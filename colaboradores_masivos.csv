@@ -1,0 +1,5 @@
+
+id_colaborador,flag,division,area,servicio,puesto,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion
+T12345,Involucrado,DCA,Área Comercial,Servicio 1,Puesto 1,Agencia Central,123456,Inconducta funcional,Amonestación
+U00123,Relacionado,Finanzas,Área de Control,Servicio 2,Puesto 2,, ,Negligencia funcional,Suspensión 2 días
+T54321,Involucrado,Operaciones,Área de Operaciones,Servicio 3,Puesto 3,, ,No aplica,No aplica

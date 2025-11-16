@@ -1,0 +1,6 @@
+
+id_colaborador,division,area,servicio,puesto,nombre_agencia,codigo_agencia
+T12345,Finanzas,Área Operativa,Servicio 1,Analista,Agencia Central,123456
+U00123,Marketing,Área Comercial,Servicio 2,Gerente,Agencia Sur,654321
+T54321,DCA,Área Comercial,Servicio 3,Jefe,Agencia Norte,111111
+Z99999,Canales de atención,Área Comercial,Servicio 4,Analista,Agencia Lima,222222

@@ -1,0 +1,5 @@
+
+id_cliente,tipo_id,flag,telefonos,correos,direcciones,accionado
+12345678,DNI,Involucrado,987654321;912345678,cliente1@example.com,"Av La Paz 123, Miraflores, Lima",Tribu Producto Afectado
+C00000001,RUC,Afectado,999999999,cliente2@ejemplo.pe,"Calle Falsa 123, Lima",Centro de Contacto
+87654321,DNI,Involucrado,912345680,cliente3@ejemplo.pe,"Av Javier Prado 200, San Borja",Tribu Canal Impactado

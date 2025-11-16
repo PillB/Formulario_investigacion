@@ -1,0 +1,4 @@
+
+id_reclamo,id_caso,id_producto,nombre_analitica,codigo_analitica
+C00000001,2025-0001,PRD001,Cuenta Analítica 1,4300000001
+C00000002,2025-0001,PRD002,Cuenta Analítica 2,4500000002

@@ -1,0 +1,4 @@
+
+id_producto,id_cliente,tipo_producto,categoria1,categoria2,modalidad,canal,proceso,fecha_ocurrencia,fecha_descubrimiento,monto_investigado,tipo_moneda,monto_perdida_fraude,monto_falla_procesos,monto_contingencia,monto_recuperado,monto_pago_deuda,id_reclamo,nombre_analitica,codigo_analitica,involucramiento
+PRD100,12345678,Crédito personal,Riesgo de Fraude,Fraude Interno,Hurto,Banca Móvil,Bloqueo de cuentas,2025-10-05,2025-10-10,5000,Soles,500,200,4300,0,0,C22222222,Analítica C,4612345678,T12345:200;U00123:300
+PRD101,87654321,Cuenta corriente,Riesgo de Fraude,Fraude Interno,Transferencia ilegal de fondos,App IO,Activación de Tarjeta de crédito,2025-10-12,2025-10-18,10000,Soles,0,0,10000,0,0,,, ,

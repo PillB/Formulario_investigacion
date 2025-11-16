@@ -1,0 +1,5 @@
+
+id_cliente,tipo_id,flag,telefonos,correos,direcciones,accionado
+12345678,DNI,Afectado,987654321;912345678,cliente@example.com,Av La Paz 123 Miraflores Lima Perú,Tribu Producto Afectado
+C00000001,RUC,Involucrado,999999999,otro@correo.pe,Calle 5 345 San Isidro Lima Perú,Centro de Contacto
+87654321,DNI,Involucrado,912345677,ninguno@example.com,Av Benavides 456 Surco Lima Perú,
