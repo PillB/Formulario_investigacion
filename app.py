@@ -60,6 +60,7 @@ from tkinter import ttk, filedialog, messagebox
 import csv
 import json
 import os
+import re
 from datetime import datetime
 from functools import partial
 
@@ -263,12 +264,26 @@ CRITICIDAD_LIST = ["Bajo", "Moderado", "Relevante", "Alto", "Crítico"]
 TEAM_DETAILS_FILE = os.path.join(os.path.dirname(__file__), "team_details.csv")
 # Archivo con detalles de clientes para autopoblado
 CLIENT_DETAILS_FILE = os.path.join(os.path.dirname(__file__), "client_details.csv")
+# Archivo con detalles de productos para autopoblado
+PRODUCT_DETAILS_FILE = os.path.join(os.path.dirname(__file__), "productos_masivos.csv")
 
 # Ruta de autosave
 AUTOSAVE_FILE = os.path.join(os.path.dirname(__file__), "autosave.json")
 
 # Ruta de logs si se desea guardar de forma permanente
 LOGS_FILE = os.path.join(os.path.dirname(__file__), "logs.csv")
+
+# Opciones de áreas accionadas disponibles para el selector múltiple
+ACCIONADO_OPTIONS = [
+    "Tribu Producto Afectado",
+    "Tribu Canal Impactado",
+    "Centro de Contacto",
+    "Canal presencial",
+    "Fuerza de Ventas",
+    "Mesa de Partes",
+    "Unidad de Fraude",
+    "No aplica",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +353,356 @@ def load_client_details():
     return lookup
 
 
+def load_product_details():
+    """Carga detalles de productos desde ``productos_masivos.csv`` si existe.
+
+    La función devuelve un diccionario con los datos necesarios para
+    autopoblar un producto (cliente, taxonomía, montos, fechas y reclamo)
+    cuando el usuario escribe el identificador.  Si el archivo no existe,
+    se retorna un diccionario vacío para mantener la compatibilidad.
+
+    Example:
+        >>> productos = load_product_details()
+        >>> productos.get('PRD001', {}).get('id_cliente')
+        '12345678'
+
+    Returns:
+        dict[str, dict[str, str]]: Mapa de ID de producto con su metadata.
+    """
+    lookup = {}
+    try:
+        with open(PRODUCT_DETAILS_FILE, newline='', encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                key = row.get("id_producto", "").strip()
+                if not key:
+                    continue
+                lookup[key] = {
+                    "id_cliente": row.get("id_cliente", "").strip(),
+                    "tipo_producto": row.get("tipo_producto", "").strip(),
+                    "categoria1": row.get("categoria1", "").strip(),
+                    "categoria2": row.get("categoria2", "").strip(),
+                    "modalidad": row.get("modalidad", "").strip(),
+                    "canal": row.get("canal", "").strip(),
+                    "proceso": row.get("proceso", "").strip(),
+                    "fecha_ocurrencia": row.get("fecha_ocurrencia", "").strip(),
+                    "fecha_descubrimiento": row.get("fecha_descubrimiento", "").strip(),
+                    "monto_investigado": row.get("monto_investigado", "").strip(),
+                    "tipo_moneda": row.get("tipo_moneda", "").strip(),
+                    "monto_perdida_fraude": row.get("monto_perdida_fraude", "").strip(),
+                    "monto_falla_procesos": row.get("monto_falla_procesos", "").strip(),
+                    "monto_contingencia": row.get("monto_contingencia", "").strip(),
+                    "monto_recuperado": row.get("monto_recuperado", "").strip(),
+                    "monto_pago_deuda": row.get("monto_pago_deuda", "").strip(),
+                    "id_reclamo": row.get("id_reclamo", "").strip(),
+                    "nombre_analitica": row.get("nombre_analitica", "").strip(),
+                    "codigo_analitica": row.get("codigo_analitica", "").strip(),
+                }
+    except FileNotFoundError:
+        pass
+    return lookup
+
+
+# ---------------------------------------------------------------------------
+# Validadores reutilizables y componentes de ayuda visual
+
+def validate_required_text(value, label):
+    """Valida que un texto obligatorio tenga contenido.
+
+    Args:
+        value (str): Texto a evaluar.
+        label (str): Nombre del campo que se mostrará al usuario.
+
+    Returns:
+        Optional[str]: Mensaje de error si está vacío, ``None`` si es válido.
+    """
+    if not value.strip():
+        return f"Debe ingresar {label}."
+    return None
+
+
+def validate_case_id(value):
+    """Valida el formato del número de caso AAAA-NNNN.
+
+    Example:
+        >>> validate_case_id('2024-0001')
+        None
+        >>> validate_case_id('24-1')
+        'El número de caso debe seguir el formato AAAA-NNNN.'
+    """
+    if not value.strip():
+        return "Debe ingresar el número de caso."
+    if not re.match(r"^\d{4}-\d{4}$", value.strip()):
+        return "El número de caso debe seguir el formato AAAA-NNNN."
+    return None
+
+
+def validate_date_text(value, label, allow_blank=True):
+    """Valida fechas en formato ISO ``YYYY-MM-DD``.
+
+    Args:
+        value (str): Fecha a validar.
+        label (str): Nombre descriptivo del campo.
+        allow_blank (bool): Si es ``True`` permite valores vacíos.
+    """
+    if not value.strip():
+        return None if allow_blank else f"Debe ingresar {label}."
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return f"{label} debe tener el formato YYYY-MM-DD."
+    return None
+
+
+def validate_amount_text(value, label, allow_blank=True):
+    """Valida que los montos sean numéricos en formato decimal.
+
+    Example:
+        >>> validate_amount_text('10.5', 'Monto investigado')
+        None
+        >>> validate_amount_text('abc', 'Monto investigado')
+        'Monto investigado debe ser numérico.'
+    """
+    if not value.strip():
+        return None if allow_blank else f"Debe ingresar {label}."
+    try:
+        float(value)
+    except ValueError:
+        return f"{label} debe ser numérico."
+    return None
+
+
+def validate_email_list(value, label):
+    """Valida listas separadas por ``;`` asegurando que cada correo tenga ``@``."""
+    if not value.strip():
+        return None
+    for email in [item.strip() for item in value.split(';') if item.strip()]:
+        if '@' not in email or email.startswith('@') or email.endswith('@'):
+            return f"Cada correo en {label} debe contener '@'."
+    return None
+
+
+def validate_phone_list(value, label):
+    """Valida que los teléfonos sean números peruanos de al menos 6 dígitos."""
+    if not value.strip():
+        return None
+    for phone in [item.strip() for item in value.split(';') if item.strip()]:
+        if not phone.isdigit() or len(phone) < 6:
+            return f"Cada teléfono en {label} debe tener solo dígitos y al menos 6 caracteres."
+    return None
+
+
+def validate_reclamo_id(value):
+    """Valida que el ID de reclamo siga el patrón ``CXXXXXXXX``."""
+    if not value.strip():
+        return None
+    if not re.match(r"^C\d{8}$", value.strip()):
+        return "El ID de reclamo debe iniciar con C seguido de 8 dígitos."
+    return None
+
+
+def validate_codigo_analitica(value):
+    """Valida que el código de analítica tenga 10 dígitos y prefijo permitido."""
+    if not value.strip():
+        return None
+    if not (value.isdigit() and len(value) == 10 and value.startswith(('43', '45', '46', '56'))):
+        return "El código de analítica debe tener 10 dígitos y comenzar con 43, 45, 46 o 56."
+    return None
+
+
+def validate_norm_id(value):
+    """Valida IDs de norma en formato ``XXXX.XXX.XX.XX``."""
+    if not value.strip():
+        return None
+    if not re.match(r"^\d{4}\.\d{3}\.\d{2}\.\d{2}$", value.strip()):
+        return "El ID de norma debe seguir el formato XXXX.XXX.XX.XX."
+    return None
+
+
+def validate_multi_selection(value, label):
+    """Valida que exista al menos una selección en campos multiselección."""
+    if not value.strip():
+        return f"Debe seleccionar al menos una opción en {label}."
+    return None
+
+
+class HoverTooltip:
+    """Muestra mensajes contextuales cuando el usuario pasa el mouse sobre un widget.
+
+    Este tooltip ayuda a los usuarios nuevos a entender el propósito de cada
+    campo.  Se activa con un pequeño retardo para no resultar intrusivo y se
+    oculta automáticamente al mover el cursor.
+
+    Example:
+        >>> HoverTooltip(mi_boton, "Guarda el formulario actual")
+    """
+
+    def __init__(self, widget, text, delay=300):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self.tipwindow = None
+        self.after_id = None
+        widget.bind("<Enter>", self._schedule)
+        widget.bind("<Leave>", self._hide)
+        widget.bind("<ButtonPress>", self._hide)
+        widget.bind("<Destroy>", self._on_destroy)
+
+    def _schedule(self, _event=None):
+        """Programa la aparición del tooltip tras el retardo configurado."""
+        self._cancel()
+        self.after_id = self.widget.after(self.delay, self.show)
+
+    def _cancel(self):
+        """Cancela cualquier tooltip pendiente para evitar acumulación."""
+        if self.after_id is not None:
+            try:
+                self.widget.after_cancel(self.after_id)
+            except tk.TclError:
+                pass
+            self.after_id = None
+
+    def show(self):
+        """Crea la ventana emergente y la posiciona debajo del widget."""
+        if self.tipwindow or not self.text:
+            return
+        try:
+            x = self.widget.winfo_rootx()
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
+        except tk.TclError:
+            return
+        self.tipwindow = tk.Toplevel(self.widget)
+        self.tipwindow.wm_overrideredirect(True)
+        self.tipwindow.configure(bg="#333333")
+        label = tk.Label(
+            self.tipwindow,
+            text=self.text,
+            justify="left",
+            background="#333333",
+            foreground="#ffffff",
+            relief="solid",
+            borderwidth=1,
+            padx=5,
+            pady=3,
+            wraplength=280,
+        )
+        label.pack()
+        self.tipwindow.wm_geometry(f"+{x}+{y}")
+
+    def _hide(self, _event=None):
+        """Elimina el tooltip cuando el cursor sale del widget."""
+        self._cancel()
+        if self.tipwindow is not None:
+            try:
+                self.tipwindow.destroy()
+            except tk.TclError:
+                pass
+            self.tipwindow = None
+
+    def _on_destroy(self, _event=None):
+        """Garantiza que la ventana se cierre si el widget se destruye."""
+        self._hide()
+
+
+class ValidationTooltip:
+    """Muestra mensajes de error en rojo justo debajo del widget asociado."""
+
+    def __init__(self, widget):
+        self.widget = widget
+        self.tipwindow = None
+        widget.bind("<Destroy>", self._on_destroy)
+
+    def show(self, text):
+        """Crea o actualiza la burbuja de error con el mensaje indicado."""
+        if not text:
+            self.hide()
+            return
+        self.hide()
+        try:
+            x = self.widget.winfo_rootx()
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 2
+        except tk.TclError:
+            return
+        self.tipwindow = tk.Toplevel(self.widget)
+        self.tipwindow.wm_overrideredirect(True)
+        self.tipwindow.configure(bg="#8B0000")
+        label = tk.Label(
+            self.tipwindow,
+            text=text,
+            justify="left",
+            background="#8B0000",
+            foreground="#ffffff",
+            relief="solid",
+            borderwidth=1,
+            padx=5,
+            pady=3,
+            wraplength=320,
+        )
+        label.pack()
+        self.tipwindow.wm_geometry(f"+{x}+{y}")
+
+    def hide(self):
+        """Oculta el tooltip de validación si está visible."""
+        if self.tipwindow is not None:
+            try:
+                self.tipwindow.destroy()
+            except tk.TclError:
+                pass
+            self.tipwindow = None
+
+    def _on_destroy(self, _event=None):
+        """Evita errores cuando el widget asociado se elimina."""
+        self.hide()
+
+
+class FieldValidator:
+    """Vincula un widget con una función de validación en tiempo real.
+
+    Este helper adjunta *traces* a las variables observadas y muestra
+    automáticamente un ``ValidationTooltip`` con el mensaje retornado por la
+    función ``validate_callback``.  El tooltip se oculta cuando el valor vuelve
+    a ser válido.  También registra eventos en el log para mantener trazabilidad
+    y, si el widget es un ``ttk.Combobox``, escucha ``<<ComboboxSelected>>`` para
+    reaccionar apenas el usuario cambie la opción.
+
+    Args:
+        widget (tk.Widget): Control que recibirá el mensaje de error.
+        validate_callback (Callable[[], Optional[str]]): Función que devuelve
+            ``None`` si el campo es válido o el mensaje de error en español.
+        logs (list): Referencia al arreglo de logs para documentar errores.
+        field_name (str): Nombre legible usado en el log.
+        variables (Optional[list[tk.Variable]]): Lista de variables a observar.
+    """
+
+    def __init__(self, widget, validate_callback, logs, field_name, variables=None):
+        self.widget = widget
+        self.validate_callback = validate_callback
+        self.logs = logs
+        self.field_name = field_name
+        self.tooltip = ValidationTooltip(widget)
+        self.variables = variables or []
+        self._traces = []
+        self.last_error = None
+        for var in self.variables:
+            self._traces.append(var.trace_add("write", self._on_change))
+        widget.bind("<FocusOut>", self._on_change)
+        widget.bind("<KeyRelease>", self._on_change)
+        if isinstance(widget, ttk.Combobox):
+            widget.bind("<<ComboboxSelected>>", self._on_change)
+        self._on_change()
+
+    def _on_change(self, *_args):
+        """Ejecuta la validación y actualiza el tooltip sólo si cambió el estado."""
+        error = self.validate_callback()
+        if error == self.last_error:
+            return
+        if error:
+            self.tooltip.show(error)
+            log_event("validacion", f"{self.field_name}: {error}", self.logs)
+        else:
+            self.tooltip.hide()
+        self.last_error = error
+
 # Callback global opcional para guardar versiones temporales
 SAVE_TEMP_CALLBACK = None
 
@@ -389,14 +754,16 @@ def escape_csv(value):
 class ClientFrame:
     """Representa un cliente y su interfaz dentro de la sección de clientes."""
 
-    def __init__(self, parent, idx, remove_callback, update_client_options, logs, client_lookup=None):
+    def __init__(self, parent, idx, remove_callback, update_client_options, logs, tooltip_register, client_lookup=None):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
         self.update_client_options = update_client_options
         self.logs = logs
+        self.tooltip_register = tooltip_register
         # Diccionario con datos de clientes para autopoblado
         self.client_lookup = client_lookup or {}
+        self.validators = []
 
         # Variables de control
         self.tipo_id_var = tk.StringVar(value=TIPO_ID_LIST[0])
@@ -417,10 +784,13 @@ class ClientFrame:
         ttk.Label(row1, text="Tipo de ID:").pack(side="left")
         tipo_id_cb = ttk.Combobox(row1, textvariable=self.tipo_id_var, values=TIPO_ID_LIST, state="readonly", width=20)
         tipo_id_cb.pack(side="left", padx=5)
+        self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
         ttk.Label(row1, text="ID del cliente:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
         id_entry.bind("<FocusOut>", lambda e: self.on_id_change())
+        id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
+        self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
         # Fila 2: Flag y Accionado
         row2 = ttk.Frame(self.frame)
@@ -428,10 +798,25 @@ class ClientFrame:
         ttk.Label(row2, text="Flag:").pack(side="left")
         flag_cb = ttk.Combobox(row2, textvariable=self.flag_var, values=FLAG_CLIENTE_LIST, state="readonly", width=20)
         flag_cb.pack(side="left", padx=5)
-        ttk.Label(row2, text="Accionado (lista separada por ;):").pack(side="left")
-        accionado_entry = ttk.Entry(row2, textvariable=self.accionado_var, width=40)
-        accionado_entry.pack(side="left", padx=5)
-        accionado_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Cliente {self.idx+1}: modificó accionado", self.logs))
+        self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
+
+        accionado_frame = ttk.Frame(self.frame)
+        accionado_frame.pack(fill="x", pady=1)
+        ttk.Label(accionado_frame, text="Accionado (seleccione uno o varios):").pack(anchor="w")
+        self.accionado_listbox = tk.Listbox(
+            accionado_frame,
+            listvariable=tk.StringVar(value=ACCIONADO_OPTIONS),
+            selectmode="multiple",
+            exportselection=False,
+            height=4,
+            width=40,
+        )
+        self.accionado_listbox.pack(fill="x", padx=5)
+        self.accionado_listbox.bind("<<ListboxSelect>>", self.update_accionado_var)
+        self.tooltip_register(
+            self.accionado_listbox,
+            "Marca las tribus o equipos accionados por la alerta. Puedes escoger varias opciones."
+        )
 
         # Fila 3: Teléfonos, correos, direcciones
         row3 = ttk.Frame(self.frame)
@@ -440,20 +825,62 @@ class ClientFrame:
         tel_entry = ttk.Entry(row3, textvariable=self.telefonos_var, width=30)
         tel_entry.pack(side="left", padx=5)
         tel_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Cliente {self.idx+1}: modificó teléfonos", self.logs))
+        self.tooltip_register(tel_entry, "Ingresa números separados por ; sin guiones.")
         ttk.Label(row3, text="Correos (separados por ;):").pack(side="left")
         cor_entry = ttk.Entry(row3, textvariable=self.correos_var, width=30)
         cor_entry.pack(side="left", padx=5)
         cor_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Cliente {self.idx+1}: modificó correos", self.logs))
+        self.tooltip_register(cor_entry, "Coloca correos electrónicos separados por ;.")
         ttk.Label(row3, text="Direcciones (separados por ;):").pack(side="left")
         dir_entry = ttk.Entry(row3, textvariable=self.direcciones_var, width=30)
         dir_entry.pack(side="left", padx=5)
         dir_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Cliente {self.idx+1}: modificó direcciones", self.logs))
+        self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
 
         # Botón eliminar
         btn_frame = ttk.Frame(self.frame)
         btn_frame.pack(fill="x", pady=2)
         remove_btn = ttk.Button(btn_frame, text="Eliminar cliente", command=self.remove)
         remove_btn.pack(side="right")
+        self.tooltip_register(remove_btn, "Quita por completo al cliente de la lista.")
+
+        # Validaciones por campo
+        self.validators.append(
+            FieldValidator(
+                id_entry,
+                lambda: validate_required_text(self.id_var.get(), "el ID del cliente"),
+                self.logs,
+                f"Cliente {self.idx+1} - ID",
+                variables=[self.id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                tel_entry,
+                lambda: validate_phone_list(self.telefonos_var.get(), "los teléfonos del cliente"),
+                self.logs,
+                f"Cliente {self.idx+1} - Teléfonos",
+                variables=[self.telefonos_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                cor_entry,
+                lambda: validate_email_list(self.correos_var.get(), "los correos del cliente"),
+                self.logs,
+                f"Cliente {self.idx+1} - Correos",
+                variables=[self.correos_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                self.accionado_listbox,
+                lambda: validate_multi_selection(self.accionado_var.get(), "Accionado"),
+                self.logs,
+                f"Cliente {self.idx+1} - Accionado",
+                variables=[self.accionado_var],
+            )
+        )
 
     def on_id_change(self):
         """Cuando cambia el ID, actualiza las listas dependientes."""
@@ -465,19 +892,19 @@ class ClientFrame:
         cid = self.id_var.get().strip()
         if cid and cid in self.client_lookup:
             data = self.client_lookup[cid]
-            # Solo autopoblar si los campos están vacíos (para no sobrescribir cambios)
-            if not self.tipo_id_var.get():
-                self.tipo_id_var.set(data.get('tipo_id', ''))
-            if not self.flag_var.get():
-                self.flag_var.set(data.get('flag', ''))
-            if not self.telefonos_var.get():
-                self.telefonos_var.set(data.get('telefonos', ''))
-            if not self.correos_var.get():
-                self.correos_var.set(data.get('correos', ''))
-            if not self.direcciones_var.get():
-                self.direcciones_var.set(data.get('direcciones', ''))
-            if not self.accionado_var.get():
-                self.accionado_var.set(data.get('accionado', ''))
+            def set_if_present(var, key):
+                value = data.get(key, "").strip()
+                if value:
+                    var.set(value)
+
+            set_if_present(self.tipo_id_var, 'tipo_id')
+            set_if_present(self.flag_var, 'flag')
+            set_if_present(self.telefonos_var, 'telefonos')
+            set_if_present(self.correos_var, 'correos')
+            set_if_present(self.direcciones_var, 'direcciones')
+            accionado = data.get('accionado', '').strip()
+            if accionado:
+                self.set_accionado_from_text(accionado)
             log_event("navegacion", f"Autopoblado datos del cliente {cid}", self.logs)
 
     def get_data(self):
@@ -493,6 +920,25 @@ class ClientFrame:
             "accionado": self.accionado_var.get().strip(),
         }
 
+    def update_accionado_var(self, _event=None):
+        """Actualiza la cadena de accionados cuando cambia la selección."""
+        selections = [
+            ACCIONADO_OPTIONS[i]
+            for i in self.accionado_listbox.curselection()
+        ]
+        self.accionado_var.set("; ".join(selections))
+
+    def set_accionado_from_text(self, value):
+        """Sincroniza el listbox con un texto existente de accionados."""
+        self.accionado_var.set(value.strip())
+        self.accionado_listbox.selection_clear(0, tk.END)
+        if not value:
+            return
+        targets = [item.strip() for item in value.split(';') if item.strip()]
+        for idx, name in enumerate(ACCIONADO_OPTIONS):
+            if name in targets:
+                self.accionado_listbox.selection_set(idx)
+
     def remove(self):
         """Elimina el cliente de la interfaz y de las estructuras internas."""
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el cliente {self.idx+1}?"):
@@ -504,13 +950,15 @@ class ClientFrame:
 class TeamMemberFrame:
     """Representa un colaborador y su interfaz en la sección de colaboradores."""
 
-    def __init__(self, parent, idx, remove_callback, update_team_options, team_lookup, logs):
+    def __init__(self, parent, idx, remove_callback, update_team_options, team_lookup, logs, tooltip_register):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
         self.update_team_options = update_team_options
         self.team_lookup = team_lookup
         self.logs = logs
+        self.tooltip_register = tooltip_register
+        self.validators = []
 
         # Variables
         self.id_var = tk.StringVar()
@@ -535,9 +983,12 @@ class TeamMemberFrame:
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
         id_entry.bind("<FocusOut>", lambda e: self.on_id_change())
+        id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
+        self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
         ttk.Label(row1, text="Flag:").pack(side="left")
         flag_cb = ttk.Combobox(row1, textvariable=self.flag_var, values=FLAG_COLABORADOR_LIST, state="readonly", width=20)
         flag_cb.pack(side="left", padx=5)
+        self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: log_event("navegacion", f"Colaborador {self.idx+1}: modificó flag", self.logs))
 
         # Fila 2: División, Área, Servicio, Puesto
@@ -546,15 +997,19 @@ class TeamMemberFrame:
         ttk.Label(row2, text="División:").pack(side="left")
         div_entry = ttk.Entry(row2, textvariable=self.division_var, width=20)
         div_entry.pack(side="left", padx=5)
+        self.tooltip_register(div_entry, "Ingresa la división o gerencia del colaborador.")
         ttk.Label(row2, text="Área:").pack(side="left")
         area_entry = ttk.Entry(row2, textvariable=self.area_var, width=20)
         area_entry.pack(side="left", padx=5)
+        self.tooltip_register(area_entry, "Detalla el área específica.")
         ttk.Label(row2, text="Servicio:").pack(side="left")
         serv_entry = ttk.Entry(row2, textvariable=self.servicio_var, width=20)
         serv_entry.pack(side="left", padx=5)
+        self.tooltip_register(serv_entry, "Describe el servicio o célula.")
         ttk.Label(row2, text="Puesto:").pack(side="left")
         puesto_entry = ttk.Entry(row2, textvariable=self.puesto_var, width=20)
         puesto_entry.pack(side="left", padx=5)
+        self.tooltip_register(puesto_entry, "Define el cargo actual del colaborador.")
 
         # Fila 3: Agencia nombre y código
         row3 = ttk.Frame(self.frame)
@@ -562,9 +1017,11 @@ class TeamMemberFrame:
         ttk.Label(row3, text="Nombre agencia:").pack(side="left")
         nombre_ag_entry = ttk.Entry(row3, textvariable=self.nombre_agencia_var, width=25)
         nombre_ag_entry.pack(side="left", padx=5)
+        self.tooltip_register(nombre_ag_entry, "Especifica la agencia u oficina de trabajo.")
         ttk.Label(row3, text="Código agencia:").pack(side="left")
         cod_ag_entry = ttk.Entry(row3, textvariable=self.codigo_agencia_var, width=10)
         cod_ag_entry.pack(side="left", padx=5)
+        self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
 
         # Fila 4: Tipo de falta y sanción
         row4 = ttk.Frame(self.frame)
@@ -572,15 +1029,38 @@ class TeamMemberFrame:
         ttk.Label(row4, text="Tipo de falta:").pack(side="left")
         falta_cb = ttk.Combobox(row4, textvariable=self.tipo_falta_var, values=TIPO_FALTA_LIST, state="readonly", width=20)
         falta_cb.pack(side="left", padx=5)
+        self.tooltip_register(falta_cb, "Selecciona la falta disciplinaria tipificada.")
         ttk.Label(row4, text="Tipo de sanción:").pack(side="left")
         sanc_cb = ttk.Combobox(row4, textvariable=self.tipo_sancion_var, values=TIPO_SANCION_LIST, state="readonly", width=20)
         sanc_cb.pack(side="left", padx=5)
+        self.tooltip_register(sanc_cb, "Describe la sanción propuesta o aplicada.")
 
         # Botón eliminar
         btn_frame = ttk.Frame(self.frame)
         btn_frame.pack(fill="x", pady=2)
         remove_btn = ttk.Button(btn_frame, text="Eliminar colaborador", command=self.remove)
         remove_btn.pack(side="right")
+        self.tooltip_register(remove_btn, "Quita al colaborador y sus datos del caso.")
+
+        # Validadores clave
+        self.validators.append(
+            FieldValidator(
+                id_entry,
+                lambda: validate_required_text(self.id_var.get(), "el ID del colaborador"),
+                self.logs,
+                f"Colaborador {self.idx+1} - ID",
+                variables=[self.id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                cod_ag_entry,
+                lambda: validate_amount_text(self.codigo_agencia_var.get(), "el código de agencia", allow_blank=True),
+                self.logs,
+                f"Colaborador {self.idx+1} - Código agencia",
+                variables=[self.codigo_agencia_var],
+            )
+        )
 
     def on_id_change(self):
         """Se ejecuta al salir del campo ID: autopuebla y actualiza listas."""
@@ -589,19 +1069,17 @@ class TeamMemberFrame:
             # Autopoblado si existe en lookup
             data = self.team_lookup.get(cid)
             if data:
-                # Solo autopoblar si el campo está vacío
-                if not self.division_var.get():
-                    self.division_var.set(data.get("division", ""))
-                if not self.area_var.get():
-                    self.area_var.set(data.get("area", ""))
-                if not self.servicio_var.get():
-                    self.servicio_var.set(data.get("servicio", ""))
-                if not self.puesto_var.get():
-                    self.puesto_var.set(data.get("puesto", ""))
-                if not self.nombre_agencia_var.get():
-                    self.nombre_agencia_var.set(data.get("nombre_agencia", ""))
-                if not self.codigo_agencia_var.get():
-                    self.codigo_agencia_var.set(data.get("codigo_agencia", ""))
+                def set_if_present(var, key):
+                    value = data.get(key, "").strip()
+                    if value:
+                        var.set(value)
+
+                set_if_present(self.division_var, "division")
+                set_if_present(self.area_var, "area")
+                set_if_present(self.servicio_var, "servicio")
+                set_if_present(self.puesto_var, "puesto")
+                set_if_present(self.nombre_agencia_var, "nombre_agencia")
+                set_if_present(self.codigo_agencia_var, "codigo_agencia")
                 log_event("navegacion", f"Autopoblado colaborador {self.idx+1} desde team_details.csv", self.logs)
             else:
                 log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
@@ -633,13 +1111,15 @@ class TeamMemberFrame:
 class InvolvementRow:
     """Representa una fila de asignación de monto a un colaborador dentro de un producto."""
 
-    def __init__(self, parent, product_frame, idx, team_getter, remove_callback, logs):
+    def __init__(self, parent, product_frame, idx, team_getter, remove_callback, logs, tooltip_register):
         self.parent = parent
         self.product_frame = product_frame
         self.idx = idx
         self.team_getter = team_getter
         self.remove_callback = remove_callback
         self.logs = logs
+        self.tooltip_register = tooltip_register
+        self.validators = []
 
         # Variables
         self.team_var = tk.StringVar()
@@ -653,14 +1133,27 @@ class InvolvementRow:
         ttk.Label(self.frame, text="Colaborador:").pack(side="left")
         self.team_cb = ttk.Combobox(self.frame, textvariable=self.team_var, values=self.team_getter(), state="readonly", width=20)
         self.team_cb.pack(side="left", padx=5)
+        self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
         ttk.Label(self.frame, text="Monto asignado:").pack(side="left")
         monto_entry = ttk.Entry(self.frame, textvariable=self.monto_var, width=15)
         monto_entry.pack(side="left", padx=5)
         monto_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto", self.logs))
+        self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
 
         # Botón eliminar
         remove_btn = ttk.Button(self.frame, text="Eliminar", command=self.remove)
         remove_btn.pack(side="left", padx=5)
+        self.tooltip_register(remove_btn, "Elimina esta asignación específica.")
+
+        self.validators.append(
+            FieldValidator(
+                monto_entry,
+                lambda: validate_amount_text(self.monto_var.get(), "el monto asignado", allow_blank=True),
+                self.logs,
+                f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1}",
+                variables=[self.monto_var],
+            )
+        )
 
     def get_data(self):
         return {
@@ -681,13 +1174,16 @@ class InvolvementRow:
 class ProductFrame:
     """Representa un producto y su interfaz en la sección de productos."""
 
-    def __init__(self, parent, idx, remove_callback, get_client_options, get_team_options, logs):
+    def __init__(self, parent, idx, remove_callback, get_client_options, get_team_options, logs, product_lookup, tooltip_register):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
         self.get_client_options = get_client_options
         self.get_team_options = get_team_options
         self.logs = logs
+        self.product_lookup = product_lookup or {}
+        self.tooltip_register = tooltip_register
+        self.validators = []
         self.involvements = []
 
         # Variables
@@ -727,11 +1223,14 @@ class ProductFrame:
         ttk.Label(row1, text="ID del producto:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Producto {self.idx+1}: modificó ID", self.logs))
+        id_entry.bind("<FocusOut>", lambda e: self.on_id_change())
+        id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
+        self.tooltip_register(id_entry, "Código único del producto investigado.")
         ttk.Label(row1, text="Cliente:").pack(side="left")
         self.client_cb = ttk.Combobox(row1, textvariable=self.client_var, values=self.get_client_options(), state="readonly", width=20)
         self.client_cb.pack(side="left", padx=5)
         self.client_cb.bind("<FocusOut>", lambda e: log_event("navegacion", f"Producto {self.idx+1}: seleccionó cliente", self.logs))
+        self.tooltip_register(self.client_cb, "Selecciona al cliente dueño del producto.")
 
         # Fila 2: Categoría 1, 2, Modalidad
         row2 = ttk.Frame(self.frame)
@@ -740,13 +1239,18 @@ class ProductFrame:
         cat1_cb = ttk.Combobox(row2, textvariable=self.cat1_var, values=list(TAXONOMIA.keys()), state="readonly", width=20)
         cat1_cb.pack(side="left", padx=5)
         cat1_cb.bind("<FocusOut>", lambda e: self.on_cat1_change())
+        cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat1_change())
+        self.tooltip_register(cat1_cb, "Define la categoría principal del riesgo de producto.")
         ttk.Label(row2, text="Categoría 2:").pack(side="left")
         self.cat2_cb = ttk.Combobox(row2, textvariable=self.cat2_var, values=first_subcats, state="readonly", width=20)
         self.cat2_cb.pack(side="left", padx=5)
         self.cat2_cb.bind("<FocusOut>", lambda e: self.on_cat2_change())
+        self.cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat2_change())
+        self.tooltip_register(self.cat2_cb, "Selecciona la subcategoría específica.")
         ttk.Label(row2, text="Modalidad:").pack(side="left")
         self.mod_cb = ttk.Combobox(row2, textvariable=self.mod_var, values=first_modalities, state="readonly", width=25)
         self.mod_cb.pack(side="left", padx=5)
+        self.tooltip_register(self.mod_cb, "Indica la modalidad concreta del fraude.")
 
         # Fila 3: Canal, Proceso, Tipo de producto
         row3 = ttk.Frame(self.frame)
@@ -754,12 +1258,15 @@ class ProductFrame:
         ttk.Label(row3, text="Canal:").pack(side="left")
         canal_cb = ttk.Combobox(row3, textvariable=self.canal_var, values=CANAL_LIST, state="readonly", width=20)
         canal_cb.pack(side="left", padx=5)
+        self.tooltip_register(canal_cb, "Canal por donde ocurrió el evento.")
         ttk.Label(row3, text="Proceso:").pack(side="left")
         proc_cb = ttk.Combobox(row3, textvariable=self.proceso_var, values=PROCESO_LIST, state="readonly", width=25)
         proc_cb.pack(side="left", padx=5)
+        self.tooltip_register(proc_cb, "Proceso impactado por el incidente.")
         ttk.Label(row3, text="Tipo de producto:").pack(side="left")
         tipo_prod_cb = ttk.Combobox(row3, textvariable=self.tipo_prod_var, values=TIPO_PRODUCTO_LIST, state="readonly", width=25)
         tipo_prod_cb.pack(side="left", padx=5)
+        self.tooltip_register(tipo_prod_cb, "Clasificación comercial del producto.")
 
         # Fila 4: Fechas
         row4 = ttk.Frame(self.frame)
@@ -767,9 +1274,11 @@ class ProductFrame:
         ttk.Label(row4, text="Fecha de ocurrencia (YYYY-MM-DD):").pack(side="left")
         focc_entry = ttk.Entry(row4, textvariable=self.fecha_oc_var, width=15)
         focc_entry.pack(side="left", padx=5)
+        self.tooltip_register(focc_entry, "Fecha exacta del evento.")
         ttk.Label(row4, text="Fecha de descubrimiento (YYYY-MM-DD):").pack(side="left")
         fdesc_entry = ttk.Entry(row4, textvariable=self.fecha_desc_var, width=15)
         fdesc_entry.pack(side="left", padx=5)
+        self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")
 
         # Fila 5: Montos y moneda
         row5 = ttk.Frame(self.frame)
@@ -777,24 +1286,31 @@ class ProductFrame:
         ttk.Label(row5, text="Monto investigado:").pack(side="left")
         m_inv_entry = ttk.Entry(row5, textvariable=self.monto_inv_var, width=15)
         m_inv_entry.pack(side="left", padx=5)
+        self.tooltip_register(m_inv_entry, "Monto total analizado.")
         ttk.Label(row5, text="Moneda:").pack(side="left")
         moneda_cb = ttk.Combobox(row5, textvariable=self.moneda_var, values=TIPO_MONEDA_LIST, state="readonly", width=10)
         moneda_cb.pack(side="left", padx=5)
+        self.tooltip_register(moneda_cb, "Moneda en la que se expresan los montos.")
         ttk.Label(row5, text="Pérdida de fraude:").pack(side="left")
         m_perdida_entry = ttk.Entry(row5, textvariable=self.monto_perdida_var, width=10)
         m_perdida_entry.pack(side="left", padx=5)
+        self.tooltip_register(m_perdida_entry, "Pérdida confirmada.")
         ttk.Label(row5, text="Falla de procesos:").pack(side="left")
         m_falla_entry = ttk.Entry(row5, textvariable=self.monto_falla_var, width=10)
         m_falla_entry.pack(side="left", padx=5)
+        self.tooltip_register(m_falla_entry, "Valor asociado a errores de proceso.")
         ttk.Label(row5, text="Contingencia:").pack(side="left")
         m_cont_entry = ttk.Entry(row5, textvariable=self.monto_cont_var, width=10)
         m_cont_entry.pack(side="left", padx=5)
+        self.tooltip_register(m_cont_entry, "Fondos provisionados por contingencia.")
         ttk.Label(row5, text="Recuperado:").pack(side="left")
         m_rec_entry = ttk.Entry(row5, textvariable=self.monto_rec_var, width=10)
         m_rec_entry.pack(side="left", padx=5)
+        self.tooltip_register(m_rec_entry, "Monto recuperado.")
         ttk.Label(row5, text="Pago deuda:").pack(side="left")
         m_pago_entry = ttk.Entry(row5, textvariable=self.monto_pago_var, width=10)
         m_pago_entry.pack(side="left", padx=5)
+        self.tooltip_register(m_pago_entry, "Pagos realizados a terceros por la deuda.")
 
         # Fila 6: Reclamo y analítica
         row6 = ttk.Frame(self.frame)
@@ -802,12 +1318,15 @@ class ProductFrame:
         ttk.Label(row6, text="ID reclamo (CXXXXXXXX):").pack(side="left")
         idrec_entry = ttk.Entry(row6, textvariable=self.id_reclamo_var, width=15)
         idrec_entry.pack(side="left", padx=5)
+        self.tooltip_register(idrec_entry, "Número del reclamo asociado (C + 8 dígitos).")
         ttk.Label(row6, text="Analítica nombre:").pack(side="left")
         anal_nom_entry = ttk.Entry(row6, textvariable=self.nombre_analitica_var, width=20)
         anal_nom_entry.pack(side="left", padx=5)
+        self.tooltip_register(anal_nom_entry, "Nombre descriptivo de la analítica.")
         ttk.Label(row6, text="Analítica código:").pack(side="left")
         anal_cod_entry = ttk.Entry(row6, textvariable=self.codigo_analitica_var, width=12)
         anal_cod_entry.pack(side="left", padx=5)
+        self.tooltip_register(anal_cod_entry, "Código numérico de 10 dígitos para la analítica.")
 
         # Fila 7: Asignaciones de colaboradores (involucramiento)
         row7 = ttk.Frame(self.frame)
@@ -817,6 +1336,7 @@ class ProductFrame:
         self.invol_frame.pack(fill="x", pady=1)
         add_inv_btn = ttk.Button(row7, text="Agregar asignación", command=self.add_involvement)
         add_inv_btn.pack(side="right")
+        self.tooltip_register(add_inv_btn, "Crea otra relación producto-colaborador.")
 
         # Inicialmente sin asignaciones
         self.add_involvement()
@@ -826,6 +1346,132 @@ class ProductFrame:
         btn_frame.pack(fill="x", pady=2)
         remove_btn = ttk.Button(btn_frame, text="Eliminar producto", command=self.remove)
         remove_btn.pack(side="right")
+        self.tooltip_register(remove_btn, "Quita el producto y sus datos del caso.")
+
+        # Validaciones en tiempo real
+        self.validators.append(
+            FieldValidator(
+                id_entry,
+                lambda: validate_required_text(self.id_var.get(), "el ID del producto"),
+                self.logs,
+                f"Producto {self.idx+1} - ID",
+                variables=[self.id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                self.client_cb,
+                lambda: validate_required_text(self.client_var.get(), "el cliente del producto"),
+                self.logs,
+                f"Producto {self.idx+1} - Cliente",
+                variables=[self.client_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                cat1_cb,
+                lambda: validate_required_text(self.cat1_var.get(), "la categoría 1"),
+                self.logs,
+                f"Producto {self.idx+1} - Categoría 1",
+                variables=[self.cat1_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                self.cat2_cb,
+                lambda: validate_required_text(self.cat2_var.get(), "la categoría 2"),
+                self.logs,
+                f"Producto {self.idx+1} - Categoría 2",
+                variables=[self.cat2_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                self.mod_cb,
+                lambda: validate_required_text(self.mod_var.get(), "la modalidad"),
+                self.logs,
+                f"Producto {self.idx+1} - Modalidad",
+                variables=[self.mod_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                focc_entry,
+                lambda: validate_date_text(self.fecha_oc_var.get(), "la fecha de ocurrencia", allow_blank=False),
+                self.logs,
+                f"Producto {self.idx+1} - Fecha de ocurrencia",
+                variables=[self.fecha_oc_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                fdesc_entry,
+                self._validate_fecha_descubrimiento,
+                self.logs,
+                f"Producto {self.idx+1} - Fechas",
+                variables=[self.fecha_desc_var, self.fecha_oc_var],
+            )
+        )
+        amount_vars = [
+            self.monto_inv_var,
+            self.monto_perdida_var,
+            self.monto_falla_var,
+            self.monto_cont_var,
+            self.monto_rec_var,
+            self.monto_pago_var,
+        ]
+        self.validators.append(
+            FieldValidator(
+                m_inv_entry,
+                lambda: validate_amount_text(self.monto_inv_var.get(), "el monto investigado", allow_blank=False),
+                self.logs,
+                f"Producto {self.idx+1} - Monto investigado",
+                variables=[self.monto_inv_var],
+            )
+        )
+        for entry, var, label in [
+            (m_perdida_entry, self.monto_perdida_var, "la pérdida de fraude"),
+            (m_falla_entry, self.monto_falla_var, "la falla de procesos"),
+            (m_cont_entry, self.monto_cont_var, "la contingencia"),
+            (m_rec_entry, self.monto_rec_var, "el recupero"),
+            (m_pago_entry, self.monto_pago_var, "el pago de deuda"),
+        ]:
+            self.validators.append(
+                FieldValidator(
+                    entry,
+                    lambda var=var, label=label: validate_amount_text(var.get(), label, allow_blank=True),
+                    self.logs,
+                    f"Producto {self.idx+1} - {label}",
+                    variables=[var],
+                )
+            )
+        self.validators.append(
+            FieldValidator(
+                m_perdida_entry,
+                self._validate_montos_consistentes,
+                self.logs,
+                f"Producto {self.idx+1} - Consistencia de montos",
+                variables=amount_vars,
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                idrec_entry,
+                lambda: validate_reclamo_id(self.id_reclamo_var.get()),
+                self.logs,
+                f"Producto {self.idx+1} - ID reclamo",
+                variables=[self.id_reclamo_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                anal_cod_entry,
+                lambda: validate_codigo_analitica(self.codigo_analitica_var.get()),
+                self.logs,
+                f"Producto {self.idx+1} - Código analítica",
+                variables=[self.codigo_analitica_var],
+            )
+        )
 
     def on_cat1_change(self):
         """Actualiza las opciones de categoría 2 y modalidad cuando cambia categoría 1."""
@@ -834,8 +1480,10 @@ class ProductFrame:
         if not subcats:
             subcats = [""]
         self.cat2_cb['values'] = subcats
-        self.cat2_var.set(subcats[0])
-        self.on_cat2_change()
+        self.cat2_var.set('')
+        self.cat2_cb.set('')
+        self.mod_cb['values'] = []
+        self.mod_var.set('')
         log_event("navegacion", f"Producto {self.idx+1}: cambió categoría 1", self.logs)
 
     def on_cat2_change(self):
@@ -846,13 +1494,14 @@ class ProductFrame:
         if not modalities:
             modalities = [""]
         self.mod_cb['values'] = modalities
-        self.mod_var.set(modalities[0])
+        self.mod_var.set('')
+        self.mod_cb.set('')
         log_event("navegacion", f"Producto {self.idx+1}: cambió categoría 2", self.logs)
 
     def add_involvement(self):
         """Añade una fila de asignación de colaborador a este producto."""
         idx = len(self.involvements)
-        row = InvolvementRow(self.invol_frame, self, idx, self.get_team_options, self.remove_involvement, self.logs)
+        row = InvolvementRow(self.invol_frame, self, idx, self.get_team_options, self.remove_involvement, self.logs, self.tooltip_register)
         self.involvements.append(row)
 
     def remove_involvement(self, row):
@@ -871,6 +1520,92 @@ class ProductFrame:
         """Actualiza las listas de colaboradores en las asignaciones."""
         for inv in self.involvements:
             inv.update_team_options()
+
+    def on_id_change(self):
+        """Autocompleta el producto cuando se escribe un ID reconocido."""
+        pid = self.id_var.get().strip()
+        log_event("navegacion", f"Producto {self.idx+1}: modificó ID a {pid}", self.logs)
+        if not pid:
+            return
+        data = self.product_lookup.get(pid)
+        if not data:
+            return
+
+        def set_if_present(var, key):
+            value = data.get(key)
+            if value not in (None, ""):
+                var.set(str(value).strip())
+
+        client_id = data.get('id_cliente')
+        if client_id:
+            values = list(self.client_cb['values'])
+            if client_id not in values:
+                values.append(client_id)
+                self.client_cb['values'] = values
+            self.client_var.set(client_id)
+            self.client_cb.set(client_id)
+        set_if_present(self.canal_var, 'canal')
+        set_if_present(self.proceso_var, 'proceso')
+        set_if_present(self.tipo_prod_var, 'tipo_producto')
+        set_if_present(self.fecha_oc_var, 'fecha_ocurrencia')
+        set_if_present(self.fecha_desc_var, 'fecha_descubrimiento')
+        set_if_present(self.monto_inv_var, 'monto_investigado')
+        set_if_present(self.moneda_var, 'tipo_moneda')
+        set_if_present(self.monto_perdida_var, 'monto_perdida_fraude')
+        set_if_present(self.monto_falla_var, 'monto_falla_procesos')
+        set_if_present(self.monto_cont_var, 'monto_contingencia')
+        set_if_present(self.monto_rec_var, 'monto_recuperado')
+        set_if_present(self.monto_pago_var, 'monto_pago_deuda')
+        set_if_present(self.id_reclamo_var, 'id_reclamo')
+        set_if_present(self.nombre_analitica_var, 'nombre_analitica')
+        set_if_present(self.codigo_analitica_var, 'codigo_analitica')
+        cat1 = data.get('categoria1')
+        cat2 = data.get('categoria2')
+        mod = data.get('modalidad')
+        if cat1 in TAXONOMIA:
+            self.cat1_var.set(cat1)
+            self.on_cat1_change()
+            if cat2 in TAXONOMIA[cat1]:
+                self.cat2_var.set(cat2)
+                self.cat2_cb.set(cat2)
+                self.on_cat2_change()
+                if mod in TAXONOMIA[cat1][cat2]:
+                    self.mod_var.set(mod)
+                    self.mod_cb.set(mod)
+        log_event("navegacion", f"Producto {self.idx+1}: autopoblado desde catálogo", self.logs)
+
+    def _validate_fecha_descubrimiento(self):
+        """Valida la fecha de descubrimiento y su relación con la de ocurrencia."""
+        msg = validate_date_text(self.fecha_desc_var.get(), "la fecha de descubrimiento", allow_blank=False)
+        if msg:
+            return msg
+        try:
+            occ = datetime.strptime(self.fecha_oc_var.get(), "%Y-%m-%d")
+            desc = datetime.strptime(self.fecha_desc_var.get(), "%Y-%m-%d")
+        except ValueError:
+            return None
+        if occ > desc:
+            return "La fecha de ocurrencia no puede ser posterior a la de descubrimiento."
+        if desc > datetime.now():
+            return "La fecha de descubrimiento no puede ser futura."
+        return None
+
+    def _validate_montos_consistentes(self):
+        """Valida que la distribución de montos sea coherente con la investigación."""
+        try:
+            m_inv = float(self.monto_inv_var.get() or 0)
+            m_perd = float(self.monto_perdida_var.get() or 0)
+            m_falla = float(self.monto_falla_var.get() or 0)
+            m_cont = float(self.monto_cont_var.get() or 0)
+            m_rec = float(self.monto_rec_var.get() or 0)
+            m_pago = float(self.monto_pago_var.get() or 0)
+        except ValueError:
+            return None
+        if (m_perd + m_falla + m_cont + m_rec) > m_inv + 1e-6:
+            return "La suma de pérdida, falla, contingencia y recupero no puede superar el monto investigado."
+        if m_pago > m_inv + 1e-6:
+            return "El pago de deuda no puede ser mayor al monto investigado."
+        return None
 
     def get_data(self):
         """Devuelve los datos del producto como un diccionario y lista de asignaciones."""
@@ -913,11 +1648,13 @@ class ProductFrame:
 class RiskFrame:
     """Representa un riesgo identificado en la sección de riesgos."""
 
-    def __init__(self, parent, idx, remove_callback, logs):
+    def __init__(self, parent, idx, remove_callback, logs, tooltip_register):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
         self.logs = logs
+        self.tooltip_register = tooltip_register
+        self.validators = []
         # Variables
         self.id_var = tk.StringVar(value=f"RSK-{idx+1:06d}")
         self.lider_var = tk.StringVar()
@@ -935,32 +1672,58 @@ class RiskFrame:
         ttk.Label(row1, text="ID riesgo:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=15)
         id_entry.pack(side="left", padx=5)
+        self.tooltip_register(id_entry, "Usa el formato RSK-000000.")
         ttk.Label(row1, text="Líder:").pack(side="left")
         lider_entry = ttk.Entry(row1, textvariable=self.lider_var, width=20)
         lider_entry.pack(side="left", padx=5)
+        self.tooltip_register(lider_entry, "Responsable del seguimiento del riesgo.")
         ttk.Label(row1, text="Criticidad:").pack(side="left")
         crit_cb = ttk.Combobox(row1, textvariable=self.criticidad_var, values=CRITICIDAD_LIST, state="readonly", width=12)
         crit_cb.pack(side="left", padx=5)
+        self.tooltip_register(crit_cb, "Nivel de severidad del riesgo.")
 
         row2 = ttk.Frame(self.frame)
         row2.pack(fill="x", pady=1)
         ttk.Label(row2, text="Descripción del riesgo:").pack(side="left")
         desc_entry = ttk.Entry(row2, textvariable=self.descripcion_var, width=60)
         desc_entry.pack(side="left", padx=5)
+        self.tooltip_register(desc_entry, "Describe el riesgo de forma clara.")
 
         row3 = ttk.Frame(self.frame)
         row3.pack(fill="x", pady=1)
         ttk.Label(row3, text="Exposición residual (US$):").pack(side="left")
         expos_entry = ttk.Entry(row3, textvariable=self.exposicion_var, width=15)
         expos_entry.pack(side="left", padx=5)
+        self.tooltip_register(expos_entry, "Monto estimado en dólares.")
         ttk.Label(row3, text="Planes de acción (IDs separados por ;):").pack(side="left")
         planes_entry = ttk.Entry(row3, textvariable=self.planes_var, width=40)
         planes_entry.pack(side="left", padx=5)
+        self.tooltip_register(planes_entry, "Lista de planes registrados en OTRS o Aranda.")
 
         btn_frame = ttk.Frame(self.frame)
         btn_frame.pack(fill="x", pady=2)
         remove_btn = ttk.Button(btn_frame, text="Eliminar riesgo", command=self.remove)
         remove_btn.pack(side="right")
+        self.tooltip_register(remove_btn, "Quita este riesgo del caso.")
+
+        self.validators.append(
+            FieldValidator(
+                id_entry,
+                self._validate_risk_id,
+                self.logs,
+                f"Riesgo {self.idx+1} - ID",
+                variables=[self.id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                expos_entry,
+                lambda: validate_amount_text(self.exposicion_var.get(), "la exposición residual", allow_blank=True),
+                self.logs,
+                f"Riesgo {self.idx+1} - Exposición",
+                variables=[self.exposicion_var],
+            )
+        )
 
     def get_data(self):
         return {
@@ -978,15 +1741,24 @@ class RiskFrame:
             self.frame.destroy()
             self.remove_callback(self)
 
+    def _validate_risk_id(self):
+        """Valida el formato del identificador de riesgo."""
+        value = self.id_var.get().strip()
+        if not re.match(r"^RSK-\d{4,10}$", value):
+            return "El ID de riesgo debe seguir el formato RSK-0000." 
+        return None
+
 
 class NormFrame:
     """Representa una norma transgredida en la sección de normas."""
 
-    def __init__(self, parent, idx, remove_callback, logs):
+    def __init__(self, parent, idx, remove_callback, logs, tooltip_register):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
         self.logs = logs
+        self.tooltip_register = tooltip_register
+        self.validators = []
 
         self.id_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
@@ -999,20 +1771,52 @@ class NormFrame:
         ttk.Label(row1, text="ID de norma:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
+        self.tooltip_register(id_entry, "Formato sugerido: 0000.000.00.00")
         ttk.Label(row1, text="Fecha de vigencia (YYYY-MM-DD):").pack(side="left")
         fecha_entry = ttk.Entry(row1, textvariable=self.fecha_var, width=15)
         fecha_entry.pack(side="left", padx=5)
+        self.tooltip_register(fecha_entry, "Fecha de publicación o vigencia de la norma.")
 
         row2 = ttk.Frame(self.frame)
         row2.pack(fill="x", pady=1)
         ttk.Label(row2, text="Descripción de la norma:").pack(side="left")
         desc_entry = ttk.Entry(row2, textvariable=self.descripcion_var, width=70)
         desc_entry.pack(side="left", padx=5)
+        self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
 
         btn_frame = ttk.Frame(self.frame)
         btn_frame.pack(fill="x", pady=2)
         remove_btn = ttk.Button(btn_frame, text="Eliminar norma", command=self.remove)
         remove_btn.pack(side="right")
+        self.tooltip_register(remove_btn, "Quita esta norma del caso.")
+
+        self.validators.append(
+            FieldValidator(
+                id_entry,
+                lambda: validate_norm_id(self.id_var.get()),
+                self.logs,
+                f"Norma {self.idx+1} - ID",
+                variables=[self.id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                fecha_entry,
+                lambda: validate_date_text(self.fecha_var.get(), "la fecha de vigencia"),
+                self.logs,
+                f"Norma {self.idx+1} - Fecha",
+                variables=[self.fecha_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                desc_entry,
+                lambda: validate_required_text(self.descripcion_var.get(), "la descripción de la norma"),
+                self.logs,
+                f"Norma {self.idx+1} - Descripción",
+                variables=[self.descripcion_var],
+            )
+        )
 
     def get_data(self):
         return {
@@ -1039,13 +1843,25 @@ class FraudCaseApp:
         self.root.title("Gestión de Casos de Fraude (App de escritorio)")
         # Lista para logs de navegación y validación
         self.logs = []
-        # Cargar team details
+        self._hover_tooltips = []
+        self.validators = []
+
+        def register_tooltip(widget, text):
+            if widget is None or not text:
+                return None
+            tip = HoverTooltip(widget, text)
+            self._hover_tooltips.append(tip)
+            return tip
+
+        self.register_tooltip = register_tooltip
+        # Cargar catálogos para autopoblado
         self.team_lookup = load_team_details()
         # Cargar client details para autopoblar clientes. Si no existe el
         # fichero ``client_details.csv`` se obtiene un diccionario vacío. Este
         # diccionario se usa en ClientFrame.on_id_change() para rellenar
         # automáticamente campos del cliente cuando se reconoce su ID.
         self.client_lookup = load_client_details()
+        self.product_lookup = load_product_details()
         # Datos en memoria: listas de frames
         self.client_frames = []
         self.team_frames = []
@@ -1087,48 +1903,131 @@ class FraudCaseApp:
 
     def build_ui(self):
         """Construye la interfaz del usuario en diferentes pestañas."""
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill="both", expand=True)
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True)
 
-        # --- Pestaña Detalles del caso ---
-        case_tab = ttk.Frame(notebook)
-        notebook.add(case_tab, text="Detalles del caso")
-        self.build_case_tab(case_tab)
-
-        # --- Pestaña Clientes ---
-        clients_tab = ttk.Frame(notebook)
-        notebook.add(clients_tab, text="Clientes")
-        self.build_clients_tab(clients_tab)
-
-        # --- Pestaña Colaboradores ---
-        team_tab = ttk.Frame(notebook)
-        notebook.add(team_tab, text="Colaboradores")
-        self.build_team_tab(team_tab)
-
-        # --- Pestaña Productos ---
-        product_tab = ttk.Frame(notebook)
-        notebook.add(product_tab, text="Productos")
-        self.build_products_tab(product_tab)
+        # --- Pestaña principal: caso y participantes ---
+        self.main_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.main_tab, text="Caso y participantes")
+        self.build_case_and_participants_tab(self.main_tab)
 
         # --- Pestaña Riesgos ---
-        risk_tab = ttk.Frame(notebook)
-        notebook.add(risk_tab, text="Riesgos")
+        risk_tab = ttk.Frame(self.notebook)
+        self.notebook.add(risk_tab, text="Riesgos")
         self.build_risk_tab(risk_tab)
 
         # --- Pestaña Normas ---
-        norm_tab = ttk.Frame(notebook)
-        notebook.add(norm_tab, text="Normas")
+        norm_tab = ttk.Frame(self.notebook)
+        self.notebook.add(norm_tab, text="Normas")
         self.build_norm_tab(norm_tab)
 
         # --- Pestaña Análisis ---
-        analysis_tab = ttk.Frame(notebook)
-        notebook.add(analysis_tab, text="Análisis y narrativas")
+        analysis_tab = ttk.Frame(self.notebook)
+        self.notebook.add(analysis_tab, text="Análisis y narrativas")
         self.build_analysis_tab(analysis_tab)
 
         # --- Pestaña Acciones ---
-        actions_tab = ttk.Frame(notebook)
-        notebook.add(actions_tab, text="Acciones")
+        actions_tab = ttk.Frame(self.notebook)
+        self.notebook.add(actions_tab, text="Acciones")
         self.build_actions_tab(actions_tab)
+
+    def build_case_and_participants_tab(self, parent):
+        """Agrupa en una sola vista los datos del caso, clientes, productos y equipo.
+
+        Esta función encapsula la experiencia solicitada por los analistas:
+        evita tener que cambiar de pestaña para capturar la información básica
+        del expediente y coloca, en orden lógico, las secciones de caso,
+        clientes, productos y colaboradores.  Para lograrlo, se crean
+        ``LabelFrame`` consecutivos que actúan como contenedores y se reutiliza
+        la lógica existente de ``build_case_tab``/``build_clients_tab``/etc.
+
+        Args:
+            parent (tk.Widget): Contenedor donde se inyectarán las secciones.
+
+        Ejemplo::
+
+            # Durante la construcción de la UI
+            self.build_case_and_participants_tab(self.main_tab)
+        """
+
+        case_section = ttk.LabelFrame(parent, text="1. Datos generales del caso")
+        case_section.pack(fill="x", expand=False, padx=5, pady=5)
+        self.build_case_tab(case_section)
+
+        clients_section = ttk.LabelFrame(parent, text="2. Clientes implicados")
+        clients_section.pack(fill="x", expand=True, padx=5, pady=5)
+        self.build_clients_tab(clients_section)
+
+        products_section = ttk.LabelFrame(parent, text="3. Productos investigados")
+        products_section.pack(fill="x", expand=True, padx=5, pady=5)
+        self.build_products_tab(products_section)
+
+        team_section = ttk.LabelFrame(parent, text="4. Colaboradores involucrados")
+        team_section.pack(fill="x", expand=True, padx=5, pady=5)
+        self.build_team_tab(team_section)
+
+    def focus_main_tab(self):
+        """Muestra la pestaña principal cuando una importación agrega registros.
+
+        Al terminar de cargar clientes, productos o colaboradores desde la
+        pestaña de acciones, los usuarios esperaban ver de inmediato los datos
+        recién agregados.  Este helper selecciona la pestaña principal del
+        ``Notebook`` (si existe) y registra el cambio en el log para que el
+        auto-guardado capture el nuevo estado.
+        """
+
+        if getattr(self, "notebook", None) is None or getattr(self, "main_tab", None) is None:
+            return
+        try:
+            self.notebook.select(self.main_tab)
+            log_event("navegacion", "Se mostró la pestaña principal tras importar datos", self.logs)
+        except tk.TclError:
+            # Si el widget ya no existe (por ejemplo, al cerrar la app), se ignora el error.
+            pass
+
+    def sync_main_form_after_import(self, section_name):
+        """Sincroniza la interfaz principal después de importar datos masivos.
+
+        La función se diseñó como respuesta directa al feedback de que los
+        registros cargados desde la pestaña de *Acciones* no se veían reflejados
+        inmediatamente en las secciones de caso, clientes y productos.  Para
+        garantizar esa visibilidad, se realizan cuatro pasos en orden:
+
+            1. Se invocan ``update_client_options_global`` y
+               ``update_team_options_global`` para notificar a todos los
+               ``Combobox`` dependientes que hay nuevos IDs disponibles.
+            2. Se llama a ``update_idletasks`` sobre la ventana raíz para que
+               Tkinter repinte los marcos dinámicos y muestre los datos recién
+               insertados sin esperar a que el usuario interactúe.
+            3. Se selecciona la pestaña principal (método ``focus_main_tab``) de
+               modo que el usuario visualice de inmediato los clientes,
+               productos o colaboradores importados.
+            4. Se registra un evento de navegación indicando qué tipo de datos
+               disparó la sincronización, lo que permite auditar el proceso.
+
+        Args:
+            section_name (str): Nombre en español de la sección importada. Se
+                utiliza únicamente para detallar el mensaje del log.
+
+        Ejemplo::
+
+            self.sync_main_form_after_import("clientes")
+        """
+
+        self.update_client_options_global()
+        self.update_team_options_global()
+        try:
+            self.root.update_idletasks()
+        except tk.TclError:
+            # Si la ventana ya no existe (por ejemplo al cerrar la app) no es
+            # necesario continuar con la sincronización.
+            return
+        self.focus_main_tab()
+        log_event(
+            "navegacion",
+            f"Sincronizó la pestaña principal tras importar {section_name}",
+            self.logs,
+        )
 
     def build_case_tab(self, parent):
         """Construye la pestaña de detalles del caso."""
@@ -1141,9 +2040,11 @@ class FraudCaseApp:
         id_entry = ttk.Entry(row1, textvariable=self.id_caso_var, width=20)
         id_entry.pack(side="left", padx=5)
         id_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó número de caso", self.logs))
+        self.register_tooltip(id_entry, "Identificador del expediente con formato AAAA-NNNN.")
         ttk.Label(row1, text="Tipo de informe:").pack(side="left")
         tipo_cb = ttk.Combobox(row1, textvariable=self.tipo_informe_var, values=TIPO_INFORME_LIST, state="readonly", width=15)
         tipo_cb.pack(side="left", padx=5)
+        self.register_tooltip(tipo_cb, "Selecciona si el reporte es interno o regulatorio.")
 
         # Categorías y modalidad
         row2 = ttk.Frame(frame)
@@ -1152,13 +2053,18 @@ class FraudCaseApp:
         cat1_cb = ttk.Combobox(row2, textvariable=self.cat_caso1_var, values=list(TAXONOMIA.keys()), state="readonly", width=20)
         cat1_cb.pack(side="left", padx=5)
         cat1_cb.bind("<FocusOut>", lambda e: self.on_case_cat1_change())
+        cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_case_cat1_change())
+        self.register_tooltip(cat1_cb, "Nivel superior de la taxonomía de fraude.")
         ttk.Label(row2, text="Categoría nivel 2:").pack(side="left")
         self.case_cat2_cb = ttk.Combobox(row2, textvariable=self.cat_caso2_var, values=list(TAXONOMIA[self.cat_caso1_var.get()].keys()), state="readonly", width=20)
         self.case_cat2_cb.pack(side="left", padx=5)
         self.case_cat2_cb.bind("<FocusOut>", lambda e: self.on_case_cat2_change())
+        self.case_cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_case_cat2_change())
+        self.register_tooltip(self.case_cat2_cb, "Subcategoría que precisa el evento.")
         ttk.Label(row2, text="Modalidad:").pack(side="left")
         self.case_mod_cb = ttk.Combobox(row2, textvariable=self.mod_caso_var, values=TAXONOMIA[self.cat_caso1_var.get()][self.cat_caso2_var.get()], state="readonly", width=25)
         self.case_mod_cb.pack(side="left", padx=5)
+        self.register_tooltip(self.case_mod_cb, "Modalidad específica dentro de la taxonomía.")
 
         # Canal y proceso
         row3 = ttk.Frame(frame)
@@ -1166,9 +2072,76 @@ class FraudCaseApp:
         ttk.Label(row3, text="Canal:").pack(side="left")
         canal_cb = ttk.Combobox(row3, textvariable=self.canal_caso_var, values=CANAL_LIST, state="readonly", width=25)
         canal_cb.pack(side="left", padx=5)
+        self.register_tooltip(canal_cb, "Canal donde se originó el evento.")
         ttk.Label(row3, text="Proceso impactado:").pack(side="left")
         proc_cb = ttk.Combobox(row3, textvariable=self.proceso_caso_var, values=PROCESO_LIST, state="readonly", width=25)
         proc_cb.pack(side="left", padx=5)
+        self.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
+
+        # Validaciones del caso
+        self.validators.append(
+            FieldValidator(
+                id_entry,
+                lambda: validate_case_id(self.id_caso_var.get()),
+                self.logs,
+                "Caso - ID",
+                variables=[self.id_caso_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                tipo_cb,
+                lambda: validate_required_text(self.tipo_informe_var.get(), "el tipo de informe"),
+                self.logs,
+                "Caso - Tipo de informe",
+                variables=[self.tipo_informe_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                cat1_cb,
+                lambda: validate_required_text(self.cat_caso1_var.get(), "la categoría nivel 1"),
+                self.logs,
+                "Caso - Categoría 1",
+                variables=[self.cat_caso1_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                self.case_cat2_cb,
+                lambda: validate_required_text(self.cat_caso2_var.get(), "la categoría nivel 2"),
+                self.logs,
+                "Caso - Categoría 2",
+                variables=[self.cat_caso2_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                self.case_mod_cb,
+                lambda: validate_required_text(self.mod_caso_var.get(), "la modalidad del caso"),
+                self.logs,
+                "Caso - Modalidad",
+                variables=[self.mod_caso_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                canal_cb,
+                lambda: validate_required_text(self.canal_caso_var.get(), "el canal del caso"),
+                self.logs,
+                "Caso - Canal",
+                variables=[self.canal_caso_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                proc_cb,
+                lambda: validate_required_text(self.proceso_caso_var.get(), "el proceso impactado"),
+                self.logs,
+                "Caso - Proceso",
+                variables=[self.proceso_caso_var],
+            )
+        )
 
     def on_case_cat1_change(self):
         """Actualiza las opciones de categoría 2 y modalidad cuando cambia cat1 del caso."""
@@ -1177,8 +2150,11 @@ class FraudCaseApp:
         if not subcats:
             subcats = [""]
         self.case_cat2_cb['values'] = subcats
-        self.cat_caso2_var.set(subcats[0])
-        self.on_case_cat2_change()
+        self.cat_caso2_var.set('')
+        self.case_cat2_cb.set('')
+        self.case_mod_cb['values'] = []
+        self.mod_caso_var.set('')
+        self.case_mod_cb.set('')
         log_event("navegacion", "Modificó categoría 1 del caso", self.logs)
 
     def on_case_cat2_change(self):
@@ -1188,7 +2164,8 @@ class FraudCaseApp:
         if not mods:
             mods = [""]
         self.case_mod_cb['values'] = mods
-        self.mod_caso_var.set(mods[0])
+        self.mod_caso_var.set('')
+        self.case_mod_cb.set('')
         log_event("navegacion", "Modificó categoría 2 del caso", self.logs)
 
     def build_clients_tab(self, parent):
@@ -1201,6 +2178,7 @@ class FraudCaseApp:
         # Botón añadir cliente
         add_btn = ttk.Button(frame, text="Agregar cliente", command=self.add_client)
         add_btn.pack(side="left", padx=5)
+        self.register_tooltip(add_btn, "Añade un nuevo cliente implicado en el caso.")
         # Inicialmente un cliente en blanco
         self.add_client()
 
@@ -1215,7 +2193,7 @@ class FraudCaseApp:
         idx = len(self.client_frames)
         client = ClientFrame(self.clients_container, idx, self.remove_client,
                              self.update_client_options_global, self.logs,
-                             client_lookup=self.client_lookup)
+                             self.register_tooltip, client_lookup=self.client_lookup)
         self.client_frames.append(client)
         self.update_client_options_global()
 
@@ -1242,11 +2220,12 @@ class FraudCaseApp:
         self.team_container.pack(fill="x", pady=5)
         add_btn = ttk.Button(frame, text="Agregar colaborador", command=self.add_team)
         add_btn.pack(side="left", padx=5)
+        self.register_tooltip(add_btn, "Crea un registro para otro colaborador investigado.")
         self.add_team()
 
     def add_team(self):
         idx = len(self.team_frames)
-        team = TeamMemberFrame(self.team_container, idx, self.remove_team, self.update_team_options_global, self.team_lookup, self.logs)
+        team = TeamMemberFrame(self.team_container, idx, self.remove_team, self.update_team_options_global, self.team_lookup, self.logs, self.register_tooltip)
         self.team_frames.append(team)
         self.update_team_options_global()
 
@@ -1272,11 +2251,12 @@ class FraudCaseApp:
         self.product_container.pack(fill="x", pady=5)
         add_btn = ttk.Button(frame, text="Agregar producto", command=self.add_product)
         add_btn.pack(side="left", padx=5)
+        self.register_tooltip(add_btn, "Registra un nuevo producto investigado.")
         # No añadimos automáticamente un producto porque los productos están asociados a clientes
 
     def add_product(self):
         idx = len(self.product_frames)
-        prod = ProductFrame(self.product_container, idx, self.remove_product, self.get_client_ids, self.get_team_ids, self.logs)
+        prod = ProductFrame(self.product_container, idx, self.remove_product, self.get_client_ids, self.get_team_ids, self.logs, self.product_lookup, self.register_tooltip)
         self.product_frames.append(prod)
         # Renombrar
         for i, p in enumerate(self.product_frames):
@@ -1302,11 +2282,12 @@ class FraudCaseApp:
         self.risk_container.pack(fill="x", pady=5)
         add_btn = ttk.Button(frame, text="Agregar riesgo", command=self.add_risk)
         add_btn.pack(side="left", padx=5)
+        self.register_tooltip(add_btn, "Registra un nuevo riesgo identificado.")
         self.add_risk()
 
     def add_risk(self):
         idx = len(self.risk_frames)
-        risk = RiskFrame(self.risk_container, idx, self.remove_risk, self.logs)
+        risk = RiskFrame(self.risk_container, idx, self.remove_risk, self.logs, self.register_tooltip)
         self.risk_frames.append(risk)
         for i, r in enumerate(self.risk_frames):
             r.idx = i
@@ -1325,11 +2306,12 @@ class FraudCaseApp:
         self.norm_container.pack(fill="x", pady=5)
         add_btn = ttk.Button(frame, text="Agregar norma", command=self.add_norm)
         add_btn.pack(side="left", padx=5)
+        self.register_tooltip(add_btn, "Agrega otra norma transgredida.")
         self.add_norm()
 
     def add_norm(self):
         idx = len(self.norm_frames)
-        norm = NormFrame(self.norm_container, idx, self.remove_norm, self.logs)
+        norm = NormFrame(self.norm_container, idx, self.remove_norm, self.logs, self.register_tooltip)
         self.norm_frames.append(norm)
         for i, n in enumerate(self.norm_frames):
             n.idx = i
@@ -1351,36 +2333,42 @@ class FraudCaseApp:
         antecedentes_entry = ttk.Entry(row1, textvariable=self.antecedentes_var, width=80)
         antecedentes_entry.pack(side="left", padx=5)
         antecedentes_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó antecedentes", self.logs))
+        self.register_tooltip(antecedentes_entry, "Resume los hechos previos y contexto del caso.")
         row2 = ttk.Frame(frame)
         row2.pack(fill="x", pady=1)
         ttk.Label(row2, text="Modus operandi:").pack(side="left")
         modus_entry = ttk.Entry(row2, textvariable=self.modus_var, width=80)
         modus_entry.pack(side="left", padx=5)
         modus_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó modus operandi", self.logs))
+        self.register_tooltip(modus_entry, "Describe la forma en que se ejecutó el fraude.")
         row3 = ttk.Frame(frame)
         row3.pack(fill="x", pady=1)
         ttk.Label(row3, text="Hallazgos principales:").pack(side="left")
         hall_entry = ttk.Entry(row3, textvariable=self.hallazgos_var, width=80)
         hall_entry.pack(side="left", padx=5)
         hall_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó hallazgos", self.logs))
+        self.register_tooltip(hall_entry, "Menciona los hallazgos clave de la investigación.")
         row4 = ttk.Frame(frame)
         row4.pack(fill="x", pady=1)
         ttk.Label(row4, text="Descargos del colaborador:").pack(side="left")
         desc_entry = ttk.Entry(row4, textvariable=self.descargos_var, width=80)
         desc_entry.pack(side="left", padx=5)
         desc_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó descargos", self.logs))
+        self.register_tooltip(desc_entry, "Registra los descargos formales del colaborador.")
         row5 = ttk.Frame(frame)
         row5.pack(fill="x", pady=1)
         ttk.Label(row5, text="Conclusiones:").pack(side="left")
         concl_entry = ttk.Entry(row5, textvariable=self.conclusiones_var, width=80)
         concl_entry.pack(side="left", padx=5)
         concl_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó conclusiones", self.logs))
+        self.register_tooltip(concl_entry, "Escribe las conclusiones generales del informe.")
         row6 = ttk.Frame(frame)
         row6.pack(fill="x", pady=1)
         ttk.Label(row6, text="Recomendaciones y mejoras:").pack(side="left")
         reco_entry = ttk.Entry(row6, textvariable=self.recomendaciones_var, width=80)
         reco_entry.pack(side="left", padx=5)
         reco_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó recomendaciones", self.logs))
+        self.register_tooltip(reco_entry, "Propón acciones correctivas y preventivas.")
 
     def build_actions_tab(self, parent):
         frame = ttk.Frame(parent)
@@ -1389,28 +2377,119 @@ class FraudCaseApp:
         ttk.Label(frame, text="Importar datos masivos (CSV)").pack(anchor="w")
         import_buttons = ttk.Frame(frame)
         import_buttons.pack(anchor="w", pady=2)
-        ttk.Button(import_buttons, text="Cargar clientes", command=self.import_clients).pack(side="left", padx=2)
-        ttk.Button(import_buttons, text="Cargar colaboradores", command=self.import_team_members).pack(side="left", padx=2)
-        ttk.Button(import_buttons, text="Cargar productos", command=self.import_products).pack(side="left", padx=2)
-        ttk.Button(import_buttons, text="Cargar combinado", command=self.import_combined).pack(side="left", padx=2)
+        btn_clientes = ttk.Button(import_buttons, text="Cargar clientes", command=self.import_clients)
+        btn_clientes.pack(side="left", padx=2)
+        self.register_tooltip(btn_clientes, "Importa clientes desde un CSV masivo.")
+        btn_colabs = ttk.Button(import_buttons, text="Cargar colaboradores", command=self.import_team_members)
+        btn_colabs.pack(side="left", padx=2)
+        self.register_tooltip(btn_colabs, "Importa colaboradores y sus datos laborales.")
+        btn_productos = ttk.Button(import_buttons, text="Cargar productos", command=self.import_products)
+        btn_productos.pack(side="left", padx=2)
+        self.register_tooltip(btn_productos, "Carga productos investigados desde un CSV.")
+        btn_combo = ttk.Button(import_buttons, text="Cargar combinado", command=self.import_combined)
+        btn_combo.pack(side="left", padx=2)
+        self.register_tooltip(btn_combo, "Importa en un solo archivo clientes, productos y colaboradores.")
         # Nuevos botones para riesgos, normas y reclamos
-        ttk.Button(import_buttons, text="Cargar riesgos", command=self.import_risks).pack(side="left", padx=2)
-        ttk.Button(import_buttons, text="Cargar normas", command=self.import_norms).pack(side="left", padx=2)
-        ttk.Button(import_buttons, text="Cargar reclamos", command=self.import_claims).pack(side="left", padx=2)
+        btn_riesgos = ttk.Button(import_buttons, text="Cargar riesgos", command=self.import_risks)
+        btn_riesgos.pack(side="left", padx=2)
+        self.register_tooltip(btn_riesgos, "Carga la matriz de riesgos desde CSV.")
+        btn_normas = ttk.Button(import_buttons, text="Cargar normas", command=self.import_norms)
+        btn_normas.pack(side="left", padx=2)
+        self.register_tooltip(btn_normas, "Importa las normas vulneradas.")
+        btn_reclamos = ttk.Button(import_buttons, text="Cargar reclamos", command=self.import_claims)
+        btn_reclamos.pack(side="left", padx=2)
+        self.register_tooltip(btn_reclamos, "Vincula reclamos con los productos.")
 
         # Botones de guardado y carga
         ttk.Label(frame, text="Guardar y cargar versiones").pack(anchor="w", pady=(10,2))
         version_buttons = ttk.Frame(frame)
         version_buttons.pack(anchor="w", pady=2)
-        ttk.Button(version_buttons, text="Guardar y enviar", command=self.save_and_send).pack(side="left", padx=2)
-        ttk.Button(version_buttons, text="Cargar versión", command=self.load_version_dialog).pack(side="left", padx=2)
-        ttk.Button(version_buttons, text="Borrar todos los datos", command=self.clear_all).pack(side="left", padx=2)
+        btn_save = ttk.Button(version_buttons, text="Guardar y enviar", command=self.save_and_send)
+        btn_save.pack(side="left", padx=2)
+        self.register_tooltip(btn_save, "Valida y exporta todos los archivos requeridos.")
+        btn_load = ttk.Button(version_buttons, text="Cargar versión", command=self.load_version_dialog)
+        btn_load.pack(side="left", padx=2)
+        self.register_tooltip(btn_load, "Restaura una versión previa en formato JSON.")
+        btn_clear = ttk.Button(version_buttons, text="Borrar todos los datos", command=self.clear_all)
+        btn_clear.pack(side="left", padx=2)
+        self.register_tooltip(btn_clear, "Limpia el formulario completo para iniciar desde cero.")
 
         # Información adicional
         ttk.Label(frame, text="El auto‑guardado se realiza automáticamente en un archivo JSON").pack(anchor="w", pady=(10,2))
 
     # ---------------------------------------------------------------------
     # Importación desde CSV
+
+    def _obtain_client_slot_for_import(self):
+        """Obtiene un ``ClientFrame`` vacío o crea uno nuevo para importación.
+
+        Paso a paso:
+            1. Recorre la lista existente de clientes y detecta el primero
+               cuyo ``id_cliente`` esté en blanco.
+            2. Si encuentra un espacio vacío, se reutiliza para mostrar los
+               datos recién importados (esto evita que el usuario piense que no
+               se cargó nada por tener clientes vacíos al inicio).
+            3. Si no existe un espacio vacío, se invoca ``add_client`` para
+               crear un nuevo marco y finalmente se devuelve.
+
+        Returns:
+            ClientFrame: Instancia lista para llenarse con datos externos.
+
+        Ejemplo::
+
+            slot = self._obtain_client_slot_for_import()
+            slot.id_var.set("12345678")
+        """
+
+        for frame in self.client_frames:
+            if not frame.id_var.get().strip():
+                return frame
+        self.add_client()
+        return self.client_frames[-1]
+
+    def _populate_client_frame_from_row(self, frame, row):
+        """Traslada los datos de una fila CSV a un ``ClientFrame``.
+
+        Cada línea de este método tiene como fin dejar explícito qué campo se
+        está poblando y por qué::
+
+            1. Se normaliza el texto con ``strip`` para evitar espacios.
+            2. Se actualiza el ``StringVar`` correspondiente en el frame.
+            3. Se sincroniza el selector múltiple de ``accionado``.
+            4. Se actualiza ``client_lookup`` para futuros autopoblados.
+
+        Args:
+            frame (ClientFrame): Cliente objetivo.
+            row (dict): Fila leída por ``csv.DictReader``.
+
+        Ejemplo::
+
+            fila = {"id_cliente": "123", "telefonos": "999"}
+            self._populate_client_frame_from_row(cliente, fila)
+        """
+
+        id_cliente = (row.get('id_cliente') or row.get('IdCliente') or '').strip()
+        frame.id_var.set(id_cliente)
+        tipo_id = (row.get('tipo_id') or row.get('TipoID') or TIPO_ID_LIST[0]).strip()
+        frame.tipo_id_var.set(tipo_id)
+        flag_value = (row.get('flag') or row.get('Flag') or FLAG_CLIENTE_LIST[0]).strip()
+        frame.flag_var.set(flag_value)
+        telefonos = (row.get('telefonos') or row.get('Telefono') or '').strip()
+        frame.telefonos_var.set(telefonos)
+        correos = (row.get('correos') or row.get('Correo') or '').strip()
+        frame.correos_var.set(correos)
+        direcciones = (row.get('direcciones') or row.get('Direccion') or '').strip()
+        frame.direcciones_var.set(direcciones)
+        accionado_val = (row.get('accionado') or row.get('Accionado') or '').strip()
+        frame.set_accionado_from_text(accionado_val)
+        self.client_lookup[id_cliente] = {
+            'tipo_id': frame.tipo_id_var.get(),
+            'flag': frame.flag_var.get(),
+            'telefonos': frame.telefonos_var.get(),
+            'correos': frame.correos_var.get(),
+            'direcciones': frame.direcciones_var.get(),
+            'accionado': accionado_val,
+        }
 
     def import_clients(self):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
@@ -1420,30 +2499,28 @@ class FraudCaseApp:
         try:
             with open(filename, newline='', encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                imported = 0
                 for row in reader:
                     # Extraer datos esperados
                     id_cliente = row.get('id_cliente', '').strip()
                     if not id_cliente:
                         continue
                     # Verificar duplicado
-                    if id_cliente in [c.id_var.get().strip() for c in self.client_frames]:
-                        log_event("validacion", f"Cliente duplicado {id_cliente} en importación", self.logs)
-                        continue
-                    # Crear cliente
-                    self.add_client()
-                    cl = self.client_frames[-1]
-                    cl.id_var.set(id_cliente)
-                    cl.tipo_id_var.set(row.get('tipo_id', 'DNI').strip())
-                    cl.flag_var.set(row.get('flag', 'No aplica').strip())
-                    cl.telefonos_var.set(row.get('telefonos', '').strip())
-                    cl.correos_var.set(row.get('correos', '').strip())
-                    cl.direcciones_var.set(row.get('direcciones', '').strip())
-                    cl.accionado_var.set(row.get('accionado', '').strip())
+                    existing = next((c for c in self.client_frames if c.id_var.get().strip() == id_cliente), None)
+                    target_frame = existing or self._obtain_client_slot_for_import()
+                    if existing:
+                        log_event("navegacion", f"Actualizó cliente {id_cliente} desde importación", self.logs)
+                    self._populate_client_frame_from_row(target_frame, row)
+                    imported += 1
             self.update_client_options_global()
             # Guardar autosave y registrar evento
             self.save_auto()
-            log_event("navegacion", "Clientes importados desde CSV", self.logs)
-            messagebox.showinfo("Importación completa", "Clientes importados correctamente.")
+            log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
+            if imported:
+                self.sync_main_form_after_import("clientes")
+                messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
+            else:
+                messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar clientes: {ex}")
 
@@ -1473,6 +2550,7 @@ class FraudCaseApp:
         try:
             with open(filename, newline='', encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                imported = 0
                 for row in reader:
                     id_col = row.get('id_colaborador', '').strip()
                     if not id_col:
@@ -1492,10 +2570,23 @@ class FraudCaseApp:
                     tm.codigo_agencia_var.set(row.get('codigo_agencia', '').strip())
                     tm.tipo_falta_var.set(row.get('tipo_falta', 'No aplica').strip())
                     tm.tipo_sancion_var.set(row.get('tipo_sancion', 'No aplica').strip())
+                    self.team_lookup[id_col] = {
+                        'division': tm.division_var.get(),
+                        'area': tm.area_var.get(),
+                        'servicio': tm.servicio_var.get(),
+                        'puesto': tm.puesto_var.get(),
+                        'nombre_agencia': tm.nombre_agencia_var.get(),
+                        'codigo_agencia': tm.codigo_agencia_var.get(),
+                    }
+                    imported += 1
             self.update_team_options_global()
             self.save_auto()
             log_event("navegacion", "Colaboradores importados desde CSV", self.logs)
-            messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+            if imported:
+                self.sync_main_form_after_import("colaboradores")
+                messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar colaboradores: {ex}")
 
@@ -1524,6 +2615,7 @@ class FraudCaseApp:
         try:
             with open(filename, newline='', encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                imported = 0
                 for row in reader:
                     id_prod = row.get('id_producto', '').strip()
                     if not id_prod:
@@ -1566,9 +2658,35 @@ class FraudCaseApp:
                     pr.nombre_analitica_var.set(row.get('nombre_analitica', '').strip())
                     pr.codigo_analitica_var.set(row.get('codigo_analitica', '').strip())
                     # No se cargan asignaciones desde este CSV
-                self.save_auto()
-                log_event("navegacion", "Productos importados desde CSV", self.logs)
+                    self.product_lookup[id_prod] = {
+                        'id_cliente': pr.client_var.get(),
+                        'tipo_producto': pr.tipo_prod_var.get(),
+                        'categoria1': pr.cat1_var.get(),
+                        'categoria2': pr.cat2_var.get(),
+                        'modalidad': pr.mod_var.get(),
+                        'canal': pr.canal_var.get(),
+                        'proceso': pr.proceso_var.get(),
+                        'fecha_ocurrencia': pr.fecha_oc_var.get(),
+                        'fecha_descubrimiento': pr.fecha_desc_var.get(),
+                        'monto_investigado': pr.monto_inv_var.get(),
+                        'tipo_moneda': pr.moneda_var.get(),
+                        'monto_perdida_fraude': pr.monto_perdida_var.get(),
+                        'monto_falla_procesos': pr.monto_falla_var.get(),
+                        'monto_contingencia': pr.monto_cont_var.get(),
+                        'monto_recuperado': pr.monto_rec_var.get(),
+                        'monto_pago_deuda': pr.monto_pago_var.get(),
+                        'id_reclamo': pr.id_reclamo_var.get(),
+                        'nombre_analitica': pr.nombre_analitica_var.get(),
+                        'codigo_analitica': pr.codigo_analitica_var.get(),
+                    }
+                    imported += 1
+            self.save_auto()
+            log_event("navegacion", "Productos importados desde CSV", self.logs)
+            if imported:
+                self.sync_main_form_after_import("productos")
                 messagebox.showinfo("Importación completa", "Productos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "El CSV no contenía productos nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar productos: {ex}")
 
@@ -1606,6 +2724,7 @@ class FraudCaseApp:
         try:
             with open(filename, newline='', encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                created_records = False
                 for row in reader:
                     # Columns may include id_cliente, tipo_id, flag_cliente, id_producto, id_colaborador, monto_asignado, etc.
                     id_cliente = row.get('id_cliente', '').strip()
@@ -1618,7 +2737,17 @@ class FraudCaseApp:
                         cl.telefonos_var.set(row.get('telefonos', ''))
                         cl.correos_var.set(row.get('correos', ''))
                         cl.direcciones_var.set(row.get('direcciones', ''))
-                        cl.accionado_var.set(row.get('accionado', ''))
+                        accionado_val = row.get('accionado', '')
+                        cl.set_accionado_from_text(accionado_val)
+                        self.client_lookup[id_cliente] = {
+                            'tipo_id': cl.tipo_id_var.get(),
+                            'flag': cl.flag_var.get(),
+                            'telefonos': cl.telefonos_var.get(),
+                            'correos': cl.correos_var.get(),
+                            'direcciones': cl.direcciones_var.get(),
+                            'accionado': accionado_val,
+                        }
+                        created_records = True
                     # Team member
                     id_col = row.get('id_colaborador', '').strip()
                     if id_col and id_col not in [t.id_var.get().strip() for t in self.team_frames]:
@@ -1634,6 +2763,15 @@ class FraudCaseApp:
                         tm.codigo_agencia_var.set(row.get('codigo_agencia', ''))
                         tm.tipo_falta_var.set(row.get('tipo_falta', 'No aplica'))
                         tm.tipo_sancion_var.set(row.get('tipo_sancion', 'No aplica'))
+                        self.team_lookup[id_col] = {
+                            'division': tm.division_var.get(),
+                            'area': tm.area_var.get(),
+                            'servicio': tm.servicio_var.get(),
+                            'puesto': tm.puesto_var.get(),
+                            'nombre_agencia': tm.nombre_agencia_var.get(),
+                            'codigo_agencia': tm.codigo_agencia_var.get(),
+                        }
+                        created_records = True
                     # Producto
                     id_prod = row.get('id_producto', '').strip()
                     if id_prod:
@@ -1676,20 +2814,47 @@ class FraudCaseApp:
                             prod.id_reclamo_var.set(row.get('id_reclamo', '').strip())
                             prod.nombre_analitica_var.set(row.get('nombre_analitica', '').strip())
                             prod.codigo_analitica_var.set(row.get('codigo_analitica', '').strip())
+                            self.product_lookup[id_prod] = {
+                                'id_cliente': prod.client_var.get(),
+                                'tipo_producto': prod.tipo_prod_var.get(),
+                                'categoria1': prod.cat1_var.get(),
+                                'categoria2': prod.cat2_var.get(),
+                                'modalidad': prod.mod_var.get(),
+                                'canal': prod.canal_var.get(),
+                                'proceso': prod.proceso_var.get(),
+                                'fecha_ocurrencia': prod.fecha_oc_var.get(),
+                                'fecha_descubrimiento': prod.fecha_desc_var.get(),
+                                'monto_investigado': prod.monto_inv_var.get(),
+                                'tipo_moneda': prod.moneda_var.get(),
+                                'monto_perdida_fraude': prod.monto_perdida_var.get(),
+                                'monto_falla_procesos': prod.monto_falla_var.get(),
+                                'monto_contingencia': prod.monto_cont_var.get(),
+                                'monto_recuperado': prod.monto_rec_var.get(),
+                                'monto_pago_deuda': prod.monto_pago_var.get(),
+                                'id_reclamo': prod.id_reclamo_var.get(),
+                                'nombre_analitica': prod.nombre_analitica_var.get(),
+                                'codigo_analitica': prod.codigo_analitica_var.get(),
+                            }
+                            created_records = True
                         # Añadir asignación a este producto
                         monto_asignado = row.get('monto_asignado', '').strip()
                         if id_col and monto_asignado:
                             # Añadir fila de involvement
-                            inv = InvolvementRow(prod.invol_frame, prod, len(prod.involvements), prod.get_team_options, prod.remove_involvement, self.logs)
+                            inv = InvolvementRow(prod.invol_frame, prod, len(prod.involvements), prod.get_team_options, prod.remove_involvement, self.logs, prod.tooltip_register)
                             prod.involvements.append(inv)
                             inv.team_var.set(id_col)
                             inv.monto_var.set(monto_asignado)
+                            created_records = True
             # Actualizar opciones
             self.update_client_options_global()
             self.update_team_options_global()
             self.save_auto()
             log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
-            messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+            if created_records:
+                self.sync_main_form_after_import("datos combinados")
+                messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
 
@@ -2027,7 +3192,7 @@ class FraudCaseApp:
             cl.telefonos_var.set(cliente.get('telefonos', ''))
             cl.correos_var.set(cliente.get('correos', ''))
             cl.direcciones_var.set(cliente.get('direcciones', ''))
-            cl.accionado_var.set(cliente.get('accionado', ''))
+            cl.set_accionado_from_text(cliente.get('accionado', ''))
         # Colaboradores
         for i, col in enumerate(data.get('colaboradores', [])):
             if i >= len(self.team_frames):
@@ -2089,7 +3254,7 @@ class FraudCaseApp:
             for pframe in self.product_frames:
                 if pframe.id_var.get().strip() == inv.get('id_producto'):
                     # agregar asignación a pframe
-                    assign = InvolvementRow(pframe.invol_frame, pframe, len(pframe.involvements), pframe.get_team_options, pframe.remove_involvement, self.logs)
+                    assign = InvolvementRow(pframe.invol_frame, pframe, len(pframe.involvements), pframe.get_team_options, pframe.remove_involvement, self.logs, pframe.tooltip_register)
                     pframe.involvements.append(assign)
                     assign.team_var.set(inv.get('id_colaborador', ''))
                     assign.monto_var.set(inv.get('monto_asignado', ''))
