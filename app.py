@@ -60,7 +60,6 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 import csv
 import json
 import os
-import random
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -456,84 +455,21 @@ def validate_date_text(value, label, allow_blank=True):
     return None
 
 
-AMOUNT_PATTERN = re.compile(r"^\d{1,12}(\.\d{1,2})?$")
-
-
 def validate_amount_text(value, label, allow_blank=True):
-    """Valida montos positivos con hasta 12 enteros y dos decimales."""
+    """Valida que los montos sean numéricos en formato decimal.
 
-    text = value.strip()
-    if not text:
-        return None if allow_blank else f"Debe ingresar {label}."
-    if not AMOUNT_PATTERN.match(text):
-        return (
-            f"{label} debe usar solo dígitos, con máximo 12 enteros y hasta dos decimales."
-        )
-    return None
-
-
-def parse_decimal_amount(value):
-    """Devuelve un ``Decimal`` para montos o ``None`` si el texto no es válido."""
-
-    text = (value or "").strip()
-    if not text:
-        return Decimal("0")
-    try:
-        return Decimal(text)
-    except InvalidOperation:
-        return None
-
-
-def validate_address_list(value, label):
-    """Valida direcciones peruanas permisivas separadas por ``;``."""
-
+    Example:
+        >>> validate_amount_text('10.5', 'Monto investigado')
+        None
+        >>> validate_amount_text('abc', 'Monto investigado')
+        'Monto investigado debe ser numérico.'
+    """
     if not value.strip():
-        return None
-    pattern = re.compile(r"^[A-Za-zÁÉÍÓÚáéíóúÑñ0-9 #.,'/-]+$")
-    for addr in [item.strip() for item in value.split(';') if item.strip()]:
-        if not pattern.match(addr):
-            return f"Cada dirección en {label} debe usar letras, números y separadores comunes."
-    return None
-
-
-def validate_client_identifier(doc_type, value):
-    """Valida IDs de cliente según el tipo de documento peruano seleccionado."""
-
-    clean = value.strip().upper()
-    if not clean:
-        return "Debe ingresar el ID del cliente."
-    doc = (doc_type or "").lower()
-    doc_normalized = doc.replace("é", "e")
-    patterns = {
-        "dni": r"^\d{8}$",
-        "ruc": r"^\d{11}$",
-        "carne de extranjeria": r"^[A-Z0-9]{9}$",
-        "pasaporte": r"^[A-Z0-9]{6,12}$",
-    }
-    if doc_normalized in patterns and not re.match(patterns[doc_normalized], clean):
-        return f"El ID del cliente no cumple el formato requerido para {doc_type}."
-    return None
-
-
-def validate_team_member_id(value):
-    """Valida IDs de colaboradores con una letra y cinco dígitos (ej. T12345)."""
-
-    clean = value.strip().upper()
-    if not clean:
-        return "Debe ingresar el ID del colaborador."
-    if not re.match(r"^[A-Z][0-9]{5}$", clean):
-        return "El ID del colaborador debe ser una letra seguida de cinco dígitos (ej. T12345)."
-    return None
-
-
-def validate_agency_code(value):
-    """Valida códigos de agencia opcionales compuestos por seis dígitos."""
-
-    clean = value.strip()
-    if not clean:
-        return None
-    if not re.match(r"^\d{6}$", clean):
-        return "El código de agencia debe tener exactamente 6 dígitos."
+        return None if allow_blank else f"Debe ingresar {label}."
+    try:
+        float(value)
+    except ValueError:
+        return f"{label} debe ser numérico."
     return None
 
 
@@ -584,32 +520,10 @@ def validate_norm_id(value):
     return None
 
 
-def validate_multi_selection(value, label, allow_empty=False, valid_options=None):
-    """Valida campos multiselección opcionales u obligatorios.
-
-    Args:
-        value (str): Cadena separada por ``;`` que representa las
-            selecciones actuales.
-        label (str): Nombre amigable del campo para los mensajes.
-        allow_empty (bool): Cuando es ``True`` no se exige al menos un
-            valor; el campo puede quedar sin selección.
-        valid_options (Iterable[str], opcional): Lista de valores
-            permitidos que se utilizará para detectar entradas inválidas.
-
-    Returns:
-        str | None: Mensaje de error en español o ``None`` si la entrada
-            es válida.
-    """
-
-    clean = value.strip()
-    if not clean:
-        return None if allow_empty else f"Debe seleccionar al menos una opción en {label}."
-
-    selections = [item.strip() for item in clean.split(';') if item.strip()]
-    if valid_options:
-        invalid = [sel for sel in selections if sel not in valid_options]
-        if invalid:
-            return f"{label} solo admite opciones conocidas. Revise: {', '.join(invalid)}."
+def validate_multi_selection(value, label):
+    """Valida que exista al menos una selección en campos multiselección."""
+    if not value.strip():
+        return f"Debe seleccionar al menos una opción en {label}."
     return None
 
 
@@ -956,10 +870,10 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_client_identifier(self.tipo_id_var.get(), self.id_var.get()),
+                lambda: validate_required_text(self.id_var.get(), "el ID del cliente"),
                 self.logs,
                 f"Cliente {self.idx+1} - ID",
-                variables=[self.id_var, self.tipo_id_var],
+                variables=[self.id_var],
             )
         )
         self.validators.append(
@@ -982,22 +896,8 @@ class ClientFrame:
         )
         self.validators.append(
             FieldValidator(
-                dir_entry,
-                lambda: validate_address_list(self.direcciones_var.get(), "las direcciones del cliente"),
-                self.logs,
-                f"Cliente {self.idx+1} - Direcciones",
-                variables=[self.direcciones_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
                 self.accionado_listbox,
-                lambda: validate_multi_selection(
-                    self.accionado_var.get(),
-                    "Accionado",
-                    allow_empty=True,
-                    valid_options=ACCIONADO_OPTIONS,
-                ),
+                lambda: validate_multi_selection(self.accionado_var.get(), "Accionado"),
                 self.logs,
                 f"Cliente {self.idx+1} - Accionado",
                 variables=[self.accionado_var],
@@ -1081,7 +981,6 @@ class TeamMemberFrame:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
-        self._last_missing_lookup_id = None
 
         # Variables
         self.id_var = tk.StringVar()
@@ -1169,7 +1068,7 @@ class TeamMemberFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_team_member_id(self.id_var.get()),
+                lambda: validate_required_text(self.id_var.get(), "el ID del colaborador"),
                 self.logs,
                 f"Colaborador {self.idx+1} - ID",
                 variables=[self.id_var],
@@ -1178,7 +1077,7 @@ class TeamMemberFrame:
         self.validators.append(
             FieldValidator(
                 cod_ag_entry,
-                lambda: validate_agency_code(self.codigo_agencia_var.get()),
+                lambda: validate_amount_text(self.codigo_agencia_var.get(), "el código de agencia", allow_blank=True),
                 self.logs,
                 f"Colaborador {self.idx+1} - Código agencia",
                 variables=[self.codigo_agencia_var],
@@ -1203,7 +1102,6 @@ class TeamMemberFrame:
                 set_if_present(self.puesto_var, "puesto")
                 set_if_present(self.nombre_agencia_var, "nombre_agencia")
                 set_if_present(self.codigo_agencia_var, "codigo_agencia")
-                self._last_missing_lookup_id = None
                 log_event("navegacion", f"Autopoblado colaborador {self.idx+1} desde team_details.csv", self.logs)
             else:
                 log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
@@ -1371,11 +1269,13 @@ class ProductFrame:
         ttk.Label(row2, text="Categoría 1:").pack(side="left")
         cat1_cb = ttk.Combobox(row2, textvariable=self.cat1_var, values=list(TAXONOMIA.keys()), state="readonly", width=20)
         cat1_cb.pack(side="left", padx=5)
+        cat1_cb.bind("<FocusOut>", lambda e: self.on_cat1_change())
         cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat1_change())
         self.tooltip_register(cat1_cb, "Define la categoría principal del riesgo de producto.")
         ttk.Label(row2, text="Categoría 2:").pack(side="left")
         self.cat2_cb = ttk.Combobox(row2, textvariable=self.cat2_var, values=first_subcats, state="readonly", width=20)
         self.cat2_cb.pack(side="left", padx=5)
+        self.cat2_cb.bind("<FocusOut>", lambda e: self.on_cat2_change())
         self.cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat2_change())
         self.tooltip_register(self.cat2_cb, "Selecciona la subcategoría específica.")
         ttk.Label(row2, text="Modalidad:").pack(side="left")
@@ -1723,21 +1623,19 @@ class ProductFrame:
 
     def _validate_montos_consistentes(self):
         """Valida que la distribución de montos sea coherente con la investigación."""
-        m_inv = parse_decimal_amount(self.monto_inv_var.get())
-        m_perd = parse_decimal_amount(self.monto_perdida_var.get())
-        m_falla = parse_decimal_amount(self.monto_falla_var.get())
-        m_cont = parse_decimal_amount(self.monto_cont_var.get())
-        m_rec = parse_decimal_amount(self.monto_rec_var.get())
-        m_pago = parse_decimal_amount(self.monto_pago_var.get())
-        if None in (m_inv, m_perd, m_falla, m_cont, m_rec, m_pago):
+        try:
+            m_inv = float(self.monto_inv_var.get() or 0)
+            m_perd = float(self.monto_perdida_var.get() or 0)
+            m_falla = float(self.monto_falla_var.get() or 0)
+            m_cont = float(self.monto_cont_var.get() or 0)
+            m_rec = float(self.monto_rec_var.get() or 0)
+            m_pago = float(self.monto_pago_var.get() or 0)
+        except ValueError:
             return None
-        if abs((m_perd + m_falla + m_cont + m_rec) - m_inv) > Decimal("0.01"):
-            return "Los montos de pérdida, falla, contingencia y recupero deben sumar el monto investigado."
-        if m_pago > m_inv:
+        if (m_perd + m_falla + m_cont + m_rec) > m_inv + 1e-6:
+            return "La suma de pérdida, falla, contingencia y recupero no puede superar el monto investigado."
+        if m_pago > m_inv + 1e-6:
             return "El pago de deuda no puede ser mayor al monto investigado."
-        tipo_prod = self.tipo_prod_var.get().lower()
-        if any(word in tipo_prod for word in ['crédito', 'tarjeta']) and abs(m_cont - m_inv) > Decimal("0.01"):
-            return "En productos de crédito o tarjeta, el monto de contingencia debe igualar al investigado."
         return None
 
     def get_data(self):
@@ -1877,8 +1775,8 @@ class RiskFrame:
     def _validate_risk_id(self):
         """Valida el formato del identificador de riesgo."""
         value = self.id_var.get().strip()
-        if not re.match(r"^RSK-\d{6,10}$", value):
-            return "El ID de riesgo debe seguir el formato RSK-XXXXXX (6 a 10 dígitos)."
+        if not re.match(r"^RSK-\d{4,10}$", value):
+            return "El ID de riesgo debe seguir el formato RSK-0000." 
         return None
 
 
@@ -2190,11 +2088,13 @@ class FraudCaseApp:
         ttk.Label(row2, text="Categoría nivel 1:").pack(side="left")
         cat1_cb = ttk.Combobox(row2, textvariable=self.cat_caso1_var, values=list(TAXONOMIA.keys()), state="readonly", width=20)
         cat1_cb.pack(side="left", padx=5)
+        cat1_cb.bind("<FocusOut>", lambda e: self.on_case_cat1_change())
         cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_case_cat1_change())
         self.register_tooltip(cat1_cb, "Nivel superior de la taxonomía de fraude.")
         ttk.Label(row2, text="Categoría nivel 2:").pack(side="left")
         self.case_cat2_cb = ttk.Combobox(row2, textvariable=self.cat_caso2_var, values=list(TAXONOMIA[self.cat_caso1_var.get()].keys()), state="readonly", width=20)
         self.case_cat2_cb.pack(side="left", padx=5)
+        self.case_cat2_cb.bind("<FocusOut>", lambda e: self.on_case_cat2_change())
         self.case_cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_case_cat2_change())
         self.register_tooltip(self.case_cat2_cb, "Subcategoría que precisa el evento.")
         ttk.Label(row2, text="Modalidad:").pack(side="left")
@@ -2414,7 +2314,6 @@ class FraudCaseApp:
     def add_product(self):
         idx = len(self.product_frames)
         prod = ProductFrame(self.product_container, idx, self.remove_product, self.get_client_ids, self.get_team_ids, self.logs, self.product_lookup, self.register_tooltip)
-        self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
         # Renombrar
         for i, p in enumerate(self.product_frames):
@@ -2572,31 +2471,8 @@ class FraudCaseApp:
         btn_clear.pack(side="left", padx=2)
         self.register_tooltip(btn_clear, "Limpia el formulario completo para iniciar desde cero.")
 
-        feedback_frame = ttk.LabelFrame(frame, text="Retroalimentación del formulario")
-        feedback_frame.pack(fill="x", pady=(15, 5))
-        ttk.Label(feedback_frame, text="¿Esta pantalla fue útil?").pack(side="left", padx=5)
-        btn_up = ttk.Button(feedback_frame, text="👍 Me gustó", command=lambda: self.request_feedback(True))
-        btn_up.pack(side="left", padx=2)
-        self.register_tooltip(btn_up, "Haz clic si la experiencia fue positiva.")
-        btn_down = ttk.Button(feedback_frame, text="👎 Necesita mejoras", command=lambda: self.request_feedback(False))
-        btn_down.pack(side="left", padx=2)
-        self.register_tooltip(btn_down, "Cuéntanos qué deberíamos mejorar.")
-
         # Información adicional
         ttk.Label(frame, text="El auto‑guardado se realiza automáticamente en un archivo JSON").pack(anchor="w", pady=(10,2))
-
-    # ---------------------------------------------------------------------
-    # Importación desde CSV
-
-    def request_feedback(self, was_positive):
-        """Solicita un comentario breve y lo registra en los logs."""
-
-        sentiment = "positivo" if was_positive else "negativo"
-        default_prompt = "Cuéntanos qué funcionó bien." if was_positive else "Describe qué deberíamos mejorar."
-        comment = simpledialog.askstring("Retroalimentación", default_prompt, parent=self.root)
-        detail = (comment or "Sin comentarios adicionales").strip()
-        log_event("feedback", f"Feedback {sentiment}: {detail}", self.logs)
-        messagebox.showinfo("¡Gracias!", "Registramos tu opinión para seguir mejorando.")
 
     # ---------------------------------------------------------------------
     # Importación desde CSV
@@ -2694,11 +2570,11 @@ class FraudCaseApp:
                     self._populate_client_frame_from_row(target_frame, row)
                     imported += 1
             self.update_client_options_global()
+            self.root.update_idletasks()
             # Guardar autosave y registrar evento
             self.save_auto()
             log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
             if imported:
-                self.sync_main_form_after_import("clientes")
                 messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
             else:
                 messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
@@ -2759,7 +2635,6 @@ class FraudCaseApp:
                         'nombre_agencia': tm.nombre_agencia_var.get(),
                         'codigo_agencia': tm.codigo_agencia_var.get(),
                     }
-                    imported += 1
             self.update_team_options_global()
             self.save_auto()
             log_event("navegacion", "Colaboradores importados desde CSV", self.logs)
@@ -2874,11 +2749,8 @@ class FraudCaseApp:
                         'nombre_analitica': pr.nombre_analitica_var.get(),
                         'codigo_analitica': pr.codigo_analitica_var.get(),
                     }
-                    imported += 1
-            self.save_auto()
-            log_event("navegacion", "Productos importados desde CSV", self.logs)
-            if imported:
-                self.sync_main_form_after_import("productos")
+                self.save_auto()
+                log_event("navegacion", "Productos importados desde CSV", self.logs)
                 messagebox.showinfo("Importación completa", "Productos importados correctamente.")
             else:
                 messagebox.showwarning("Sin cambios", "El CSV no contenía productos nuevos.")
@@ -2942,7 +2814,6 @@ class FraudCaseApp:
                             'direcciones': cl.direcciones_var.get(),
                             'accionado': accionado_val,
                         }
-                        created_records = True
                     # Team member
                     id_col = row.get('id_colaborador', '').strip()
                     if id_col and id_col not in [t.id_var.get().strip() for t in self.team_frames]:
@@ -2966,7 +2837,6 @@ class FraudCaseApp:
                             'nombre_agencia': tm.nombre_agencia_var.get(),
                             'codigo_agencia': tm.codigo_agencia_var.get(),
                         }
-                        created_records = True
                     # Producto
                     id_prod = row.get('id_producto', '').strip()
                     if id_prod:
@@ -3044,7 +2914,6 @@ class FraudCaseApp:
                                 'nombre_analitica': prod.nombre_analitica_var.get(),
                                 'codigo_analitica': prod.codigo_analitica_var.get(),
                             }
-                            created_records = True
                         # Añadir asignación a este producto
                         monto_asignado = row.get('monto_asignado', '').strip()
                         if id_col and monto_asignado:
