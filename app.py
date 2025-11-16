@@ -2475,7 +2475,6 @@ class FraudCaseApp:
             log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
             if imported:
                 messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
-                self.focus_main_tab()
             else:
                 messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
         except Exception as ex:
