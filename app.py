@@ -56,12 +56,13 @@ correos, direcciones y planes de acción).
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import csv
 import json
 import os
 import re
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from functools import partial
 
 # ---------------------------------------------------------------------------
@@ -723,7 +724,9 @@ def log_event(event_type, message, logs):
         logs (list): Lista de registros donde se añadirá el nuevo log.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    logs.append({"timestamp": timestamp, "tipo": event_type, "mensaje": message})
+    row = {"timestamp": timestamp, "tipo": event_type, "mensaje": message}
+    logs.append(row)
+    _append_log_to_disk(row)
     # Ejecutar callback de guardado temporal si está definido y el evento es de navegación
     if SAVE_TEMP_CALLBACK is not None and event_type == 'navegacion':
         try:
@@ -731,6 +734,25 @@ def log_event(event_type, message, logs):
         except Exception:
             # Ignorar errores en el guardado temporal para no interrumpir el uso
             pass
+
+
+def _append_log_to_disk(row):
+    """Persiste cada entrada de log en ``LOGS_FILE``."""
+
+    if not LOGS_FILE:
+        return
+    folder = os.path.dirname(LOGS_FILE)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder, exist_ok=True)
+    file_exists = os.path.exists(LOGS_FILE)
+    try:
+        with open(LOGS_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['timestamp', 'tipo', 'mensaje'])
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(row)
+    except OSError:
+        pass
 
 
 def escape_csv(value):
@@ -1083,6 +1105,15 @@ class TeamMemberFrame:
                 log_event("navegacion", f"Autopoblado colaborador {self.idx+1} desde team_details.csv", self.logs)
             else:
                 log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
+                if self._last_missing_lookup_id != cid:
+                    messagebox.showwarning(
+                        "Colaborador no encontrado",
+                        (
+                            f"El ID {cid} no existe en el catálogo team_details.csv. "
+                            "Verifica el código o actualiza el archivo maestro."
+                        ),
+                    )
+                    self._last_missing_lookup_id = cid
         # Actualizar desplegables de colaboradores
         self.update_team_options()
 
@@ -1819,8 +1850,13 @@ class NormFrame:
         )
 
     def get_data(self):
+        norm_id = self.id_var.get().strip()
+        if not norm_id:
+            norm_id = f"{random.randint(1000, 9999)}.{random.randint(100, 999):03d}.{random.randint(10, 99):02d}.{random.randint(10, 99):02d}"
+            self.id_var.set(norm_id)
+            log_event("navegacion", f"Norma {self.idx+1} sin ID: se asignó correlativo {norm_id}", self.logs)
         return {
-            "id_norma": self.id_var.get().strip(),
+            "id_norma": norm_id,
             "descripcion": self.descripcion_var.get().strip(),
             "fecha_vigencia": self.fecha_var.get().strip(),
         }
@@ -1903,48 +1939,131 @@ class FraudCaseApp:
 
     def build_ui(self):
         """Construye la interfaz del usuario en diferentes pestañas."""
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill="both", expand=True)
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True)
 
-        # --- Pestaña Detalles del caso ---
-        case_tab = ttk.Frame(notebook)
-        notebook.add(case_tab, text="Detalles del caso")
-        self.build_case_tab(case_tab)
-
-        # --- Pestaña Clientes ---
-        clients_tab = ttk.Frame(notebook)
-        notebook.add(clients_tab, text="Clientes")
-        self.build_clients_tab(clients_tab)
-
-        # --- Pestaña Colaboradores ---
-        team_tab = ttk.Frame(notebook)
-        notebook.add(team_tab, text="Colaboradores")
-        self.build_team_tab(team_tab)
-
-        # --- Pestaña Productos ---
-        product_tab = ttk.Frame(notebook)
-        notebook.add(product_tab, text="Productos")
-        self.build_products_tab(product_tab)
+        # --- Pestaña principal: caso y participantes ---
+        self.main_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.main_tab, text="Caso y participantes")
+        self.build_case_and_participants_tab(self.main_tab)
 
         # --- Pestaña Riesgos ---
-        risk_tab = ttk.Frame(notebook)
-        notebook.add(risk_tab, text="Riesgos")
+        risk_tab = ttk.Frame(self.notebook)
+        self.notebook.add(risk_tab, text="Riesgos")
         self.build_risk_tab(risk_tab)
 
         # --- Pestaña Normas ---
-        norm_tab = ttk.Frame(notebook)
-        notebook.add(norm_tab, text="Normas")
+        norm_tab = ttk.Frame(self.notebook)
+        self.notebook.add(norm_tab, text="Normas")
         self.build_norm_tab(norm_tab)
 
         # --- Pestaña Análisis ---
-        analysis_tab = ttk.Frame(notebook)
-        notebook.add(analysis_tab, text="Análisis y narrativas")
+        analysis_tab = ttk.Frame(self.notebook)
+        self.notebook.add(analysis_tab, text="Análisis y narrativas")
         self.build_analysis_tab(analysis_tab)
 
         # --- Pestaña Acciones ---
-        actions_tab = ttk.Frame(notebook)
-        notebook.add(actions_tab, text="Acciones")
+        actions_tab = ttk.Frame(self.notebook)
+        self.notebook.add(actions_tab, text="Acciones")
         self.build_actions_tab(actions_tab)
+
+    def build_case_and_participants_tab(self, parent):
+        """Agrupa en una sola vista los datos del caso, clientes, productos y equipo.
+
+        Esta función encapsula la experiencia solicitada por los analistas:
+        evita tener que cambiar de pestaña para capturar la información básica
+        del expediente y coloca, en orden lógico, las secciones de caso,
+        clientes, productos y colaboradores.  Para lograrlo, se crean
+        ``LabelFrame`` consecutivos que actúan como contenedores y se reutiliza
+        la lógica existente de ``build_case_tab``/``build_clients_tab``/etc.
+
+        Args:
+            parent (tk.Widget): Contenedor donde se inyectarán las secciones.
+
+        Ejemplo::
+
+            # Durante la construcción de la UI
+            self.build_case_and_participants_tab(self.main_tab)
+        """
+
+        case_section = ttk.LabelFrame(parent, text="1. Datos generales del caso")
+        case_section.pack(fill="x", expand=False, padx=5, pady=5)
+        self.build_case_tab(case_section)
+
+        clients_section = ttk.LabelFrame(parent, text="2. Clientes implicados")
+        clients_section.pack(fill="x", expand=True, padx=5, pady=5)
+        self.build_clients_tab(clients_section)
+
+        products_section = ttk.LabelFrame(parent, text="3. Productos investigados")
+        products_section.pack(fill="x", expand=True, padx=5, pady=5)
+        self.build_products_tab(products_section)
+
+        team_section = ttk.LabelFrame(parent, text="4. Colaboradores involucrados")
+        team_section.pack(fill="x", expand=True, padx=5, pady=5)
+        self.build_team_tab(team_section)
+
+    def focus_main_tab(self):
+        """Muestra la pestaña principal cuando una importación agrega registros.
+
+        Al terminar de cargar clientes, productos o colaboradores desde la
+        pestaña de acciones, los usuarios esperaban ver de inmediato los datos
+        recién agregados.  Este helper selecciona la pestaña principal del
+        ``Notebook`` (si existe) y registra el cambio en el log para que el
+        auto-guardado capture el nuevo estado.
+        """
+
+        if getattr(self, "notebook", None) is None or getattr(self, "main_tab", None) is None:
+            return
+        try:
+            self.notebook.select(self.main_tab)
+            log_event("navegacion", "Se mostró la pestaña principal tras importar datos", self.logs)
+        except tk.TclError:
+            # Si el widget ya no existe (por ejemplo, al cerrar la app), se ignora el error.
+            pass
+
+    def sync_main_form_after_import(self, section_name):
+        """Sincroniza la interfaz principal después de importar datos masivos.
+
+        La función se diseñó como respuesta directa al feedback de que los
+        registros cargados desde la pestaña de *Acciones* no se veían reflejados
+        inmediatamente en las secciones de caso, clientes y productos.  Para
+        garantizar esa visibilidad, se realizan cuatro pasos en orden:
+
+            1. Se invocan ``update_client_options_global`` y
+               ``update_team_options_global`` para notificar a todos los
+               ``Combobox`` dependientes que hay nuevos IDs disponibles.
+            2. Se llama a ``update_idletasks`` sobre la ventana raíz para que
+               Tkinter repinte los marcos dinámicos y muestre los datos recién
+               insertados sin esperar a que el usuario interactúe.
+            3. Se selecciona la pestaña principal (método ``focus_main_tab``) de
+               modo que el usuario visualice de inmediato los clientes,
+               productos o colaboradores importados.
+            4. Se registra un evento de navegación indicando qué tipo de datos
+               disparó la sincronización, lo que permite auditar el proceso.
+
+        Args:
+            section_name (str): Nombre en español de la sección importada. Se
+                utiliza únicamente para detallar el mensaje del log.
+
+        Ejemplo::
+
+            self.sync_main_form_after_import("clientes")
+        """
+
+        self.update_client_options_global()
+        self.update_team_options_global()
+        try:
+            self.root.update_idletasks()
+        except tk.TclError:
+            # Si la ventana ya no existe (por ejemplo al cerrar la app) no es
+            # necesario continuar con la sincronización.
+            return
+        self.focus_main_tab()
+        log_event(
+            "navegacion",
+            f"Sincronizó la pestaña principal tras importar {section_name}",
+            self.logs,
+        )
 
     def build_case_tab(self, parent):
         """Construye la pestaña de detalles del caso."""
@@ -2084,6 +2203,11 @@ class FraudCaseApp:
         self.mod_caso_var.set('')
         self.case_mod_cb.set('')
         log_event("navegacion", "Modificó categoría 2 del caso", self.logs)
+        if self.cat_caso2_var.get() == 'Fraude Externo':
+            messagebox.showwarning(
+                "Analítica de fraude externo",
+                "Recuerda coordinar con el equipo de reclamos para registrar la analítica correcta en casos de Fraude Externo.",
+            )
 
     def build_clients_tab(self, parent):
         """Construye la pestaña de clientes con lista dinámica."""
@@ -2170,6 +2294,22 @@ class FraudCaseApp:
         add_btn.pack(side="left", padx=5)
         self.register_tooltip(add_btn, "Registra un nuevo producto investigado.")
         # No añadimos automáticamente un producto porque los productos están asociados a clientes
+
+    def _apply_case_taxonomy_defaults(self, product_frame):
+        """Configura un producto nuevo con la taxonomía seleccionada en el caso."""
+
+        cat1 = self.cat_caso1_var.get()
+        cat2 = self.cat_caso2_var.get()
+        modalidad = self.mod_caso_var.get()
+        if cat1 in TAXONOMIA:
+            product_frame.cat1_var.set(cat1)
+            product_frame.on_cat1_change()
+            if cat2 in TAXONOMIA[cat1]:
+                product_frame.cat2_var.set(cat2)
+                product_frame.on_cat2_change()
+                if modalidad in TAXONOMIA[cat1][cat2]:
+                    product_frame.mod_var.set(modalidad)
+                    product_frame.mod_cb.set(modalidad)
 
     def add_product(self):
         idx = len(self.product_frames)
@@ -2467,6 +2607,7 @@ class FraudCaseApp:
         try:
             with open(filename, newline='', encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                imported = 0
                 for row in reader:
                     id_col = row.get('id_colaborador', '').strip()
                     if not id_col:
@@ -2497,7 +2638,11 @@ class FraudCaseApp:
             self.update_team_options_global()
             self.save_auto()
             log_event("navegacion", "Colaboradores importados desde CSV", self.logs)
-            messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+            if imported:
+                self.sync_main_form_after_import("colaboradores")
+                messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar colaboradores: {ex}")
 
@@ -2526,6 +2671,7 @@ class FraudCaseApp:
         try:
             with open(filename, newline='', encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                imported = 0
                 for row in reader:
                     id_prod = row.get('id_producto', '').strip()
                     if not id_prod:
@@ -2550,6 +2696,20 @@ class FraudCaseApp:
                             mod = row.get('modalidad', '')
                             if mod in TAXONOMIA[cat1][cat2]:
                                 pr.mod_var.set(mod)
+                            elif mod:
+                                warning = f"Producto {id_prod}: la modalidad '{mod}' no corresponde a {cat1}/{cat2}."
+                                log_event('validacion', warning, self.logs)
+                                messagebox.showwarning('Taxonomía inválida', warning)
+                        elif cat2:
+                            warning = f"Producto {id_prod}: la categoría 2 '{cat2}' no existe bajo {cat1}."
+                            log_event('validacion', warning, self.logs)
+                            messagebox.showwarning('Taxonomía inválida', warning)
+                    else:
+                        if cat1:
+                            warning = f"Producto {id_prod}: la categoría 1 '{cat1}' no está en la taxonomía."
+                            log_event('validacion', warning, self.logs)
+                            messagebox.showwarning('Taxonomía inválida', warning)
+                        pr.cat1_var.set(cat1)
                     pr.canal_var.set(row.get('canal', CANAL_LIST[0]))
                     pr.proceso_var.set(row.get('proceso', PROCESO_LIST[0]))
                     pr.fecha_oc_var.set(row.get('fecha_ocurrencia', ''))
@@ -2592,6 +2752,8 @@ class FraudCaseApp:
                 self.save_auto()
                 log_event("navegacion", "Productos importados desde CSV", self.logs)
                 messagebox.showinfo("Importación completa", "Productos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "El CSV no contenía productos nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar productos: {ex}")
 
@@ -2629,6 +2791,7 @@ class FraudCaseApp:
         try:
             with open(filename, newline='', encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                created_records = False
                 for row in reader:
                     # Columns may include id_cliente, tipo_id, flag_cliente, id_producto, id_colaborador, monto_asignado, etc.
                     id_cliente = row.get('id_cliente', '').strip()
@@ -2699,6 +2862,20 @@ class FraudCaseApp:
                                     mod = row.get('modalidad', '')
                                     if mod in TAXONOMIA[cat1][cat2]:
                                         prod.mod_var.set(mod)
+                                    elif mod:
+                                        warning = f"Producto {id_prod}: la modalidad '{mod}' no corresponde a {cat1}/{cat2}."
+                                        log_event('validacion', warning, self.logs)
+                                        messagebox.showwarning('Taxonomía inválida', warning)
+                                elif cat2:
+                                    warning = f"Producto {id_prod}: la categoría 2 '{cat2}' no existe bajo {cat1}."
+                                    log_event('validacion', warning, self.logs)
+                                    messagebox.showwarning('Taxonomía inválida', warning)
+                            else:
+                                if cat1:
+                                    warning = f"Producto {id_prod}: la categoría 1 '{cat1}' no está en la taxonomía."
+                                    log_event('validacion', warning, self.logs)
+                                    messagebox.showwarning('Taxonomía inválida', warning)
+                                prod.cat1_var.set(cat1)
                             prod.canal_var.set(row.get('canal', CANAL_LIST[0]))
                             prod.proceso_var.set(row.get('proceso', PROCESO_LIST[0]))
                             prod.fecha_oc_var.set(row.get('fecha_ocurrencia', ''))
@@ -2745,12 +2922,17 @@ class FraudCaseApp:
                             prod.involvements.append(inv)
                             inv.team_var.set(id_col)
                             inv.monto_var.set(monto_asignado)
+                            created_records = True
             # Actualizar opciones
             self.update_client_options_global()
             self.update_team_options_global()
             self.save_auto()
             log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
-            messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+            if created_records:
+                self.sync_main_form_after_import("datos combinados")
+                messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
 
@@ -3194,10 +3376,36 @@ class FraudCaseApp:
             errors.append("Debe ingresar el número de caso.")
         # Validar duplicidad del key técnico (caso, producto, cliente, colaborador, fecha ocurrencia, reclamo)
         key_set = set()
+        product_client_map = {}
+        total_investigado = Decimal('0')
+        total_componentes = Decimal('0')
+        for idx, tm in enumerate(self.team_frames, start=1):
+            division = tm.division_var.get().strip().lower()
+            area = tm.area_var.get().strip().lower()
+            division_norm = division.replace('á', 'a').replace('é', 'e').replace('ó', 'o')
+            area_norm = area.replace('á', 'a').replace('é', 'e').replace('ó', 'o')
+            needs_agency = (
+                'dca' in division_norm or 'canales de atencion' in division_norm
+            ) and ('area comercial' in area_norm)
+            if needs_agency:
+                if not tm.nombre_agencia_var.get().strip() or not tm.codigo_agencia_var.get().strip():
+                    errors.append(
+                        f"El colaborador {idx} debe registrar nombre y código de agencia por pertenecer a canales comerciales."
+                    )
         for p in self.product_frames:
             prod_data = p.get_data()
             pid = prod_data['producto']['id_producto']
             cid = prod_data['producto']['id_cliente']
+            if pid in product_client_map:
+                prev_client = product_client_map[pid]
+                if prev_client != cid:
+                    errors.append(
+                        f"El producto {pid} está asociado a dos clientes distintos ({prev_client} y {cid})."
+                    )
+                else:
+                    errors.append(f"El producto {pid} está duplicado en el formulario.")
+            else:
+                product_client_map[pid] = cid
             # For each involvement; if no assignments, use empty string for id_colaborador
             if not prod_data['asignaciones']:
                 # still need to check combination with blank collaborator
@@ -3225,24 +3433,23 @@ class FraudCaseApp:
             except ValueError:
                 errors.append(f"Fechas inválidas en el producto {producto['id_producto']}")
             # Montos
-            def parse_amount(s):
-                try:
-                    return float(s) if s else 0.0
-                except ValueError:
-                    return None
-            m_inv = parse_amount(producto['monto_investigado'])
-            m_perd = parse_amount(producto['monto_perdida_fraude'])
-            m_fall = parse_amount(producto['monto_falla_procesos'])
-            m_cont = parse_amount(producto['monto_contingencia'])
-            m_rec = parse_amount(producto['monto_recuperado'])
-            m_pago = parse_amount(producto['monto_pago_deuda'])
+            m_inv = parse_decimal_amount(producto['monto_investigado'])
+            m_perd = parse_decimal_amount(producto['monto_perdida_fraude'])
+            m_fall = parse_decimal_amount(producto['monto_falla_procesos'])
+            m_cont = parse_decimal_amount(producto['monto_contingencia'])
+            m_rec = parse_decimal_amount(producto['monto_recuperado'])
+            m_pago = parse_decimal_amount(producto['monto_pago_deuda'])
             if m_inv is None or m_perd is None or m_fall is None or m_cont is None or m_rec is None or m_pago is None:
                 errors.append(f"Valores numéricos inválidos en el producto {producto['id_producto']}")
                 continue
-            if m_perd + m_fall + m_cont + m_rec > m_inv + 1e-6:
-                errors.append(f"La suma de pérdida, falla, contingencia y recupero supera el monto investigado en el producto {producto['id_producto']}")
-            if m_pago > m_inv + 1e-6:
+            if abs((m_perd + m_fall + m_cont + m_rec) - m_inv) > Decimal('0.01'):
+                errors.append(
+                    f"La suma de pérdida, falla, contingencia y recupero debe ser igual al monto investigado en el producto {producto['id_producto']}"
+                )
+            if m_pago > m_inv:
                 errors.append(f"El monto pagado de deuda excede el monto investigado en el producto {producto['id_producto']}")
+            total_investigado += m_inv
+            total_componentes += (m_perd + m_fall + m_cont + m_rec)
             # Reclamo y analíticas
             if (m_perd > 0 or m_fall > 0 or m_cont > 0) and (not data['reclamo']['id_reclamo'] or not data['reclamo']['nombre_analitica'] or not data['reclamo']['codigo_analitica']):
                 errors.append(f"Debe ingresar reclamo y analítica completa en el producto {producto['id_producto']} porque hay montos de pérdida, falla o contingencia")
@@ -3258,11 +3465,13 @@ class FraudCaseApp:
             # Tipo producto vs contingencia
             tipo_prod = producto['tipo_producto'].lower()
             if any(word in tipo_prod for word in ['crédito', 'tarjeta']):
-                if abs(m_cont - m_inv) > 1e-6:
+                if abs(m_cont - m_inv) > Decimal('0.01'):
                     errors.append(f"El monto de contingencia debe ser igual al monto investigado en el producto {producto['id_producto']} porque es un crédito o tarjeta")
             # Fraude externo
             if producto['categoria2'] == 'Fraude Externo':
                 messagebox.showwarning("Fraude Externo", f"Producto {producto['id_producto']} con categoría 2 'Fraude Externo': verifique la analítica registrada.")
+        if self.product_frames and abs(total_componentes - total_investigado) > Decimal('0.01'):
+            errors.append("La suma total de pérdidas, fallas, contingencias y recuperos no coincide con el total investigado del caso.")
         # Validar que al menos un producto coincida con categorías del caso
         match_found = False
         for p in self.product_frames:
@@ -3275,8 +3484,8 @@ class FraudCaseApp:
         # Validar reporte tipo Interno vs pérdidas y sanciones
         if self.tipo_informe_var.get() == 'Interno':
             any_loss = any(
-                float(p.get_data()['producto']['monto_perdida_fraude'] or 0) > 0 or
-                float(p.get_data()['producto']['monto_contingencia'] or 0) > 0
+                parse_decimal_amount(p.get_data()['producto']['monto_perdida_fraude']) > Decimal('0') or
+                parse_decimal_amount(p.get_data()['producto']['monto_contingencia']) > Decimal('0')
                 for p in self.product_frames
             )
             any_sanction = any(
@@ -3291,8 +3500,8 @@ class FraudCaseApp:
         for r in self.risk_frames:
             rd = r.get_data()
             rid = rd['id_riesgo']
-            if not rid.startswith('RSK-'):
-                errors.append(f"ID de riesgo {rid} no sigue el formato RSK-XXXXXX")
+            if not re.match(r"^RSK-\d{6,10}$", rid):
+                errors.append(f"ID de riesgo {rid} no sigue el formato RSK-XXXXXX (6-10 dígitos)")
             if rid in risk_ids:
                 errors.append(f"ID de riesgo duplicado: {rid}")
             risk_ids.add(rid)
@@ -3333,6 +3542,173 @@ class FraudCaseApp:
 
     # ---------------------------------------------------------------------
     # Exportación de datos
+
+    def build_markdown_report(self, data):
+        """Genera el informe solicitado en formato Markdown."""
+
+        case = data['caso']
+        analysis = data['analisis']
+        clients = data['clientes']
+        team = data['colaboradores']
+        products = data['productos']
+        riesgos = data['riesgos']
+        normas = data['normas']
+        total_inv = sum((parse_decimal_amount(p.get('monto_investigado')) or Decimal('0')) for p in products)
+        destinatarios = sorted({
+            " - ".join(filter(None, [col.get('division', '').strip(), col.get('area', '').strip(), col.get('servicio', '').strip()]))
+            for col in team
+            if any([col.get('division'), col.get('area'), col.get('servicio')])
+        })
+        destinatarios = [d for d in destinatarios if d]
+        destinatarios_text = ", ".join(destinatarios) if destinatarios else "Sin divisiones registradas"
+
+        def md_table(headers, rows):
+            if not rows:
+                return ["Sin registros."]
+            safe = lambda cell: str(cell or '').replace('|', '\\|')
+            lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(['---'] * len(headers)) + " |"]
+            for row in rows:
+                lines.append("| " + " | ".join(safe(col) for col in row) + " |")
+            return lines
+
+        reclamo_por_producto = {r['id_producto']: r for r in data['reclamos']}
+
+        lines = [
+            "Banco de Crédito - BCP",
+            "SEGURIDAD CORPORATIVA, INVESTIGACIONES & CRIMEN CIBERNÉTICO",
+            "INVESTIGACIONES & CIBERCRIMINOLOGÍA",
+            f"Informe {case['tipo_informe']} N.{case['id_caso']}",
+            f"Dirigido a: {destinatarios_text}",
+            (
+                "Referencia: "
+                f"{len(team)} colaboradores investigados, {len(products)} productos afectados, "
+                f"monto investigado total {total_inv:.2f} y modalidad {case['modalidad']}."
+            ),
+            "",
+            "## 1. Antecedentes",
+            analysis.get('antecedentes') or "Pendiente",
+            "",
+            "## 2. Tabla de clientes",
+        ]
+        client_rows = [
+            [
+                f"Cliente {idx}",
+                client.get('tipo_id', ''),
+                client.get('id_cliente', ''),
+                client.get('flag', ''),
+                client.get('telefonos', ''),
+                client.get('correos', ''),
+                client.get('direcciones', ''),
+                client.get('accionado', ''),
+            ]
+            for idx, client in enumerate(clients, start=1)
+        ]
+        lines.extend(md_table([
+            "Cliente", "Tipo ID", "ID", "Flag", "Teléfonos", "Correos", "Direcciones", "Accionado"
+        ], client_rows))
+        lines.extend([
+            "",
+            "## 3. Tabla de team members involucrados",
+        ])
+        team_rows = [
+            [
+                f"Colaborador {idx}",
+                col.get('id_colaborador', ''),
+                col.get('flag', ''),
+                col.get('division', ''),
+                col.get('area', ''),
+                col.get('servicio', ''),
+                col.get('puesto', ''),
+                col.get('nombre_agencia', ''),
+                col.get('codigo_agencia', ''),
+                col.get('tipo_falta', ''),
+                col.get('tipo_sancion', ''),
+            ]
+            for idx, col in enumerate(team, start=1)
+        ]
+        lines.extend(md_table([
+            "Colaborador", "ID", "Flag", "División", "Área", "Servicio", "Puesto", "Agencia", "Código", "Falta", "Sanción"
+        ], team_rows))
+        lines.extend([
+            "",
+            "## 4. Tabla de productos combinado",
+        ])
+        product_rows = []
+        for idx, prod in enumerate(products, start=1):
+            reclamo = reclamo_por_producto.get(prod['id_producto'], {})
+            product_rows.append([
+                f"Producto {idx}",
+                prod.get('id_producto', ''),
+                prod.get('id_cliente', ''),
+                prod.get('tipo_producto', ''),
+                prod.get('canal', ''),
+                prod.get('proceso', ''),
+                prod.get('categoria1', ''),
+                prod.get('categoria2', ''),
+                prod.get('modalidad', ''),
+                f"INV:{prod.get('monto_investigado', '')} | PER:{prod.get('monto_perdida_fraude', '')} | FALLA:{prod.get('monto_falla_procesos', '')} | CONT:{prod.get('monto_contingencia', '')} | REC:{prod.get('monto_recuperado', '')} | PAGO:{prod.get('monto_pago_deuda', '')}",
+                f"{reclamo.get('id_reclamo', '')} / {reclamo.get('codigo_analitica', '')}",
+            ])
+        lines.extend(md_table([
+            "Registro", "ID", "Cliente", "Tipo", "Canal", "Proceso", "Cat.1", "Cat.2", "Modalidad", "Montos", "Reclamo/Analítica"
+        ], product_rows))
+        lines.extend([
+            "",
+            "## 5. Resumen automatizado",
+            (
+                f"Se documentaron {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos. "
+                f"El caso está tipificado como {case['categoria1']} / {case['categoria2']} en modalidad {case['modalidad']}."
+            ),
+            "",
+            "## 6. Modus Operandi",
+            analysis.get('modus_operandi') or "Pendiente",
+            "",
+            "## 7. Hallazgos Principales",
+            analysis.get('hallazgos') or "Pendiente",
+            "",
+            "## 8. Descargo de colaboradores",
+            analysis.get('descargos') or "Pendiente",
+            "",
+            "## 9. Tabla de riesgos identificados",
+        ])
+        risk_rows = [
+            [
+                risk.get('id_riesgo', ''),
+                risk.get('lider', ''),
+                risk.get('criticidad', ''),
+                risk.get('exposicion_residual', ''),
+                risk.get('planes_accion', ''),
+            ]
+            for risk in riesgos
+        ]
+        lines.extend(md_table([
+            "ID Riesgo", "Líder", "Criticidad", "Exposición US$", "Planes"
+        ], risk_rows))
+        lines.extend([
+            "",
+            "## 10. Tabla de normas transgredidas",
+        ])
+        norm_rows = [
+            [
+                norm.get('id_norma', ''),
+                norm.get('descripcion', ''),
+                norm.get('fecha_vigencia', ''),
+            ]
+            for norm in normas
+        ]
+        lines.extend(md_table([
+            "N° de norma", "Descripción", "Fecha de vigencia"
+        ], norm_rows))
+        lines.extend([
+            "",
+            "## 11. Conclusiones",
+            analysis.get('conclusiones') or "Pendiente",
+            "",
+            "## 12. Recomendaciones y mejoras de procesos",
+            analysis.get('recomendaciones') or "Pendiente",
+            "",
+        ])
+        return "\n".join(lines)
 
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta elegida."""
@@ -3393,7 +3769,14 @@ class FraudCaseApp:
         # Guardar JSON
         with open(os.path.join(folder, f"{case_id}_version.json"), 'w', encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        messagebox.showinfo("Datos guardados", f"Los archivos se han guardado en la carpeta seleccionada como {case_id}_*.csv y {case_id}_version.json.")
+        # Guardar informe Markdown
+        report_path = os.path.join(folder, f"{case_id}_informe.md")
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write(self.build_markdown_report(data))
+        messagebox.showinfo(
+            "Datos guardados",
+            f"Los archivos se han guardado como {case_id}_*.csv, {case_id}_version.json y {case_id}_informe.md.",
+        )
         log_event("navegacion", "Datos guardados y enviados", self.logs)
 
     def save_temp_version(self):
