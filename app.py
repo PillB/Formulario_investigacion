@@ -2752,8 +2752,7 @@ class FraudCaseApp:
                 self.save_auto()
                 log_event("navegacion", "Productos importados desde CSV", self.logs)
                 messagebox.showinfo("Importación completa", "Productos importados correctamente.")
-            else:
-                messagebox.showwarning("Sin cambios", "El CSV no contenía productos nuevos.")
+                
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar productos: {ex}")
 
