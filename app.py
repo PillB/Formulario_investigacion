@@ -2963,6 +2963,7 @@ class FraudCaseApp:
     def add_product(self):
         idx = len(self.product_frames)
         prod = ProductFrame(self.product_container, idx, self.remove_product, self.get_client_ids, self.get_team_ids, self.logs, self.product_lookup, self.register_tooltip)
+        self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
         # Renombrar
         for i, p in enumerate(self.product_frames):
@@ -3446,6 +3447,7 @@ class FraudCaseApp:
     def _obtain_product_slot_for_import(self):
         for frame in self.product_frames:
             if not frame.id_var.get().strip():
+                self._apply_case_taxonomy_defaults(frame)
                 return frame
         self.add_product()
         return self.product_frames[-1]
