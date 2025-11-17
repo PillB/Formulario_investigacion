@@ -2534,6 +2534,7 @@ class FraudCaseApp:
 
         self.update_client_options_global()
         self.update_team_options_global()
+        self.refresh_summary_tables()
         try:
             self.root.update_idletasks()
         except tk.TclError:
