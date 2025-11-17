@@ -3752,10 +3752,16 @@ class FraudCaseApp:
                         self.logs,
                     )
                     continue
+                # ``_trigger_import_id_refresh`` ends up invoking the product
+                # ``on_id_change`` handler, which repopulates the reclamo
+                # fields from the catalog data for that product. Trigger the
+                # refresh *before* assigning the pasted claim/analytic values
+                # so they are not immediately overwritten (mirroring the CSV
+                # import flow for reclamos).
+                self._trigger_import_id_refresh(frame, product_id)
                 frame.id_reclamo_var.set(claim_id)
                 frame.nombre_analitica_var.set(analytic_name)
                 frame.codigo_analitica_var.set(analytic_code)
-                self._trigger_import_id_refresh(frame, product_id)
                 processed += 1
             if processed:
                 self.save_auto()
