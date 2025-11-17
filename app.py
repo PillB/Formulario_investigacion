@@ -4080,6 +4080,7 @@ class FraudCaseApp:
             return processed
         if section_key == "reclamos":
             missing_products = []
+            new_products_without_catalog = []
             for values in rows:
                 row_dict = {
                     'id_reclamo': (values[0] or "").strip(),
@@ -4101,7 +4102,13 @@ class FraudCaseApp:
                     client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
                     self._ensure_client_exists(client_id, client_details)
                 if new_product:
-                    self._populate_product_frame_from_row(product_frame, hydrated)
+                    if found:
+                        self._populate_product_frame_from_row(product_frame, hydrated)
+                    else:
+                        # Solo registrar el ID y mantener defaults hasta que el usuario complete los campos obligatorios.
+                        product_frame.id_var.set(product_id)
+                        if product_id not in new_products_without_catalog:
+                            new_products_without_catalog.append(product_id)
                 self._trigger_import_id_refresh(
                     product_frame,
                     product_id,
@@ -4129,6 +4136,18 @@ class FraudCaseApp:
                 log_event("navegacion", f"Reclamos pegados desde resumen: {processed}", self.logs)
             if missing_products:
                 self._report_missing_detail_ids("productos", missing_products)
+            if new_products_without_catalog:
+                messagebox.showerror(
+                    "Productos sin detalle catalogado",
+                    (
+                        "Los siguientes productos provienen de reclamos pero no tienen"
+                        " detalle en los catálogos: "
+                        + ", ".join(new_products_without_catalog)
+                        + ".\nCompleta manualmente la información obligatoria en la"
+                        " sección de Productos o corrige la fuente de datos antes de"
+                        " continuar."
+                    ),
+                )
             return processed
         if section_key == "riesgos":
             duplicate_ids = []
