@@ -1082,7 +1082,17 @@ def escape_csv(value):
 class ClientFrame:
     """Representa un cliente y su interfaz dentro de la sección de clientes."""
 
-    def __init__(self, parent, idx, remove_callback, update_client_options, logs, tooltip_register, client_lookup=None):
+    def __init__(
+        self,
+        parent,
+        idx,
+        remove_callback,
+        update_client_options,
+        logs,
+        tooltip_register,
+        client_lookup=None,
+        summary_refresh_callback=None,
+    ):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
@@ -1093,6 +1103,7 @@ class ClientFrame:
         self.client_lookup = client_lookup or {}
         self.validators = []
         self._last_missing_lookup_id = None
+        self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
 
         # Variables de control
         self.tipo_id_var = tk.StringVar(value=TIPO_ID_LIST[0])
@@ -1221,6 +1232,7 @@ class ClientFrame:
         cid = self.id_var.get().strip()
         if not cid:
             self._last_missing_lookup_id = None
+            self.schedule_summary_refresh()
             return
         data = self.client_lookup.get(cid)
         if data:
@@ -1249,6 +1261,7 @@ class ClientFrame:
                     ),
                 )
                 self._last_missing_lookup_id = cid
+        self.schedule_summary_refresh()
 
     def get_data(self):
         """Devuelve los datos del cliente como un diccionario."""
@@ -1293,7 +1306,17 @@ class ClientFrame:
 class TeamMemberFrame:
     """Representa un colaborador y su interfaz en la sección de colaboradores."""
 
-    def __init__(self, parent, idx, remove_callback, update_team_options, team_lookup, logs, tooltip_register):
+    def __init__(
+        self,
+        parent,
+        idx,
+        remove_callback,
+        update_team_options,
+        team_lookup,
+        logs,
+        tooltip_register,
+        summary_refresh_callback=None,
+    ):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
@@ -1303,6 +1326,7 @@ class TeamMemberFrame:
         self.tooltip_register = tooltip_register
         self.validators = []
         self._last_missing_lookup_id = None
+        self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
 
         # Variables
         self.id_var = tk.StringVar()
@@ -1441,6 +1465,7 @@ class TeamMemberFrame:
             self._last_missing_lookup_id = None
         # Actualizar desplegables de colaboradores
         self.update_team_options()
+        self.schedule_summary_refresh()
 
     def get_data(self):
         return {
@@ -1540,7 +1565,18 @@ PRODUCT_MONEY_SPECS = (
 class ProductFrame:
     """Representa un producto y su interfaz en la sección de productos."""
 
-    def __init__(self, parent, idx, remove_callback, get_client_options, get_team_options, logs, product_lookup, tooltip_register):
+    def __init__(
+        self,
+        parent,
+        idx,
+        remove_callback,
+        get_client_options,
+        get_team_options,
+        logs,
+        product_lookup,
+        tooltip_register,
+        summary_refresh_callback=None,
+    ):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
@@ -1553,6 +1589,7 @@ class ProductFrame:
         self.client_validator = None
         self.involvements = []
         self._last_missing_lookup_id = None
+        self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
 
         # Variables
         self.id_var = tk.StringVar()
@@ -1919,6 +1956,7 @@ class ProductFrame:
         log_event("navegacion", f"Producto {self.idx+1}: modificó ID a {pid}", self.logs)
         if not pid:
             self._last_missing_lookup_id = None
+            self.schedule_summary_refresh()
             return
         data = self.product_lookup.get(pid)
         if not data:
@@ -1931,6 +1969,7 @@ class ProductFrame:
                     ),
                 )
                 self._last_missing_lookup_id = pid
+            self.schedule_summary_refresh()
             return
 
         def set_if_present(var, key):
@@ -1976,6 +2015,7 @@ class ProductFrame:
                     self.mod_cb.set(mod)
         self._last_missing_lookup_id = None
         log_event("navegacion", f"Producto {self.idx+1}: autopoblado desde catálogo", self.logs)
+        self.schedule_summary_refresh()
 
     def _validate_fecha_descubrimiento(self):
         """Valida la fecha de descubrimiento y su relación con la de ocurrencia."""
@@ -2351,6 +2391,7 @@ class FraudCaseApp:
         self.risk_frames = []
         self.norm_frames = []
         self.summary_tables = {}
+        self._summary_refresh_after_id = None
 
         # Variables de caso
         self.id_caso_var = tk.StringVar()
@@ -2927,11 +2968,19 @@ class FraudCaseApp:
         disponibles para los productos.
         """
         idx = len(self.client_frames)
-        client = ClientFrame(self.clients_container, idx, self.remove_client,
-                             self.update_client_options_global, self.logs,
-                             self.register_tooltip, client_lookup=self.client_lookup)
+        client = ClientFrame(
+            self.clients_container,
+            idx,
+            self.remove_client,
+            self.update_client_options_global,
+            self.logs,
+            self.register_tooltip,
+            client_lookup=self.client_lookup,
+            summary_refresh_callback=self._schedule_summary_refresh,
+        )
         self.client_frames.append(client)
         self.update_client_options_global()
+        self._schedule_summary_refresh()
 
     def remove_client(self, client_frame):
         self.client_frames.remove(client_frame)
@@ -2940,6 +2989,7 @@ class FraudCaseApp:
             cl.idx = i
             cl.frame.config(text=f"Cliente {i+1}")
         self.update_client_options_global()
+        self._schedule_summary_refresh()
 
     def update_client_options_global(self):
         """Actualiza la lista de clientes en todos los productos y envolvimientos."""
@@ -2961,9 +3011,19 @@ class FraudCaseApp:
 
     def add_team(self):
         idx = len(self.team_frames)
-        team = TeamMemberFrame(self.team_container, idx, self.remove_team, self.update_team_options_global, self.team_lookup, self.logs, self.register_tooltip)
+        team = TeamMemberFrame(
+            self.team_container,
+            idx,
+            self.remove_team,
+            self.update_team_options_global,
+            self.team_lookup,
+            self.logs,
+            self.register_tooltip,
+            summary_refresh_callback=self._schedule_summary_refresh,
+        )
         self.team_frames.append(team)
         self.update_team_options_global()
+        self._schedule_summary_refresh()
 
     def remove_team(self, team_frame):
         self.team_frames.remove(team_frame)
@@ -2972,6 +3032,7 @@ class FraudCaseApp:
             tm.idx = i
             tm.frame.config(text=f"Colaborador {i+1}")
         self.update_team_options_global()
+        self._schedule_summary_refresh()
 
     def update_team_options_global(self):
         """Actualiza listas de colaboradores en productos e involucra."""
@@ -3011,19 +3072,31 @@ class FraudCaseApp:
 
     def add_product(self):
         idx = len(self.product_frames)
-        prod = ProductFrame(self.product_container, idx, self.remove_product, self.get_client_ids, self.get_team_ids, self.logs, self.product_lookup, self.register_tooltip)
+        prod = ProductFrame(
+            self.product_container,
+            idx,
+            self.remove_product,
+            self.get_client_ids,
+            self.get_team_ids,
+            self.logs,
+            self.product_lookup,
+            self.register_tooltip,
+            summary_refresh_callback=self._schedule_summary_refresh,
+        )
         self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
         # Renombrar
         for i, p in enumerate(self.product_frames):
             p.idx = i
             p.frame.config(text=f"Producto {i+1}")
+        self._schedule_summary_refresh()
 
     def remove_product(self, prod_frame):
         self.product_frames.remove(prod_frame)
         for i, p in enumerate(self.product_frames):
             p.idx = i
             p.frame.config(text=f"Producto {i+1}")
+        self._schedule_summary_refresh()
 
     def get_client_ids(self):
         return [c.id_var.get().strip() for c in self.client_frames if c.id_var.get().strip()]
@@ -3048,12 +3121,14 @@ class FraudCaseApp:
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
+        self._schedule_summary_refresh()
 
     def remove_risk(self, risk_frame):
         self.risk_frames.remove(risk_frame)
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
+        self._schedule_summary_refresh()
 
     def build_norm_tab(self, parent):
         frame = ttk.Frame(parent)
@@ -3072,12 +3147,14 @@ class FraudCaseApp:
         for i, n in enumerate(self.norm_frames):
             n.idx = i
             n.frame.config(text=f"Norma {i+1}")
+        self._schedule_summary_refresh()
 
     def remove_norm(self, norm_frame):
         self.norm_frames.remove(norm_frame)
         for i, n in enumerate(self.norm_frames):
             n.idx = i
             n.frame.config(text=f"Norma {i+1}")
+        self._schedule_summary_refresh()
 
     def build_analysis_tab(self, parent):
         frame = ttk.Frame(parent)
@@ -3261,6 +3338,23 @@ class FraudCaseApp:
             scrollbar.pack(side="right", fill="y")
             self.summary_tables[key] = tree
 
+        self.refresh_summary_tables()
+
+    def _schedule_summary_refresh(self):
+        """Programa la actualización del resumen en la cola ``after_idle`` de Tk."""
+
+        if not self.summary_tables:
+            return
+        if self._summary_refresh_after_id:
+            return
+        try:
+            self._summary_refresh_after_id = self.root.after_idle(self._run_scheduled_summary_refresh)
+        except tk.TclError:
+            self._summary_refresh_after_id = None
+            self.refresh_summary_tables()
+
+    def _run_scheduled_summary_refresh(self):
+        self._summary_refresh_after_id = None
         self.refresh_summary_tables()
 
     def refresh_summary_tables(self, data=None):
