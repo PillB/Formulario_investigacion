@@ -950,6 +950,7 @@ class FieldValidator:
         self.variables = variables or []
         self._traces = []
         self.last_error = None
+        self._suspend_count = 0
         # La validación sólo debe activarse tras una interacción del usuario.
         # Hasta entonces se ignoran los callbacks de ``trace_add`` generados
         # por el auto‑poblamiento inicial para evitar mensajes al arrancar.
@@ -963,6 +964,8 @@ class FieldValidator:
 
     def _on_change(self, *_args):
         """Ejecuta la validación y actualiza el tooltip sólo si cambió el estado."""
+        if self._suspend_count > 0:
+            return
         event = _args[0] if _args else None
         is_user_event = hasattr(event, "widget")
         if is_user_event:
@@ -972,6 +975,10 @@ class FieldValidator:
             # del usuario, por lo que se ignora para no mostrar alertas.
             return
         error = self.validate_callback()
+        self._display_error(error)
+
+    def _display_error(self, error):
+        """Muestra u oculta el mensaje si cambió."""
         if error == self.last_error:
             return
         if error:
@@ -980,6 +987,19 @@ class FieldValidator:
         else:
             self.tooltip.hide()
         self.last_error = error
+
+    def show_custom_error(self, message):
+        """Permite forzar un mensaje específico tras una actualización programática."""
+        self._validation_armed = True
+        self._display_error(message)
+
+    def suppress_during(self, callback):
+        """Ejecuta ``callback`` evitando que se dispare la validación automática."""
+        self._suspend_count += 1
+        try:
+            return callback()
+        finally:
+            self._suspend_count -= 1
 
 
 
@@ -1520,6 +1540,7 @@ class ProductFrame:
         self.product_lookup = product_lookup or {}
         self.tooltip_register = tooltip_register
         self.validators = []
+        self.client_validator = None
         self.involvements = []
         self._last_missing_lookup_id = None
 
@@ -1695,15 +1716,14 @@ class ProductFrame:
                 variables=[self.id_var, self.tipo_prod_var],
             )
         )
-        self.validators.append(
-            FieldValidator(
-                self.client_cb,
-                lambda: validate_required_text(self.client_var.get(), "el cliente del producto"),
-                self.logs,
-                f"Producto {self.idx+1} - Cliente",
-                variables=[self.client_var],
-            )
+        self.client_validator = FieldValidator(
+            self.client_cb,
+            lambda: validate_required_text(self.client_var.get(), "el cliente del producto"),
+            self.logs,
+            f"Producto {self.idx+1} - Cliente",
+            variables=[self.client_var],
         )
+        self.validators.append(self.client_validator)
         self.validators.append(
             FieldValidator(
                 cat1_cb,
@@ -1855,12 +1875,28 @@ class ProductFrame:
 
     def update_client_options(self):
         """Actualiza la lista de clientes en el desplegable."""
-        current = self.client_var.get()
-        self.client_cb['values'] = self.get_client_options()
-        if current in self.client_cb['values']:
+        current = self.client_var.get().strip()
+        options = self.get_client_options()
+        self.client_cb['values'] = options
+        if current and current in options:
+            self.client_cb.set(current)
             self.client_var.set(current)
-        elif self.client_cb['values']:
-            self.client_var.set(self.client_cb['values'][0])
+            return
+
+        def _clear_selection():
+            self.client_var.set('')
+            self.client_cb.set('')
+
+        if self.client_validator:
+            self.client_validator.suppress_during(_clear_selection)
+        else:
+            _clear_selection()
+
+        if current and self.client_validator:
+            warning_msg = (
+                f"Cliente {current} eliminado. Selecciona un nuevo titular para este producto."
+            )
+            self.client_validator.show_custom_error(warning_msg)
 
     def update_team_options(self):
         """Actualiza las listas de colaboradores en las asignaciones."""
@@ -4121,6 +4157,10 @@ class FraudCaseApp:
             if pid_message:
                 errors.append(f"Producto {idx}: {pid_message}")
             cid = prod_data['producto']['id_cliente']
+            if not cid:
+                errors.append(
+                    f"Producto {idx}: el cliente vinculado fue eliminado. Selecciona un nuevo titular antes de exportar."
+                )
             if pid in product_client_map:
                 prev_client = product_client_map[pid]
                 if prev_client != cid:
