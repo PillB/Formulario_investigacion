@@ -418,6 +418,62 @@ def load_product_details():
     return lookup
 
 
+def iter_massive_csv_rows(filename):
+    """Yield rows from a CSV file used for carga masiva.
+
+    The helper normalizes the reading of the repository-provided
+    ``*_masivos.csv`` files by:
+
+    * Opening the file with ``utf-8-sig`` so BOM markers are ignored.
+    * Skipping empty lines that some samples use for spacing.
+    * Stripping whitespace from headers and values to prevent subtle
+      mismatches (e.g., ``" id_cliente"`` vs ``"id_cliente"``).
+
+    Args:
+        filename (str): Absolute path to the CSV file.
+
+    Yields:
+        dict[str, str]: Normalized row ready to consumir.
+    """
+
+    with open(filename, newline='', encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(line for line in handle if line.strip())
+        for row in reader:
+            cleaned = {}
+            for key, value in row.items():
+                if key is None:
+                    continue
+                key = key.strip()
+                if isinstance(value, str):
+                    value = value.strip()
+                cleaned[key] = value
+            if cleaned:
+                yield cleaned
+
+
+def parse_involvement_entries(raw_value):
+    """Parse the ``involucramiento`` column from the combinado CSV."""
+
+    if not raw_value:
+        return []
+    entries = []
+    if isinstance(raw_value, (list, tuple)):
+        raw_value = ";".join(raw_value)
+    for chunk in str(raw_value).split(';'):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if ':' in chunk:
+            collaborator, amount = chunk.split(':', 1)
+        else:
+            collaborator, amount = chunk, ''
+        collaborator = collaborator.strip()
+        amount = amount.strip()
+        if collaborator:
+            entries.append((collaborator, amount))
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # Validadores reutilizables y componentes de ayuda visual
 
@@ -2057,6 +2113,23 @@ class FraudCaseApp:
         team_section.pack(fill="x", expand=True, padx=5, pady=5)
         self.build_team_tab(team_section)
 
+    def _safe_update_idletasks(self):
+        """Intenta refrescar la UI sin propagar errores cuando la ventana no existe."""
+
+        try:
+            self.root.update_idletasks()
+        except tk.TclError:
+            pass
+
+    def _notify_taxonomy_warning(self, message):
+        """Centraliza el aviso de inconsistencias en la taxonomía."""
+
+        log_event('validacion', message, self.logs)
+        try:
+            messagebox.showwarning('Taxonomía inválida', message)
+        except tk.TclError:
+            pass
+
     def focus_main_tab(self):
         """Muestra la pestaña principal cuando una importación agrega registros.
 
@@ -2827,6 +2900,27 @@ class FraudCaseApp:
                 messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar clientes: {ex}")
+            return
+        imported = 0
+        for row in rows:
+            id_cliente = (row.get('id_cliente') or row.get('IdCliente') or '').strip()
+            if not id_cliente:
+                continue
+            existing = self._find_client_frame(id_cliente)
+            target_frame = existing or self._obtain_client_slot_for_import()
+            if existing:
+                log_event("navegacion", f"Actualizó cliente {id_cliente} desde importación", self.logs)
+            self._populate_client_frame_from_row(target_frame, row)
+            imported += 1
+        self.update_client_options_global()
+        self._safe_update_idletasks()
+        self.save_auto()
+        log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
+        if imported:
+            self.sync_main_form_after_import("clientes")
+            messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
+        else:
+            messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
 
     def import_team_members(self, filename=None):
         """Importa colaboradores desde un archivo CSV y los añade a la lista.
@@ -2894,6 +2988,26 @@ class FraudCaseApp:
                 messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar colaboradores: {ex}")
+            return
+        imported = 0
+        for row in rows:
+            id_col = (row.get('id_colaborador') or row.get('IdColaborador') or '').strip()
+            if not id_col:
+                continue
+            if self._find_team_frame(id_col):
+                log_event("validacion", f"Colaborador duplicado {id_col} en importación", self.logs)
+                continue
+            self._ensure_team_member_exists(id_col, row)
+            imported += 1
+        self.update_team_options_global()
+        self._safe_update_idletasks()
+        self.save_auto()
+        log_event("navegacion", "Colaboradores importados desde CSV", self.logs)
+        if imported:
+            self.sync_main_form_after_import("colaboradores")
+            messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
 
     def import_products(self, filename=None):
         """Importa productos desde un archivo CSV y los añade a la lista.
@@ -3008,6 +3122,32 @@ class FraudCaseApp:
                 messagebox.showwarning("Sin cambios", "No se añadieron productos nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar productos: {ex}")
+            return
+        imported = 0
+        for row in rows:
+            id_prod = (row.get('id_producto') or '').strip()
+            if not id_prod:
+                continue
+            if self._find_product_frame(id_prod):
+                log_event("validacion", f"Producto duplicado {id_prod} en importación", self.logs)
+                continue
+            self.add_product()
+            pr = self.product_frames[-1]
+            pr.id_var.set(id_prod)
+            client_id = (row.get('id_cliente') or '').strip()
+            if client_id:
+                self._ensure_client_exists(client_id, row)
+            self._populate_product_frame_from_row(pr, row)
+            imported += 1
+        self.update_client_options_global()
+        self._safe_update_idletasks()
+        self.save_auto()
+        log_event("navegacion", "Productos importados desde CSV", self.logs)
+        if imported:
+            self.sync_main_form_after_import("productos")
+            messagebox.showinfo("Importación completa", "Productos importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se añadieron productos nuevos.")
 
     def import_combined(self, filename=None):
         """Importa datos combinados de productos, clientes y colaboradores.
@@ -3191,6 +3331,53 @@ class FraudCaseApp:
                 messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
+            return
+        created_records = False
+        for row in rows:
+            id_cliente = (row.get('id_cliente') or '').strip()
+            if id_cliente:
+                _, created = self._ensure_client_exists(id_cliente, row)
+                created_records = created_records or created
+            id_col = (row.get('id_colaborador') or '').strip()
+            if id_col:
+                _, created = self._ensure_team_member_exists(id_col, row)
+                created_records = created_records or created
+            id_prod = (row.get('id_producto') or '').strip()
+            if not id_prod:
+                continue
+            prod = self._find_product_frame(id_prod)
+            if not prod:
+                self.add_product()
+                prod = self.product_frames[-1]
+                prod.id_var.set(id_prod)
+                created_records = True
+            if id_cliente:
+                prod.client_var.set(id_cliente)
+            self._populate_product_frame_from_row(prod, row)
+            involvement_pairs = parse_involvement_entries(row.get('involucramiento', ''))
+            if not involvement_pairs and id_col and row.get('monto_asignado'):
+                involvement_pairs = [(id_col, (row.get('monto_asignado') or '').strip())]
+            for collaborator_id, amount in involvement_pairs:
+                if not collaborator_id:
+                    continue
+                _, created = self._ensure_team_member_exists(collaborator_id, row)
+                created_records = created_records or created
+                inv_row = next((inv for inv in prod.involvements if inv.team_var.get().strip() == collaborator_id), None)
+                if not inv_row:
+                    inv_row = self._obtain_involvement_slot(prod)
+                inv_row.team_var.set(collaborator_id)
+                inv_row.monto_var.set(amount)
+                created_records = True
+        self.update_client_options_global()
+        self.update_team_options_global()
+        self._safe_update_idletasks()
+        self.save_auto()
+        log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
+        if created_records:
+            self.sync_main_form_after_import("datos combinados")
+            messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
 
     def import_risks(self, filename=None):
         """Importa riesgos desde un archivo CSV.
@@ -3249,6 +3436,33 @@ class FraudCaseApp:
                 messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar riesgos: {ex}")
+            return
+        imported = 0
+        for row in rows:
+            rid = (row.get('id_riesgo') or '').strip()
+            if not rid:
+                continue
+            if any(r.id_var.get().strip() == rid for r in self.risk_frames):
+                log_event("validacion", f"Riesgo duplicado {rid} en importación", self.logs)
+                continue
+            self.add_risk()
+            rf = self.risk_frames[-1]
+            rf.id_var.set(rid)
+            rf.lider_var.set((row.get('lider') or '').strip())
+            rf.descripcion_var.set((row.get('descripcion') or '').strip())
+            crit = (row.get('criticidad') or '').strip()
+            if crit in CRITICIDAD_LIST:
+                rf.criticidad_var.set(crit)
+            rf.exposicion_var.set((row.get('exposicion_residual') or '').strip())
+            rf.planes_var.set((row.get('planes_accion') or '').strip())
+            imported += 1
+        self._safe_update_idletasks()
+        self.save_auto()
+        log_event("navegacion", "Riesgos importados desde CSV", self.logs)
+        if imported:
+            messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
 
     def import_norms(self, filename=None):
         """Importa normas transgredidas desde un archivo CSV.
@@ -3299,6 +3513,28 @@ class FraudCaseApp:
                 messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar normas: {ex}")
+            return
+        imported = 0
+        for row in rows:
+            nid = (row.get('id_norma') or '').strip()
+            if not nid:
+                continue
+            if any(n.id_var.get().strip() == nid for n in self.norm_frames):
+                log_event("validacion", f"Norma duplicada {nid} en importación", self.logs)
+                continue
+            self.add_norm()
+            nf = self.norm_frames[-1]
+            nf.id_var.set(nid)
+            nf.descripcion_var.set((row.get('descripcion') or '').strip())
+            nf.fecha_var.set((row.get('fecha_vigencia') or '').strip())
+            imported += 1
+        self._safe_update_idletasks()
+        self.save_auto()
+        log_event("navegacion", "Normas importadas desde CSV", self.logs)
+        if imported:
+            messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
 
     def import_claims(self, filename=None):
         """Importa reclamos desde un archivo CSV.
@@ -3356,6 +3592,28 @@ class FraudCaseApp:
                 messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar reclamos: {ex}")
+            return
+        imported = 0
+        for row in rows:
+            rid = (row.get('id_reclamo') or '').strip()
+            pid = (row.get('id_producto') or '').strip()
+            if not pid:
+                continue
+            prod = self._find_product_frame(pid)
+            if not prod:
+                log_event("validacion", f"Producto {pid} no encontrado para reclamo {rid}", self.logs)
+                continue
+            prod.id_reclamo_var.set(rid)
+            prod.nombre_analitica_var.set((row.get('nombre_analitica') or '').strip())
+            prod.codigo_analitica_var.set((row.get('codigo_analitica') or '').strip())
+            imported += 1
+        self._safe_update_idletasks()
+        self.save_auto()
+        log_event("navegacion", "Reclamos importados desde CSV", self.logs)
+        if imported:
+            messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
 
     # ---------------------------------------------------------------------
     # Autoguardado y carga
