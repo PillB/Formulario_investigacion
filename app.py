@@ -4081,13 +4081,13 @@ class FraudCaseApp:
         if section_key == "reclamos":
             missing_products = []
             for values in rows:
-                payload = {
+                row_dict = {
                     'id_reclamo': (values[0] or "").strip(),
                     'id_producto': (values[1] or "").strip(),
                     'nombre_analitica': (values[2] or "").strip(),
                     'codigo_analitica': (values[3] or "").strip(),
                 }
-                hydrated, found = self._hydrate_row_from_details(payload, 'id_producto', PRODUCT_ID_ALIASES)
+                hydrated, found = self._hydrate_row_from_details(row_dict, 'id_producto', PRODUCT_ID_ALIASES)
                 product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
                     continue
@@ -4108,16 +4108,13 @@ class FraudCaseApp:
                     preserve_existing=False,
                 )
                 claim_payload = {
-                    'id_reclamo': (hydrated.get('id_reclamo') or payload['id_reclamo']),
-                    'nombre_analitica': (hydrated.get('nombre_analitica') or payload['nombre_analitica']),
-                    'codigo_analitica': (hydrated.get('codigo_analitica') or payload['codigo_analitica']),
+                    'id_reclamo': (hydrated.get('id_reclamo') or row_dict.get('id_reclamo') or '').strip(),
+                    'nombre_analitica': (hydrated.get('nombre_analitica') or row_dict.get('nombre_analitica') or '').strip(),
+                    'codigo_analitica': (hydrated.get('codigo_analitica') or row_dict.get('codigo_analitica') or '').strip(),
                 }
-                claim_payload = {k: (v or '').strip() for k, v in claim_payload.items()}
                 if not any(claim_payload.values()):
                     continue
-                target = None
-                if claim_payload['id_reclamo']:
-                    target = product_frame.find_claim_by_id(claim_payload['id_reclamo'])
+                target = product_frame.find_claim_by_id(claim_payload['id_reclamo']) if claim_payload['id_reclamo'] else None
                 if not target:
                     target = product_frame.obtain_claim_slot()
                 target.set_data(claim_payload)
