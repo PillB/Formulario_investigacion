@@ -1816,8 +1816,11 @@ class ProductFrame:
             m_pago = float(self.monto_pago_var.get() or 0)
         except ValueError:
             return None
-        if (m_perd + m_falla + m_cont + m_rec) > m_inv + 1e-6:
-            return "La suma de pérdida, falla, contingencia y recupero no puede superar el monto investigado."
+        componentes = m_perd + m_falla + m_cont
+        if abs(componentes - m_inv) > 1e-2:
+            return "La suma de pérdida, falla y contingencia debe ser igual al monto investigado."
+        if m_rec > m_inv + 1e-6:
+            return "El monto recuperado no puede superar el monto investigado."
         if m_pago > m_inv + 1e-6:
             return "El pago de deuda no puede ser mayor al monto investigado."
         return None
@@ -3964,14 +3967,19 @@ class FraudCaseApp:
             if m_inv is None or m_perd is None or m_fall is None or m_cont is None or m_rec is None or m_pago is None:
                 errors.append(f"Valores numéricos inválidos en el producto {producto['id_producto']}")
                 continue
-            if abs((m_perd + m_fall + m_cont + m_rec) - m_inv) > Decimal('0.01'):
+            componentes = m_perd + m_fall + m_cont
+            if abs(componentes - m_inv) > Decimal('0.01'):
                 errors.append(
-                    f"La suma de pérdida, falla, contingencia y recupero debe ser igual al monto investigado en el producto {producto['id_producto']}"
+                    f"La suma de pérdida, falla y contingencia debe ser igual al monto investigado en el producto {producto['id_producto']}"
+                )
+            if m_rec > m_inv:
+                errors.append(
+                    f"El monto recuperado no puede superar el monto investigado en el producto {producto['id_producto']}"
                 )
             if m_pago > m_inv:
                 errors.append(f"El monto pagado de deuda excede el monto investigado en el producto {producto['id_producto']}")
             total_investigado += m_inv
-            total_componentes += (m_perd + m_fall + m_cont + m_rec)
+            total_componentes += componentes
             # Reclamo y analíticas
             if (m_perd > 0 or m_fall > 0 or m_cont > 0) and (not data['reclamo']['id_reclamo'] or not data['reclamo']['nombre_analitica'] or not data['reclamo']['codigo_analitica']):
                 errors.append(f"Debe ingresar reclamo y analítica completa en el producto {producto['id_producto']} porque hay montos de pérdida, falla o contingencia")
@@ -3993,7 +4001,7 @@ class FraudCaseApp:
             if producto['categoria2'] == 'Fraude Externo':
                 messagebox.showwarning("Fraude Externo", f"Producto {producto['id_producto']} con categoría 2 'Fraude Externo': verifique la analítica registrada.")
         if self.product_frames and abs(total_componentes - total_investigado) > Decimal('0.01'):
-            errors.append("La suma total de pérdidas, fallas, contingencias y recuperos no coincide con el total investigado del caso.")
+            errors.append("La suma total de pérdidas, fallas y contingencias no coincide con el total investigado del caso.")
         # Validar que al menos un producto coincida con categorías del caso
         match_found = False
         for p in self.product_frames:
