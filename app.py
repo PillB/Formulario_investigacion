@@ -63,7 +63,7 @@ import os
 import re
 import unicodedata
 from datetime import datetime
-from decimal import Decimal, InvalidOperation, getcontext, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 from functools import partial
 import random
 
@@ -604,7 +604,9 @@ def validate_money_bounds(value, label, allow_blank=True):
     Se restringen a valores positivos o cero, con hasta 12 dígitos enteros y
     dos decimales como máximo. Si el campo se deja vacío y ``allow_blank`` es
     ``True`` se considera válido y se devuelve ``None`` para el valor
-    normalizado.
+    normalizado. La cuantización usa un ``localcontext`` con precisión mínima
+    de 16 dígitos y redondeo ``ROUND_HALF_UP`` para evitar ``InvalidOperation``
+    al normalizar montos de hasta 12 enteros y dos decimales.
     """
 
     text = (value or "").strip()
@@ -627,7 +629,12 @@ def validate_money_bounds(value, label, allow_blank=True):
         )
 
     try:
-        decimal_value = Decimal(normalized).quantize(TWO_DECIMALS)
+        with localcontext() as ctx:
+            ctx.prec = max(ctx.prec, 16)
+            ctx.rounding = ROUND_HALF_UP
+            decimal_value = Decimal(normalized).quantize(
+                TWO_DECIMALS, rounding=ROUND_HALF_UP
+            )
     except InvalidOperation:
         return (
             f"{label} debe ser ≥ 0 y tener dos decimales (máximo 12 dígitos enteros).",
@@ -974,11 +981,6 @@ class FieldValidator:
             self.tooltip.hide()
         self.last_error = error
 
-
-
-# Set a context for desired precision and rounding
-getcontext().prec = 10  # Set precision to 10 significant digits
-getcontext().rounding = ROUND_HALF_UP # Set rounding method
 
 
 def parse_decimal_amount(amount_string):
