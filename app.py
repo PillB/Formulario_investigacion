@@ -481,7 +481,15 @@ def load_product_details():
                     "id_reclamo": row.get("id_reclamo", "").strip(),
                     "nombre_analitica": row.get("nombre_analitica", "").strip(),
                     "codigo_analitica": row.get("codigo_analitica", "").strip(),
+                    "reclamos": [],
                 }
+                claim_payload = {
+                    "id_reclamo": lookup[key]["id_reclamo"],
+                    "nombre_analitica": lookup[key]["nombre_analitica"],
+                    "codigo_analitica": lookup[key]["codigo_analitica"],
+                }
+                if any(value for value in claim_payload.values()):
+                    lookup[key]["reclamos"] = [claim_payload]
     except FileNotFoundError:
         pass
     return lookup
@@ -1600,6 +1608,94 @@ class InvolvementRow:
             self.remove_callback(self)
 
 
+class ClaimRow:
+    """Fila dinámica que captura los reclamos asociados a un producto."""
+
+    def __init__(self, parent, product_frame, idx, remove_callback, logs, tooltip_register):
+        self.parent = parent
+        self.product_frame = product_frame
+        self.idx = idx
+        self.remove_callback = remove_callback
+        self.logs = logs
+        self.tooltip_register = tooltip_register
+        self.validators = []
+
+        self.id_var = tk.StringVar()
+        self.name_var = tk.StringVar()
+        self.code_var = tk.StringVar()
+
+        self.frame = ttk.Frame(parent)
+        self.frame.pack(fill="x", pady=1)
+
+        ttk.Label(self.frame, text="ID reclamo:").pack(side="left")
+        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=15)
+        id_entry.pack(side="left", padx=5)
+        self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
+
+        ttk.Label(self.frame, text="Analítica nombre:").pack(side="left")
+        name_entry = ttk.Entry(self.frame, textvariable=self.name_var, width=20)
+        name_entry.pack(side="left", padx=5)
+        self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
+
+        ttk.Label(self.frame, text="Código:").pack(side="left")
+        code_entry = ttk.Entry(self.frame, textvariable=self.code_var, width=12)
+        code_entry.pack(side="left", padx=5)
+        self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
+
+        remove_btn = ttk.Button(self.frame, text="Eliminar", command=self.remove)
+        remove_btn.pack(side="left", padx=5)
+        self.tooltip_register(remove_btn, "Elimina este reclamo del producto.")
+
+        self.product_frame._register_lookup_sync(id_entry)
+        self.product_frame._register_lookup_sync(name_entry)
+        self.product_frame._register_lookup_sync(code_entry)
+
+        self.validators.append(
+            FieldValidator(
+                id_entry,
+                lambda: validate_reclamo_id(self.id_var.get()),
+                self.logs,
+                f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} ID",
+                variables=[self.id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                code_entry,
+                lambda: validate_codigo_analitica(self.code_var.get()),
+                self.logs,
+                f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Código",
+                variables=[self.code_var],
+            )
+        )
+
+    def get_data(self):
+        return {
+            "id_reclamo": self.id_var.get().strip(),
+            "nombre_analitica": self.name_var.get().strip(),
+            "codigo_analitica": self.code_var.get().strip(),
+        }
+
+    def set_data(self, data):
+        self.id_var.set((data.get("id_reclamo") or "").strip())
+        self.name_var.set((data.get("nombre_analitica") or "").strip())
+        self.code_var.set((data.get("codigo_analitica") or "").strip())
+
+    def is_empty(self):
+        snapshot = self.get_data()
+        return not any(snapshot.values())
+
+    def remove(self):
+        if messagebox.askyesno("Confirmar", "¿Desea eliminar este reclamo?"):
+            log_event(
+                "navegacion",
+                f"Se eliminó reclamo del producto {self.product_frame.idx+1}",
+                self.logs,
+            )
+            self.frame.destroy()
+            self.remove_callback(self)
+
+
 PRODUCT_MONEY_SPECS = (
     ("monto_investigado", "monto_inv_var", "Monto investigado", False, "inv"),
     ("monto_perdida_fraude", "monto_perdida_var", "Monto pérdida de fraude", True, "perdida"),
@@ -1636,6 +1732,7 @@ class ProductFrame:
         self.validators = []
         self.client_validator = None
         self.involvements = []
+        self.claims = []
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
 
@@ -1661,11 +1758,6 @@ class ProductFrame:
         self.monto_rec_var = tk.StringVar()
         self.monto_pago_var = tk.StringVar()
         self.tipo_prod_var = tk.StringVar(value=TIPO_PRODUCTO_LIST[0])
-        # Reclamo y analítica
-        self.id_reclamo_var = tk.StringVar()
-        self.nombre_analitica_var = tk.StringVar()
-        self.codigo_analitica_var = tk.StringVar()
-
         # Contenedor
         self.frame = ttk.LabelFrame(parent, text=f"Producto {self.idx+1}")
         self.frame.pack(fill="x", padx=5, pady=2)
@@ -1765,21 +1857,15 @@ class ProductFrame:
         m_pago_entry.pack(side="left", padx=5)
         self.tooltip_register(m_pago_entry, "Pagos realizados a terceros por la deuda.")
 
-        # Fila 6: Reclamo y analítica
+        # Fila 6: Reclamos
         row6 = ttk.Frame(self.frame)
         row6.pack(fill="x", pady=1)
-        ttk.Label(row6, text="ID reclamo (CXXXXXXXX):").pack(side="left")
-        idrec_entry = ttk.Entry(row6, textvariable=self.id_reclamo_var, width=15)
-        idrec_entry.pack(side="left", padx=5)
-        self.tooltip_register(idrec_entry, "Número del reclamo asociado (C + 8 dígitos).")
-        ttk.Label(row6, text="Analítica nombre:").pack(side="left")
-        anal_nom_entry = ttk.Entry(row6, textvariable=self.nombre_analitica_var, width=20)
-        anal_nom_entry.pack(side="left", padx=5)
-        self.tooltip_register(anal_nom_entry, "Nombre descriptivo de la analítica.")
-        ttk.Label(row6, text="Analítica código:").pack(side="left")
-        anal_cod_entry = ttk.Entry(row6, textvariable=self.codigo_analitica_var, width=12)
-        anal_cod_entry.pack(side="left", padx=5)
-        self.tooltip_register(anal_cod_entry, "Código numérico de 10 dígitos para la analítica.")
+        ttk.Label(row6, text="Reclamos asociados:").pack(side="left")
+        add_claim_btn = ttk.Button(row6, text="Agregar reclamo", command=self.add_claim)
+        add_claim_btn.pack(side="right")
+        self.tooltip_register(add_claim_btn, "Añade otro reclamo vinculado a este producto.")
+        self.claims_frame = ttk.Frame(self.frame)
+        self.claims_frame.pack(fill="x", pady=1)
 
         critical_widgets = [
             id_entry,
@@ -1799,9 +1885,6 @@ class ProductFrame:
             m_cont_entry,
             m_rec_entry,
             m_pago_entry,
-            idrec_entry,
-            anal_nom_entry,
-            anal_cod_entry,
         ]
         for widget in critical_widgets:
             self._register_lookup_sync(widget)
@@ -1816,7 +1899,8 @@ class ProductFrame:
         add_inv_btn.pack(side="right")
         self.tooltip_register(add_inv_btn, "Crea otra relación producto-colaborador.")
 
-        # Inicialmente sin asignaciones
+        # Inicialmente sin reclamos ni asignaciones
+        self.add_claim()
         self.add_involvement()
 
         # Botón eliminar producto
@@ -1940,25 +2024,6 @@ class ProductFrame:
                 variables=amount_vars,
             )
         )
-        self.validators.append(
-            FieldValidator(
-                idrec_entry,
-                lambda: validate_reclamo_id(self.id_reclamo_var.get()),
-                self.logs,
-                f"Producto {self.idx+1} - ID reclamo",
-                variables=[self.id_reclamo_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                anal_cod_entry,
-                lambda: validate_codigo_analitica(self.codigo_analitica_var.get()),
-                self.logs,
-                f"Producto {self.idx+1} - Código analítica",
-                variables=[self.codigo_analitica_var],
-            )
-        )
-
     def on_cat1_change(self):
         """Actualiza las opciones de categoría 2 y modalidad cuando cambia categoría 1."""
         cat1 = self.cat1_var.get()
@@ -1983,6 +2048,82 @@ class ProductFrame:
         self.mod_var.set('')
         self.mod_cb.set('')
         log_event("navegacion", f"Producto {self.idx+1}: cambió categoría 2", self.logs)
+
+    def add_claim(self):
+        """Crea una nueva fila de reclamo para el producto."""
+        idx = len(self.claims)
+        row = ClaimRow(self.claims_frame, self, idx, self.remove_claim, self.logs, self.tooltip_register)
+        self.claims.append(row)
+        self.schedule_summary_refresh()
+        self.persist_lookup_snapshot()
+        return row
+
+    def remove_claim(self, row):
+        if row in self.claims:
+            self.claims.remove(row)
+        if not self.claims:
+            self.add_claim()
+        self.schedule_summary_refresh()
+        self.persist_lookup_snapshot()
+
+    def clear_claims(self):
+        for claim in self.claims:
+            claim.frame.destroy()
+        self.claims.clear()
+
+    def set_claims_from_data(self, claims):
+        self.clear_claims()
+        added = False
+        for claim_data in claims or []:
+            if not isinstance(claim_data, dict):
+                continue
+            row = self.add_claim()
+            row.set_data(claim_data)
+            added = True
+        if not added:
+            self.add_claim()
+        self.schedule_summary_refresh()
+        self.persist_lookup_snapshot()
+
+    def obtain_claim_slot(self):
+        empty = next((claim for claim in self.claims if claim.is_empty()), None)
+        if empty:
+            return empty
+        return self.add_claim()
+
+    def find_claim_by_id(self, claim_id):
+        claim_id = (claim_id or '').strip()
+        if not claim_id:
+            return None
+        for claim in self.claims:
+            if claim.id_var.get().strip() == claim_id:
+                return claim
+        return None
+
+    def claims_have_content(self):
+        return any(not claim.is_empty() for claim in self.claims)
+
+    def _normalize_claim_dict(self, payload):
+        return {
+            'id_reclamo': (payload.get('id_reclamo') or '').strip(),
+            'nombre_analitica': (payload.get('nombre_analitica') or '').strip(),
+            'codigo_analitica': (payload.get('codigo_analitica') or '').strip(),
+        }
+
+    def extract_claims_from_payload(self, payload):
+        claims = payload.get('reclamos') if isinstance(payload, dict) else None
+        normalized = []
+        if isinstance(claims, list):
+            for item in claims:
+                if isinstance(item, dict):
+                    claim_data = self._normalize_claim_dict(item)
+                    if any(claim_data.values()):
+                        normalized.append(claim_data)
+        if not normalized:
+            legacy = self._normalize_claim_dict(payload)
+            if any(legacy.values()):
+                normalized.append(legacy)
+        return normalized
 
     def add_involvement(self):
         """Añade una fila de asignación de colaborador a este producto."""
@@ -2059,9 +2200,12 @@ class ProductFrame:
             'monto_contingencia': self.monto_cont_var.get().strip(),
             'monto_recuperado': self.monto_rec_var.get().strip(),
             'monto_pago_deuda': self.monto_pago_var.get().strip(),
-            'id_reclamo': self.id_reclamo_var.get().strip(),
-            'nombre_analitica': self.nombre_analitica_var.get().strip(),
-            'codigo_analitica': self.codigo_analitica_var.get().strip(),
+            'reclamos': [
+                claim_data
+                for claim in self.claims
+                for claim_data in [claim.get_data()]
+                if any(claim_data.values())
+            ],
         }
 
     def on_id_change(self, from_focus=False, preserve_existing=False):
@@ -2114,9 +2258,6 @@ class ProductFrame:
         set_if_present(self.monto_cont_var, 'monto_contingencia')
         set_if_present(self.monto_rec_var, 'monto_recuperado')
         set_if_present(self.monto_pago_var, 'monto_pago_deuda')
-        set_if_present(self.id_reclamo_var, 'id_reclamo')
-        set_if_present(self.nombre_analitica_var, 'nombre_analitica')
-        set_if_present(self.codigo_analitica_var, 'codigo_analitica')
         cat1 = data.get('categoria1')
         cat2 = data.get('categoria2')
         mod = data.get('modalidad')
@@ -2130,6 +2271,10 @@ class ProductFrame:
                 if mod in TAXONOMIA[cat1][cat2]:
                     self.mod_var.set(mod)
                     self.mod_cb.set(mod)
+        claims_payload = self.extract_claims_from_payload(data)
+        if claims_payload:
+            if not (preserve_existing and self.claims_have_content()):
+                self.set_claims_from_data(claims_payload)
         self._last_missing_lookup_id = None
         log_event("navegacion", f"Producto {self.idx+1}: autopoblado desde catálogo", self.logs)
         self.schedule_summary_refresh()
@@ -2197,11 +2342,7 @@ class ProductFrame:
                 "monto_pago_deuda": self.monto_pago_var.get().strip(),
                 "tipo_producto": self.tipo_prod_var.get(),
             },
-            "reclamo": {
-                "id_reclamo": self.id_reclamo_var.get().strip(),
-                "nombre_analitica": self.nombre_analitica_var.get().strip(),
-                "codigo_analitica": self.codigo_analitica_var.get().strip(),
-            },
+            "reclamos": [claim.get_data() for claim in self.claims],
             "asignaciones": [inv.get_data() for inv in self.involvements],
         }
 
@@ -2744,10 +2885,17 @@ class FraudCaseApp:
                         product_id,
                         preserve_existing=False,
                     )
-                rid = (hydrated.get('id_reclamo') or row.get('id_reclamo') or '').strip()
-                product_frame.id_reclamo_var.set(rid)
-                product_frame.nombre_analitica_var.set((hydrated.get('nombre_analitica') or row.get('nombre_analitica') or '').strip())
-                product_frame.codigo_analitica_var.set((hydrated.get('codigo_analitica') or row.get('codigo_analitica') or '').strip())
+                claim_payload = {
+                    'id_reclamo': (hydrated.get('id_reclamo') or row.get('id_reclamo') or '').strip(),
+                    'nombre_analitica': (hydrated.get('nombre_analitica') or row.get('nombre_analitica') or '').strip(),
+                    'codigo_analitica': (hydrated.get('codigo_analitica') or row.get('codigo_analitica') or '').strip(),
+                }
+                if not any(claim_payload.values()):
+                    continue
+                target = product_frame.find_claim_by_id(claim_payload['id_reclamo'])
+                if not target:
+                    target = product_frame.obtain_claim_slot()
+                target.set_data(claim_payload)
                 self._sync_product_lookup_claim_fields(product_frame, product_id)
                 product_frame.persist_lookup_snapshot()
                 imported += 1
@@ -3897,6 +4045,7 @@ class FraudCaseApp:
                 self.sync_main_form_after_import("productos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "reclamos":
+            duplicate_ids = []
             for idx, values in enumerate(rows, start=1):
                 claim_id = (values[0] or "").strip()
                 product_id = (values[1] or "").strip()
@@ -3919,12 +4068,25 @@ class FraudCaseApp:
                         self.logs,
                     )
                     continue
-                frame.id_reclamo_var.set(claim_id)
-                frame.nombre_analitica_var.set(analytic_name)
-                frame.codigo_analitica_var.set(analytic_code)
+                if claim_id and frame.find_claim_by_id(claim_id):
+                    duplicate_ids.append(claim_id)
+                    continue
+                target = frame.obtain_claim_slot()
+                target.set_data(
+                    {
+                        'id_reclamo': claim_id,
+                        'nombre_analitica': analytic_name,
+                        'codigo_analitica': analytic_code,
+                    }
+                )
                 self._sync_product_lookup_claim_fields(frame, product_id)
                 frame.persist_lookup_snapshot()
                 processed += 1
+            if duplicate_ids:
+                messagebox.showwarning(
+                    "Reclamos duplicados",
+                    "Se ignoraron los siguientes reclamos ya existentes:\n" + ", ".join(duplicate_ids),
+                )
             if processed:
                 self.save_auto()
                 self.sync_main_form_after_import("reclamos", stay_on_summary=stay_on_summary)
@@ -4204,7 +4366,7 @@ class FraudCaseApp:
         )
 
     def _merge_product_payload_with_frame(self, frame, payload):
-        return self._merge_payload_with_frame(
+        merged = self._merge_payload_with_frame(
             payload,
             {
                 'id_cliente': frame.client_var.get,
@@ -4223,11 +4385,14 @@ class FraudCaseApp:
                 'monto_contingencia': frame.monto_cont_var.get,
                 'monto_recuperado': frame.monto_rec_var.get,
                 'monto_pago_deuda': frame.monto_pago_var.get,
-                'id_reclamo': frame.id_reclamo_var.get,
-                'nombre_analitica': frame.nombre_analitica_var.get,
-                'codigo_analitica': frame.codigo_analitica_var.get,
             },
         )
+        claim_candidates = frame.extract_claims_from_payload(payload or {})
+        if claim_candidates:
+            merged['reclamos'] = claim_candidates
+        elif 'reclamos' not in merged:
+            merged['reclamos'] = [claim.get_data() for claim in frame.claims]
+        return merged
 
     def _report_missing_detail_ids(self, entity_label, missing_ids):
         """Registra y muestra un único aviso de IDs sin detalle catalogado."""
@@ -4341,18 +4506,14 @@ class FraudCaseApp:
             frame.on_id_change(from_focus=notify_on_missing, preserve_existing=preserve_existing)
 
     def _sync_product_lookup_claim_fields(self, frame, product_id):
-        """Actualiza ``product_lookup`` con los datos de reclamo visibles en el marco."""
+        """Actualiza ``product_lookup`` con la lista de reclamos visibles."""
 
         if not frame:
             return
         product_id = (product_id or '').strip()
         if not product_id:
             return
-        claim_values = {
-            'id_reclamo': frame.id_reclamo_var.get().strip(),
-            'nombre_analitica': frame.nombre_analitica_var.get().strip(),
-            'codigo_analitica': frame.codigo_analitica_var.get().strip(),
-        }
+        claim_values = [claim.get_data() for claim in getattr(frame, 'claims', [])]
         lookups = []
         if isinstance(self.product_lookup, dict):
             lookups.append(self.product_lookup)
@@ -4361,7 +4522,7 @@ class FraudCaseApp:
             lookups.append(frame_lookup)
         for lookup in lookups:
             entry = lookup.setdefault(product_id, {})
-            entry.update(claim_values)
+            entry['reclamos'] = claim_values
 
     def _populate_client_frame_from_row(self, frame, row):
         """Traslada los datos de una fila CSV a un ``ClientFrame``.
@@ -4516,9 +4677,7 @@ class FraudCaseApp:
         frame.monto_cont_var.set((row.get('monto_contingencia') or '').strip())
         frame.monto_rec_var.set((row.get('monto_recuperado') or '').strip())
         frame.monto_pago_var.set((row.get('monto_pago_deuda') or '').strip())
-        frame.id_reclamo_var.set((row.get('id_reclamo') or '').strip())
-        frame.nombre_analitica_var.set((row.get('nombre_analitica') or '').strip())
-        frame.codigo_analitica_var.set((row.get('codigo_analitica') or '').strip())
+        frame.set_claims_from_data(frame.extract_claims_from_payload(row))
         frame.persist_lookup_snapshot()
 
     def _ensure_client_exists(self, client_id, row_data=None):
@@ -4792,14 +4951,17 @@ class FraudCaseApp:
         for p in self.product_frames:
             prod_data = p.get_data()
             productos.append(prod_data['producto'])
-            # Reclamo
-            reclamos.append({
-                "id_reclamo": prod_data['reclamo']['id_reclamo'],
-                "id_caso": "",  # se añade al exportar
-                "id_producto": prod_data['producto']['id_producto'],
-                "nombre_analitica": prod_data['reclamo']['nombre_analitica'],
-                "codigo_analitica": prod_data['reclamo']['codigo_analitica'],
-            })
+            # Reclamos
+            for claim in prod_data['reclamos']:
+                if not any(claim.values()):
+                    continue
+                reclamos.append({
+                    "id_reclamo": claim['id_reclamo'],
+                    "id_caso": "",  # se añade al exportar
+                    "id_producto": prod_data['producto']['id_producto'],
+                    "nombre_analitica": claim['nombre_analitica'],
+                    "codigo_analitica": claim['codigo_analitica'],
+                })
             # Involucramientos
             for inv in prod_data['asignaciones']:
                 involucs.append({
@@ -4874,6 +5036,18 @@ class FraudCaseApp:
             tm.tipo_falta_var.set(col.get('tipo_falta', ''))
             tm.tipo_sancion_var.set(col.get('tipo_sancion', ''))
         # Productos y sus reclamos e involuc
+        claims_map = {}
+        for rec in data.get('reclamos', []):
+            pid = (rec.get('id_producto') or '').strip()
+            if not pid:
+                continue
+            claims_map.setdefault(pid, []).append(
+                {
+                    'id_reclamo': (rec.get('id_reclamo') or '').strip(),
+                    'nombre_analitica': (rec.get('nombre_analitica') or '').strip(),
+                    'codigo_analitica': (rec.get('codigo_analitica') or '').strip(),
+                }
+            )
         for i, prod in enumerate(data.get('productos', [])):
             if i >= len(self.product_frames):
                 self.add_product()
@@ -4905,14 +5079,7 @@ class FraudCaseApp:
             tipo_producto = prod.get('tipo_producto')
             if tipo_producto in TIPO_PRODUCTO_LIST:
                 pframe.tipo_prod_var.set(tipo_producto)
-        # Reclamos
-        reclamos = data.get('reclamos', [])
-        for rec in reclamos:
-            for pframe in self.product_frames:
-                if pframe.id_var.get().strip() == rec.get('id_producto'):
-                    pframe.id_reclamo_var.set(rec.get('id_reclamo', ''))
-                    pframe.nombre_analitica_var.set(rec.get('nombre_analitica', ''))
-                    pframe.codigo_analitica_var.set(rec.get('codigo_analitica', ''))
+            pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
         # Involucramientos
         invols = data.get('involucramientos', [])
         for inv in invols:
@@ -5034,17 +5201,23 @@ class FraudCaseApp:
             else:
                 product_client_map[pid] = cid
             # For each involvement; if no assignments, use empty string for id_colaborador
+            claim_rows = prod_data['reclamos'] or [{'id_reclamo': ''}]
             if not prod_data['asignaciones']:
-                # still need to check combination with blank collaborator
-                key = (id_caso, pid, cid, '', prod_data['producto']['fecha_ocurrencia'], prod_data['reclamo']['id_reclamo'])
-                if key in key_set:
-                    errors.append(f"Registro duplicado de clave técnica (producto {pid})")
-                key_set.add(key)
+                for claim in claim_rows:
+                    claim_id = (claim.get('id_reclamo') or '').strip()
+                    key = (id_caso, pid, cid, '', prod_data['producto']['fecha_ocurrencia'], claim_id)
+                    if key in key_set:
+                        errors.append(f"Registro duplicado de clave técnica (producto {pid})")
+                    key_set.add(key)
             for inv in prod_data['asignaciones']:
-                key = (id_caso, pid, cid, inv['id_colaborador'], prod_data['producto']['fecha_ocurrencia'], prod_data['reclamo']['id_reclamo'])
-                if key in key_set:
-                    errors.append(f"Registro duplicado de clave técnica (producto {pid}, colaborador {inv['id_colaborador']})")
-                key_set.add(key)
+                for claim in claim_rows:
+                    claim_id = (claim.get('id_reclamo') or '').strip()
+                    key = (id_caso, pid, cid, inv['id_colaborador'], prod_data['producto']['fecha_ocurrencia'], claim_id)
+                    if key in key_set:
+                        errors.append(
+                            f"Registro duplicado de clave técnica (producto {pid}, colaborador {inv['id_colaborador']})"
+                        )
+                    key_set.add(key)
         # Validar fechas y montos por producto
         for p in self.product_frames:
             data = p.get_data()
@@ -5108,26 +5281,37 @@ class FraudCaseApp:
             total_componentes += componentes
             # Reclamo y analíticas
             requiere_reclamo = m_perd > 0 or m_fall > 0 or m_cont > 0
-            reclamo_id = data['reclamo']['id_reclamo'].strip()
-            if reclamo_id:
-                reclamo_message = validate_reclamo_id(reclamo_id)
-                if reclamo_message:
-                    errors.append(
-                        f"Producto {producto['id_producto']}: {reclamo_message}"
-                    )
-            if requiere_reclamo and (
-                not reclamo_id
-                or not data['reclamo']['nombre_analitica']
-                or not data['reclamo']['codigo_analitica']
-            ):
+            complete_claim_found = False
+            seen_claim_ids = set()
+            for claim in data['reclamos'] or []:
+                claim_id = (claim.get('id_reclamo') or '').strip()
+                claim_name = (claim.get('nombre_analitica') or '').strip()
+                claim_code = (claim.get('codigo_analitica') or '').strip()
+                has_any_value = any([claim_id, claim_name, claim_code])
+                if claim_id:
+                    if claim_id in seen_claim_ids:
+                        errors.append(
+                            f"Producto {producto['id_producto']}: El ID de reclamo {claim_id} está duplicado."
+                        )
+                    seen_claim_ids.add(claim_id)
+                    reclamo_message = validate_reclamo_id(claim_id)
+                    if reclamo_message:
+                        errors.append(f"Producto {producto['id_producto']}: {reclamo_message}")
+                if claim_code:
+                    codigo_message = validate_codigo_analitica(claim_code)
+                    if codigo_message:
+                        errors.append(f"Producto {producto['id_producto']}: {codigo_message}")
+                if has_any_value:
+                    if not (claim_id and claim_name and claim_code):
+                        errors.append(
+                            f"Producto {producto['id_producto']}: El reclamo {claim_id or '(sin ID)'} debe tener ID, nombre y código de analítica."
+                        )
+                    else:
+                        complete_claim_found = True
+            if requiere_reclamo and not complete_claim_found:
                 errors.append(
-                    f"Debe ingresar reclamo y analítica completa en el producto {producto['id_producto']} porque hay montos de pérdida, falla o contingencia"
+                    f"Debe ingresar al menos un reclamo completo en el producto {producto['id_producto']} porque hay montos de pérdida, falla o contingencia"
                 )
-            # Código analítica
-            cod_anal = data['reclamo']['codigo_analitica']
-            if cod_anal:
-                if not (cod_anal.isdigit() and len(cod_anal) == 10 and cod_anal.startswith(('43','45','46','56'))):
-                    errors.append(f"Código analítica inválido en el producto {producto['id_producto']}")
             # Longitud id_producto
             # Tipo producto vs contingencia
             tipo_prod = normalize_without_accents(producto['tipo_producto']).lower()
@@ -5245,7 +5429,12 @@ class FraudCaseApp:
                 lines.append("| " + " | ".join(safe(col) for col in row) + " |")
             return lines
 
-        reclamo_por_producto = {r['id_producto']: r for r in data['reclamos']}
+        reclamos_por_producto = {}
+        for record in data['reclamos']:
+            pid = record.get('id_producto')
+            if not pid:
+                continue
+            reclamos_por_producto.setdefault(pid, []).append(record)
 
         lines = [
             "Banco de Crédito - BCP",
@@ -5309,7 +5498,11 @@ class FraudCaseApp:
         ])
         product_rows = []
         for idx, prod in enumerate(products, start=1):
-            reclamo = reclamo_por_producto.get(prod['id_producto'], {})
+            claim_values = reclamos_por_producto.get(prod['id_producto'], [])
+            claims_text = "; ".join(
+                f"{rec.get('id_reclamo', '')} / {rec.get('codigo_analitica', '')}"
+                for rec in claim_values
+            )
             product_rows.append([
                 f"Producto {idx}",
                 prod.get('id_producto', ''),
@@ -5321,7 +5514,7 @@ class FraudCaseApp:
                 prod.get('categoria2', ''),
                 prod.get('modalidad', ''),
                 f"INV:{prod.get('monto_investigado', '')} | PER:{prod.get('monto_perdida_fraude', '')} | FALLA:{prod.get('monto_falla_procesos', '')} | CONT:{prod.get('monto_contingencia', '')} | REC:{prod.get('monto_recuperado', '')} | PAGO:{prod.get('monto_pago_deuda', '')}",
-                f"{reclamo.get('id_reclamo', '')} / {reclamo.get('codigo_analitica', '')}",
+                claims_text,
             ])
         lines.extend(md_table([
             "Registro", "ID", "Cliente", "Tipo", "Canal", "Proceso", "Cat.1", "Cat.2", "Modalidad", "Montos", "Reclamo/Analítica"
