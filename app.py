@@ -3323,6 +3323,7 @@ class FraudCaseApp:
                     ("id", "ID Reclamo"),
                     ("producto", "Producto"),
                     ("analitica", "Analítica"),
+                    ("codigo", "Código analítica"),
                 ],
             ),
             (
@@ -3397,7 +3398,7 @@ class FraudCaseApp:
         except ValueError as exc:
             messagebox.showerror("Pegado no válido", str(exc))
             return "break"
-        ingestible_sections = {"clientes", "colaboradores", "productos", "riesgos", "normas"}
+        ingestible_sections = {"clientes", "colaboradores", "productos", "reclamos", "riesgos", "normas"}
         if key in ingestible_sections:
             try:
                 self.ingest_summary_rows(key, sanitized_rows)
@@ -3530,6 +3531,7 @@ class FraudCaseApp:
                 "id_reclamo": values[0].strip(),
                 "id_producto": values[1].strip(),
                 "nombre_analitica": values[2].strip(),
+                "codigo_analitica": values[3].strip(),
             }
             message = validate_reclamo_id(claim["id_reclamo"])
             if message:
@@ -3543,11 +3545,15 @@ class FraudCaseApp:
             )
             if analytic_message:
                 raise ValueError(f"Reclamo fila {idx}: {analytic_message}")
+            code_message = validate_codigo_analitica(claim["codigo_analitica"])
+            if code_message:
+                raise ValueError(f"Reclamo fila {idx}: {code_message}")
             sanitized.append(
                 (
                     claim["id_reclamo"],
                     claim["id_producto"],
                     claim["nombre_analitica"],
+                    claim["codigo_analitica"],
                 )
             )
         return sanitized
@@ -3723,6 +3729,39 @@ class FraudCaseApp:
                 self.save_auto()
                 self.sync_main_form_after_import("productos")
             return processed
+        if section_key == "reclamos":
+            for idx, values in enumerate(rows, start=1):
+                claim_id = (values[0] or "").strip()
+                product_id = (values[1] or "").strip()
+                analytic_name = (values[2] or "").strip()
+                analytic_code = (values[3] or "").strip()
+                if not product_id:
+                    continue
+                frame = self._find_product_frame(product_id)
+                if not frame:
+                    messagebox.showerror(
+                        "Producto no encontrado",
+                        (
+                            f"No existe un producto con ID '{product_id}' para el reclamo "
+                            f"{claim_id or '(sin ID)'} en la fila {idx}."
+                        ),
+                    )
+                    log_event(
+                        "validacion",
+                        f"Reclamo fila {idx} no pudo vincularse porque falta el producto {product_id}",
+                        self.logs,
+                    )
+                    continue
+                frame.id_reclamo_var.set(claim_id)
+                frame.nombre_analitica_var.set(analytic_name)
+                frame.codigo_analitica_var.set(analytic_code)
+                self._trigger_import_id_refresh(frame, product_id)
+                processed += 1
+            if processed:
+                self.save_auto()
+                self.sync_main_form_after_import("reclamos")
+                log_event("navegacion", f"Reclamos pegados desde resumen: {processed}", self.logs)
+            return processed
         if section_key == "riesgos":
             for values in rows:
                 risk_id = (values[0] or "").strip()
@@ -3851,6 +3890,7 @@ class FraudCaseApp:
                     rec.get("id_reclamo", ""),
                     rec.get("id_producto", ""),
                     rec.get("nombre_analitica", ""),
+                    rec.get("codigo_analitica", ""),
                 )
                 for rec in dataset.get("reclamos", [])
             ],
