@@ -2402,14 +2402,18 @@ class FraudCaseApp:
                     for key in ('telefonos', 'correos', 'direcciones', 'accionado', 'tipo_id'):
                         if not client_row.get(key) and row.get(key):
                             client_row[key] = row.get(key)
-                    _, created_client = self._ensure_client_exists(client_id, client_row)
+                    client_frame, created_client = self._ensure_client_exists(client_id, client_row)
+                    if created_client:
+                        self._trigger_import_id_refresh(client_frame, client_id)
                     created_records = created_records or created_client
                     if not client_found and 'id_cliente' in self.detail_catalogs:
                         missing_clients.append(client_id)
                 team_row, team_found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
                 collaborator_id = (team_row.get('id_colaborador') or '').strip()
                 if collaborator_id:
-                    _, created_team = self._ensure_team_member_exists(collaborator_id, team_row)
+                    team_frame, created_team = self._ensure_team_member_exists(collaborator_id, team_row)
+                    if created_team:
+                        self._trigger_import_id_refresh(team_frame, collaborator_id)
                     created_records = created_records or created_team
                     if not team_found and 'id_colaborador' in self.detail_catalogs:
                         missing_team.append(collaborator_id)
@@ -2427,6 +2431,7 @@ class FraudCaseApp:
                         client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
                         self._ensure_client_exists(client_for_product, client_details)
                     self._populate_product_frame_from_row(product_frame, product_row)
+                    self._trigger_import_id_refresh(product_frame, product_id)
                     created_records = created_records or new_product
                     if not product_found and 'id_producto' in self.detail_catalogs:
                         missing_products.append(product_id)
@@ -2560,6 +2565,8 @@ class FraudCaseApp:
                     self._ensure_client_exists(client_id, client_details)
                 if new_product:
                     self._populate_product_frame_from_row(product_frame, hydrated)
+                if product_frame:
+                    self._trigger_import_id_refresh(product_frame, product_id)
                 rid = (hydrated.get('id_reclamo') or row.get('id_reclamo') or '').strip()
                 product_frame.id_reclamo_var.set(rid)
                 product_frame.nombre_analitica_var.set((hydrated.get('nombre_analitica') or row.get('nombre_analitica') or '').strip())
