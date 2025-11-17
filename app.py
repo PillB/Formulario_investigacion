@@ -3732,7 +3732,8 @@ class FraudCaseApp:
                 if not client_id:
                     continue
                 frame = self._find_client_frame(client_id) or self._obtain_client_slot_for_import()
-                self._populate_client_frame_from_row(frame, hydrated)
+                merged = self._merge_client_payload_with_frame(frame, hydrated)
+                self._populate_client_frame_from_row(frame, merged)
                 self._trigger_import_id_refresh(frame, client_id)
                 processed += 1
                 if not found and 'id_cliente' in self.detail_catalogs:
@@ -3762,7 +3763,8 @@ class FraudCaseApp:
                 if not collaborator_id:
                     continue
                 frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
-                self._populate_team_frame_from_row(frame, hydrated)
+                merged = self._merge_team_payload_with_frame(frame, hydrated)
+                self._populate_team_frame_from_row(frame, merged)
                 self._trigger_import_id_refresh(frame, collaborator_id)
                 processed += 1
                 if not found and 'id_colaborador' in self.detail_catalogs:
@@ -3806,7 +3808,8 @@ class FraudCaseApp:
                 if client_id:
                     client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
                     self._ensure_client_exists(client_id, client_details)
-                self._populate_product_frame_from_row(frame, hydrated)
+                merged = self._merge_product_payload_with_frame(frame, hydrated)
+                self._populate_product_frame_from_row(frame, merged)
                 self._trigger_import_id_refresh(frame, product_id)
                 processed += 1
                 if not found and 'id_producto' in self.detail_catalogs:
@@ -4061,6 +4064,79 @@ class FraudCaseApp:
                     hydrated[key] = value
                 found = True
         return hydrated, found
+
+    def _has_meaningful_value(self, value):
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        return True
+
+    def _merge_payload_with_frame(self, payload, field_sources):
+        merged = dict(payload or {})
+        for field, getter in (field_sources or {}).items():
+            incoming = merged.get(field)
+            if self._has_meaningful_value(incoming):
+                continue
+            existing = getter() if callable(getter) else getter
+            if self._has_meaningful_value(existing):
+                merged[field] = existing.strip() if isinstance(existing, str) else existing
+        return merged
+
+    def _merge_client_payload_with_frame(self, frame, payload):
+        return self._merge_payload_with_frame(
+            payload,
+            {
+                'tipo_id': frame.tipo_id_var.get,
+                'flag': frame.flag_var.get,
+                'telefonos': frame.telefonos_var.get,
+                'correos': frame.correos_var.get,
+                'direcciones': frame.direcciones_var.get,
+                'accionado': frame.accionado_var.get,
+            },
+        )
+
+    def _merge_team_payload_with_frame(self, frame, payload):
+        return self._merge_payload_with_frame(
+            payload,
+            {
+                'flag_colaborador': frame.flag_var.get,
+                'division': frame.division_var.get,
+                'area': frame.area_var.get,
+                'servicio': frame.servicio_var.get,
+                'puesto': frame.puesto_var.get,
+                'nombre_agencia': frame.nombre_agencia_var.get,
+                'codigo_agencia': frame.codigo_agencia_var.get,
+                'tipo_falta': frame.tipo_falta_var.get,
+                'tipo_sancion': frame.tipo_sancion_var.get,
+            },
+        )
+
+    def _merge_product_payload_with_frame(self, frame, payload):
+        return self._merge_payload_with_frame(
+            payload,
+            {
+                'id_cliente': frame.client_var.get,
+                'categoria1': frame.cat1_var.get,
+                'categoria2': frame.cat2_var.get,
+                'modalidad': frame.mod_var.get,
+                'canal': frame.canal_var.get,
+                'proceso': frame.proceso_var.get,
+                'tipo_producto': frame.tipo_prod_var.get,
+                'fecha_ocurrencia': frame.fecha_oc_var.get,
+                'fecha_descubrimiento': frame.fecha_desc_var.get,
+                'tipo_moneda': frame.moneda_var.get,
+                'monto_investigado': frame.monto_inv_var.get,
+                'monto_perdida_fraude': frame.monto_perdida_var.get,
+                'monto_falla_procesos': frame.monto_falla_var.get,
+                'monto_contingencia': frame.monto_cont_var.get,
+                'monto_recuperado': frame.monto_rec_var.get,
+                'monto_pago_deuda': frame.monto_pago_var.get,
+                'id_reclamo': frame.id_reclamo_var.get,
+                'nombre_analitica': frame.nombre_analitica_var.get,
+                'codigo_analitica': frame.codigo_analitica_var.get,
+            },
+        )
 
     def _report_missing_detail_ids(self, entity_label, missing_ids):
         """Registra y muestra un único aviso de IDs sin detalle catalogado."""
