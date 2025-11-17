@@ -697,6 +697,84 @@ def validate_multi_selection(value, label):
     return None
 
 
+CLIENT_ID_PATTERNS = {
+    "dni": (re.compile(r"^\d{8}$"), "El DNI debe tener exactamente 8 dígitos."),
+    "ruc": (re.compile(r"^\d{11}$"), "El RUC debe tener exactamente 11 dígitos."),
+    "pasaporte": (
+        re.compile(r"^[A-Za-z0-9]{9,12}$"),
+        "El pasaporte debe ser alfanumérico y tener entre 9 y 12 caracteres.",
+    ),
+    "carné de extranjería": (
+        re.compile(r"^[A-Za-z0-9]{9,12}$"),
+        "El carné de extranjería debe ser alfanumérico y tener entre 9 y 12 caracteres.",
+    ),
+}
+
+TEAM_MEMBER_ID_PATTERN = re.compile(r"^[A-Za-z][0-9]{5}$")
+AGENCY_CODE_PATTERN = re.compile(r"^\d{6}$")
+PRODUCT_CREDIT_LENGTHS = {13, 14, 16, 20}
+
+
+def validate_client_id(tipo_id, value):
+    """Valida el ID del cliente de acuerdo con el tipo de documento (Diseño CM)."""
+
+    tipo = (tipo_id or "").strip().lower()
+    text = (value or "").strip()
+    if not text:
+        return "Debe ingresar el ID del cliente."
+    pattern_data = CLIENT_ID_PATTERNS.get(tipo)
+    if pattern_data and not pattern_data[0].fullmatch(text):
+        return pattern_data[1]
+    if not pattern_data and len(text) < 4:
+        return "El ID del cliente debe tener al menos 4 caracteres."
+    return None
+
+
+def validate_team_member_id(value):
+    """Valida el código de colaborador (letra + 5 dígitos)."""
+
+    text = (value or "").strip()
+    if not text:
+        return "Debe ingresar el ID del colaborador."
+    if not TEAM_MEMBER_ID_PATTERN.fullmatch(text):
+        return "El ID del colaborador debe iniciar con una letra seguida de 5 dígitos."
+    return None
+
+
+def validate_agency_code(value, allow_blank=True):
+    """Valida que el código de agencia tenga exactamente 6 dígitos."""
+
+    text = (value or "").strip()
+    if not text:
+        return None if allow_blank else "Debe ingresar el código de agencia."
+    if not AGENCY_CODE_PATTERN.fullmatch(text):
+        return "El código de agencia debe tener exactamente 6 dígitos."
+    return None
+
+
+def validate_product_id(tipo_producto, value):
+    """Valida el ID del producto según el tipo comercial indicado."""
+
+    text = (value or "").strip()
+    if not text:
+        return "Debe ingresar el ID del producto."
+    tipo = (tipo_producto or "").strip().lower()
+    tipo_normalized = (
+        tipo.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+    )
+    if "tarjeta" in tipo_normalized:
+        if not (text.isdigit() and len(text) == 16):
+            return "Para tarjetas el ID debe ser numérico de 16 dígitos."
+        return None
+    if "credito" in tipo_normalized:
+        if not (text.isdigit() and len(text) in PRODUCT_CREDIT_LENGTHS):
+            return "Para créditos el ID debe ser numérico de 13, 14, 16 o 20 dígitos."
+        return None
+    if len(text) not in PRODUCT_CREDIT_LENGTHS and len(text) <= 100:
+        return "El ID del producto debe tener 13, 14, 16, 20 o más de 100 caracteres."
+    return None
+
+
 class HoverTooltip:
     """Muestra mensajes contextuales cuando el usuario pasa el mouse sobre un widget.
 
@@ -1057,10 +1135,10 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_required_text(self.id_var.get(), "el ID del cliente"),
+                lambda: validate_client_id(self.tipo_id_var.get(), self.id_var.get()),
                 self.logs,
                 f"Cliente {self.idx+1} - ID",
-                variables=[self.id_var],
+                variables=[self.id_var, self.tipo_id_var],
             )
         )
         self.validators.append(
@@ -1270,7 +1348,7 @@ class TeamMemberFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_required_text(self.id_var.get(), "el ID del colaborador"),
+                lambda: validate_team_member_id(self.id_var.get()),
                 self.logs,
                 f"Colaborador {self.idx+1} - ID",
                 variables=[self.id_var],
@@ -1279,7 +1357,7 @@ class TeamMemberFrame:
         self.validators.append(
             FieldValidator(
                 cod_ag_entry,
-                lambda: validate_amount_text(self.codigo_agencia_var.get(), "el código de agencia", allow_blank=True),
+                lambda: validate_agency_code(self.codigo_agencia_var.get(), allow_blank=True),
                 self.logs,
                 f"Colaborador {self.idx+1} - Código agencia",
                 variables=[self.codigo_agencia_var],
@@ -1589,10 +1667,10 @@ class ProductFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_required_text(self.id_var.get(), "el ID del producto"),
+                lambda: validate_product_id(self.tipo_prod_var.get(), self.id_var.get()),
                 self.logs,
                 f"Producto {self.idx+1} - ID",
-                variables=[self.id_var],
+                variables=[self.id_var, self.tipo_prod_var],
             )
         )
         self.validators.append(
@@ -3938,6 +4016,11 @@ class FraudCaseApp:
         id_caso = self.id_caso_var.get().strip()
         if not id_caso:
             errors.append("Debe ingresar el número de caso.")
+        # Validar IDs de clientes
+        for idx, cframe in enumerate(self.client_frames, start=1):
+            message = validate_client_id(cframe.tipo_id_var.get(), cframe.id_var.get())
+            if message:
+                errors.append(f"Cliente {idx}: {message}")
         # Validar duplicidad del key técnico (caso, producto, cliente, colaborador, fecha ocurrencia, reclamo)
         key_set = set()
         product_client_map = {}
@@ -3945,6 +4028,12 @@ class FraudCaseApp:
         total_componentes = Decimal('0')
         normalized_amounts = []
         for idx, tm in enumerate(self.team_frames, start=1):
+            tm_id_message = validate_team_member_id(tm.id_var.get())
+            if tm_id_message:
+                errors.append(f"Colaborador {idx}: {tm_id_message}")
+            agency_message = validate_agency_code(tm.codigo_agencia_var.get(), allow_blank=True)
+            if agency_message:
+                errors.append(f"Colaborador {idx}: {agency_message}")
             division = tm.division_var.get().strip().lower()
             area = tm.area_var.get().strip().lower()
             division_norm = division.replace('á', 'a').replace('é', 'e').replace('ó', 'o')
@@ -3957,9 +4046,12 @@ class FraudCaseApp:
                     errors.append(
                         f"El colaborador {idx} debe registrar nombre y código de agencia por pertenecer a canales comerciales."
                     )
-        for p in self.product_frames:
+        for idx, p in enumerate(self.product_frames, start=1):
             prod_data = p.get_data()
             pid = prod_data['producto']['id_producto']
+            pid_message = validate_product_id(p.tipo_prod_var.get(), p.id_var.get())
+            if pid_message:
+                errors.append(f"Producto {idx}: {pid_message}")
             cid = prod_data['producto']['id_cliente']
             if pid in product_client_map:
                 prev_client = product_client_map[pid]
@@ -4052,9 +4144,6 @@ class FraudCaseApp:
                 if not (cod_anal.isdigit() and len(cod_anal) == 10 and cod_anal.startswith(('43','45','46','56'))):
                     errors.append(f"Código analítica inválido en el producto {producto['id_producto']}")
             # Longitud id_producto
-            pid_len = len(producto['id_producto'])
-            if not (pid_len in (13,14,16,20) or pid_len > 100):
-                errors.append(f"Longitud del ID de producto {producto['id_producto']} debe ser 13,14,16,20 o mayor a 100")
             # Tipo producto vs contingencia
             tipo_prod = producto['tipo_producto'].lower()
             if any(word in tipo_prod for word in ['crédito', 'tarjeta']):
