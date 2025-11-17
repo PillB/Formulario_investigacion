@@ -3610,6 +3610,9 @@ class FraudCaseApp:
                     ("tipo", "Tipo ID"),
                     ("flag", "Flag"),
                     ("telefonos", "Teléfonos"),
+                    ("correos", "Correos"),
+                    ("direcciones", "Direcciones"),
+                    ("accionado", "Accionado"),
                 ],
             ),
             (
@@ -3780,6 +3783,9 @@ class FraudCaseApp:
                 "tipo_id": values[1].strip(),
                 "flag": values[2].strip(),
                 "telefonos": values[3].strip(),
+                "correos": values[4].strip(),
+                "direcciones": values[5].strip(),
+                "accionado": values[6].strip(),
             }
             tipo_id = client_data["tipo_id"]
             if tipo_id and tipo_id not in TIPO_ID_LIST:
@@ -3799,12 +3805,18 @@ class FraudCaseApp:
             phone_message = validate_phone_list(client_data["telefonos"], "los teléfonos del cliente")
             if phone_message:
                 raise ValueError(f"Cliente fila {idx}: {phone_message}")
+            email_message = validate_email_list(client_data["correos"], "los correos del cliente")
+            if email_message:
+                raise ValueError(f"Cliente fila {idx}: {email_message}")
             sanitized.append(
                 (
                     client_data["id_cliente"],
                     client_data["tipo_id"],
                     client_data["flag"],
                     client_data["telefonos"],
+                    client_data["correos"],
+                    client_data["direcciones"],
+                    client_data["accionado"],
                 )
             )
         return sanitized
@@ -3985,9 +3997,9 @@ class FraudCaseApp:
                     "tipo_id": (values[1] or "").strip(),
                     "flag": (values[2] or "").strip(),
                     "telefonos": (values[3] or "").strip(),
-                    "correos": "",
-                    "direcciones": "",
-                    "accionado": "",
+                    "correos": (values[4] or "").strip(),
+                    "direcciones": (values[5] or "").strip(),
+                    "accionado": (values[6] or "").strip(),
                 }
                 hydrated, found = self._hydrate_row_from_details(payload, 'id_cliente', CLIENT_ID_ALIASES)
                 client_id = (hydrated.get('id_cliente') or '').strip()
@@ -4265,6 +4277,9 @@ class FraudCaseApp:
                     client.get("tipo_id", ""),
                     client.get("flag", ""),
                     client.get("telefonos", ""),
+                    client.get("correos", ""),
+                    client.get("direcciones", ""),
+                    client.get("accionado", ""),
                 )
                 for client in dataset.get("clientes", [])
             ],
