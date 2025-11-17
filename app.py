@@ -743,8 +743,12 @@ def normalize_without_accents(value):
     return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 
-# Conjunto normalizado para validar tipos de producto sin importar tildes o mayúsculas
-TIPO_PRODUCTO_NORMALIZED = {normalize_without_accents(item).lower() for item in TIPO_PRODUCTO_LIST}
+# Conjunto/diccionario normalizado para validar tipos de producto sin importar tildes o mayúsculas
+TIPO_PRODUCTO_CATALOG = {
+    normalize_without_accents(item).lower(): item
+    for item in TIPO_PRODUCTO_LIST
+}
+TIPO_PRODUCTO_NORMALIZED = set(TIPO_PRODUCTO_CATALOG.keys())
 
 
 def validate_client_id(tipo_id, value):
@@ -782,6 +786,15 @@ def validate_agency_code(value, allow_blank=True):
     if not AGENCY_CODE_PATTERN.fullmatch(text):
         return "El código de agencia debe tener exactamente 6 dígitos."
     return None
+
+
+def resolve_catalog_product_type(value):
+    """Devuelve el nombre oficial del catálogo para ``value`` o ``None`` si no existe."""
+
+    normalized = normalize_without_accents((value or "").strip()).lower()
+    if not normalized:
+        return None
+    return TIPO_PRODUCTO_CATALOG.get(normalized)
 
 
 def validate_product_id(tipo_producto, value):
@@ -3571,6 +3584,14 @@ class FraudCaseApp:
             }
             if not product["id_cliente"]:
                 raise ValueError(f"Producto fila {idx}: el ID de cliente es obligatorio.")
+            tipo_catalogo = resolve_catalog_product_type(product["tipo_producto"])
+            if not tipo_catalogo:
+                if product["tipo_producto"]:
+                    raise ValueError(
+                        f"Producto fila {idx}: el tipo de producto '{product['tipo_producto']}' no está en el catálogo CM."
+                    )
+                raise ValueError(f"Producto fila {idx}: debe ingresar el tipo de producto.")
+            product["tipo_producto"] = tipo_catalogo
             message = validate_product_id(product["tipo_producto"], product["id_producto"])
             if message:
                 raise ValueError(f"Producto fila {idx}: {message}")
@@ -4272,8 +4293,14 @@ class FraudCaseApp:
         if proceso in PROCESO_LIST:
             frame.proceso_var.set(proceso)
         tipo_prod = (row.get('tipo_producto') or row.get('tipoProducto') or '').strip()
-        if tipo_prod in TIPO_PRODUCTO_LIST:
-            frame.tipo_prod_var.set(tipo_prod)
+        if tipo_prod:
+            resolved_tipo = resolve_catalog_product_type(tipo_prod)
+            if resolved_tipo:
+                frame.tipo_prod_var.set(resolved_tipo)
+            else:
+                self._notify_taxonomy_warning(
+                    f"Producto {product_id}: el tipo de producto '{tipo_prod}' no está en el catálogo CM."
+                )
         fecha_occ = (row.get('fecha_ocurrencia') or '').strip()
         if fecha_occ:
             frame.fecha_oc_var.set(fecha_occ)
