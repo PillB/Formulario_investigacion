@@ -5292,6 +5292,7 @@ class FraudCaseApp:
             m_pago = money_values['monto_pago_deuda']
             normalized_amounts.append({
                 'perdida': m_perd,
+                'falla': m_fall,
                 'contingencia': m_cont,
             })
             componentes = m_perd + m_fall + m_cont + m_rec
@@ -5367,7 +5368,9 @@ class FraudCaseApp:
         # Validar reporte tipo Interno vs pérdidas y sanciones
         if self.tipo_informe_var.get() == 'Interno':
             any_loss = any(
-                amounts['perdida'] > Decimal('0') or amounts['contingencia'] > Decimal('0')
+                amounts['perdida'] > Decimal('0')
+                or amounts['falla'] > Decimal('0')
+                or amounts['contingencia'] > Decimal('0')
                 for amounts in normalized_amounts
             )
             any_sanction = any(
@@ -5375,7 +5378,7 @@ class FraudCaseApp:
                 for t in self.team_frames
             )
             if any_loss or any_sanction:
-                errors.append("No se puede seleccionar tipo de informe 'Interno' si hay pérdidas, contingencias o sanciones registradas.")
+                errors.append("No se puede seleccionar tipo de informe 'Interno' si hay pérdidas, fallas, contingencias o sanciones registradas.")
         # Validar riesgos
         risk_exposure_total = Decimal('0')
         risk_ids = set()
