@@ -625,9 +625,16 @@ def validate_money_bounds(value, label, allow_blank=True):
             None,
         )
 
+    integer_digits = len(match.group("int") or "")
+    # ``quantize`` respeta el ``prec`` del contexto. Elevarlo dinámicamente
+    # evita ``InvalidOperation`` cuando se ingresan montos grandes (hasta 12
+    # dígitos enteros) incluso si el contexto global se configuró con una
+    # precisión pequeña en otra parte del módulo.
+    required_precision = integer_digits + max(len(decimal_part or ""), 2) + 4
+
     try:
         with localcontext() as ctx:
-            ctx.prec = max(ctx.prec, 20)
+            ctx.prec = max(ctx.prec, required_precision)
             ctx.rounding = ROUND_HALF_UP
             decimal_value = Decimal(normalized).quantize(TWO_DECIMALS)
     except InvalidOperation:
