@@ -1527,6 +1527,16 @@ class InvolvementRow:
             self.remove_callback(self)
 
 
+PRODUCT_MONEY_SPECS = (
+    ("monto_investigado", "monto_inv_var", "Monto investigado", False, "inv"),
+    ("monto_perdida_fraude", "monto_perdida_var", "Monto pérdida de fraude", True, "perdida"),
+    ("monto_falla_procesos", "monto_falla_var", "Monto falla en procesos", True, "falla"),
+    ("monto_contingencia", "monto_cont_var", "Monto contingencia", True, "contingencia"),
+    ("monto_recuperado", "monto_rec_var", "Monto recuperado", True, "recuperado"),
+    ("monto_pago_deuda", "monto_pago_var", "Monto pago de deuda", True, "pago"),
+)
+
+
 class ProductFrame:
     """Representa un producto y su interfaz en la sección de productos."""
 
@@ -1985,17 +1995,10 @@ class ProductFrame:
 
     def _validate_montos_consistentes(self):
         """Valida que la distribución de montos sea coherente con la investigación."""
-        specs = [
-            (self.monto_inv_var.get(), "Monto investigado", False, "inv"),
-            (self.monto_perdida_var.get(), "Monto pérdida de fraude", True, "perdida"),
-            (self.monto_falla_var.get(), "Monto falla en procesos", True, "falla"),
-            (self.monto_cont_var.get(), "Monto contingencia", True, "contingencia"),
-            (self.monto_rec_var.get(), "Monto recuperado", True, "recuperado"),
-            (self.monto_pago_var.get(), "Monto pago de deuda", True, "pago"),
-        ]
         values = {}
-        for raw_value, label, required, key in specs:
-            message, decimal_value = validate_money_bounds(raw_value, label, allow_blank=not required)
+        for _, var_attr, label, allow_blank, key in PRODUCT_MONEY_SPECS:
+            raw_value = getattr(self, var_attr).get()
+            message, decimal_value = validate_money_bounds(raw_value, label, allow_blank=allow_blank)
             if message:
                 return message
             values[key] = decimal_value if decimal_value is not None else Decimal('0')
@@ -4207,17 +4210,9 @@ class FraudCaseApp:
             except ValueError:
                 errors.append(f"Fechas inválidas en el producto {producto['id_producto']}")
             # Montos
-            money_specs = [
-                ('monto_investigado', False, 'Monto investigado'),
-                ('monto_perdida_fraude', True, 'Monto pérdida de fraude'),
-                ('monto_falla_procesos', True, 'Monto falla en procesos'),
-                ('monto_contingencia', True, 'Monto contingencia'),
-                ('monto_recuperado', True, 'Monto recuperado'),
-                ('monto_pago_deuda', True, 'Monto pago de deuda'),
-            ]
             money_values = {}
             money_error = False
-            for field, allow_blank, label in money_specs:
+            for field, _, label, allow_blank, _ in PRODUCT_MONEY_SPECS:
                 message, decimal_value = validate_money_bounds(
                     producto.get(field, ''),
                     f"{label} del producto {producto['id_producto']}",
