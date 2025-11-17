@@ -261,18 +261,31 @@ CRITICIDAD_LIST = ["Bajo", "Moderado", "Relevante", "Alto", "Crítico"]
 # accionados). Estos ficheros son opcionales: si no se encuentran, la
 # aplicación seguirá funcionando, pero no se autopoblarán datos adicionales.
 
+BASE_DIR = os.path.dirname(__file__)
+
 # Archivo con detalles de colaboradores para autopoblado
-TEAM_DETAILS_FILE = os.path.join(os.path.dirname(__file__), "team_details.csv")
+TEAM_DETAILS_FILE = os.path.join(BASE_DIR, "team_details.csv")
 # Archivo con detalles de clientes para autopoblado
-CLIENT_DETAILS_FILE = os.path.join(os.path.dirname(__file__), "client_details.csv")
+CLIENT_DETAILS_FILE = os.path.join(BASE_DIR, "client_details.csv")
 # Archivo con detalles de productos para autopoblado
-PRODUCT_DETAILS_FILE = os.path.join(os.path.dirname(__file__), "productos_masivos.csv")
+PRODUCT_DETAILS_FILE = os.path.join(BASE_DIR, "productos_masivos.csv")
 
 # Ruta de autosave
-AUTOSAVE_FILE = os.path.join(os.path.dirname(__file__), "autosave.json")
+AUTOSAVE_FILE = os.path.join(BASE_DIR, "autosave.json")
 
 # Ruta de logs si se desea guardar de forma permanente
-LOGS_FILE = os.path.join(os.path.dirname(__file__), "logs.csv")
+LOGS_FILE = os.path.join(BASE_DIR, "logs.csv")
+
+# Archivos de carga masiva disponibles en el repositorio
+MASSIVE_SAMPLE_FILES = {
+    "clientes": os.path.join(BASE_DIR, "clientes_masivos.csv"),
+    "colaboradores": os.path.join(BASE_DIR, "colaboradores_masivos.csv"),
+    "productos": os.path.join(BASE_DIR, "productos_masivos.csv"),
+    "riesgos": os.path.join(BASE_DIR, "riesgos_masivos.csv"),
+    "normas": os.path.join(BASE_DIR, "normas_masivas.csv"),
+    "reclamos": os.path.join(BASE_DIR, "reclamos_masivos.csv"),
+    "combinado": os.path.join(BASE_DIR, "datos_combinados_masivos.csv"),
+}
 
 # Opciones de áreas accionadas disponibles para el selector múltiple
 ACCIONADO_OPTIONS = [
@@ -299,8 +312,8 @@ def load_team_details():
     """
     lookup = {}
     try:
-        with open(TEAM_DETAILS_FILE, newline='', encoding="utf-8") as f:
-            reader = csv.DictReader(f)
+        with open(TEAM_DETAILS_FILE, newline='', encoding="utf-8-sig") as f:
+            reader = csv.DictReader(line for line in f if line.strip())
             for row in reader:
                 key = row.get("id_colaborador") or row.get("IdTeamMember") or row.get("Id")
                 if key:
@@ -335,8 +348,8 @@ def load_client_details():
     """
     lookup = {}
     try:
-        with open(CLIENT_DETAILS_FILE, newline='', encoding="utf-8") as f:
-            reader = csv.DictReader(f)
+        with open(CLIENT_DETAILS_FILE, newline='', encoding="utf-8-sig") as f:
+            reader = csv.DictReader(line for line in f if line.strip())
             for row in reader:
                 key = row.get("id_cliente") or row.get("IdCliente") or row.get("IDCliente")
                 if key:
@@ -372,8 +385,8 @@ def load_product_details():
     """
     lookup = {}
     try:
-        with open(PRODUCT_DETAILS_FILE, newline='', encoding="utf-8") as f:
-            reader = csv.DictReader(f)
+        with open(PRODUCT_DETAILS_FILE, newline='', encoding="utf-8-sig") as f:
+            reader = csv.DictReader(line for line in f if line.strip())
             for row in reader:
                 key = row.get("id_producto", "").strip()
                 if not key:
@@ -1904,6 +1917,7 @@ class FraudCaseApp:
         self.product_frames = []
         self.risk_frames = []
         self.norm_frames = []
+        self.summary_tables = {}
 
         # Variables de caso
         self.id_caso_var = tk.StringVar()
@@ -1967,6 +1981,11 @@ class FraudCaseApp:
         self.notebook.add(actions_tab, text="Acciones")
         self.build_actions_tab(actions_tab)
 
+        # --- Pestaña Resumen ---
+        summary_tab = ttk.Frame(self.notebook)
+        self.notebook.add(summary_tab, text="Resumen")
+        self.build_summary_tab(summary_tab)
+
     def build_case_and_participants_tab(self, parent):
         """Agrupa en una sola vista los datos del caso, clientes, productos y equipo.
 
@@ -1986,19 +2005,39 @@ class FraudCaseApp:
             self.build_case_and_participants_tab(self.main_tab)
         """
 
-        case_section = ttk.LabelFrame(parent, text="1. Datos generales del caso")
+        scroll_container = ttk.Frame(parent)
+        scroll_container.pack(fill="both", expand=True)
+        canvas = tk.Canvas(scroll_container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        self._main_scrollable_frame = ttk.Frame(canvas)
+        window_id = canvas.create_window((0, 0), window=self._main_scrollable_frame, anchor="nw")
+
+        def _configure_canvas(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _resize_inner(event):
+            canvas.itemconfigure(window_id, width=event.width)
+
+        self._main_scrollable_frame.bind("<Configure>", _configure_canvas)
+        canvas.bind("<Configure>", _resize_inner)
+
+        case_section = ttk.LabelFrame(self._main_scrollable_frame, text="1. Datos generales del caso")
         case_section.pack(fill="x", expand=False, padx=5, pady=5)
         self.build_case_tab(case_section)
 
-        clients_section = ttk.LabelFrame(parent, text="2. Clientes implicados")
+        clients_section = ttk.LabelFrame(self._main_scrollable_frame, text="2. Clientes implicados")
         clients_section.pack(fill="x", expand=True, padx=5, pady=5)
         self.build_clients_tab(clients_section)
 
-        products_section = ttk.LabelFrame(parent, text="3. Productos investigados")
+        products_section = ttk.LabelFrame(self._main_scrollable_frame, text="3. Productos investigados")
         products_section.pack(fill="x", expand=True, padx=5, pady=5)
         self.build_products_tab(products_section)
 
-        team_section = ttk.LabelFrame(parent, text="4. Colaboradores involucrados")
+        team_section = ttk.LabelFrame(self._main_scrollable_frame, text="4. Colaboradores involucrados")
         team_section.pack(fill="x", expand=True, padx=5, pady=5)
         self.build_team_tab(team_section)
 
@@ -2474,8 +2513,199 @@ class FraudCaseApp:
         # Información adicional
         ttk.Label(frame, text="El auto‑guardado se realiza automáticamente en un archivo JSON").pack(anchor="w", pady=(10,2))
 
+    def build_summary_tab(self, parent):
+        """Construye la pestaña de resumen con tablas compactas."""
+
+        container = ttk.Frame(parent)
+        container.pack(fill="both", expand=True, padx=5, pady=5)
+        ttk.Label(
+            container,
+            text="Resumen compacto de los datos capturados. Las tablas se actualizan tras cada guardado o importación.",
+        ).pack(anchor="w", pady=(0, 5))
+
+        config = [
+            (
+                "clientes",
+                "Clientes registrados",
+                [
+                    ("id", "ID"),
+                    ("tipo", "Tipo ID"),
+                    ("flag", "Flag"),
+                    ("telefonos", "Teléfonos"),
+                ],
+            ),
+            (
+                "colaboradores",
+                "Colaboradores involucrados",
+                [
+                    ("id", "ID"),
+                    ("division", "División"),
+                    ("area", "Área"),
+                    ("sancion", "Sanción"),
+                ],
+            ),
+            (
+                "productos",
+                "Productos investigados",
+                [
+                    ("id", "ID Producto"),
+                    ("cliente", "Cliente"),
+                    ("tipo", "Tipo"),
+                    ("monto", "Monto investigado"),
+                ],
+            ),
+            (
+                "riesgos",
+                "Riesgos registrados",
+                [
+                    ("id", "ID Riesgo"),
+                    ("lider", "Líder"),
+                    ("criticidad", "Criticidad"),
+                    ("exposicion", "Exposición"),
+                ],
+            ),
+            (
+                "reclamos",
+                "Reclamos asociados",
+                [
+                    ("id", "ID Reclamo"),
+                    ("producto", "Producto"),
+                    ("analitica", "Analítica"),
+                ],
+            ),
+            (
+                "normas",
+                "Normas transgredidas",
+                [
+                    ("id", "ID Norma"),
+                    ("descripcion", "Descripción"),
+                    ("vigencia", "Vigencia"),
+                ],
+            ),
+        ]
+
+        self.summary_tables.clear()
+        for key, title, columns in config:
+            section = ttk.LabelFrame(container, text=title)
+            section.pack(fill="both", expand=True, pady=5)
+            tree = ttk.Treeview(section, columns=[col for col, _ in columns], show="headings", height=5)
+            for col_id, heading in columns:
+                tree.heading(col_id, text=heading)
+                tree.column(col_id, width=150, stretch=True)
+            tree.pack(fill="both", expand=True)
+            self.summary_tables[key] = tree
+
+        self.refresh_summary_tables()
+
+    def refresh_summary_tables(self, data=None):
+        """Actualiza las tablas de resumen con la información actual."""
+
+        if not self.summary_tables:
+            return
+        dataset = data or self.gather_data()
+
+        def update_table(key, rows):
+            tree = self.summary_tables.get(key)
+            if not tree:
+                return
+            children = tree.get_children()
+            if children:
+                tree.delete(*children)
+            for row in rows:
+                tree.insert("", "end", values=row)
+
+        update_table(
+            "clientes",
+            [
+                (
+                    client.get("id_cliente", ""),
+                    client.get("tipo_id", ""),
+                    client.get("flag", ""),
+                    client.get("telefonos", ""),
+                )
+                for client in dataset.get("clientes", [])
+            ],
+        )
+        update_table(
+            "colaboradores",
+            [
+                (
+                    col.get("id_colaborador", ""),
+                    col.get("division", ""),
+                    col.get("area", ""),
+                    col.get("tipo_sancion", ""),
+                )
+                for col in dataset.get("colaboradores", [])
+            ],
+        )
+        update_table(
+            "productos",
+            [
+                (
+                    prod.get("id_producto", ""),
+                    prod.get("id_cliente", ""),
+                    prod.get("tipo_producto", ""),
+                    prod.get("monto_investigado", ""),
+                )
+                for prod in dataset.get("productos", [])
+            ],
+        )
+        update_table(
+            "riesgos",
+            [
+                (
+                    risk.get("id_riesgo", ""),
+                    risk.get("lider", ""),
+                    risk.get("criticidad", ""),
+                    risk.get("exposicion_residual", ""),
+                )
+                for risk in dataset.get("riesgos", [])
+            ],
+        )
+        update_table(
+            "reclamos",
+            [
+                (
+                    rec.get("id_reclamo", ""),
+                    rec.get("id_producto", ""),
+                    rec.get("nombre_analitica", ""),
+                )
+                for rec in dataset.get("reclamos", [])
+            ],
+        )
+        update_table(
+            "normas",
+            [
+                (
+                    norm.get("id_norma", ""),
+                    norm.get("descripcion", ""),
+                    norm.get("fecha_vigencia", ""),
+                )
+                for norm in dataset.get("normas", [])
+            ],
+        )
+
     # ---------------------------------------------------------------------
     # Importación desde CSV
+
+    def _select_csv_file(self, sample_key, dialog_title):
+        """Obtiene un CSV desde diálogo o usa el archivo masivo de ejemplo."""
+
+        filename = None
+        try:
+            filename = filedialog.askopenfilename(title=dialog_title, filetypes=[("CSV Files", "*.csv")])
+        except tk.TclError:
+            filename = None
+        if not filename:
+            sample_path = MASSIVE_SAMPLE_FILES.get(sample_key)
+            if sample_path and os.path.exists(sample_path):
+                filename = sample_path
+                log_event(
+                    "navegacion",
+                    f"Se usó el archivo masivo de ejemplo {os.path.basename(sample_path)} para {sample_key}.",
+                    self.logs,
+                )
+        return filename
 
     def _obtain_client_slot_for_import(self):
         """Obtiene un ``ClientFrame`` vacío o crea uno nuevo para importación.
@@ -2548,14 +2778,16 @@ class FraudCaseApp:
             'accionado': accionado_val,
         }
 
-    def import_clients(self):
+    def import_clients(self, filename=None):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
-        filename = filedialog.askopenfilename(title="Seleccionar CSV de clientes", filetypes=[("CSV Files", "*.csv")])
+
+        filename = filename or self._select_csv_file("clientes", "Seleccionar CSV de clientes")
         if not filename:
+            messagebox.showwarning("Sin archivo", "No se seleccionó un CSV para clientes ni se encontró el ejemplo.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
                 imported = 0
                 for row in reader:
                     # Extraer datos esperados
@@ -2575,13 +2807,14 @@ class FraudCaseApp:
             self.save_auto()
             log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
             if imported:
+                self.sync_main_form_after_import("clientes")
                 messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
             else:
                 messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar clientes: {ex}")
 
-    def import_team_members(self):
+    def import_team_members(self, filename=None):
         """Importa colaboradores desde un archivo CSV y los añade a la lista.
 
         Esta función abre un diálogo para seleccionar un archivo CSV que debe
@@ -2601,12 +2834,13 @@ class FraudCaseApp:
             app.import_team_members()
 
         """
-        filename = filedialog.askopenfilename(title="Seleccionar CSV de colaboradores", filetypes=[("CSV Files", "*.csv")])
+        filename = filename or self._select_csv_file("colaboradores", "Seleccionar CSV de colaboradores")
         if not filename:
+            messagebox.showwarning("Sin archivo", "No hay CSV para colaboradores disponible.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
                 imported = 0
                 for row in reader:
                     id_col = row.get('id_colaborador', '').strip()
@@ -2635,6 +2869,7 @@ class FraudCaseApp:
                         'nombre_agencia': tm.nombre_agencia_var.get(),
                         'codigo_agencia': tm.codigo_agencia_var.get(),
                     }
+                    imported += 1
             self.update_team_options_global()
             self.save_auto()
             log_event("navegacion", "Colaboradores importados desde CSV", self.logs)
@@ -2646,7 +2881,7 @@ class FraudCaseApp:
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar colaboradores: {ex}")
 
-    def import_products(self):
+    def import_products(self, filename=None):
         """Importa productos desde un archivo CSV y los añade a la lista.
 
         Cada fila del CSV define un producto e incluye columnas como
@@ -2665,12 +2900,13 @@ class FraudCaseApp:
         actualiza el autosave y se registra un evento de navegación.
 
         """
-        filename = filedialog.askopenfilename(title="Seleccionar CSV de productos", filetypes=[("CSV Files", "*.csv")])
+        filename = filename or self._select_csv_file("productos", "Seleccionar CSV de productos")
         if not filename:
+            messagebox.showwarning("Sin archivo", "No se seleccionó CSV de productos ni se encontró el ejemplo.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
                 imported = 0
                 for row in reader:
                     id_prod = row.get('id_producto', '').strip()
@@ -2749,14 +2985,17 @@ class FraudCaseApp:
                         'nombre_analitica': pr.nombre_analitica_var.get(),
                         'codigo_analitica': pr.codigo_analitica_var.get(),
                     }
-                self.save_auto()
-                log_event("navegacion", "Productos importados desde CSV", self.logs)
+            self.save_auto()
+            log_event("navegacion", "Productos importados desde CSV", self.logs)
+            if imported:
+                self.sync_main_form_after_import("productos")
                 messagebox.showinfo("Importación completa", "Productos importados correctamente.")
-                
+            else:
+                messagebox.showwarning("Sin cambios", "No se añadieron productos nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar productos: {ex}")
 
-    def import_combined(self):
+    def import_combined(self, filename=None):
         """Importa datos combinados de productos, clientes y colaboradores.
 
         Este importador permite cargar en un único CSV toda la información
@@ -2784,12 +3023,13 @@ class FraudCaseApp:
         navegación y se guarda un autosave.
 
         """
-        filename = filedialog.askopenfilename(title="Seleccionar CSV combinado", filetypes=[("CSV Files", "*.csv")])
+        filename = filename or self._select_csv_file("combinado", "Seleccionar CSV combinado")
         if not filename:
+            messagebox.showwarning("Sin archivo", "No hay CSV combinado disponible para importar.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
                 created_records = False
                 for row in reader:
                     # Columns may include id_cliente, tipo_id, flag_cliente, id_producto, id_colaborador, monto_asignado, etc.
@@ -2813,6 +3053,7 @@ class FraudCaseApp:
                             'direcciones': cl.direcciones_var.get(),
                             'accionado': accionado_val,
                         }
+                        created_records = True
                     # Team member
                     id_col = row.get('id_colaborador', '').strip()
                     if id_col and id_col not in [t.id_var.get().strip() for t in self.team_frames]:
@@ -2836,6 +3077,7 @@ class FraudCaseApp:
                             'nombre_agencia': tm.nombre_agencia_var.get(),
                             'codigo_agencia': tm.codigo_agencia_var.get(),
                         }
+                        created_records = True
                     # Producto
                     id_prod = row.get('id_producto', '').strip()
                     if id_prod:
@@ -2913,6 +3155,7 @@ class FraudCaseApp:
                                 'nombre_analitica': prod.nombre_analitica_var.get(),
                                 'codigo_analitica': prod.codigo_analitica_var.get(),
                             }
+                            created_records = True
                         # Añadir asignación a este producto
                         monto_asignado = row.get('monto_asignado', '').strip()
                         if id_col and monto_asignado:
@@ -2935,7 +3178,7 @@ class FraudCaseApp:
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
 
-    def import_risks(self):
+    def import_risks(self, filename=None):
         """Importa riesgos desde un archivo CSV.
 
         Cada fila del CSV debe contener las columnas ``id_riesgo``,
@@ -2957,12 +3200,14 @@ class FraudCaseApp:
         nuevas entradas de riesgo para cada fila. Si un ID de riesgo ya
         existe, se registra en el log y se omite.
         """
-        filename = filedialog.askopenfilename(title="Seleccionar CSV de riesgos", filetypes=[("CSV Files", "*.csv")])
+        filename = filename or self._select_csv_file("riesgos", "Seleccionar CSV de riesgos")
         if not filename:
+            messagebox.showwarning("Sin archivo", "No se encontró CSV de riesgos para importar.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
+                imported = 0
                 for row in reader:
                     rid = row.get('id_riesgo', '').strip()
                     if not rid:
@@ -2980,14 +3225,18 @@ class FraudCaseApp:
                         rf.criticidad_var.set(crit)
                     rf.exposicion_var.set(row.get('exposicion_residual', '').strip())
                     rf.planes_var.set(row.get('planes_accion', '').strip())
+                    imported += 1
             # Autosave y log
             self.save_auto()
             log_event("navegacion", "Riesgos importados desde CSV", self.logs)
-            messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
+            if imported:
+                messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar riesgos: {ex}")
 
-    def import_norms(self):
+    def import_norms(self, filename=None):
         """Importa normas transgredidas desde un archivo CSV.
 
         El archivo CSV debe tener las columnas ``id_norma``, ``id_caso``,
@@ -3007,12 +3256,14 @@ class FraudCaseApp:
         ``fecha_vigencia``. Crea nuevas normas para cada fila. Si un ID de
         norma ya existe, se registra en el log y se omite.
         """
-        filename = filedialog.askopenfilename(title="Seleccionar CSV de normas", filetypes=[("CSV Files", "*.csv")])
+        filename = filename or self._select_csv_file("normas", "Seleccionar CSV de normas")
         if not filename:
+            messagebox.showwarning("Sin archivo", "No se encontró CSV de normas.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
+                imported = 0
                 for row in reader:
                     nid = row.get('id_norma', '').strip()
                     if not nid:
@@ -3025,13 +3276,17 @@ class FraudCaseApp:
                     nf.id_var.set(nid)
                     nf.descripcion_var.set(row.get('descripcion', '').strip())
                     nf.fecha_var.set(row.get('fecha_vigencia', '').strip())
+                    imported += 1
             self.save_auto()
             log_event("navegacion", "Normas importadas desde CSV", self.logs)
-            messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
+            if imported:
+                messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar normas: {ex}")
 
-    def import_claims(self):
+    def import_claims(self, filename=None):
         """Importa reclamos desde un archivo CSV.
 
         Cada fila del CSV debe incluir ``id_reclamo``, ``id_caso``,
@@ -3053,12 +3308,14 @@ class FraudCaseApp:
         asignan los datos al producto correspondiente. Si el producto no
         existe en la interfaz, se registra un error y se omite.
         """
-        filename = filedialog.askopenfilename(title="Seleccionar CSV de reclamos", filetypes=[("CSV Files", "*.csv")])
+        filename = filename or self._select_csv_file("reclamos", "Seleccionar CSV de reclamos")
         if not filename:
+            messagebox.showwarning("Sin archivo", "No se encontró CSV de reclamos.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
+                imported = 0
                 for row in reader:
                     rid = row.get('id_reclamo', '').strip()
                     pid = row.get('id_producto', '').strip()
@@ -3076,9 +3333,13 @@ class FraudCaseApp:
                     prod.id_reclamo_var.set(rid)
                     prod.nombre_analitica_var.set(row.get('nombre_analitica', '').strip())
                     prod.codigo_analitica_var.set(row.get('codigo_analitica', '').strip())
+                    imported += 1
             self.save_auto()
             log_event("navegacion", "Reclamos importados desde CSV", self.logs)
-            messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
+            if imported:
+                messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar reclamos: {ex}")
 
@@ -3093,6 +3354,7 @@ class FraudCaseApp:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
+        self.refresh_summary_tables(data)
 
     def load_autosave(self):
         """Carga el estado guardado automáticamente si el archivo existe."""
@@ -3362,6 +3624,7 @@ class FraudCaseApp:
         self.descargos_var.set(analisis.get('descargos', ''))
         self.conclusiones_var.set(analisis.get('conclusiones', ''))
         self.recomendaciones_var.set(analisis.get('recomendaciones', ''))
+        self.refresh_summary_tables(data)
 
     # ---------------------------------------------------------------------
     # Validación de reglas de negocio
