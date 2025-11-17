@@ -593,22 +593,54 @@ def validate_date_text(value, label, allow_blank=True):
     return None
 
 
-def validate_amount_text(value, label, allow_blank=True):
-    """Valida que los montos sean numéricos en formato decimal.
+MONEY_PATTERN = re.compile(r"^(?P<int>\d{1,12})([\.,](?P<dec>\d{1,2}))?$")
+TWO_DECIMALS = Decimal("0.01")
 
-    Example:
-        >>> validate_amount_text('10.5', 'Monto investigado')
-        None
-        >>> validate_amount_text('abc', 'Monto investigado')
-        'Monto investigado debe ser numérico.'
+
+def validate_money_bounds(value, label, allow_blank=True):
+    """Valida montos monetarios y retorna ``(mensaje_error, Decimal|None)``.
+
+    Se restringen a valores positivos o cero, con hasta 12 dígitos enteros y
+    dos decimales como máximo. Si el campo se deja vacío y ``allow_blank`` es
+    ``True`` se considera válido y se devuelve ``None`` para el valor
+    normalizado.
     """
-    if not value.strip():
-        return None if allow_blank else f"Debe ingresar {label}."
+
+    text = (value or "").strip()
+    if not text:
+        return (None, None) if allow_blank else (f"Debe ingresar {label}.", None)
+
+    normalized = text.replace(",", ".")
+    match = MONEY_PATTERN.match(normalized)
+    if not match:
+        return (
+            f"{label} debe ser ≥ 0 y tener dos decimales (máximo 12 dígitos enteros).",
+            None,
+        )
+
+    decimal_part = match.group("dec") or ""
+    if len(decimal_part) > 2:
+        return (
+            f"{label} debe ser ≥ 0 y tener dos decimales (máximo 12 dígitos enteros).",
+            None,
+        )
+
     try:
-        float(value)
-    except ValueError:
-        return f"{label} debe ser numérico."
-    return None
+        decimal_value = Decimal(normalized).quantize(TWO_DECIMALS)
+    except InvalidOperation:
+        return (
+            f"{label} debe ser ≥ 0 y tener dos decimales (máximo 12 dígitos enteros).",
+            None,
+        )
+
+    return None, decimal_value
+
+
+def validate_amount_text(value, label, allow_blank=True):
+    """Valida que los montos sean numéricos en formato monetario estándar."""
+
+    message, _ = validate_money_bounds(value, label, allow_blank=allow_blank)
+    return message
 
 
 def validate_email_list(value, label):
@@ -850,15 +882,14 @@ class FieldValidator:
 getcontext().prec = 10  # Set precision to 10 significant digits
 getcontext().rounding = ROUND_HALF_UP # Set rounding method
 
+
 def parse_decimal_amount(amount_string):
-    try:
-        # Replace comma with period if present
-        cleaned_string = amount_string.replace(',', '.')
-        decimal_value = Decimal(cleaned_string)
-        return decimal_value
-    except InvalidOperation:
-        print(f"Error: '{amount_string}' is not a valid decimal amount.")
+    """Convierte cadenas monetarias a ``Decimal`` usando ``validate_money_bounds``."""
+
+    message, value = validate_money_bounds(amount_string or "", "monto", allow_blank=True)
+    if message:
         return None
+    return value or Decimal('0')
 # Callback global opcional para guardar versiones temporales
 SAVE_TEMP_CALLBACK = None
 
@@ -1809,21 +1840,27 @@ class ProductFrame:
 
     def _validate_montos_consistentes(self):
         """Valida que la distribución de montos sea coherente con la investigación."""
-        try:
-            m_inv = float(self.monto_inv_var.get() or 0)
-            m_perd = float(self.monto_perdida_var.get() or 0)
-            m_falla = float(self.monto_falla_var.get() or 0)
-            m_cont = float(self.monto_cont_var.get() or 0)
-            m_rec = float(self.monto_rec_var.get() or 0)
-            m_pago = float(self.monto_pago_var.get() or 0)
-        except ValueError:
-            return None
-        componentes = m_perd + m_falla + m_cont
-        if abs(componentes - m_inv) > 1e-2:
+        specs = [
+            (self.monto_inv_var.get(), "Monto investigado", False, "inv"),
+            (self.monto_perdida_var.get(), "Monto pérdida de fraude", True, "perdida"),
+            (self.monto_falla_var.get(), "Monto falla en procesos", True, "falla"),
+            (self.monto_cont_var.get(), "Monto contingencia", True, "contingencia"),
+            (self.monto_rec_var.get(), "Monto recuperado", True, "recuperado"),
+            (self.monto_pago_var.get(), "Monto pago de deuda", True, "pago"),
+        ]
+        values = {}
+        for raw_value, label, required, key in specs:
+            message, decimal_value = validate_money_bounds(raw_value, label, allow_blank=not required)
+            if message:
+                return message
+            values[key] = decimal_value if decimal_value is not None else Decimal('0')
+
+        componentes = values['perdida'] + values['falla'] + values['contingencia']
+        if abs(componentes - values['inv']) > Decimal('0.01'):
             return "La suma de pérdida, falla y contingencia debe ser igual al monto investigado."
-        if m_rec > m_inv + 1e-6:
+        if values['recuperado'] > values['inv']:
             return "El monto recuperado no puede superar el monto investigado."
-        if m_pago > m_inv + 1e-6:
+        if values['pago'] > values['inv']:
             return "El pago de deuda no puede ser mayor al monto investigado."
         return None
 
@@ -3961,15 +3998,34 @@ class FraudCaseApp:
             except ValueError:
                 errors.append(f"Fechas inválidas en el producto {producto['id_producto']}")
             # Montos
-            m_inv = parse_decimal_amount(producto['monto_investigado'])
-            m_perd = parse_decimal_amount(producto['monto_perdida_fraude'])
-            m_fall = parse_decimal_amount(producto['monto_falla_procesos'])
-            m_cont = parse_decimal_amount(producto['monto_contingencia'])
-            m_rec = parse_decimal_amount(producto['monto_recuperado'])
-            m_pago = parse_decimal_amount(producto['monto_pago_deuda'])
-            if m_inv is None or m_perd is None or m_fall is None or m_cont is None or m_rec is None or m_pago is None:
-                errors.append(f"Valores numéricos inválidos en el producto {producto['id_producto']}")
+            money_specs = [
+                ('monto_investigado', False, 'Monto investigado'),
+                ('monto_perdida_fraude', True, 'Monto pérdida de fraude'),
+                ('monto_falla_procesos', True, 'Monto falla en procesos'),
+                ('monto_contingencia', True, 'Monto contingencia'),
+                ('monto_recuperado', True, 'Monto recuperado'),
+                ('monto_pago_deuda', True, 'Monto pago de deuda'),
+            ]
+            money_values = {}
+            money_error = False
+            for field, allow_blank, label in money_specs:
+                message, decimal_value = validate_money_bounds(
+                    producto.get(field, ''),
+                    f"{label} del producto {producto['id_producto']}",
+                    allow_blank=allow_blank,
+                )
+                if message:
+                    errors.append(message)
+                    money_error = True
+                money_values[field] = decimal_value if decimal_value is not None else Decimal('0')
+            if money_error:
                 continue
+            m_inv = money_values['monto_investigado']
+            m_perd = money_values['monto_perdida_fraude']
+            m_fall = money_values['monto_falla_procesos']
+            m_cont = money_values['monto_contingencia']
+            m_rec = money_values['monto_recuperado']
+            m_pago = money_values['monto_pago_deuda']
             normalized_amounts.append({
                 'perdida': m_perd,
                 'contingencia': m_cont,
