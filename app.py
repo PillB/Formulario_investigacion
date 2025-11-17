@@ -2025,6 +2025,7 @@ class RiskFrame:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self._last_exposicion_decimal = None
         # Variables
         self.id_var = tk.StringVar(value=f"RSK-{idx+1:06d}")
         self.lider_var = tk.StringVar()
@@ -2085,10 +2086,19 @@ class RiskFrame:
                 variables=[self.id_var],
             )
         )
+        def _validate_exposure_amount():
+            message, decimal_value = validate_money_bounds(
+                self.exposicion_var.get(),
+                "la exposición residual",
+                allow_blank=True,
+            )
+            self._last_exposicion_decimal = decimal_value
+            return message
+
         self.validators.append(
             FieldValidator(
                 expos_entry,
-                lambda: validate_amount_text(self.exposicion_var.get(), "la exposición residual", allow_blank=True),
+                _validate_exposure_amount,
                 self.logs,
                 f"Riesgo {self.idx+1} - Exposición",
                 variables=[self.exposicion_var],
@@ -2220,6 +2230,7 @@ class FraudCaseApp:
         self.logs = []
         self._hover_tooltips = []
         self.validators = []
+        self._last_validated_risk_exposure_total = Decimal('0')
 
         def register_tooltip(widget, text):
             if widget is None or not text:
@@ -4235,6 +4246,7 @@ class FraudCaseApp:
             if any_loss or any_sanction:
                 errors.append("No se puede seleccionar tipo de informe 'Interno' si hay pérdidas, contingencias o sanciones registradas.")
         # Validar riesgos
+        risk_exposure_total = Decimal('0')
         risk_ids = set()
         plan_ids = set()
         for r in self.risk_frames:
@@ -4246,18 +4258,21 @@ class FraudCaseApp:
                 errors.append(f"ID de riesgo duplicado: {rid}")
             risk_ids.add(rid)
             # Exposición
-            message, _ = validate_money_bounds(
+            message, exposure_decimal = validate_money_bounds(
                 rd['exposicion_residual'],
                 f"Exposición residual del riesgo {rid}",
                 allow_blank=True,
             )
             if message:
                 errors.append(message)
+            elif exposure_decimal is not None:
+                risk_exposure_total += exposure_decimal
             # Planes de acción
             for plan in [p.strip() for p in rd['planes_accion'].split(';') if p.strip()]:
                 if plan in plan_ids:
                     errors.append(f"Plan de acción {plan} duplicado entre riesgos")
                 plan_ids.add(plan)
+        self._last_validated_risk_exposure_total = risk_exposure_total
         # Validar normas
         norm_ids = set()
         for n in self.norm_frames:
