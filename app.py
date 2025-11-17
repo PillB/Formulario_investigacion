@@ -1034,6 +1034,30 @@ def parse_decimal_amount(amount_string):
     if message:
         return None
     return value or Decimal('0')
+
+
+def should_autofill_field(current_value, preserve_existing):
+    """Determina si se debe sobrescribir un campo durante el autopoblado.
+
+    Args:
+        current_value: Valor actual del campo (por lo general un ``str``).
+        preserve_existing (bool): Cuando es ``True`` sólo se permite escribir si
+            el campo está vacío o contiene únicamente espacios en blanco. Si es
+            ``False`` se mantiene el comportamiento tradicional y siempre se
+            sobrescribe.
+
+    Returns:
+        bool: ``True`` si corresponde autopoblar el campo, ``False`` en caso
+        contrario.
+    """
+
+    if not preserve_existing:
+        return True
+    if current_value is None:
+        return True
+    if isinstance(current_value, str):
+        return not current_value.strip()
+    return False
 # Callback global opcional para guardar versiones temporales
 SAVE_TEMP_CALLBACK = None
 
@@ -1246,7 +1270,7 @@ class ClientFrame:
             )
         )
 
-    def on_id_change(self, from_focus=False):
+    def on_id_change(self, from_focus=False, preserve_existing=False):
         """Cuando cambia el ID, actualiza las listas dependientes."""
         # Registrar evento
         log_event("navegacion", f"Cliente {self.idx+1}: cambió ID a {self.id_var.get()}", self.logs)
@@ -1262,7 +1286,7 @@ class ClientFrame:
         if data:
             def set_if_present(var, key):
                 value = data.get(key, "").strip()
-                if value:
+                if value and should_autofill_field(var.get(), preserve_existing):
                     var.set(value)
 
             set_if_present(self.tipo_id_var, 'tipo_id')
@@ -1271,7 +1295,7 @@ class ClientFrame:
             set_if_present(self.correos_var, 'correos')
             set_if_present(self.direcciones_var, 'direcciones')
             accionado = data.get('accionado', '').strip()
-            if accionado:
+            if accionado and should_autofill_field(self.accionado_var.get(), preserve_existing):
                 self.set_accionado_from_text(accionado)
             self._last_missing_lookup_id = None
             log_event("navegacion", f"Autopoblado datos del cliente {cid}", self.logs)
@@ -1454,7 +1478,7 @@ class TeamMemberFrame:
             )
         )
 
-    def on_id_change(self, from_focus=False):
+    def on_id_change(self, from_focus=False, preserve_existing=False):
         """Se ejecuta al salir del campo ID: autopuebla y actualiza listas."""
         cid = self.id_var.get().strip()
         if cid:
@@ -1463,7 +1487,7 @@ class TeamMemberFrame:
             if data:
                 def set_if_present(var, key):
                     value = data.get(key, "").strip()
-                    if value:
+                    if value and should_autofill_field(var.get(), preserve_existing):
                         var.set(value)
 
                 set_if_present(self.division_var, "division")
@@ -2040,7 +2064,7 @@ class ProductFrame:
             'codigo_analitica': self.codigo_analitica_var.get().strip(),
         }
 
-    def on_id_change(self, from_focus=False):
+    def on_id_change(self, from_focus=False, preserve_existing=False):
         """Autocompleta el producto cuando se escribe un ID reconocido."""
         pid = self.id_var.get().strip()
         log_event("navegacion", f"Producto {self.idx+1}: modificó ID a {pid}", self.logs)
@@ -2064,8 +2088,11 @@ class ProductFrame:
 
         def set_if_present(var, key):
             value = data.get(key)
-            if value not in (None, ""):
-                var.set(str(value).strip())
+            if value in (None, ""):
+                return
+            text_value = str(value).strip()
+            if text_value and should_autofill_field(var.get(), preserve_existing):
+                var.set(text_value)
 
         client_id = data.get('id_cliente')
         if client_id:
@@ -2539,6 +2566,7 @@ class FraudCaseApp:
                             client_frame,
                             client_id,
                             notify_on_missing=False,
+                            preserve_existing=False,
                         )
                     created_records = created_records or created_client
                     if not client_found and 'id_cliente' in self.detail_catalogs:
@@ -2552,6 +2580,7 @@ class FraudCaseApp:
                             team_frame,
                             collaborator_id,
                             notify_on_missing=False,
+                            preserve_existing=False,
                         )
                     created_records = created_records or created_team
                     if not team_found and 'id_colaborador' in self.detail_catalogs:
@@ -2574,6 +2603,7 @@ class FraudCaseApp:
                         product_frame,
                         product_id,
                         notify_on_missing=False,
+                        preserve_existing=False,
                     )
                     created_records = created_records or new_product
                     if not product_found and 'id_producto' in self.detail_catalogs:
@@ -2709,7 +2739,11 @@ class FraudCaseApp:
                 if new_product:
                     self._populate_product_frame_from_row(product_frame, hydrated)
                 if product_frame:
-                    self._trigger_import_id_refresh(product_frame, product_id)
+                    self._trigger_import_id_refresh(
+                        product_frame,
+                        product_id,
+                        preserve_existing=False,
+                    )
                 rid = (hydrated.get('id_reclamo') or row.get('id_reclamo') or '').strip()
                 product_frame.id_reclamo_var.set(rid)
                 product_frame.nombre_analitica_var.set((hydrated.get('nombre_analitica') or row.get('nombre_analitica') or '').strip())
@@ -3761,7 +3795,12 @@ class FraudCaseApp:
                 frame = self._find_client_frame(client_id) or self._obtain_client_slot_for_import()
                 merged = self._merge_client_payload_with_frame(frame, hydrated)
                 self._populate_client_frame_from_row(frame, merged)
-                self._trigger_import_id_refresh(frame, client_id, notify_on_missing=True)
+                self._trigger_import_id_refresh(
+                    frame,
+                    client_id,
+                    notify_on_missing=True,
+                    preserve_existing=True,
+                )
                 processed += 1
                 if not found and 'id_cliente' in self.detail_catalogs:
                     missing_ids.append(client_id)
@@ -3792,7 +3831,12 @@ class FraudCaseApp:
                 frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
                 merged = self._merge_team_payload_with_frame(frame, hydrated)
                 self._populate_team_frame_from_row(frame, merged)
-                self._trigger_import_id_refresh(frame, collaborator_id, notify_on_missing=True)
+                self._trigger_import_id_refresh(
+                    frame,
+                    collaborator_id,
+                    notify_on_missing=True,
+                    preserve_existing=True,
+                )
                 processed += 1
                 if not found and 'id_colaborador' in self.detail_catalogs:
                     missing_ids.append(collaborator_id)
@@ -3837,7 +3881,12 @@ class FraudCaseApp:
                     self._ensure_client_exists(client_id, client_details)
                 merged = self._merge_product_payload_with_frame(frame, hydrated)
                 self._populate_product_frame_from_row(frame, merged)
-                self._trigger_import_id_refresh(frame, product_id, notify_on_missing=True)
+                self._trigger_import_id_refresh(
+                    frame,
+                    product_id,
+                    notify_on_missing=True,
+                    preserve_existing=True,
+                )
                 processed += 1
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_ids.append(product_id)
@@ -4274,7 +4323,7 @@ class FraudCaseApp:
         product_frame.add_involvement()
         return product_frame.involvements[-1]
 
-    def _trigger_import_id_refresh(self, frame, identifier, notify_on_missing=False):
+    def _trigger_import_id_refresh(self, frame, identifier, notify_on_missing=False, preserve_existing=False):
         """Ejecuta ``on_id_change`` tras importaciones evitando mensajes redundantes.
 
         Args:
@@ -4283,11 +4332,13 @@ class FraudCaseApp:
             notify_on_missing (bool): Si es ``True`` se propaga ``from_focus=True``
                 para que los cuadros de diálogo de inexistencia aparezcan igual que
                 cuando el usuario edita el campo manualmente.
+            preserve_existing (bool): Si es ``True`` los campos con datos
+                recientes no se sobreescriben durante el autopoblado.
         """
 
         identifier = (identifier or '').strip()
         if identifier and hasattr(frame, 'on_id_change'):
-            frame.on_id_change(from_focus=notify_on_missing)
+            frame.on_id_change(from_focus=notify_on_missing, preserve_existing=preserve_existing)
 
     def _sync_product_lookup_claim_fields(self, frame, product_id):
         """Actualiza ``product_lookup`` con los datos de reclamo visibles en el marco."""
@@ -4517,7 +4568,12 @@ class FraudCaseApp:
                     continue
                 frame = self._find_client_frame(id_cliente) or self._obtain_client_slot_for_import()
                 self._populate_client_frame_from_row(frame, hydrated)
-                self._trigger_import_id_refresh(frame, id_cliente, notify_on_missing=True)
+                self._trigger_import_id_refresh(
+                    frame,
+                    id_cliente,
+                    notify_on_missing=True,
+                    preserve_existing=False,
+                )
                 imported += 1
                 if not found and 'id_cliente' in self.detail_catalogs:
                     missing_ids.append(id_cliente)
@@ -4550,7 +4606,12 @@ class FraudCaseApp:
                     continue
                 frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
                 self._populate_team_frame_from_row(frame, hydrated)
-                self._trigger_import_id_refresh(frame, collaborator_id, notify_on_missing=True)
+                self._trigger_import_id_refresh(
+                    frame,
+                    collaborator_id,
+                    notify_on_missing=True,
+                    preserve_existing=False,
+                )
                 imported += 1
                 if not found and 'id_colaborador' in self.detail_catalogs:
                     missing_ids.append(collaborator_id)
@@ -4587,7 +4648,12 @@ class FraudCaseApp:
                     client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
                     self._ensure_client_exists(client_id, client_details)
                 self._populate_product_frame_from_row(frame, hydrated)
-                self._trigger_import_id_refresh(frame, product_id, notify_on_missing=True)
+                self._trigger_import_id_refresh(
+                    frame,
+                    product_id,
+                    notify_on_missing=True,
+                    preserve_existing=False,
+                )
                 imported += 1
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_ids.append(product_id)
