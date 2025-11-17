@@ -4034,8 +4034,9 @@ class FraudCaseApp:
         errors = []
         # Validar número de caso
         id_caso = self.id_caso_var.get().strip()
-        if not id_caso:
-            errors.append("Debe ingresar el número de caso.")
+        case_message = validate_case_id(id_caso)
+        if case_message:
+            errors.append(case_message)
         # Validar IDs de clientes
         for idx, cframe in enumerate(self.client_frames, start=1):
             message = validate_client_id(cframe.tipo_id_var.get(), cframe.id_var.get())
