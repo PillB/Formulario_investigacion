@@ -932,6 +932,9 @@ class FieldValidator:
         self.variables = variables or []
         self._traces = []
         self.last_error = None
+        # La validación sólo debe activarse tras una interacción del usuario.
+        # Hasta entonces se ignoran los callbacks de ``trace_add`` generados
+        # por el auto‑poblamiento inicial para evitar mensajes al arrancar.
         self._validation_armed = False
         for var in self.variables:
             self._traces.append(var.trace_add("write", self._on_change))
@@ -942,8 +945,14 @@ class FieldValidator:
 
     def _on_change(self, *_args):
         """Ejecuta la validación y actualiza el tooltip sólo si cambió el estado."""
-        if not self._validation_armed:
+        event = _args[0] if _args else None
+        is_user_event = hasattr(event, "widget")
+        if is_user_event:
             self._validation_armed = True
+        elif not self._validation_armed:
+            # Se trata de un ``trace_add`` disparado antes de cualquier edición
+            # del usuario, por lo que se ignora para no mostrar alertas.
+            return
         error = self.validate_callback()
         if error == self.last_error:
             return
