@@ -3538,10 +3538,14 @@ class FraudCaseApp:
         for idx, values in enumerate(rows, start=1):
             client_data = {
                 "id_cliente": values[0].strip(),
-                "tipo_id": values[1].strip() or TIPO_ID_LIST[0],
-                "flag": values[2].strip() or FLAG_CLIENTE_LIST[0],
+                "tipo_id": values[1].strip(),
+                "flag": values[2].strip(),
                 "telefonos": values[3].strip(),
             }
+            if client_data["tipo_id"] not in TIPO_ID_LIST:
+                raise ValueError(f"Cliente fila {idx}: debe seleccionar un tipo de ID válido.")
+            if client_data["flag"] not in FLAG_CLIENTE_LIST:
+                raise ValueError(f"Cliente fila {idx}: debe seleccionar un flag de cliente válido.")
             message = validate_client_id(client_data["tipo_id"], client_data["id_cliente"])
             if message:
                 raise ValueError(f"Cliente fila {idx}: {message}")
@@ -3567,6 +3571,10 @@ class FraudCaseApp:
                 "area": values[2].strip(),
                 "tipo_sancion": values[3].strip(),
             }
+            if collaborator["tipo_sancion"] not in TIPO_SANCION_LIST:
+                raise ValueError(
+                    f"Colaborador fila {idx}: debe seleccionar un tipo de sanción válido."
+                )
             message = validate_team_member_id(collaborator["id_colaborador"])
             if message:
                 raise ValueError(f"Colaborador fila {idx}: {message}")
