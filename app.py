@@ -3389,6 +3389,13 @@ class FraudCaseApp:
         except ValueError as exc:
             messagebox.showerror("Pegado no válido", str(exc))
             return "break"
+        ingestible_sections = {"clientes", "colaboradores", "productos"}
+        if key in ingestible_sections:
+            try:
+                self.ingest_summary_rows(key, sanitized_rows)
+            except ValueError as exc:
+                messagebox.showerror("Pegado no válido", str(exc))
+            return "break"
         tree.delete(*tree.get_children())
         for row in sanitized_rows:
             tree.insert("", "end", values=row)
@@ -3534,6 +3541,117 @@ class FraudCaseApp:
                 )
             )
         return sanitized
+
+    def ingest_summary_rows(self, section_key, rows):
+        """Incorpora filas pegadas en las tablas de resumen al formulario principal."""
+
+        if not rows:
+            return 0
+        section_key = (section_key or "").strip().lower()
+        processed = 0
+        missing_ids = []
+        if section_key == "clientes":
+            for values in rows:
+                payload = {
+                    "id_cliente": (values[0] or "").strip(),
+                    "tipo_id": (values[1] or TIPO_ID_LIST[0]).strip(),
+                    "flag": (values[2] or FLAG_CLIENTE_LIST[0]).strip(),
+                    "telefonos": (values[3] or "").strip(),
+                    "correos": "",
+                    "direcciones": "",
+                    "accionado": "",
+                }
+                hydrated, found = self._hydrate_row_from_details(payload, 'id_cliente', CLIENT_ID_ALIASES)
+                client_id = (hydrated.get('id_cliente') or '').strip()
+                if not client_id:
+                    continue
+                frame = self._find_client_frame(client_id) or self._obtain_client_slot_for_import()
+                self._populate_client_frame_from_row(frame, hydrated)
+                self._trigger_import_id_refresh(frame, client_id)
+                processed += 1
+                if not found and 'id_cliente' in self.detail_catalogs:
+                    missing_ids.append(client_id)
+            if missing_ids:
+                self._report_missing_detail_ids("clientes", missing_ids)
+            if processed:
+                self.save_auto()
+                self.sync_main_form_after_import("clientes")
+            return processed
+        if section_key == "colaboradores":
+            for values in rows:
+                payload = {
+                    "id_colaborador": (values[0] or "").strip(),
+                    "division": (values[1] or "").strip(),
+                    "area": (values[2] or "").strip(),
+                    "tipo_sancion": (values[3] or "").strip(),
+                    "flag_colaborador": "No aplica",
+                    "servicio": "",
+                    "puesto": "",
+                    "nombre_agencia": "",
+                    "codigo_agencia": "",
+                    "tipo_falta": "No aplica",
+                }
+                hydrated, found = self._hydrate_row_from_details(payload, 'id_colaborador', TEAM_ID_ALIASES)
+                collaborator_id = (hydrated.get('id_colaborador') or '').strip()
+                if not collaborator_id:
+                    continue
+                frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
+                self._populate_team_frame_from_row(frame, hydrated)
+                self._trigger_import_id_refresh(frame, collaborator_id)
+                processed += 1
+                if not found and 'id_colaborador' in self.detail_catalogs:
+                    missing_ids.append(collaborator_id)
+            if missing_ids:
+                self._report_missing_detail_ids("colaboradores", missing_ids)
+            if processed:
+                self.save_auto()
+                self.sync_main_form_after_import("colaboradores")
+            return processed
+        if section_key == "productos":
+            for values in rows:
+                payload = {
+                    "id_producto": (values[0] or "").strip(),
+                    "id_cliente": (values[1] or "").strip(),
+                    "tipo_producto": (values[2] or "").strip(),
+                    "monto_investigado": (values[3] or "").strip(),
+                    "categoria1": "",
+                    "categoria2": "",
+                    "modalidad": "",
+                    "canal": "",
+                    "proceso": "",
+                    "fecha_ocurrencia": "",
+                    "fecha_descubrimiento": "",
+                    "tipo_moneda": "",
+                    "monto_perdida_fraude": "",
+                    "monto_falla_procesos": "",
+                    "monto_contingencia": "",
+                    "monto_recuperado": "",
+                    "monto_pago_deuda": "",
+                    "id_reclamo": "",
+                    "nombre_analitica": "",
+                    "codigo_analitica": "",
+                }
+                hydrated, found = self._hydrate_row_from_details(payload, 'id_producto', PRODUCT_ID_ALIASES)
+                product_id = (hydrated.get('id_producto') or '').strip()
+                if not product_id:
+                    continue
+                frame = self._find_product_frame(product_id) or self._obtain_product_slot_for_import()
+                client_id = (hydrated.get('id_cliente') or '').strip()
+                if client_id:
+                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                    self._ensure_client_exists(client_id, client_details)
+                self._populate_product_frame_from_row(frame, hydrated)
+                self._trigger_import_id_refresh(frame, product_id)
+                processed += 1
+                if not found and 'id_producto' in self.detail_catalogs:
+                    missing_ids.append(product_id)
+            if missing_ids:
+                self._report_missing_detail_ids("productos", missing_ids)
+            if processed:
+                self.save_auto()
+                self.sync_main_form_after_import("productos")
+            return processed
+        raise ValueError("Esta tabla no admite pegado directo al formulario principal.")
 
     def _schedule_summary_refresh(self):
         """Programa la actualización del resumen en la cola ``after_idle`` de Tk."""
