@@ -2994,10 +2994,13 @@ class FraudCaseApp:
             product_frame.on_cat1_change()
             if cat2 in TAXONOMIA[cat1]:
                 product_frame.cat2_var.set(cat2)
+                if hasattr(product_frame, 'cat2_cb'):
+                    product_frame.cat2_cb.set(cat2)
                 product_frame.on_cat2_change()
                 if modalidad in TAXONOMIA[cat1][cat2]:
                     product_frame.mod_var.set(modalidad)
-                    product_frame.mod_cb.set(modalidad)
+                    if hasattr(product_frame, 'mod_cb'):
+                        product_frame.mod_cb.set(modalidad)
 
     def add_product(self):
         idx = len(self.product_frames)
@@ -3489,7 +3492,9 @@ class FraudCaseApp:
                 self._apply_case_taxonomy_defaults(frame)
                 return frame
         self.add_product()
-        return self.product_frames[-1]
+        new_frame = self.product_frames[-1]
+        self._apply_case_taxonomy_defaults(new_frame)
+        return new_frame
 
     def _obtain_involvement_slot(self, product_frame):
         empty = next((inv for inv in product_frame.involvements if not inv.team_var.get().strip()), None)
