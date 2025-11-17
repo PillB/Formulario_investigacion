@@ -461,35 +461,38 @@ def load_product_details():
                 key = row.get("id_producto", "").strip()
                 if not key:
                     continue
-                lookup[key] = {
-                    "id_cliente": row.get("id_cliente", "").strip(),
-                    "tipo_producto": row.get("tipo_producto", "").strip(),
-                    "categoria1": row.get("categoria1", "").strip(),
-                    "categoria2": row.get("categoria2", "").strip(),
-                    "modalidad": row.get("modalidad", "").strip(),
-                    "canal": row.get("canal", "").strip(),
-                    "proceso": row.get("proceso", "").strip(),
-                    "fecha_ocurrencia": row.get("fecha_ocurrencia", "").strip(),
-                    "fecha_descubrimiento": row.get("fecha_descubrimiento", "").strip(),
-                    "monto_investigado": row.get("monto_investigado", "").strip(),
-                    "tipo_moneda": row.get("tipo_moneda", "").strip(),
-                    "monto_perdida_fraude": row.get("monto_perdida_fraude", "").strip(),
-                    "monto_falla_procesos": row.get("monto_falla_procesos", "").strip(),
-                    "monto_contingencia": row.get("monto_contingencia", "").strip(),
-                    "monto_recuperado": row.get("monto_recuperado", "").strip(),
-                    "monto_pago_deuda": row.get("monto_pago_deuda", "").strip(),
+                product = lookup.get(key)
+                if not product:
+                    product = {
+                        "id_cliente": row.get("id_cliente", "").strip(),
+                        "tipo_producto": row.get("tipo_producto", "").strip(),
+                        "categoria1": row.get("categoria1", "").strip(),
+                        "categoria2": row.get("categoria2", "").strip(),
+                        "modalidad": row.get("modalidad", "").strip(),
+                        "canal": row.get("canal", "").strip(),
+                        "proceso": row.get("proceso", "").strip(),
+                        "fecha_ocurrencia": row.get("fecha_ocurrencia", "").strip(),
+                        "fecha_descubrimiento": row.get("fecha_descubrimiento", "").strip(),
+                        "monto_investigado": row.get("monto_investigado", "").strip(),
+                        "tipo_moneda": row.get("tipo_moneda", "").strip(),
+                        "monto_perdida_fraude": row.get("monto_perdida_fraude", "").strip(),
+                        "monto_falla_procesos": row.get("monto_falla_procesos", "").strip(),
+                        "monto_contingencia": row.get("monto_contingencia", "").strip(),
+                        "monto_recuperado": row.get("monto_recuperado", "").strip(),
+                        "monto_pago_deuda": row.get("monto_pago_deuda", "").strip(),
+                        "id_reclamo": row.get("id_reclamo", "").strip(),
+                        "nombre_analitica": row.get("nombre_analitica", "").strip(),
+                        "codigo_analitica": row.get("codigo_analitica", "").strip(),
+                        "reclamos": [],
+                    }
+                    lookup[key] = product
+                claim_payload = {
                     "id_reclamo": row.get("id_reclamo", "").strip(),
                     "nombre_analitica": row.get("nombre_analitica", "").strip(),
                     "codigo_analitica": row.get("codigo_analitica", "").strip(),
-                    "reclamos": [],
-                }
-                claim_payload = {
-                    "id_reclamo": lookup[key]["id_reclamo"],
-                    "nombre_analitica": lookup[key]["nombre_analitica"],
-                    "codigo_analitica": lookup[key]["codigo_analitica"],
                 }
                 if any(value for value in claim_payload.values()):
-                    lookup[key]["reclamos"] = [claim_payload]
+                    product["reclamos"].append(claim_payload)
     except FileNotFoundError:
         pass
     return lookup
