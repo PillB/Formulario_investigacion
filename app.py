@@ -4136,8 +4136,22 @@ class FraudCaseApp:
             total_investigado += m_inv
             total_componentes += componentes
             # Reclamo y analíticas
-            if (m_perd > 0 or m_fall > 0 or m_cont > 0) and (not data['reclamo']['id_reclamo'] or not data['reclamo']['nombre_analitica'] or not data['reclamo']['codigo_analitica']):
-                errors.append(f"Debe ingresar reclamo y analítica completa en el producto {producto['id_producto']} porque hay montos de pérdida, falla o contingencia")
+            requiere_reclamo = m_perd > 0 or m_fall > 0 or m_cont > 0
+            reclamo_id = data['reclamo']['id_reclamo'].strip()
+            if requiere_reclamo and (
+                not reclamo_id
+                or not data['reclamo']['nombre_analitica']
+                or not data['reclamo']['codigo_analitica']
+            ):
+                errors.append(
+                    f"Debe ingresar reclamo y analítica completa en el producto {producto['id_producto']} porque hay montos de pérdida, falla o contingencia"
+                )
+            if requiere_reclamo and reclamo_id:
+                reclamo_message = validate_reclamo_id(reclamo_id)
+                if reclamo_message:
+                    errors.append(
+                        f"Producto {producto['id_producto']}: {reclamo_message}"
+                    )
             # Código analítica
             cod_anal = data['reclamo']['codigo_analitica']
             if cod_anal:
