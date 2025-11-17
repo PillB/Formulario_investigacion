@@ -61,6 +61,7 @@ import csv
 import json
 import os
 import re
+import unicodedata
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, getcontext, ROUND_HALF_UP
 from functools import partial
@@ -715,6 +716,15 @@ AGENCY_CODE_PATTERN = re.compile(r"^\d{6}$")
 PRODUCT_CREDIT_LENGTHS = {13, 14, 16, 20}
 
 
+def normalize_without_accents(value):
+    """Devuelve el texto sin tildes para facilitar las comparaciones lógicas."""
+
+    if not isinstance(value, str):
+        return ""
+    normalized = unicodedata.normalize("NFKD", value)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
 def validate_client_id(tipo_id, value):
     """Valida el ID del cliente de acuerdo con el tipo de documento (Diseño CM)."""
 
@@ -758,10 +768,7 @@ def validate_product_id(tipo_producto, value):
     text = (value or "").strip()
     if not text:
         return "Debe ingresar el ID del producto."
-    tipo = (tipo_producto or "").strip().lower()
-    tipo_normalized = (
-        tipo.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
-    )
+    tipo_normalized = normalize_without_accents((tipo_producto or "").strip()).lower()
     if "tarjeta" in tipo_normalized:
         if not (text.isdigit() and len(text) == 16):
             return "Para tarjetas el ID debe ser numérico de 16 dígitos."
@@ -1949,6 +1956,10 @@ class ProductFrame:
             return "El monto recuperado no puede superar el monto investigado."
         if values['pago'] > values['inv']:
             return "El pago de deuda no puede ser mayor al monto investigado."
+        tipo_prod = normalize_without_accents(self.tipo_prod_var.get()).lower()
+        if any(word in tipo_prod for word in ('credito', 'tarjeta')):
+            if abs(values['contingencia'] - values['inv']) > Decimal('0.01'):
+                return "El monto de contingencia debe ser igual al monto investigado para créditos o tarjetas."
         return None
 
     def get_data(self):
@@ -4168,8 +4179,8 @@ class FraudCaseApp:
                     errors.append(f"Código analítica inválido en el producto {producto['id_producto']}")
             # Longitud id_producto
             # Tipo producto vs contingencia
-            tipo_prod = producto['tipo_producto'].lower()
-            if any(word in tipo_prod for word in ['crédito', 'tarjeta']):
+            tipo_prod = normalize_without_accents(producto['tipo_producto']).lower()
+            if any(word in tipo_prod for word in ['credito', 'tarjeta']):
                 if abs(m_cont - m_inv) > Decimal('0.01'):
                     errors.append(f"El monto de contingencia debe ser igual al monto investigado en el producto {producto['id_producto']} porque es un crédito o tarjeta")
             # Fraude externo
