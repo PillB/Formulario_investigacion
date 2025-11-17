@@ -1744,6 +1744,31 @@ class ProductFrame:
         anal_cod_entry.pack(side="left", padx=5)
         self.tooltip_register(anal_cod_entry, "Código numérico de 10 dígitos para la analítica.")
 
+        critical_widgets = [
+            id_entry,
+            self.client_cb,
+            cat1_cb,
+            self.cat2_cb,
+            self.mod_cb,
+            canal_cb,
+            proc_cb,
+            tipo_prod_cb,
+            focc_entry,
+            fdesc_entry,
+            m_inv_entry,
+            moneda_cb,
+            m_perdida_entry,
+            m_falla_entry,
+            m_cont_entry,
+            m_rec_entry,
+            m_pago_entry,
+            idrec_entry,
+            anal_nom_entry,
+            anal_cod_entry,
+        ]
+        for widget in critical_widgets:
+            self._register_lookup_sync(widget)
+
         # Fila 7: Asignaciones de colaboradores (involucramiento)
         row7 = ttk.Frame(self.frame)
         row7.pack(fill="x", pady=1)
@@ -1961,6 +1986,47 @@ class ProductFrame:
         for inv in self.involvements:
             inv.update_team_options()
 
+    def _register_lookup_sync(self, widget):
+        if widget is None:
+            return
+        widget.bind("<FocusOut>", self._handle_lookup_sync_event, add="+")
+        widget.bind("<Return>", self._handle_lookup_sync_event, add="+")
+        if isinstance(widget, ttk.Combobox):
+            widget.bind("<<ComboboxSelected>>", self._handle_lookup_sync_event, add="+")
+
+    def _handle_lookup_sync_event(self, *_args):
+        self.persist_lookup_snapshot()
+
+    def persist_lookup_snapshot(self):
+        """Guarda en ``product_lookup`` los datos visibles para futuras hidrataciones."""
+
+        if not isinstance(self.product_lookup, dict):
+            return
+        product_id = self.id_var.get().strip()
+        if not product_id:
+            return
+        self.product_lookup[product_id] = {
+            'id_cliente': self.client_var.get().strip(),
+            'tipo_producto': self.tipo_prod_var.get(),
+            'categoria1': self.cat1_var.get(),
+            'categoria2': self.cat2_var.get(),
+            'modalidad': self.mod_var.get(),
+            'canal': self.canal_var.get(),
+            'proceso': self.proceso_var.get(),
+            'fecha_ocurrencia': self.fecha_oc_var.get().strip(),
+            'fecha_descubrimiento': self.fecha_desc_var.get().strip(),
+            'monto_investigado': self.monto_inv_var.get().strip(),
+            'tipo_moneda': self.moneda_var.get(),
+            'monto_perdida_fraude': self.monto_perdida_var.get().strip(),
+            'monto_falla_procesos': self.monto_falla_var.get().strip(),
+            'monto_contingencia': self.monto_cont_var.get().strip(),
+            'monto_recuperado': self.monto_rec_var.get().strip(),
+            'monto_pago_deuda': self.monto_pago_var.get().strip(),
+            'id_reclamo': self.id_reclamo_var.get().strip(),
+            'nombre_analitica': self.nombre_analitica_var.get().strip(),
+            'codigo_analitica': self.codigo_analitica_var.get().strip(),
+        }
+
     def on_id_change(self, from_focus=False):
         """Autocompleta el producto cuando se escribe un ID reconocido."""
         pid = self.id_var.get().strip()
@@ -2027,6 +2093,7 @@ class ProductFrame:
         self._last_missing_lookup_id = None
         log_event("navegacion", f"Producto {self.idx+1}: autopoblado desde catálogo", self.logs)
         self.schedule_summary_refresh()
+        self.persist_lookup_snapshot()
 
     def _validate_fecha_descubrimiento(self):
         """Valida la fecha de descubrimiento y su relación con la de ocurrencia."""
@@ -3755,7 +3822,7 @@ class FraudCaseApp:
                 frame.id_reclamo_var.set(claim_id)
                 frame.nombre_analitica_var.set(analytic_name)
                 frame.codigo_analitica_var.set(analytic_code)
-                self._trigger_import_id_refresh(frame, product_id)
+                frame.persist_lookup_snapshot()
                 processed += 1
             if processed:
                 self.save_auto()
@@ -4225,27 +4292,7 @@ class FraudCaseApp:
         frame.id_reclamo_var.set((row.get('id_reclamo') or '').strip())
         frame.nombre_analitica_var.set((row.get('nombre_analitica') or '').strip())
         frame.codigo_analitica_var.set((row.get('codigo_analitica') or '').strip())
-        self.product_lookup[product_id] = {
-            'id_cliente': frame.client_var.get(),
-            'tipo_producto': frame.tipo_prod_var.get(),
-            'categoria1': frame.cat1_var.get(),
-            'categoria2': frame.cat2_var.get(),
-            'modalidad': frame.mod_var.get(),
-            'canal': frame.canal_var.get(),
-            'proceso': frame.proceso_var.get(),
-            'fecha_ocurrencia': frame.fecha_oc_var.get(),
-            'fecha_descubrimiento': frame.fecha_desc_var.get(),
-            'monto_investigado': frame.monto_inv_var.get(),
-            'tipo_moneda': frame.moneda_var.get(),
-            'monto_perdida_fraude': frame.monto_perdida_var.get(),
-            'monto_falla_procesos': frame.monto_falla_var.get(),
-            'monto_contingencia': frame.monto_cont_var.get(),
-            'monto_recuperado': frame.monto_rec_var.get(),
-            'monto_pago_deuda': frame.monto_pago_var.get(),
-            'id_reclamo': frame.id_reclamo_var.get(),
-            'nombre_analitica': frame.nombre_analitica_var.get(),
-            'codigo_analitica': frame.codigo_analitica_var.get(),
-        }
+        frame.persist_lookup_snapshot()
 
     def _ensure_client_exists(self, client_id, row_data=None):
         client_id = (client_id or '').strip()
