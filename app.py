@@ -62,8 +62,9 @@ import json
 import os
 import re
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, getcontext, ROUND_HALF_UP
 from functools import partial
+import random
 
 # ---------------------------------------------------------------------------
 # Constantes y listas de opciones
@@ -773,6 +774,21 @@ class FieldValidator:
             self.tooltip.hide()
         self.last_error = error
 
+
+
+# Set a context for desired precision and rounding
+getcontext().prec = 10  # Set precision to 10 significant digits
+getcontext().rounding = ROUND_HALF_UP # Set rounding method
+
+def parse_decimal_amount(amount_string):
+    try:
+        # Replace comma with period if present
+        cleaned_string = amount_string.replace(',', '.')
+        decimal_value = Decimal(cleaned_string)
+        return decimal_value
+    except InvalidOperation:
+        print(f"Error: '{amount_string}' is not a valid decimal amount.")
+        return None
 # Callback global opcional para guardar versiones temporales
 SAVE_TEMP_CALLBACK = None
 
@@ -2681,9 +2697,7 @@ class FraudCaseApp:
             tree = self.summary_tables.get(key)
             if not tree:
                 return
-            children = tree.get_children()
-            if children:
-                tree.delete(*children)
+            tree.delete(*tree.get_children())
             for row in rows:
                 tree.insert("", "end", values=row)
 
@@ -2851,172 +2865,6 @@ class FraudCaseApp:
             'accionado': accionado_val,
         }
 
-    def _find_client_frame(self, client_id):
-        client_id = (client_id or '').strip()
-        if not client_id:
-            return None
-        return next((c for c in self.client_frames if c.id_var.get().strip() == client_id), None)
-
-    def _ensure_client_exists(self, client_id, row=None):
-        """Crea o reutiliza un cliente a partir de datos masivos."""
-
-        frame = self._find_client_frame(client_id)
-        created = False
-        if frame is None:
-            frame = self._obtain_client_slot_for_import()
-            created = True
-        was_empty = not frame.id_var.get().strip()
-        frame.id_var.set(client_id)
-        tipo_id = (row or {}).get('tipo_id') or (row or {}).get('TipoID') or frame.tipo_id_var.get() or TIPO_ID_LIST[0]
-        frame.tipo_id_var.set(tipo_id)
-        flag_value = (row or {}).get('flag_cliente') or (row or {}).get('flag') or frame.flag_var.get() or FLAG_CLIENTE_LIST[0]
-        frame.flag_var.set(flag_value)
-        frame.telefonos_var.set((row or {}).get('telefonos', frame.telefonos_var.get()))
-        frame.correos_var.set((row or {}).get('correos', frame.correos_var.get()))
-        frame.direcciones_var.set((row or {}).get('direcciones', frame.direcciones_var.get()))
-        accionado_val = (row or {}).get('accionado', frame.accionado_var.get())
-        if accionado_val:
-            frame.set_accionado_from_text(accionado_val)
-        self.client_lookup[client_id] = {
-            'tipo_id': frame.tipo_id_var.get(),
-            'flag': frame.flag_var.get(),
-            'telefonos': frame.telefonos_var.get(),
-            'correos': frame.correos_var.get(),
-            'direcciones': frame.direcciones_var.get(),
-            'accionado': frame.accionado_var.get(),
-        }
-        return frame, created or was_empty
-
-    def _find_team_frame(self, collaborator_id):
-        collaborator_id = (collaborator_id or '').strip()
-        if not collaborator_id:
-            return None
-        return next((t for t in self.team_frames if t.id_var.get().strip() == collaborator_id), None)
-
-    def _ensure_team_member_exists(self, collaborator_id, row=None):
-        frame = self._find_team_frame(collaborator_id)
-        created = False
-        if frame is None:
-            self.add_team()
-            frame = self.team_frames[-1]
-            created = True
-        was_empty = not frame.id_var.get().strip()
-        frame.id_var.set(collaborator_id)
-        frame.flag_var.set((row or {}).get('flag_colaborador') or (row or {}).get('flag') or frame.flag_var.get() or FLAG_COLABORADOR_LIST[0])
-        frame.division_var.set((row or {}).get('division', frame.division_var.get()))
-        frame.area_var.set((row or {}).get('area', frame.area_var.get()))
-        frame.servicio_var.set((row or {}).get('servicio', frame.servicio_var.get()))
-        frame.puesto_var.set((row or {}).get('puesto', frame.puesto_var.get()))
-        frame.nombre_agencia_var.set((row or {}).get('nombre_agencia', frame.nombre_agencia_var.get()))
-        frame.codigo_agencia_var.set((row or {}).get('codigo_agencia', frame.codigo_agencia_var.get()))
-        frame.tipo_falta_var.set((row or {}).get('tipo_falta', frame.tipo_falta_var.get() or TIPO_FALTA_LIST[0]))
-        frame.tipo_sancion_var.set((row or {}).get('tipo_sancion', frame.tipo_sancion_var.get() or TIPO_SANCION_LIST[0]))
-        self.team_lookup[collaborator_id] = {
-            'division': frame.division_var.get(),
-            'area': frame.area_var.get(),
-            'servicio': frame.servicio_var.get(),
-            'puesto': frame.puesto_var.get(),
-            'nombre_agencia': frame.nombre_agencia_var.get(),
-            'codigo_agencia': frame.codigo_agencia_var.get(),
-        }
-        return frame, created or was_empty
-
-    def _find_product_frame(self, product_id):
-        product_id = (product_id or '').strip()
-        if not product_id:
-            return None
-        return next((p for p in self.product_frames if p.id_var.get().strip() == product_id), None)
-
-    def _obtain_involvement_slot(self, product_frame):
-        for inv in product_frame.involvements:
-            if not inv.team_var.get().strip() and not inv.monto_var.get().strip():
-                return inv
-        product_frame.add_involvement()
-        return product_frame.involvements[-1]
-
-    def _apply_taxonomy_to_product(self, product_frame, cat1, cat2, modalidad, product_id):
-        cat1 = (cat1 or '').strip()
-        cat2 = (cat2 or '').strip()
-        modalidad = (modalidad or '').strip()
-        if cat1 in TAXONOMIA:
-            product_frame.cat1_var.set(cat1)
-            product_frame.on_cat1_change()
-            if cat2 in TAXONOMIA[cat1]:
-                product_frame.cat2_var.set(cat2)
-                product_frame.on_cat2_change()
-                if modalidad in TAXONOMIA[cat1][cat2]:
-                    product_frame.mod_var.set(modalidad)
-                elif modalidad:
-                    self._notify_taxonomy_warning(
-                        f"Producto {product_id}: la modalidad '{modalidad}' no corresponde a {cat1}/{cat2}."
-                    )
-            elif cat2:
-                self._notify_taxonomy_warning(
-                    f"Producto {product_id}: la categoría 2 '{cat2}' no existe bajo {cat1}."
-                )
-        elif cat1:
-            self._notify_taxonomy_warning(
-                f"Producto {product_id}: la categoría 1 '{cat1}' no está en la taxonomía."
-            )
-            product_frame.cat1_var.set(cat1)
-
-    def _populate_product_frame_from_row(self, product_frame, row):
-        pid = (row.get('id_producto') or '').strip()
-        if pid:
-            product_frame.id_var.set(pid)
-        client_id = (row.get('id_cliente') or row.get('cliente') or '').strip()
-        if client_id:
-            product_frame.client_var.set(client_id)
-        self._apply_taxonomy_to_product(
-            product_frame,
-            row.get('categoria1', ''),
-            row.get('categoria2', ''),
-            row.get('modalidad', ''),
-            pid or product_frame.id_var.get().strip(),
-        )
-        product_frame.canal_var.set(row.get('canal', product_frame.canal_var.get() or CANAL_LIST[0]))
-        product_frame.proceso_var.set(row.get('proceso', product_frame.proceso_var.get() or PROCESO_LIST[0]))
-        product_frame.fecha_oc_var.set(row.get('fecha_ocurrencia', product_frame.fecha_oc_var.get()))
-        product_frame.fecha_desc_var.set(row.get('fecha_descubrimiento', product_frame.fecha_desc_var.get()))
-        product_frame.monto_inv_var.set(row.get('monto_investigado', product_frame.monto_inv_var.get()))
-        product_frame.moneda_var.set(row.get('tipo_moneda', product_frame.moneda_var.get() or TIPO_MONEDA_LIST[0]))
-        product_frame.monto_perdida_var.set(row.get('monto_perdida_fraude', product_frame.monto_perdida_var.get()))
-        product_frame.monto_falla_var.set(row.get('monto_falla_procesos', product_frame.monto_falla_var.get()))
-        product_frame.monto_cont_var.set(row.get('monto_contingencia', product_frame.monto_cont_var.get()))
-        product_frame.monto_rec_var.set(row.get('monto_recuperado', product_frame.monto_rec_var.get()))
-        product_frame.monto_pago_var.set(row.get('monto_pago_deuda', product_frame.monto_pago_var.get()))
-        tipo_prod = (row.get('tipo_producto') or '').strip()
-        if tipo_prod in TIPO_PRODUCTO_LIST:
-            product_frame.tipo_prod_var.set(tipo_prod)
-        elif tipo_prod:
-            product_frame.tipo_prod_var.set(tipo_prod)
-        product_frame.id_reclamo_var.set((row.get('id_reclamo') or '').strip())
-        product_frame.nombre_analitica_var.set((row.get('nombre_analitica') or '').strip())
-        product_frame.codigo_analitica_var.set((row.get('codigo_analitica') or '').strip())
-        pid_lookup = product_frame.id_var.get().strip()
-        if pid_lookup:
-            self.product_lookup[pid_lookup] = {
-                'id_cliente': product_frame.client_var.get(),
-                'tipo_producto': product_frame.tipo_prod_var.get(),
-                'categoria1': product_frame.cat1_var.get(),
-                'categoria2': product_frame.cat2_var.get(),
-                'modalidad': product_frame.mod_var.get(),
-                'canal': product_frame.canal_var.get(),
-                'proceso': product_frame.proceso_var.get(),
-                'fecha_ocurrencia': product_frame.fecha_oc_var.get(),
-                'fecha_descubrimiento': product_frame.fecha_desc_var.get(),
-                'monto_investigado': product_frame.monto_inv_var.get(),
-                'tipo_moneda': product_frame.moneda_var.get(),
-                'monto_perdida_fraude': product_frame.monto_perdida_var.get(),
-                'monto_falla_procesos': product_frame.monto_falla_var.get(),
-                'monto_contingencia': product_frame.monto_cont_var.get(),
-                'monto_recuperado': product_frame.monto_rec_var.get(),
-                'monto_pago_deuda': product_frame.monto_pago_var.get(),
-                'id_reclamo': product_frame.id_reclamo_var.get(),
-                'nombre_analitica': product_frame.nombre_analitica_var.get(),
-                'codigo_analitica': product_frame.codigo_analitica_var.get(),
-            }
-
     def import_clients(self, filename=None):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
 
@@ -3025,7 +2873,31 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se seleccionó un CSV para clientes ni se encontró el ejemplo.")
             return
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
+                imported = 0
+                for row in reader:
+                    # Extraer datos esperados
+                    id_cliente = row.get('id_cliente', '').strip()
+                    if not id_cliente:
+                        continue
+                    # Verificar duplicado
+                    existing = next((c for c in self.client_frames if c.id_var.get().strip() == id_cliente), None)
+                    target_frame = existing or self._obtain_client_slot_for_import()
+                    if existing:
+                        log_event("navegacion", f"Actualizó cliente {id_cliente} desde importación", self.logs)
+                    self._populate_client_frame_from_row(target_frame, row)
+                    imported += 1
+            self.update_client_options_global()
+            self.root.update_idletasks()
+            # Guardar autosave y registrar evento
+            self.save_auto()
+            log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
+            if imported:
+                self.sync_main_form_after_import("clientes")
+                messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
+            else:
+                messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar clientes: {ex}")
             return
@@ -3075,7 +2947,45 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No hay CSV para colaboradores disponible.")
             return
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
+                imported = 0
+                for row in reader:
+                    id_col = row.get('id_colaborador', '').strip()
+                    if not id_col:
+                        continue
+                    if id_col in [t.id_var.get().strip() for t in self.team_frames]:
+                        log_event("validacion", f"Colaborador duplicado {id_col} en importación", self.logs)
+                        continue
+                    self.add_team()
+                    tm = self.team_frames[-1]
+                    tm.id_var.set(id_col)
+                    tm.flag_var.set(row.get('flag', 'No aplica').strip())
+                    tm.division_var.set(row.get('division', '').strip())
+                    tm.area_var.set(row.get('area', '').strip())
+                    tm.servicio_var.set(row.get('servicio', '').strip())
+                    tm.puesto_var.set(row.get('puesto', '').strip())
+                    tm.nombre_agencia_var.set(row.get('nombre_agencia', '').strip())
+                    tm.codigo_agencia_var.set(row.get('codigo_agencia', '').strip())
+                    tm.tipo_falta_var.set(row.get('tipo_falta', 'No aplica').strip())
+                    tm.tipo_sancion_var.set(row.get('tipo_sancion', 'No aplica').strip())
+                    self.team_lookup[id_col] = {
+                        'division': tm.division_var.get(),
+                        'area': tm.area_var.get(),
+                        'servicio': tm.servicio_var.get(),
+                        'puesto': tm.puesto_var.get(),
+                        'nombre_agencia': tm.nombre_agencia_var.get(),
+                        'codigo_agencia': tm.codigo_agencia_var.get(),
+                    }
+                    imported += 1
+            self.update_team_options_global()
+            self.save_auto()
+            log_event("navegacion", "Colaboradores importados desde CSV", self.logs)
+            if imported:
+                self.sync_main_form_after_import("colaboradores")
+                messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar colaboradores: {ex}")
             return
@@ -3123,7 +3033,93 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se seleccionó CSV de productos ni se encontró el ejemplo.")
             return
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
+                imported = 0
+                for row in reader:
+                    id_prod = row.get('id_producto', '').strip()
+                    if not id_prod:
+                        continue
+                    # Verificar duplicado
+                    if id_prod in [p.id_var.get().strip() for p in self.product_frames]:
+                        log_event("validacion", f"Producto duplicado {id_prod} en importación", self.logs)
+                        continue
+                    self.add_product()
+                    pr = self.product_frames[-1]
+                    pr.id_var.set(id_prod)
+                    pr.client_var.set(row.get('id_cliente', '').strip())
+                    # Asignar categorías con validación básica
+                    cat1 = row.get('categoria1', '')
+                    if cat1 in TAXONOMIA:
+                        pr.cat1_var.set(cat1)
+                        pr.on_cat1_change()
+                        cat2 = row.get('categoria2', '')
+                        if cat2 in TAXONOMIA[cat1]:
+                            pr.cat2_var.set(cat2)
+                            pr.on_cat2_change()
+                            mod = row.get('modalidad', '')
+                            if mod in TAXONOMIA[cat1][cat2]:
+                                pr.mod_var.set(mod)
+                            elif mod:
+                                warning = f"Producto {id_prod}: la modalidad '{mod}' no corresponde a {cat1}/{cat2}."
+                                log_event('validacion', warning, self.logs)
+                                messagebox.showwarning('Taxonomía inválida', warning)
+                        elif cat2:
+                            warning = f"Producto {id_prod}: la categoría 2 '{cat2}' no existe bajo {cat1}."
+                            log_event('validacion', warning, self.logs)
+                            messagebox.showwarning('Taxonomía inválida', warning)
+                    else:
+                        if cat1:
+                            warning = f"Producto {id_prod}: la categoría 1 '{cat1}' no está en la taxonomía."
+                            log_event('validacion', warning, self.logs)
+                            messagebox.showwarning('Taxonomía inválida', warning)
+                        pr.cat1_var.set(cat1)
+                    pr.canal_var.set(row.get('canal', CANAL_LIST[0]))
+                    pr.proceso_var.set(row.get('proceso', PROCESO_LIST[0]))
+                    pr.fecha_oc_var.set(row.get('fecha_ocurrencia', ''))
+                    pr.fecha_desc_var.set(row.get('fecha_descubrimiento', ''))
+                    pr.monto_inv_var.set(row.get('monto_investigado', ''))
+                    pr.moneda_var.set(row.get('tipo_moneda', TIPO_MONEDA_LIST[0]))
+                    pr.monto_perdida_var.set(row.get('monto_perdida_fraude', ''))
+                    pr.monto_falla_var.set(row.get('monto_falla_procesos', ''))
+                    pr.monto_cont_var.set(row.get('monto_contingencia', ''))
+                    pr.monto_rec_var.set(row.get('monto_recuperado', ''))
+                    pr.monto_pago_var.set(row.get('monto_pago_deuda', ''))
+                    tipo_prod = row.get('tipo_producto', '')
+                    if tipo_prod in TIPO_PRODUCTO_LIST:
+                        pr.tipo_prod_var.set(tipo_prod)
+                    pr.id_reclamo_var.set(row.get('id_reclamo', '').strip())
+                    pr.nombre_analitica_var.set(row.get('nombre_analitica', '').strip())
+                    pr.codigo_analitica_var.set(row.get('codigo_analitica', '').strip())
+                    # No se cargan asignaciones desde este CSV
+                    self.product_lookup[id_prod] = {
+                        'id_cliente': pr.client_var.get(),
+                        'tipo_producto': pr.tipo_prod_var.get(),
+                        'categoria1': pr.cat1_var.get(),
+                        'categoria2': pr.cat2_var.get(),
+                        'modalidad': pr.mod_var.get(),
+                        'canal': pr.canal_var.get(),
+                        'proceso': pr.proceso_var.get(),
+                        'fecha_ocurrencia': pr.fecha_oc_var.get(),
+                        'fecha_descubrimiento': pr.fecha_desc_var.get(),
+                        'monto_investigado': pr.monto_inv_var.get(),
+                        'tipo_moneda': pr.moneda_var.get(),
+                        'monto_perdida_fraude': pr.monto_perdida_var.get(),
+                        'monto_falla_procesos': pr.monto_falla_var.get(),
+                        'monto_contingencia': pr.monto_cont_var.get(),
+                        'monto_recuperado': pr.monto_rec_var.get(),
+                        'monto_pago_deuda': pr.monto_pago_var.get(),
+                        'id_reclamo': pr.id_reclamo_var.get(),
+                        'nombre_analitica': pr.nombre_analitica_var.get(),
+                        'codigo_analitica': pr.codigo_analitica_var.get(),
+                    }
+            self.save_auto()
+            log_event("navegacion", "Productos importados desde CSV", self.logs)
+            if imported:
+                self.sync_main_form_after_import("productos")
+                messagebox.showinfo("Importación completa", "Productos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se añadieron productos nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar productos: {ex}")
             return
@@ -3186,7 +3182,153 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No hay CSV combinado disponible para importar.")
             return
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
+                created_records = False
+                for row in reader:
+                    # Columns may include id_cliente, tipo_id, flag_cliente, id_producto, id_colaborador, monto_asignado, etc.
+                    id_cliente = row.get('id_cliente', '').strip()
+                    if id_cliente and id_cliente not in [c.id_var.get().strip() for c in self.client_frames]:
+                        self.add_client()
+                        cl = self.client_frames[-1]
+                        cl.id_var.set(id_cliente)
+                        cl.tipo_id_var.set(row.get('tipo_id', 'DNI'))
+                        cl.flag_var.set(row.get('flag_cliente', 'No aplica'))
+                        cl.telefonos_var.set(row.get('telefonos', ''))
+                        cl.correos_var.set(row.get('correos', ''))
+                        cl.direcciones_var.set(row.get('direcciones', ''))
+                        accionado_val = row.get('accionado', '')
+                        cl.set_accionado_from_text(accionado_val)
+                        self.client_lookup[id_cliente] = {
+                            'tipo_id': cl.tipo_id_var.get(),
+                            'flag': cl.flag_var.get(),
+                            'telefonos': cl.telefonos_var.get(),
+                            'correos': cl.correos_var.get(),
+                            'direcciones': cl.direcciones_var.get(),
+                            'accionado': accionado_val,
+                        }
+                        created_records = True
+                    # Team member
+                    id_col = row.get('id_colaborador', '').strip()
+                    if id_col and id_col not in [t.id_var.get().strip() for t in self.team_frames]:
+                        self.add_team()
+                        tm = self.team_frames[-1]
+                        tm.id_var.set(id_col)
+                        tm.flag_var.set(row.get('flag_colaborador', 'No aplica'))
+                        tm.division_var.set(row.get('division', ''))
+                        tm.area_var.set(row.get('area', ''))
+                        tm.servicio_var.set(row.get('servicio', ''))
+                        tm.puesto_var.set(row.get('puesto', ''))
+                        tm.nombre_agencia_var.set(row.get('nombre_agencia', ''))
+                        tm.codigo_agencia_var.set(row.get('codigo_agencia', ''))
+                        tm.tipo_falta_var.set(row.get('tipo_falta', 'No aplica'))
+                        tm.tipo_sancion_var.set(row.get('tipo_sancion', 'No aplica'))
+                        self.team_lookup[id_col] = {
+                            'division': tm.division_var.get(),
+                            'area': tm.area_var.get(),
+                            'servicio': tm.servicio_var.get(),
+                            'puesto': tm.puesto_var.get(),
+                            'nombre_agencia': tm.nombre_agencia_var.get(),
+                            'codigo_agencia': tm.codigo_agencia_var.get(),
+                        }
+                        created_records = True
+                    # Producto
+                    id_prod = row.get('id_producto', '').strip()
+                    if id_prod:
+                        prod = None
+                        for p in self.product_frames:
+                            if p.id_var.get().strip() == id_prod:
+                                prod = p
+                                break
+                        if not prod:
+                            self.add_product()
+                            prod = self.product_frames[-1]
+                            prod.id_var.set(id_prod)
+                            prod.client_var.set(id_cliente)
+                            # Category assignments
+                            cat1 = row.get('categoria1', '')
+                            if cat1 in TAXONOMIA:
+                                prod.cat1_var.set(cat1)
+                                prod.on_cat1_change()
+                                cat2 = row.get('categoria2', '')
+                                if cat2 in TAXONOMIA[cat1]:
+                                    prod.cat2_var.set(cat2)
+                                    prod.on_cat2_change()
+                                    mod = row.get('modalidad', '')
+                                    if mod in TAXONOMIA[cat1][cat2]:
+                                        prod.mod_var.set(mod)
+                                    elif mod:
+                                        warning = f"Producto {id_prod}: la modalidad '{mod}' no corresponde a {cat1}/{cat2}."
+                                        log_event('validacion', warning, self.logs)
+                                        messagebox.showwarning('Taxonomía inválida', warning)
+                                elif cat2:
+                                    warning = f"Producto {id_prod}: la categoría 2 '{cat2}' no existe bajo {cat1}."
+                                    log_event('validacion', warning, self.logs)
+                                    messagebox.showwarning('Taxonomía inválida', warning)
+                            else:
+                                if cat1:
+                                    warning = f"Producto {id_prod}: la categoría 1 '{cat1}' no está en la taxonomía."
+                                    log_event('validacion', warning, self.logs)
+                                    messagebox.showwarning('Taxonomía inválida', warning)
+                                prod.cat1_var.set(cat1)
+                            prod.canal_var.set(row.get('canal', CANAL_LIST[0]))
+                            prod.proceso_var.set(row.get('proceso', PROCESO_LIST[0]))
+                            prod.fecha_oc_var.set(row.get('fecha_ocurrencia', ''))
+                            prod.fecha_desc_var.set(row.get('fecha_descubrimiento', ''))
+                            prod.monto_inv_var.set(row.get('monto_investigado', ''))
+                            prod.moneda_var.set(row.get('tipo_moneda', TIPO_MONEDA_LIST[0]))
+                            prod.monto_perdida_var.set(row.get('monto_perdida_fraude', ''))
+                            prod.monto_falla_var.set(row.get('monto_falla_procesos', ''))
+                            prod.monto_cont_var.set(row.get('monto_contingencia', ''))
+                            prod.monto_rec_var.set(row.get('monto_recuperado', ''))
+                            prod.monto_pago_var.set(row.get('monto_pago_deuda', ''))
+                            tipo_prod = row.get('tipo_producto', '')
+                            if tipo_prod in TIPO_PRODUCTO_LIST:
+                                prod.tipo_prod_var.set(tipo_prod)
+                            prod.id_reclamo_var.set(row.get('id_reclamo', '').strip())
+                            prod.nombre_analitica_var.set(row.get('nombre_analitica', '').strip())
+                            prod.codigo_analitica_var.set(row.get('codigo_analitica', '').strip())
+                            self.product_lookup[id_prod] = {
+                                'id_cliente': prod.client_var.get(),
+                                'tipo_producto': prod.tipo_prod_var.get(),
+                                'categoria1': prod.cat1_var.get(),
+                                'categoria2': prod.cat2_var.get(),
+                                'modalidad': prod.mod_var.get(),
+                                'canal': prod.canal_var.get(),
+                                'proceso': prod.proceso_var.get(),
+                                'fecha_ocurrencia': prod.fecha_oc_var.get(),
+                                'fecha_descubrimiento': prod.fecha_desc_var.get(),
+                                'monto_investigado': prod.monto_inv_var.get(),
+                                'tipo_moneda': prod.moneda_var.get(),
+                                'monto_perdida_fraude': prod.monto_perdida_var.get(),
+                                'monto_falla_procesos': prod.monto_falla_var.get(),
+                                'monto_contingencia': prod.monto_cont_var.get(),
+                                'monto_recuperado': prod.monto_rec_var.get(),
+                                'monto_pago_deuda': prod.monto_pago_var.get(),
+                                'id_reclamo': prod.id_reclamo_var.get(),
+                                'nombre_analitica': prod.nombre_analitica_var.get(),
+                                'codigo_analitica': prod.codigo_analitica_var.get(),
+                            }
+                            created_records = True
+                        # Añadir asignación a este producto
+                        monto_asignado = row.get('monto_asignado', '').strip()
+                        if id_col and monto_asignado:
+                            # Añadir fila de involvement
+                            inv = InvolvementRow(prod.invol_frame, prod, len(prod.involvements), prod.get_team_options, prod.remove_involvement, self.logs, prod.tooltip_register)
+                            prod.involvements.append(inv)
+                            inv.team_var.set(id_col)
+                            inv.monto_var.set(monto_asignado)
+                            created_records = True
+            # Actualizar opciones
+            self.update_client_options_global()
+            self.update_team_options_global()
+            self.save_auto()
+            log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
+            if created_records:
+                self.sync_main_form_after_import("datos combinados")
+                messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
             return
@@ -3264,7 +3406,34 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de riesgos para importar.")
             return
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            with open(filename, newline='', encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                imported = 0
+                for row in reader:
+                    rid = row.get('id_riesgo', '').strip()
+                    if not rid:
+                        continue
+                    if any(r.id_var.get().strip() == rid for r in self.risk_frames):
+                        log_event("validacion", f"Riesgo duplicado {rid} en importación", self.logs)
+                        continue
+                    self.add_risk()
+                    rf = self.risk_frames[-1]
+                    rf.id_var.set(rid)
+                    rf.lider_var.set(row.get('lider', '').strip())
+                    rf.descripcion_var.set(row.get('descripcion', '').strip())
+                    crit = row.get('criticidad', '').strip()
+                    if crit in CRITICIDAD_LIST:
+                        rf.criticidad_var.set(crit)
+                    rf.exposicion_var.set(row.get('exposicion_residual', '').strip())
+                    rf.planes_var.set(row.get('planes_accion', '').strip())
+                    imported += 1
+            # Autosave y log
+            self.save_auto()
+            log_event("navegacion", "Riesgos importados desde CSV", self.logs)
+            if imported:
+                messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar riesgos: {ex}")
             return
@@ -3320,7 +3489,28 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de normas.")
             return
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            with open(filename, newline='', encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                imported = 0
+                for row in reader:
+                    nid = row.get('id_norma', '').strip()
+                    if not nid:
+                        continue
+                    if any(n.id_var.get().strip() == nid for n in self.norm_frames):
+                        log_event("validacion", f"Norma duplicada {nid} en importación", self.logs)
+                        continue
+                    self.add_norm()
+                    nf = self.norm_frames[-1]
+                    nf.id_var.set(nid)
+                    nf.descripcion_var.set(row.get('descripcion', '').strip())
+                    nf.fecha_var.set(row.get('fecha_vigencia', '').strip())
+                    imported += 1
+            self.save_auto()
+            log_event("navegacion", "Normas importadas desde CSV", self.logs)
+            if imported:
+                messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar normas: {ex}")
             return
@@ -3373,7 +3563,33 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de reclamos.")
             return
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            with open(filename, newline='', encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                imported = 0
+                for row in reader:
+                    rid = row.get('id_reclamo', '').strip()
+                    pid = row.get('id_producto', '').strip()
+                    if not pid:
+                        continue
+                    # buscar producto
+                    prod = None
+                    for p in self.product_frames:
+                        if p.id_var.get().strip() == pid:
+                            prod = p
+                            break
+                    if not prod:
+                        log_event("validacion", f"Producto {pid} no encontrado para reclamo {rid}", self.logs)
+                        continue
+                    prod.id_reclamo_var.set(rid)
+                    prod.nombre_analitica_var.set(row.get('nombre_analitica', '').strip())
+                    prod.codigo_analitica_var.set(row.get('codigo_analitica', '').strip())
+                    imported += 1
+            self.save_auto()
+            log_event("navegacion", "Reclamos importados desde CSV", self.logs)
+            if imported:
+                messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar reclamos: {ex}")
             return
