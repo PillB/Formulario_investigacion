@@ -3386,12 +3386,11 @@ class FraudCaseApp:
         try:
             parsed_rows = self._parse_clipboard_rows(clipboard_text, len(columns))
             sanitized_rows = self._transform_summary_clipboard_rows(key, parsed_rows)
+            self._persist_summary_rows(key, sanitized_rows)
         except ValueError as exc:
             messagebox.showerror("Pegado no válido", str(exc))
             return "break"
-        tree.delete(*tree.get_children())
-        for row in sanitized_rows:
-            tree.insert("", "end", values=row)
+        self.refresh_summary_tables()
         return "break"
 
     def _parse_clipboard_rows(self, text, expected_columns):
@@ -3534,6 +3533,100 @@ class FraudCaseApp:
                 )
             )
         return sanitized
+
+    def _persist_summary_rows(self, key, rows):
+        handlers = {
+            "clientes": self._apply_summary_clients,
+            "colaboradores": self._apply_summary_team_members,
+            "productos": self._apply_summary_products,
+            "reclamos": self._apply_summary_claims,
+        }
+        handler = handlers.get(key)
+        if not handler:
+            raise ValueError("Esta tabla no admite pegado desde portapapeles.")
+        handler(rows)
+
+    def _apply_summary_clients(self, rows):
+        if not rows:
+            return
+        while len(self.client_frames) < len(rows):
+            self.add_client()
+        for idx, values in enumerate(rows):
+            frame = self.client_frames[idx]
+            payload = {
+                "id_cliente": values[0],
+                "tipo_id": values[1],
+                "flag": values[2],
+                "telefonos": values[3],
+            }
+            self._populate_client_frame_from_row(frame, payload)
+        while len(self.client_frames) > len(rows):
+            frame = self.client_frames.pop()
+            frame.frame.destroy()
+        for i, frame in enumerate(self.client_frames):
+            frame.idx = i
+            frame.frame.config(text=f"Cliente {i+1}")
+        self.update_client_options_global()
+
+    def _apply_summary_team_members(self, rows):
+        if not rows:
+            return
+        while len(self.team_frames) < len(rows):
+            self.add_team()
+        for idx, values in enumerate(rows):
+            frame = self.team_frames[idx]
+            payload = {
+                "id_colaborador": values[0],
+                "division": values[1],
+                "area": values[2],
+                "tipo_sancion": values[3],
+            }
+            self._populate_team_frame_from_row(frame, payload)
+        while len(self.team_frames) > len(rows):
+            frame = self.team_frames.pop()
+            frame.frame.destroy()
+        for i, frame in enumerate(self.team_frames):
+            frame.idx = i
+            frame.frame.config(text=f"Colaborador {i+1}")
+        self.update_team_options_global()
+
+    def _apply_summary_products(self, rows):
+        if not rows:
+            return
+        while len(self.product_frames) < len(rows):
+            self.add_product()
+        for idx, values in enumerate(rows):
+            frame = self.product_frames[idx]
+            payload = {
+                "id_producto": values[0],
+                "id_cliente": values[1],
+                "tipo_producto": values[2],
+                "monto_investigado": values[3],
+            }
+            self._populate_product_frame_from_row(frame, payload)
+        while len(self.product_frames) > len(rows):
+            frame = self.product_frames.pop()
+            frame.frame.destroy()
+        for i, frame in enumerate(self.product_frames):
+            frame.idx = i
+            frame.frame.config(text=f"Producto {i+1}")
+
+    def _apply_summary_claims(self, rows):
+        missing_products = [values[1] for values in rows if not self._find_product_frame(values[1])]
+        if missing_products:
+            missing_list = ", ".join(sorted(set(filter(None, missing_products)))) or "desconocido"
+            raise ValueError(
+                "No se encontraron productos para los reclamos pegados (IDs: " + missing_list + ")."
+            )
+        for frame in self.product_frames:
+            frame.id_reclamo_var.set("")
+            frame.nombre_analitica_var.set("")
+            frame.codigo_analitica_var.set("")
+        for claim_id, product_id, analytic in rows:
+            product_frame = self._find_product_frame(product_id)
+            product_frame.id_reclamo_var.set(claim_id)
+            product_frame.nombre_analitica_var.set(analytic)
+            product_frame.codigo_analitica_var.set("")
 
     def _schedule_summary_refresh(self):
         """Programa la actualización del resumen en la cola ``after_idle`` de Tk."""
