@@ -4221,11 +4221,13 @@ class FraudCaseApp:
                 errors.append(f"ID de riesgo duplicado: {rid}")
             risk_ids.add(rid)
             # Exposición
-            try:
-                if rd['exposicion_residual']:
-                    float(rd['exposicion_residual'])
-            except ValueError:
-                errors.append(f"Exposición residual inválida en el riesgo {rid}")
+            message, _ = validate_money_bounds(
+                rd['exposicion_residual'],
+                f"Exposición residual del riesgo {rid}",
+                allow_blank=True,
+            )
+            if message:
+                errors.append(message)
             # Planes de acción
             for plan in [p.strip() for p in rd['planes_accion'].split(';') if p.strip()]:
                 if plan in plan_ids:
