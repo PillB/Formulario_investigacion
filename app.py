@@ -62,8 +62,9 @@ import json
 import os
 import re
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, getcontext, ROUND_HALF_UP
 from functools import partial
+import random
 
 # ---------------------------------------------------------------------------
 # Constantes y listas de opciones
@@ -717,6 +718,21 @@ class FieldValidator:
             self.tooltip.hide()
         self.last_error = error
 
+
+
+# Set a context for desired precision and rounding
+getcontext().prec = 10  # Set precision to 10 significant digits
+getcontext().rounding = ROUND_HALF_UP # Set rounding method
+
+def parse_decimal_amount(amount_string):
+    try:
+        # Replace comma with period if present
+        cleaned_string = amount_string.replace(',', '.')
+        decimal_value = Decimal(cleaned_string)
+        return decimal_value
+    except InvalidOperation:
+        print(f"Error: '{amount_string}' is not a valid decimal amount.")
+        return None
 # Callback global opcional para guardar versiones temporales
 SAVE_TEMP_CALLBACK = None
 
@@ -3203,8 +3219,8 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de riesgos para importar.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8-sig") as f:
-                reader = csv.DictReader(line for line in f if line.strip())
+            with open(filename, newline='', encoding="utf-8") as f:
+                reader = csv.DictReader(f)
                 imported = 0
                 for row in reader:
                     rid = row.get('id_riesgo', '').strip()
@@ -3259,8 +3275,8 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de normas.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8-sig") as f:
-                reader = csv.DictReader(line for line in f if line.strip())
+            with open(filename, newline='', encoding="utf-8") as f:
+                reader = csv.DictReader(f)
                 imported = 0
                 for row in reader:
                     nid = row.get('id_norma', '').strip()
@@ -3311,8 +3327,8 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de reclamos.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8-sig") as f:
-                reader = csv.DictReader(line for line in f if line.strip())
+            with open(filename, newline='', encoding="utf-8") as f:
+                reader = csv.DictReader(f)
                 imported = 0
                 for row in reader:
                     rid = row.get('id_reclamo', '').strip()
