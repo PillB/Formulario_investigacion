@@ -62,7 +62,7 @@ import json
 import os
 import re
 from datetime import datetime
-from decimal import Decimal, InvalidOperation, getcontext, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, getcontext, localcontext, ROUND_HALF_UP
 from functools import partial
 import random
 
@@ -626,7 +626,10 @@ def validate_money_bounds(value, label, allow_blank=True):
         )
 
     try:
-        decimal_value = Decimal(normalized).quantize(TWO_DECIMALS)
+        with localcontext() as ctx:
+            ctx.prec = max(ctx.prec, 20)
+            ctx.rounding = ROUND_HALF_UP
+            decimal_value = Decimal(normalized).quantize(TWO_DECIMALS)
     except InvalidOperation:
         return (
             f"{label} debe ser ≥ 0 y tener dos decimales (máximo 12 dígitos enteros).",
