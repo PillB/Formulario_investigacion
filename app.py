@@ -3285,6 +3285,13 @@ class FraudCaseApp:
         product_frame.add_involvement()
         return product_frame.involvements[-1]
 
+    def _trigger_import_id_refresh(self, frame, identifier):
+        """Ejecuta ``on_id_change`` tras importaciones evitando mensajes redundantes."""
+
+        identifier = (identifier or '').strip()
+        if identifier and hasattr(frame, 'on_id_change'):
+            frame.on_id_change(from_focus=False)
+
     def _populate_client_frame_from_row(self, frame, row):
         """Traslada los datos de una fila CSV a un ``ClientFrame``.
 
@@ -3504,6 +3511,7 @@ class FraudCaseApp:
                     continue
                 frame = self._find_client_frame(id_cliente) or self._obtain_client_slot_for_import()
                 self._populate_client_frame_from_row(frame, hydrated)
+                self._trigger_import_id_refresh(frame, id_cliente)
                 imported += 1
                 if not found and 'id_cliente' in self.detail_catalogs:
                     missing_ids.append(id_cliente)
@@ -3536,6 +3544,7 @@ class FraudCaseApp:
                     continue
                 frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
                 self._populate_team_frame_from_row(frame, hydrated)
+                self._trigger_import_id_refresh(frame, collaborator_id)
                 imported += 1
                 if not found and 'id_colaborador' in self.detail_catalogs:
                     missing_ids.append(collaborator_id)
@@ -3572,6 +3581,7 @@ class FraudCaseApp:
                     client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
                     self._ensure_client_exists(client_id, client_details)
                 self._populate_product_frame_from_row(frame, hydrated)
+                self._trigger_import_id_refresh(frame, product_id)
                 imported += 1
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_ids.append(product_id)
