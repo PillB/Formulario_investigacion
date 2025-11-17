@@ -3584,12 +3584,16 @@ class FraudCaseApp:
                     "division": (values[1] or "").strip(),
                     "area": (values[2] or "").strip(),
                     "tipo_sancion": (values[3] or "").strip(),
-                    "flag_colaborador": "No aplica",
+                    # Los campos con catálogos deben dejarse vacíos para que el
+                    # hidratador los complete cuando exista información previa en
+                    # los catálogos. En caso de no encontrarse detalle, las
+                    # rutinas de población aplican sus valores por defecto.
+                    "flag_colaborador": "",
                     "servicio": "",
                     "puesto": "",
                     "nombre_agencia": "",
                     "codigo_agencia": "",
-                    "tipo_falta": "No aplica",
+                    "tipo_falta": "",
                 }
                 hydrated, found = self._hydrate_row_from_details(payload, 'id_colaborador', TEAM_ID_ALIASES)
                 collaborator_id = (hydrated.get('id_colaborador') or '').strip()
