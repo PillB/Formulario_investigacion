@@ -308,6 +308,22 @@ RISK_ID_ALIASES = ("IdRiesgo", "IDRiesgo")
 NORM_ID_ALIASES = ("IdNorma", "IDNorma")
 CLAIM_ID_ALIASES = ("IdReclamo", "IDReclamo")
 
+# Catálogos auxiliares: permiten mapear alias provenientes de archivos
+# ``*_details.csv`` con la clave canónica utilizada en el formulario.
+DETAIL_LOOKUP_ALIASES = {
+    "id_cliente": ("clientes", "cliente", "clients", "client"),
+    "id_colaborador": ("colaboradores", "colaborador", "team", "teams"),
+    "id_producto": ("productos", "producto", "product", "products"),
+    "id_riesgo": ("riesgos", "riesgo", "risk", "risks"),
+    "id_norma": ("normas", "norma", "rule", "rules"),
+}
+
+
+def normalize_detail_catalog_key(key):
+    """Normaliza una clave de catálogo de detalle a minúsculas sin espacios."""
+
+    return (key or "").strip().lower()
+
 
 # ---------------------------------------------------------------------------
 # Funciones de utilidad
@@ -2058,19 +2074,51 @@ class FraudCaseApp:
             return tip
 
         self.register_tooltip = register_tooltip
-        # Cargar catálogos para autopoblado
-        self.detail_catalogs = load_detail_catalogs()
+        # Cargar catálogos para autopoblado conservando los valores originales
+        raw_detail_catalogs = load_detail_catalogs()
+        self.detail_catalogs = {
+            normalize_detail_catalog_key(key): (value or {})
+            for key, value in raw_detail_catalogs.items()
+        }
+
+        def _sync_catalog_aliases(canonical_key):
+            canonical_key = normalize_detail_catalog_key(canonical_key)
+            lookup = self.detail_catalogs.get(canonical_key)
+            if not lookup:
+                return
+            for alias in DETAIL_LOOKUP_ALIASES.get(canonical_key, ()): 
+                alias_key = normalize_detail_catalog_key(alias)
+                if not alias_key:
+                    continue
+                self.detail_catalogs[alias_key] = lookup
+
+        def _ensure_canonical_catalog(canonical_key):
+            canonical_key = normalize_detail_catalog_key(canonical_key)
+            if canonical_key in self.detail_catalogs:
+                _sync_catalog_aliases(canonical_key)
+                return
+            for alias in DETAIL_LOOKUP_ALIASES.get(canonical_key, ()): 
+                alias_key = normalize_detail_catalog_key(alias)
+                lookup = self.detail_catalogs.get(alias_key)
+                if lookup:
+                    self.detail_catalogs[canonical_key] = lookup
+                    _sync_catalog_aliases(canonical_key)
+                    return
+
+        for canonical in DETAIL_LOOKUP_ALIASES:
+            _ensure_canonical_catalog(canonical)
 
         def _merge_with_detail_catalog(base_lookup, aliases):
             merged = {}
             for alias in aliases:
-                merged.update(self.detail_catalogs.get(alias, {}))
+                alias_key = normalize_detail_catalog_key(alias)
+                merged.update(self.detail_catalogs.get(alias_key, {}))
             merged.update(base_lookup or {})
             return merged
 
         self.team_lookup = _merge_with_detail_catalog(
             load_team_details(),
-            ("team", "teams", "colaboradores", "colaborador"),
+            ("team", "teams", "colaboradores", "colaborador", "id_colaborador"),
         )
         # Cargar client details para autopoblar clientes. Si no existe el
         # fichero ``client_details.csv`` se obtiene un diccionario vacío. Este
@@ -2078,11 +2126,19 @@ class FraudCaseApp:
         # automáticamente campos del cliente cuando se reconoce su ID.
         self.client_lookup = load_client_details()
         self.product_lookup = load_product_details()
-        self.detail_catalogs = {
-            'id_cliente': {'label': 'clientes', 'lookup': self.client_lookup},
-            'id_colaborador': {'label': 'colaboradores', 'lookup': self.team_lookup},
-            'id_producto': {'label': 'productos', 'lookup': self.product_lookup},
-        }
+
+        def _register_normalized_catalog(canonical_key, lookup):
+            canonical_key = normalize_detail_catalog_key(canonical_key)
+            if not lookup:
+                return
+            combined = dict(self.detail_catalogs.get(canonical_key, {}))
+            combined.update(lookup)
+            self.detail_catalogs[canonical_key] = combined
+            _sync_catalog_aliases(canonical_key)
+
+        _register_normalized_catalog("id_cliente", self.client_lookup)
+        _register_normalized_catalog("id_colaborador", self.team_lookup)
+        _register_normalized_catalog("id_producto", self.product_lookup)
         # Datos en memoria: listas de frames
         self.client_frames = []
         self.team_frames = []
@@ -3092,6 +3148,25 @@ class FraudCaseApp:
                 )
         return filename
 
+    def _get_detail_lookup(self, id_column):
+        """Obtiene el diccionario de detalles considerando alias configurados."""
+
+        normalized = normalize_detail_catalog_key(id_column)
+        candidate_keys = [normalized]
+        candidate_keys.extend(
+            normalize_detail_catalog_key(alias)
+            for alias in DETAIL_LOOKUP_ALIASES.get(normalized, ())
+        )
+        seen = set()
+        for key in candidate_keys:
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            lookup = self.detail_catalogs.get(key)
+            if isinstance(lookup, dict):
+                return lookup
+        return None
+
     def _hydrate_row_from_details(self, row, id_column, alias_headers):
         """Devuelve una copia de la fila complementada con catálogos de detalle."""
 
@@ -3107,9 +3182,8 @@ class FraudCaseApp:
                 hydrated[id_column] = canonical_id
                 break
         found = False
-        catalog = self.detail_catalogs.get(id_column)
-        if canonical_id and catalog:
-            lookup = catalog.get('lookup', {})
+        lookup = self._get_detail_lookup(id_column)
+        if canonical_id and lookup:
             details = lookup.get(canonical_id)
             if details:
                 for key, value in details.items():
