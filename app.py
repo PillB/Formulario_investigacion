@@ -3736,10 +3736,18 @@ class FraudCaseApp:
                 "flag": values[2].strip(),
                 "telefonos": values[3].strip(),
             }
-            if client_data["tipo_id"] not in TIPO_ID_LIST:
-                raise ValueError(f"Cliente fila {idx}: debe seleccionar un tipo de ID válido.")
-            if client_data["flag"] not in FLAG_CLIENTE_LIST:
-                raise ValueError(f"Cliente fila {idx}: debe seleccionar un flag de cliente válido.")
+            tipo_id = client_data["tipo_id"]
+            if tipo_id and tipo_id not in TIPO_ID_LIST:
+                raise ValueError(
+                    f"Cliente fila {idx}: el tipo de ID '{tipo_id}' no está en el catálogo CM."
+                    " Corrige la hoja de Excel antes de volver a intentarlo."
+                )
+            flag_value = client_data["flag"]
+            if flag_value and flag_value not in FLAG_CLIENTE_LIST:
+                raise ValueError(
+                    f"Cliente fila {idx}: el flag de cliente '{flag_value}' no está en el catálogo CM."
+                    " Corrige la hoja de Excel antes de volver a intentarlo."
+                )
             message = validate_client_id(client_data["tipo_id"], client_data["id_cliente"])
             if message:
                 raise ValueError(f"Cliente fila {idx}: {message}")
@@ -3926,11 +3934,11 @@ class FraudCaseApp:
         processed = 0
         missing_ids = []
         if section_key == "clientes":
-            for values in rows:
+            for idx, values in enumerate(rows, start=1):
                 payload = {
                     "id_cliente": (values[0] or "").strip(),
-                    "tipo_id": (values[1] or TIPO_ID_LIST[0]).strip(),
-                    "flag": (values[2] or FLAG_CLIENTE_LIST[0]).strip(),
+                    "tipo_id": (values[1] or "").strip(),
+                    "flag": (values[2] or "").strip(),
                     "telefonos": (values[3] or "").strip(),
                     "correos": "",
                     "direcciones": "",
@@ -3940,6 +3948,18 @@ class FraudCaseApp:
                 client_id = (hydrated.get('id_cliente') or '').strip()
                 if not client_id:
                     continue
+                tipo_id = (hydrated.get('tipo_id') or '').strip()
+                if tipo_id and tipo_id not in TIPO_ID_LIST:
+                    raise ValueError(
+                        f"Cliente fila {idx}: el tipo de ID '{tipo_id}' no está en el catálogo CM."
+                        " Corrige la hoja de Excel antes de volver a intentarlo."
+                    )
+                flag_value = (hydrated.get('flag') or '').strip()
+                if flag_value and flag_value not in FLAG_CLIENTE_LIST:
+                    raise ValueError(
+                        f"Cliente fila {idx}: el flag de cliente '{flag_value}' no está en el catálogo CM."
+                        " Corrige la hoja de Excel antes de volver a intentarlo."
+                    )
                 frame = self._find_client_frame(client_id) or self._obtain_client_slot_for_import()
                 merged = self._merge_client_payload_with_frame(frame, hydrated)
                 self._populate_client_frame_from_row(frame, merged)
