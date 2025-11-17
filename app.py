@@ -2535,7 +2535,11 @@ class FraudCaseApp:
                             client_row[key] = row.get(key)
                     client_frame, created_client = self._ensure_client_exists(client_id, client_row)
                     if created_client:
-                        self._trigger_import_id_refresh(client_frame, client_id)
+                        self._trigger_import_id_refresh(
+                            client_frame,
+                            client_id,
+                            notify_on_missing=False,
+                        )
                     created_records = created_records or created_client
                     if not client_found and 'id_cliente' in self.detail_catalogs:
                         missing_clients.append(client_id)
@@ -2544,7 +2548,11 @@ class FraudCaseApp:
                 if collaborator_id:
                     team_frame, created_team = self._ensure_team_member_exists(collaborator_id, team_row)
                     if created_team:
-                        self._trigger_import_id_refresh(team_frame, collaborator_id)
+                        self._trigger_import_id_refresh(
+                            team_frame,
+                            collaborator_id,
+                            notify_on_missing=False,
+                        )
                     created_records = created_records or created_team
                     if not team_found and 'id_colaborador' in self.detail_catalogs:
                         missing_team.append(collaborator_id)
@@ -2562,7 +2570,11 @@ class FraudCaseApp:
                         client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
                         self._ensure_client_exists(client_for_product, client_details)
                     self._populate_product_frame_from_row(product_frame, product_row)
-                    self._trigger_import_id_refresh(product_frame, product_id)
+                    self._trigger_import_id_refresh(
+                        product_frame,
+                        product_id,
+                        notify_on_missing=False,
+                    )
                     created_records = created_records or new_product
                     if not product_found and 'id_producto' in self.detail_catalogs:
                         missing_products.append(product_id)
@@ -3749,7 +3761,7 @@ class FraudCaseApp:
                 frame = self._find_client_frame(client_id) or self._obtain_client_slot_for_import()
                 merged = self._merge_client_payload_with_frame(frame, hydrated)
                 self._populate_client_frame_from_row(frame, merged)
-                self._trigger_import_id_refresh(frame, client_id)
+                self._trigger_import_id_refresh(frame, client_id, notify_on_missing=True)
                 processed += 1
                 if not found and 'id_cliente' in self.detail_catalogs:
                     missing_ids.append(client_id)
@@ -3780,7 +3792,7 @@ class FraudCaseApp:
                 frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
                 merged = self._merge_team_payload_with_frame(frame, hydrated)
                 self._populate_team_frame_from_row(frame, merged)
-                self._trigger_import_id_refresh(frame, collaborator_id)
+                self._trigger_import_id_refresh(frame, collaborator_id, notify_on_missing=True)
                 processed += 1
                 if not found and 'id_colaborador' in self.detail_catalogs:
                     missing_ids.append(collaborator_id)
@@ -3825,7 +3837,7 @@ class FraudCaseApp:
                     self._ensure_client_exists(client_id, client_details)
                 merged = self._merge_product_payload_with_frame(frame, hydrated)
                 self._populate_product_frame_from_row(frame, merged)
-                self._trigger_import_id_refresh(frame, product_id)
+                self._trigger_import_id_refresh(frame, product_id, notify_on_missing=True)
                 processed += 1
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_ids.append(product_id)
@@ -4262,12 +4274,20 @@ class FraudCaseApp:
         product_frame.add_involvement()
         return product_frame.involvements[-1]
 
-    def _trigger_import_id_refresh(self, frame, identifier):
-        """Ejecuta ``on_id_change`` tras importaciones evitando mensajes redundantes."""
+    def _trigger_import_id_refresh(self, frame, identifier, notify_on_missing=False):
+        """Ejecuta ``on_id_change`` tras importaciones evitando mensajes redundantes.
+
+        Args:
+            frame: Instancia del frame que contiene el campo ID.
+            identifier (str): ID normalizado que se está cargando.
+            notify_on_missing (bool): Si es ``True`` se propaga ``from_focus=True``
+                para que los cuadros de diálogo de inexistencia aparezcan igual que
+                cuando el usuario edita el campo manualmente.
+        """
 
         identifier = (identifier or '').strip()
         if identifier and hasattr(frame, 'on_id_change'):
-            frame.on_id_change(from_focus=False)
+            frame.on_id_change(from_focus=notify_on_missing)
 
     def _sync_product_lookup_claim_fields(self, frame, product_id):
         """Actualiza ``product_lookup`` con los datos de reclamo visibles en el marco."""
@@ -4497,7 +4517,7 @@ class FraudCaseApp:
                     continue
                 frame = self._find_client_frame(id_cliente) or self._obtain_client_slot_for_import()
                 self._populate_client_frame_from_row(frame, hydrated)
-                self._trigger_import_id_refresh(frame, id_cliente)
+                self._trigger_import_id_refresh(frame, id_cliente, notify_on_missing=True)
                 imported += 1
                 if not found and 'id_cliente' in self.detail_catalogs:
                     missing_ids.append(id_cliente)
@@ -4530,7 +4550,7 @@ class FraudCaseApp:
                     continue
                 frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
                 self._populate_team_frame_from_row(frame, hydrated)
-                self._trigger_import_id_refresh(frame, collaborator_id)
+                self._trigger_import_id_refresh(frame, collaborator_id, notify_on_missing=True)
                 imported += 1
                 if not found and 'id_colaborador' in self.detail_catalogs:
                     missing_ids.append(collaborator_id)
@@ -4567,7 +4587,7 @@ class FraudCaseApp:
                     client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
                     self._ensure_client_exists(client_id, client_details)
                 self._populate_product_frame_from_row(frame, hydrated)
-                self._trigger_import_id_refresh(frame, product_id)
+                self._trigger_import_id_refresh(frame, product_id, notify_on_missing=True)
                 imported += 1
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_ids.append(product_id)
