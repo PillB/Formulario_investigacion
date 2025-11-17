@@ -822,16 +822,18 @@ class FieldValidator:
         self.variables = variables or []
         self._traces = []
         self.last_error = None
+        self._validation_armed = False
         for var in self.variables:
             self._traces.append(var.trace_add("write", self._on_change))
         widget.bind("<FocusOut>", self._on_change)
         widget.bind("<KeyRelease>", self._on_change)
         if isinstance(widget, ttk.Combobox):
             widget.bind("<<ComboboxSelected>>", self._on_change)
-        self._on_change()
 
     def _on_change(self, *_args):
         """Ejecuta la validación y actualiza el tooltip sólo si cambió el estado."""
+        if not self._validation_armed:
+            self._validation_armed = True
         error = self.validate_callback()
         if error == self.last_error:
             return
