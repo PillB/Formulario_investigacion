@@ -4063,6 +4063,25 @@ class FraudCaseApp:
         case_message = validate_case_id(id_caso)
         if case_message:
             errors.append(case_message)
+        # Validar campos obligatorios del caso antes de validar entidades hijas
+        tipo_message = validate_required_text(self.tipo_informe_var.get(), "el tipo de informe")
+        if tipo_message:
+            errors.append(tipo_message)
+        cat1_message = validate_required_text(self.cat_caso1_var.get(), "la categoría nivel 1")
+        if cat1_message:
+            errors.append(cat1_message)
+        cat2_message = validate_required_text(self.cat_caso2_var.get(), "la categoría nivel 2")
+        if cat2_message:
+            errors.append(cat2_message)
+        mod_message = validate_required_text(self.mod_caso_var.get(), "la modalidad del caso")
+        if mod_message:
+            errors.append(mod_message)
+        canal_message = validate_required_text(self.canal_caso_var.get(), "el canal del caso")
+        if canal_message:
+            errors.append(canal_message)
+        proceso_message = validate_required_text(self.proceso_caso_var.get(), "el proceso impactado")
+        if proceso_message:
+            errors.append(proceso_message)
         # Validar IDs de clientes
         for idx, cframe in enumerate(self.client_frames, start=1):
             message = validate_client_id(cframe.tipo_id_var.get(), cframe.id_var.get())
