@@ -725,6 +725,10 @@ def normalize_without_accents(value):
     return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 
+# Conjunto normalizado para validar tipos de producto sin importar tildes o mayúsculas
+TIPO_PRODUCTO_NORMALIZED = {normalize_without_accents(item).lower() for item in TIPO_PRODUCTO_LIST}
+
+
 def validate_client_id(tipo_id, value):
     """Valida el ID del cliente de acuerdo con el tipo de documento (Diseño CM)."""
 
@@ -1723,6 +1727,15 @@ class ProductFrame:
                 self.logs,
                 f"Producto {self.idx+1} - Modalidad",
                 variables=[self.mod_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                tipo_prod_cb,
+                lambda: validate_required_text(self.tipo_prod_var.get(), "el tipo de producto"),
+                self.logs,
+                f"Producto {self.idx+1} - Tipo de producto",
+                variables=[self.tipo_prod_var],
             )
         )
         self.validators.append(
@@ -4100,6 +4113,15 @@ class FraudCaseApp:
         for p in self.product_frames:
             data = p.get_data()
             producto = data['producto']
+            tipo_producto = producto.get('tipo_producto', '').strip()
+            if not tipo_producto:
+                errors.append(f"Producto {producto['id_producto']}: Debe ingresar el tipo de producto.")
+            else:
+                normalized_tipo = normalize_without_accents(tipo_producto).lower()
+                if normalized_tipo not in TIPO_PRODUCTO_NORMALIZED:
+                    errors.append(
+                        f"Producto {producto['id_producto']}: El tipo de producto '{tipo_producto}' no está en el catálogo."
+                    )
             # Fechas
             try:
                 occ = datetime.strptime(producto['fecha_ocurrencia'], "%Y-%m-%d")
