@@ -5143,8 +5143,9 @@ class FraudCaseApp:
     # Validación de reglas de negocio
 
     def validate_data(self):
-        """Valida los datos del formulario y retorna lista de errores."""
+        """Valida los datos del formulario y retorna errores y advertencias."""
         errors = []
+        warnings = []
         # Validar número de caso
         id_caso = self.id_caso_var.get().strip()
         case_message = validate_case_id(id_caso)
@@ -5340,7 +5341,9 @@ class FraudCaseApp:
                     errors.append(f"El monto de contingencia debe ser igual al monto investigado en el producto {producto['id_producto']} porque es un crédito o tarjeta")
             # Fraude externo
             if producto['categoria2'] == 'Fraude Externo':
-                messagebox.showwarning("Fraude Externo", f"Producto {producto['id_producto']} con categoría 2 'Fraude Externo': verifique la analítica registrada.")
+                warnings.append(
+                    f"Producto {producto['id_producto']} con categoría 2 'Fraude Externo': verifique la analítica registrada."
+                )
         if self.product_frames and abs(total_componentes - total_investigado) > Decimal('0.01'):
             errors.append("La suma total de pérdidas, fallas y contingencias no coincide con el total investigado del caso.")
         # Validar que al menos un producto coincida con categorías del caso
@@ -5416,7 +5419,7 @@ class FraudCaseApp:
                         errors.append(f"Fecha de vigencia futura en norma {nid or 'sin ID'}")
                 except ValueError:
                     errors.append(f"Fecha de vigencia inválida en norma {nid or 'sin ID'}")
-        return errors
+        return errors, warnings
 
     # ---------------------------------------------------------------------
     # Exportación de datos
@@ -5599,10 +5602,14 @@ class FraudCaseApp:
 
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta elegida."""
-        errors = self.validate_data()
+        errors, warnings = self.validate_data()
         if errors:
             messagebox.showerror("Errores de validación", "\n".join(errors))
             log_event("validacion", f"Errores al guardar: {errors}", self.logs)
+        if warnings:
+            messagebox.showwarning("Advertencias de validación", "\n".join(warnings))
+            log_event("validacion", f"Advertencias al guardar: {warnings}", self.logs)
+        if errors:
             return
         # Seleccionar carpeta de destino
         folder = filedialog.askdirectory(title="Seleccionar carpeta para guardar archivos")
