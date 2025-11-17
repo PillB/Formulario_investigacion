@@ -659,6 +659,12 @@ def validate_amount_text(value, label, allow_blank=True):
     return message
 
 
+def sum_investigation_components(*, perdida, falla, contingencia, recuperado):
+    """Devuelve la suma de las cuatro partidas monetarias del producto/caso."""
+
+    return perdida + falla + contingencia + recuperado
+
+
 def validate_email_list(value, label):
     """Valida listas separadas por ``;`` asegurando que cada correo tenga ``@``."""
     if not value.strip():
@@ -2306,9 +2312,17 @@ class ProductFrame:
                 return message
             values[key] = decimal_value if decimal_value is not None else Decimal('0')
 
-        componentes = values['perdida'] + values['falla'] + values['contingencia'] + values['recuperado']
+        componentes = sum_investigation_components(
+            perdida=values['perdida'],
+            falla=values['falla'],
+            contingencia=values['contingencia'],
+            recuperado=values['recuperado'],
+        )
         if abs(componentes - values['inv']) > Decimal('0.01'):
-            return "La suma de pérdida, falla, contingencia y recuperación debe ser igual al monto investigado."
+            return (
+                "La suma de las cuatro partidas (pérdida, falla, contingencia y recuperación) "
+                "debe ser igual al monto investigado."
+            )
         if values['recuperado'] > values['inv']:
             return "El monto recuperado no puede superar el monto investigado."
         if values['pago'] > values['inv']:
@@ -5294,10 +5308,15 @@ class FraudCaseApp:
                 'perdida': m_perd,
                 'contingencia': m_cont,
             })
-            componentes = m_perd + m_fall + m_cont + m_rec
+            componentes = sum_investigation_components(
+                perdida=m_perd,
+                falla=m_fall,
+                contingencia=m_cont,
+                recuperado=m_rec,
+            )
             if abs(componentes - m_inv) > Decimal('0.01'):
                 errors.append(
-                    f"La suma de pérdida, falla, contingencia y recuperación debe ser igual al monto investigado en el producto {producto['id_producto']}"
+                    f"Las cuatro partidas (pérdida, falla, contingencia y recuperación) deben ser iguales al monto investigado en el producto {producto['id_producto']}"
                 )
             if m_rec > m_inv:
                 errors.append(
@@ -5353,7 +5372,7 @@ class FraudCaseApp:
                 )
         if self.product_frames and abs(total_componentes - total_investigado) > Decimal('0.01'):
             errors.append(
-                "La suma total de pérdidas, fallas, contingencias y recuperaciones no coincide con el total investigado del caso."
+                "Las cuatro partidas (pérdida, falla, contingencia y recuperación) sumadas en el caso no coinciden con el total investigado."
             )
         # Validar que al menos un producto coincida con categorías del caso
         match_found = False
