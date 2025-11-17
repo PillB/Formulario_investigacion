@@ -3906,6 +3906,7 @@ class FraudCaseApp:
         product_client_map = {}
         total_investigado = Decimal('0')
         total_componentes = Decimal('0')
+        normalized_amounts = []
         for idx, tm in enumerate(self.team_frames, start=1):
             division = tm.division_var.get().strip().lower()
             area = tm.area_var.get().strip().lower()
@@ -3969,6 +3970,10 @@ class FraudCaseApp:
             if m_inv is None or m_perd is None or m_fall is None or m_cont is None or m_rec is None or m_pago is None:
                 errors.append(f"Valores numéricos inválidos en el producto {producto['id_producto']}")
                 continue
+            normalized_amounts.append({
+                'perdida': m_perd,
+                'contingencia': m_cont,
+            })
             componentes = m_perd + m_fall + m_cont
             if abs(componentes - m_inv) > Decimal('0.01'):
                 errors.append(
@@ -4016,9 +4021,8 @@ class FraudCaseApp:
         # Validar reporte tipo Interno vs pérdidas y sanciones
         if self.tipo_informe_var.get() == 'Interno':
             any_loss = any(
-                parse_decimal_amount(p.get_data()['producto']['monto_perdida_fraude']) > Decimal('0') or
-                parse_decimal_amount(p.get_data()['producto']['monto_contingencia']) > Decimal('0')
-                for p in self.product_frames
+                amounts['perdida'] > Decimal('0') or amounts['contingencia'] > Decimal('0')
+                for amounts in normalized_amounts
             )
             any_sanction = any(
                 t.tipo_sancion_var.get() not in ('No aplica', '')
