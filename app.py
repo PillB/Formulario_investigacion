@@ -4065,52 +4065,59 @@ class FraudCaseApp:
                 self.sync_main_form_after_import("productos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "reclamos":
-            duplicate_ids = []
-            for idx, values in enumerate(rows, start=1):
-                claim_id = (values[0] or "").strip()
-                product_id = (values[1] or "").strip()
-                analytic_name = (values[2] or "").strip()
-                analytic_code = (values[3] or "").strip()
+            missing_products = []
+            for values in rows:
+                payload = {
+                    'id_reclamo': (values[0] or "").strip(),
+                    'id_producto': (values[1] or "").strip(),
+                    'nombre_analitica': (values[2] or "").strip(),
+                    'codigo_analitica': (values[3] or "").strip(),
+                }
+                hydrated, found = self._hydrate_row_from_details(payload, 'id_producto', PRODUCT_ID_ALIASES)
+                product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
                     continue
-                frame = self._find_product_frame(product_id)
-                if not frame:
-                    messagebox.showerror(
-                        "Producto no encontrado",
-                        (
-                            f"No existe un producto con ID '{product_id}' para el reclamo "
-                            f"{claim_id or '(sin ID)'} en la fila {idx}."
-                        ),
-                    )
-                    log_event(
-                        "validacion",
-                        f"Reclamo fila {idx} no pudo vincularse porque falta el producto {product_id}",
-                        self.logs,
-                    )
-                    continue
-                if claim_id and frame.find_claim_by_id(claim_id):
-                    duplicate_ids.append(claim_id)
-                    continue
-                target = frame.obtain_claim_slot()
-                target.set_data(
-                    {
-                        'id_reclamo': claim_id,
-                        'nombre_analitica': analytic_name,
-                        'codigo_analitica': analytic_code,
-                    }
+                product_frame = self._find_product_frame(product_id)
+                new_product = False
+                if not product_frame:
+                    product_frame = self._obtain_product_slot_for_import()
+                    new_product = True
+                client_id = (hydrated.get('id_cliente') or '').strip()
+                if client_id:
+                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                    self._ensure_client_exists(client_id, client_details)
+                if new_product:
+                    self._populate_product_frame_from_row(product_frame, hydrated)
+                self._trigger_import_id_refresh(
+                    product_frame,
+                    product_id,
+                    preserve_existing=False,
                 )
-                self._sync_product_lookup_claim_fields(frame, product_id)
-                frame.persist_lookup_snapshot()
+                claim_payload = {
+                    'id_reclamo': (hydrated.get('id_reclamo') or payload['id_reclamo']),
+                    'nombre_analitica': (hydrated.get('nombre_analitica') or payload['nombre_analitica']),
+                    'codigo_analitica': (hydrated.get('codigo_analitica') or payload['codigo_analitica']),
+                }
+                claim_payload = {k: (v or '').strip() for k, v in claim_payload.items()}
+                if not any(claim_payload.values()):
+                    continue
+                target = None
+                if claim_payload['id_reclamo']:
+                    target = product_frame.find_claim_by_id(claim_payload['id_reclamo'])
+                if not target:
+                    target = product_frame.obtain_claim_slot()
+                target.set_data(claim_payload)
+                self._sync_product_lookup_claim_fields(product_frame, product_id)
+                product_frame.persist_lookup_snapshot()
                 processed += 1
-            if duplicate_ids:
-                messagebox.showwarning(
-                    "Reclamos duplicados",
-                    "Se ignoraron los siguientes reclamos ya existentes:\n" + ", ".join(duplicate_ids),
-                )
+                if not found and 'id_producto' in self.detail_catalogs:
+                    missing_products.append(product_id)
             if processed:
                 self.save_auto()
                 self.sync_main_form_after_import("reclamos", stay_on_summary=stay_on_summary)
                 log_event("navegacion", f"Reclamos pegados desde resumen: {processed}", self.logs)
+            if missing_products:
+                self._report_missing_detail_ids("productos", missing_products)
             return processed
         if section_key == "riesgos":
             duplicate_ids = []
