@@ -3862,12 +3862,14 @@ class FraudCaseApp:
                 log_event("navegacion", f"Reclamos pegados desde resumen: {processed}", self.logs)
             return processed
         if section_key == "riesgos":
+            duplicate_ids = []
             for values in rows:
                 risk_id = (values[0] or "").strip()
                 if not risk_id:
                     continue
                 if any(r.id_var.get().strip() == risk_id for r in self.risk_frames):
                     log_event("validacion", f"Riesgo duplicado {risk_id} en pegado", self.logs)
+                    duplicate_ids.append(risk_id)
                     continue
                 self.add_risk()
                 frame = self.risk_frames[-1]
@@ -3878,17 +3880,24 @@ class FraudCaseApp:
                     frame.criticidad_var.set(criticidad)
                 frame.exposicion_var.set((values[3] or "").strip())
                 processed += 1
+            if duplicate_ids:
+                messagebox.showwarning(
+                    "Riesgos duplicados",
+                    "Se ignoraron los siguientes riesgos ya existentes:\n" + ", ".join(duplicate_ids),
+                )
             if processed:
                 self.save_auto()
                 self.sync_main_form_after_import("riesgos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "normas":
+            duplicate_ids = []
             for values in rows:
                 norm_id = (values[0] or "").strip()
                 if not norm_id:
                     continue
                 if any(n.id_var.get().strip() == norm_id for n in self.norm_frames):
                     log_event("validacion", f"Norma duplicada {norm_id} en pegado", self.logs)
+                    duplicate_ids.append(norm_id)
                     continue
                 self.add_norm()
                 frame = self.norm_frames[-1]
@@ -3896,6 +3905,11 @@ class FraudCaseApp:
                 frame.descripcion_var.set((values[1] or "").strip())
                 frame.fecha_var.set((values[2] or "").strip())
                 processed += 1
+            if duplicate_ids:
+                messagebox.showwarning(
+                    "Normas duplicadas",
+                    "Se ignoraron las siguientes normas ya existentes:\n" + ", ".join(duplicate_ids),
+                )
             if processed:
                 self.save_auto()
                 self.sync_main_form_after_import("normas", stay_on_summary=stay_on_summary)
