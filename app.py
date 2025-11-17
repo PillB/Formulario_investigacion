@@ -3032,11 +3032,17 @@ class FraudCaseApp:
         for key, title, columns in config:
             section = ttk.LabelFrame(container, text=title)
             section.pack(fill="both", expand=True, pady=5)
-            tree = ttk.Treeview(section, columns=[col for col, _ in columns], show="headings", height=5)
+            frame = ttk.Frame(section)
+            frame.pack(fill="both", expand=True)
+            tree = ttk.Treeview(frame, columns=[col for col, _ in columns], show="headings", height=5)
+            scrollbar = ttk.Scrollbar(frame, orient="vertical")
             for col_id, heading in columns:
                 tree.heading(col_id, text=heading)
                 tree.column(col_id, width=150, stretch=True)
-            tree.pack(fill="both", expand=True)
+            tree.configure(yscrollcommand=scrollbar.set)
+            scrollbar.configure(command=tree.yview)
+            tree.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
             self.summary_tables[key] = tree
 
         self.refresh_summary_tables()
