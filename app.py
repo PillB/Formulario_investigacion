@@ -602,6 +602,41 @@ def validate_date_text(value, label, allow_blank=True):
     return None
 
 
+def validate_product_dates(producto_id, fecha_ocurrencia, fecha_descubrimiento):
+    """Valida coherencia entre fechas y evita registros futuros."""
+
+    label = (producto_id or "sin ID").strip() or "sin ID"
+    occ_text = (fecha_ocurrencia or "").strip()
+    desc_text = (fecha_descubrimiento or "").strip()
+    if not occ_text or not desc_text:
+        return f"Fechas inválidas en el producto {label}"
+    try:
+        occ = datetime.strptime(occ_text, "%Y-%m-%d")
+        desc = datetime.strptime(desc_text, "%Y-%m-%d")
+    except ValueError:
+        return f"Fechas inválidas en el producto {label}"
+    if occ >= desc:
+        message = (
+            f"La fecha de ocurrencia debe ser anterior a la de descubrimiento en el producto {label}"
+        )
+        if occ == desc:
+            try:
+                messagebox.showerror(
+                    "Fechas del producto",
+                    (
+                        f"Producto {label}: la fecha de ocurrencia debe ser "
+                        "estrictamente previa a la de descubrimiento."
+                    ),
+                )
+            except tk.TclError:
+                pass
+        return message
+    now = datetime.now()
+    if occ > now or desc > now:
+        return f"Las fechas del producto {label} no pueden ser futuras"
+    return None
+
+
 MONEY_PATTERN = re.compile(r"^(?P<int>\d{1,12})([\.,](?P<dec>\d{1,2}))?$")
 TWO_DECIMALS = Decimal("0.01")
 
@@ -2291,16 +2326,12 @@ class ProductFrame:
         msg = validate_date_text(self.fecha_desc_var.get(), "la fecha de descubrimiento", allow_blank=False)
         if msg:
             return msg
-        try:
-            occ = datetime.strptime(self.fecha_oc_var.get(), "%Y-%m-%d")
-            desc = datetime.strptime(self.fecha_desc_var.get(), "%Y-%m-%d")
-        except ValueError:
-            return None
-        if occ > desc:
-            return "La fecha de ocurrencia no puede ser posterior a la de descubrimiento."
-        if desc > datetime.now():
-            return "La fecha de descubrimiento no puede ser futura."
-        return None
+        producto_label = self.id_var.get().strip() or f"Producto {self.idx+1}"
+        return validate_product_dates(
+            producto_label,
+            self.fecha_oc_var.get(),
+            self.fecha_desc_var.get(),
+        )
 
     def _validate_montos_consistentes(self):
         """Valida que la distribución de montos sea coherente con la investigación."""
@@ -5290,15 +5321,13 @@ class FraudCaseApp:
                         f"Producto {producto['id_producto']}: El tipo de producto '{tipo_producto}' no está en el catálogo."
                     )
             # Fechas
-            try:
-                occ = datetime.strptime(producto['fecha_ocurrencia'], "%Y-%m-%d")
-                desc = datetime.strptime(producto['fecha_descubrimiento'], "%Y-%m-%d")
-                if occ > desc:
-                    errors.append(f"La fecha de ocurrencia debe ser anterior a la de descubrimiento en el producto {producto['id_producto']}")
-                if occ > datetime.now() or desc > datetime.now():
-                    errors.append(f"Las fechas del producto {producto['id_producto']} no pueden ser futuras")
-            except ValueError:
-                errors.append(f"Fechas inválidas en el producto {producto['id_producto']}")
+            date_message = validate_product_dates(
+                producto.get('id_producto'),
+                producto.get('fecha_ocurrencia'),
+                producto.get('fecha_descubrimiento'),
+            )
+            if date_message:
+                errors.append(date_message)
             # Montos
             money_values = {}
             money_error = False
