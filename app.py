@@ -2702,6 +2702,8 @@ class FraudCaseApp:
                 product_frame.id_reclamo_var.set(rid)
                 product_frame.nombre_analitica_var.set((hydrated.get('nombre_analitica') or row.get('nombre_analitica') or '').strip())
                 product_frame.codigo_analitica_var.set((hydrated.get('codigo_analitica') or row.get('codigo_analitica') or '').strip())
+                self._sync_product_lookup_claim_fields(product_frame, product_id)
+                product_frame.persist_lookup_snapshot()
                 imported += 1
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_products.append(product_id)
@@ -3846,6 +3848,7 @@ class FraudCaseApp:
                 frame.id_reclamo_var.set(claim_id)
                 frame.nombre_analitica_var.set(analytic_name)
                 frame.codigo_analitica_var.set(analytic_code)
+                self._sync_product_lookup_claim_fields(frame, product_id)
                 frame.persist_lookup_snapshot()
                 processed += 1
             if processed:
@@ -4238,6 +4241,29 @@ class FraudCaseApp:
         identifier = (identifier or '').strip()
         if identifier and hasattr(frame, 'on_id_change'):
             frame.on_id_change(from_focus=False)
+
+    def _sync_product_lookup_claim_fields(self, frame, product_id):
+        """Actualiza ``product_lookup`` con los datos de reclamo visibles en el marco."""
+
+        if not frame:
+            return
+        product_id = (product_id or '').strip()
+        if not product_id:
+            return
+        claim_values = {
+            'id_reclamo': frame.id_reclamo_var.get().strip(),
+            'nombre_analitica': frame.nombre_analitica_var.get().strip(),
+            'codigo_analitica': frame.codigo_analitica_var.get().strip(),
+        }
+        lookups = []
+        if isinstance(self.product_lookup, dict):
+            lookups.append(self.product_lookup)
+        frame_lookup = getattr(frame, 'product_lookup', None)
+        if isinstance(frame_lookup, dict) and frame_lookup is not self.product_lookup:
+            lookups.append(frame_lookup)
+        for lookup in lookups:
+            entry = lookup.setdefault(product_id, {})
+            entry.update(claim_values)
 
     def _populate_client_frame_from_row(self, frame, row):
         """Traslada los datos de una fila CSV a un ``ClientFrame``.
