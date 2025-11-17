@@ -2391,6 +2391,8 @@ class FraudCaseApp:
         self.risk_frames = []
         self.norm_frames = []
         self.summary_tables = {}
+        self.summary_config = {}
+        self.summary_context_menus = {}
         self._summary_refresh_after_id = None
 
         # Variables de caso
@@ -2664,6 +2666,11 @@ class FraudCaseApp:
         summary_tab = ttk.Frame(self.notebook)
         self.notebook.add(summary_tab, text="Resumen")
         self.build_summary_tab(summary_tab)
+
+    def clipboard_get(self):
+        """Proxy para ``Tk.clipboard_get`` que simplifica las pruebas unitarias."""
+
+        return self.root.clipboard_get()
 
     def build_case_and_participants_tab(self, parent):
         """Agrupa en una sola vista los datos del caso, clientes, productos y equipo.
@@ -3322,6 +3329,7 @@ class FraudCaseApp:
         ]
 
         self.summary_tables.clear()
+        self.summary_config = {key: columns for key, _, columns in config}
         for key, title, columns in config:
             section = ttk.LabelFrame(container, text=title)
             section.pack(fill="both", expand=True, pady=5)
@@ -3337,8 +3345,195 @@ class FraudCaseApp:
             tree.pack(side="left", fill="both", expand=True)
             scrollbar.pack(side="right", fill="y")
             self.summary_tables[key] = tree
+            self._register_summary_tree_bindings(tree, key)
 
         self.refresh_summary_tables()
+
+    def _register_summary_tree_bindings(self, tree, key):
+        """Configura atajos de pegado y el menú contextual para una tabla."""
+
+        tree.bind("<Control-v>", lambda event, target=key: self._handle_summary_paste(target))
+        tree.bind("<Control-V>", lambda event, target=key: self._handle_summary_paste(target))
+        menu = tk.Menu(tree, tearoff=False)
+        menu.add_command(
+            label="Pegar desde portapapeles",
+            command=lambda target=key: self._handle_summary_paste(target),
+        )
+        tree.bind(
+            "<Button-3>",
+            lambda event, context_menu=menu: self._show_summary_context_menu(event, context_menu),
+        )
+        self.summary_context_menus[key] = menu
+
+    def _show_summary_context_menu(self, event, menu):
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _handle_summary_paste(self, key):
+        """Lee el portapapeles, valida y carga filas en la tabla indicada."""
+
+        tree = self.summary_tables.get(key)
+        columns = self.summary_config.get(key, [])
+        if not tree or not columns:
+            return "break"
+        try:
+            clipboard_text = self.clipboard_get()
+        except tk.TclError:
+            messagebox.showerror("Portapapeles", "No se pudo leer el portapapeles desde el sistema.")
+            return "break"
+        try:
+            parsed_rows = self._parse_clipboard_rows(clipboard_text, len(columns))
+            sanitized_rows = self._transform_summary_clipboard_rows(key, parsed_rows)
+        except ValueError as exc:
+            messagebox.showerror("Pegado no válido", str(exc))
+            return "break"
+        tree.delete(*tree.get_children())
+        for row in sanitized_rows:
+            tree.insert("", "end", values=row)
+        return "break"
+
+    def _parse_clipboard_rows(self, text, expected_columns):
+        """Convierte el texto del portapapeles en una matriz con ``expected_columns`` celdas."""
+
+        cleaned = (text or "").strip()
+        if not cleaned:
+            raise ValueError("El portapapeles está vacío.")
+        lines = [line for line in cleaned.splitlines() if line.strip()]
+        if not lines:
+            raise ValueError("No se encontraron filas para pegar.")
+        rows = []
+        for idx, line in enumerate(lines, start=1):
+            delimiter = "\t" if "\t" in line else ";"
+            parts = [cell.strip() for cell in line.split(delimiter)]
+            if len(parts) != expected_columns:
+                raise ValueError(
+                    f"La fila {idx} tiene {len(parts)} columnas y se esperaban {expected_columns}."
+                )
+            rows.append(parts)
+        return rows
+
+    def _transform_summary_clipboard_rows(self, key, rows):
+        """Valida y normaliza filas de acuerdo al tipo de tabla del resumen."""
+
+        handlers = {
+            "clientes": self._transform_clipboard_clients,
+            "colaboradores": self._transform_clipboard_colaboradores,
+            "productos": self._transform_clipboard_productos,
+            "reclamos": self._transform_clipboard_reclamos,
+        }
+        handler = handlers.get(key)
+        if not handler:
+            raise ValueError("Esta tabla no admite pegado desde portapapeles.")
+        return handler(rows)
+
+    def _transform_clipboard_clients(self, rows):
+        sanitized = []
+        for idx, values in enumerate(rows, start=1):
+            client_data = {
+                "id_cliente": values[0].strip(),
+                "tipo_id": values[1].strip() or TIPO_ID_LIST[0],
+                "flag": values[2].strip() or FLAG_CLIENTE_LIST[0],
+                "telefonos": values[3].strip(),
+            }
+            message = validate_client_id(client_data["tipo_id"], client_data["id_cliente"])
+            if message:
+                raise ValueError(f"Cliente fila {idx}: {message}")
+            phone_message = validate_phone_list(client_data["telefonos"], "los teléfonos del cliente")
+            if phone_message:
+                raise ValueError(f"Cliente fila {idx}: {phone_message}")
+            sanitized.append(
+                (
+                    client_data["id_cliente"],
+                    client_data["tipo_id"],
+                    client_data["flag"],
+                    client_data["telefonos"],
+                )
+            )
+        return sanitized
+
+    def _transform_clipboard_colaboradores(self, rows):
+        sanitized = []
+        for idx, values in enumerate(rows, start=1):
+            collaborator = {
+                "id_colaborador": values[0].strip(),
+                "division": values[1].strip(),
+                "area": values[2].strip(),
+                "tipo_sancion": values[3].strip(),
+            }
+            message = validate_team_member_id(collaborator["id_colaborador"])
+            if message:
+                raise ValueError(f"Colaborador fila {idx}: {message}")
+            sanitized.append(
+                (
+                    collaborator["id_colaborador"],
+                    collaborator["division"],
+                    collaborator["area"],
+                    collaborator["tipo_sancion"],
+                )
+            )
+        return sanitized
+
+    def _transform_clipboard_productos(self, rows):
+        sanitized = []
+        for idx, values in enumerate(rows, start=1):
+            product = {
+                "id_producto": values[0].strip(),
+                "id_cliente": values[1].strip(),
+                "tipo_producto": values[2].strip(),
+                "monto_investigado": values[3].strip(),
+            }
+            if not product["id_cliente"]:
+                raise ValueError(f"Producto fila {idx}: el ID de cliente es obligatorio.")
+            message = validate_product_id(product["tipo_producto"], product["id_producto"])
+            if message:
+                raise ValueError(f"Producto fila {idx}: {message}")
+            amount_message, decimal_value = validate_money_bounds(
+                product["monto_investigado"],
+                "el monto investigado",
+                allow_blank=False,
+            )
+            if amount_message:
+                raise ValueError(f"Producto fila {idx}: {amount_message}")
+            sanitized.append(
+                (
+                    product["id_producto"],
+                    product["id_cliente"],
+                    product["tipo_producto"],
+                    f"{decimal_value:.2f}",
+                )
+            )
+        return sanitized
+
+    def _transform_clipboard_reclamos(self, rows):
+        sanitized = []
+        for idx, values in enumerate(rows, start=1):
+            claim = {
+                "id_reclamo": values[0].strip(),
+                "id_producto": values[1].strip(),
+                "nombre_analitica": values[2].strip(),
+            }
+            message = validate_reclamo_id(claim["id_reclamo"])
+            if message:
+                raise ValueError(f"Reclamo fila {idx}: {message}")
+            product_message = validate_required_text(claim["id_producto"], "el ID de producto")
+            if product_message:
+                raise ValueError(f"Reclamo fila {idx}: {product_message}")
+            analytic_message = validate_required_text(
+                claim["nombre_analitica"],
+                "el nombre de la analítica",
+            )
+            if analytic_message:
+                raise ValueError(f"Reclamo fila {idx}: {analytic_message}")
+            sanitized.append(
+                (
+                    claim["id_reclamo"],
+                    claim["id_producto"],
+                    claim["nombre_analitica"],
+                )
+            )
+        return sanitized
 
     def _schedule_summary_refresh(self):
         """Programa la actualización del resumen en la cola ``after_idle`` de Tk."""
