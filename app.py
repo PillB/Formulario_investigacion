@@ -313,8 +313,8 @@ def load_team_details():
     """
     lookup = {}
     try:
-        with open(TEAM_DETAILS_FILE, newline='', encoding="utf-8") as f:
-            reader = csv.DictReader(f)
+        with open(TEAM_DETAILS_FILE, newline='', encoding="utf-8-sig") as f:
+            reader = csv.DictReader(line for line in f if line.strip())
             for row in reader:
                 key = row.get("id_colaborador") or row.get("IdTeamMember") or row.get("Id")
                 if key:
@@ -349,8 +349,8 @@ def load_client_details():
     """
     lookup = {}
     try:
-        with open(CLIENT_DETAILS_FILE, newline='', encoding="utf-8") as f:
-            reader = csv.DictReader(f)
+        with open(CLIENT_DETAILS_FILE, newline='', encoding="utf-8-sig") as f:
+            reader = csv.DictReader(line for line in f if line.strip())
             for row in reader:
                 key = row.get("id_cliente") or row.get("IdCliente") or row.get("IDCliente")
                 if key:
@@ -386,8 +386,8 @@ def load_product_details():
     """
     lookup = {}
     try:
-        with open(PRODUCT_DETAILS_FILE, newline='', encoding="utf-8") as f:
-            reader = csv.DictReader(f)
+        with open(PRODUCT_DETAILS_FILE, newline='', encoding="utf-8-sig") as f:
+            reader = csv.DictReader(line for line in f if line.strip())
             for row in reader:
                 key = row.get("id_producto", "").strip()
                 if not key:
@@ -2800,8 +2800,8 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se seleccionó un CSV para clientes ni se encontró el ejemplo.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
                 imported = 0
                 for row in reader:
                     # Extraer datos esperados
@@ -2853,8 +2853,8 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No hay CSV para colaboradores disponible.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
                 imported = 0
                 for row in reader:
                     id_col = row.get('id_colaborador', '').strip()
@@ -2919,8 +2919,8 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No se seleccionó CSV de productos ni se encontró el ejemplo.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
                 imported = 0
                 for row in reader:
                     id_prod = row.get('id_producto', '').strip()
@@ -3042,8 +3042,8 @@ class FraudCaseApp:
             messagebox.showwarning("Sin archivo", "No hay CSV combinado disponible para importar.")
             return
         try:
-            with open(filename, newline='', encoding="utf-8") as f:
-                reader = csv.DictReader(f)
+            with open(filename, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
                 created_records = False
                 for row in reader:
                     # Columns may include id_cliente, tipo_id, flag_cliente, id_producto, id_colaborador, monto_asignado, etc.
