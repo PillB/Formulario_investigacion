@@ -312,6 +312,50 @@ CLAIM_ID_ALIASES = ("IdReclamo", "IDReclamo")
 # ---------------------------------------------------------------------------
 # Funciones de utilidad
 
+def load_detail_catalogs():
+    """Lee todos los archivos ``*_details.csv`` disponibles en la carpeta base.
+
+    Devuelve un diccionario con la forma ``{nombre_archivo: {id: fila}}``.
+    Cada fila conserva todos los campos del CSV para poder reutilizarlos como
+    autopoblado o enriquecimiento posterior.
+    """
+
+    catalogs = {}
+    try:
+        filenames = [
+            name
+            for name in os.listdir(BASE_DIR)
+            if name.lower().endswith("details.csv")
+        ]
+    except OSError:
+        return catalogs
+
+    for filename in filenames:
+        path = os.path.join(BASE_DIR, filename)
+        entity_name = filename[:-len("_details.csv")].lower()
+        try:
+            with open(path, newline='', encoding="utf-8-sig") as f:
+                reader = csv.DictReader(line for line in f if line.strip())
+                fieldnames = reader.fieldnames or []
+                key_field = next(
+                    (field for field in fieldnames if field and field.lower().startswith("id_")),
+                    None,
+                )
+                if not key_field:
+                    continue
+                for row in reader:
+                    key = (row.get(key_field) or "").strip()
+                    if not key:
+                        continue
+                    catalogs.setdefault(entity_name, {})[key] = {
+                        (k or ""): (v or "").strip() for k, v in row.items()
+                    }
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
+    return catalogs
+
 def load_team_details():
     """Carga los datos de colaboradores desde team_details.csv si existe.
 
@@ -879,6 +923,7 @@ class ClientFrame:
         # Diccionario con datos de clientes para autopoblado
         self.client_lookup = client_lookup or {}
         self.validators = []
+        self._last_missing_lookup_id = None
 
         # Variables de control
         self.tipo_id_var = tk.StringVar(value=TIPO_ID_LIST[0])
@@ -903,7 +948,7 @@ class ClientFrame:
         ttk.Label(row1, text="ID del cliente:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: self.on_id_change())
+        id_entry.bind("<FocusOut>", lambda e: self.on_id_change(from_focus=True))
         id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
@@ -997,7 +1042,7 @@ class ClientFrame:
             )
         )
 
-    def on_id_change(self):
+    def on_id_change(self, from_focus=False):
         """Cuando cambia el ID, actualiza las listas dependientes."""
         # Registrar evento
         log_event("navegacion", f"Cliente {self.idx+1}: cambió ID a {self.id_var.get()}", self.logs)
@@ -1005,8 +1050,11 @@ class ClientFrame:
         self.update_client_options()
         # Autopoblar datos si el ID existe en client_lookup
         cid = self.id_var.get().strip()
-        if cid and cid in self.client_lookup:
-            data = self.client_lookup[cid]
+        if not cid:
+            self._last_missing_lookup_id = None
+            return
+        data = self.client_lookup.get(cid)
+        if data:
             def set_if_present(var, key):
                 value = data.get(key, "").strip()
                 if value:
@@ -1020,7 +1068,18 @@ class ClientFrame:
             accionado = data.get('accionado', '').strip()
             if accionado:
                 self.set_accionado_from_text(accionado)
+            self._last_missing_lookup_id = None
             log_event("navegacion", f"Autopoblado datos del cliente {cid}", self.logs)
+        elif from_focus and self.client_lookup:
+            if self._last_missing_lookup_id != cid:
+                messagebox.showerror(
+                    "Cliente no encontrado",
+                    (
+                        f"El ID {cid} no existe en los catálogos de detalle. "
+                        "Verifica el documento o actualiza client_details.csv."
+                    ),
+                )
+                self._last_missing_lookup_id = cid
 
     def get_data(self):
         """Devuelve los datos del cliente como un diccionario."""
@@ -1074,6 +1133,7 @@ class TeamMemberFrame:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self._last_missing_lookup_id = None
 
         # Variables
         self.id_var = tk.StringVar()
@@ -1097,7 +1157,7 @@ class TeamMemberFrame:
         ttk.Label(row1, text="ID del colaborador:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: self.on_id_change())
+        id_entry.bind("<FocusOut>", lambda e: self.on_id_change(from_focus=True))
         id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
         self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
         ttk.Label(row1, text="Flag:").pack(side="left")
@@ -1177,7 +1237,7 @@ class TeamMemberFrame:
             )
         )
 
-    def on_id_change(self):
+    def on_id_change(self, from_focus=False):
         """Se ejecuta al salir del campo ID: autopuebla y actualiza listas."""
         cid = self.id_var.get().strip()
         if cid:
@@ -1195,11 +1255,12 @@ class TeamMemberFrame:
                 set_if_present(self.puesto_var, "puesto")
                 set_if_present(self.nombre_agencia_var, "nombre_agencia")
                 set_if_present(self.codigo_agencia_var, "codigo_agencia")
+                self._last_missing_lookup_id = None
                 log_event("navegacion", f"Autopoblado colaborador {self.idx+1} desde team_details.csv", self.logs)
-            else:
+            elif from_focus and self.team_lookup:
                 log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
                 if self._last_missing_lookup_id != cid:
-                    messagebox.showwarning(
+                    messagebox.showerror(
                         "Colaborador no encontrado",
                         (
                             f"El ID {cid} no existe en el catálogo team_details.csv. "
@@ -1207,6 +1268,8 @@ class TeamMemberFrame:
                         ),
                     )
                     self._last_missing_lookup_id = cid
+        else:
+            self._last_missing_lookup_id = None
         # Actualizar desplegables de colaboradores
         self.update_team_options()
 
@@ -1309,6 +1372,7 @@ class ProductFrame:
         self.tooltip_register = tooltip_register
         self.validators = []
         self.involvements = []
+        self._last_missing_lookup_id = None
 
         # Variables
         self.id_var = tk.StringVar()
@@ -1347,7 +1411,7 @@ class ProductFrame:
         ttk.Label(row1, text="ID del producto:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: self.on_id_change())
+        id_entry.bind("<FocusOut>", lambda e: self.on_id_change(from_focus=True))
         id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
         self.tooltip_register(id_entry, "Código único del producto investigado.")
         ttk.Label(row1, text="Cliente:").pack(side="left")
@@ -1645,14 +1709,24 @@ class ProductFrame:
         for inv in self.involvements:
             inv.update_team_options()
 
-    def on_id_change(self):
+    def on_id_change(self, from_focus=False):
         """Autocompleta el producto cuando se escribe un ID reconocido."""
         pid = self.id_var.get().strip()
         log_event("navegacion", f"Producto {self.idx+1}: modificó ID a {pid}", self.logs)
         if not pid:
+            self._last_missing_lookup_id = None
             return
         data = self.product_lookup.get(pid)
         if not data:
+            if from_focus and self.product_lookup and self._last_missing_lookup_id != pid:
+                messagebox.showerror(
+                    "Producto no encontrado",
+                    (
+                        f"El ID {pid} no existe en los catálogos de detalle. "
+                        "Verifica el código o actualiza product_details.csv."
+                    ),
+                )
+                self._last_missing_lookup_id = pid
             return
 
         def set_if_present(var, key):
@@ -1696,6 +1770,7 @@ class ProductFrame:
                 if mod in TAXONOMIA[cat1][cat2]:
                     self.mod_var.set(mod)
                     self.mod_cb.set(mod)
+        self._last_missing_lookup_id = None
         log_event("navegacion", f"Producto {self.idx+1}: autopoblado desde catálogo", self.logs)
 
     def _validate_fecha_descubrimiento(self):
@@ -1984,7 +2059,19 @@ class FraudCaseApp:
 
         self.register_tooltip = register_tooltip
         # Cargar catálogos para autopoblado
-        self.team_lookup = load_team_details()
+        self.detail_catalogs = load_detail_catalogs()
+
+        def _merge_with_detail_catalog(base_lookup, aliases):
+            merged = {}
+            for alias in aliases:
+                merged.update(self.detail_catalogs.get(alias, {}))
+            merged.update(base_lookup or {})
+            return merged
+
+        self.team_lookup = _merge_with_detail_catalog(
+            load_team_details(),
+            ("team", "teams", "colaboradores", "colaborador"),
+        )
         # Cargar client details para autopoblar clientes. Si no existe el
         # fichero ``client_details.csv`` se obtiene un diccionario vacío. Este
         # diccionario se usa en ClientFrame.on_id_change() para rellenar
