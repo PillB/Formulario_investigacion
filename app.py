@@ -4088,11 +4088,11 @@ class FraudCaseApp:
                     self._ensure_client_exists(client_id, client_details)
                 if new_product:
                     self._populate_product_frame_from_row(product_frame, hydrated)
-                self._trigger_import_id_refresh(
-                    product_frame,
-                    product_id,
-                    preserve_existing=False,
-                )
+                    self._trigger_import_id_refresh(
+                        product_frame,
+                        product_id,
+                        preserve_existing=False,
+                    )
                 claim_payload = {
                     'id_reclamo': (hydrated.get('id_reclamo') or payload['id_reclamo']),
                     'nombre_analitica': (hydrated.get('nombre_analitica') or payload['nombre_analitica']),
