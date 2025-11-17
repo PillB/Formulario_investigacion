@@ -62,8 +62,9 @@ import json
 import os
 import re
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, getcontext, ROUND_HALF_UP
 from functools import partial
+import random
 
 # ---------------------------------------------------------------------------
 # Constantes y listas de opciones
@@ -287,46 +288,6 @@ MASSIVE_SAMPLE_FILES = {
     "combinado": os.path.join(BASE_DIR, "datos_combinados_masivos.csv"),
 }
 
-# Reglas compartidas para vincular catálogos *_details con las entidades
-DETAIL_ENRICHMENT_RULES = {
-    "clientes": {
-        "id_field": "id_cliente",
-        "aliases": ("clientes", "cliente", "client", "clients"),
-        "row_keys": ("id_cliente", "IdCliente", "cliente", "Cliente"),
-        "label": "clientes",
-    },
-    "colaboradores": {
-        "id_field": "id_colaborador",
-        "aliases": ("colaboradores", "colaborador", "team", "teams"),
-        "row_keys": ("id_colaborador", "IdColaborador", "colaborador", "Colaborador"),
-        "label": "colaboradores",
-    },
-    "productos": {
-        "id_field": "id_producto",
-        "aliases": ("productos", "producto", "product", "products"),
-        "row_keys": ("id_producto", "IdProducto", "producto", "Producto"),
-        "label": "productos",
-    },
-    "reclamos": {
-        "id_field": "id_reclamo",
-        "aliases": ("reclamos", "reclamo", "claim", "claims"),
-        "row_keys": ("id_reclamo", "IdReclamo", "reclamo", "Reclamo"),
-        "label": "reclamos",
-    },
-    "riesgos": {
-        "id_field": "id_riesgo",
-        "aliases": ("riesgos", "riesgo", "risk", "risks"),
-        "row_keys": ("id_riesgo", "IdRiesgo", "riesgo", "Riesgo"),
-        "label": "riesgos",
-    },
-    "normas": {
-        "id_field": "id_norma",
-        "aliases": ("normas", "norma", "rule", "rules"),
-        "row_keys": ("id_norma", "IdNorma", "norma", "Norma"),
-        "label": "normas",
-    },
-}
-
 # Opciones de áreas accionadas disponibles para el selector múltiple
 ACCIONADO_OPTIONS = [
     "Tribu Producto Afectado",
@@ -338,6 +299,14 @@ ACCIONADO_OPTIONS = [
     "Unidad de Fraude",
     "No aplica",
 ]
+
+# Encabezados alternos utilizados durante la hidratación de filas masivas
+CLIENT_ID_ALIASES = ("IdCliente", "IDCliente")
+TEAM_ID_ALIASES = ("IdColaborador", "IdTeamMember", "IDColaborador", "Id")
+PRODUCT_ID_ALIASES = ("IdProducto", "IDProducto")
+RISK_ID_ALIASES = ("IdRiesgo", "IDRiesgo")
+NORM_ID_ALIASES = ("IdNorma", "IDNorma")
+CLAIM_ID_ALIASES = ("IdReclamo", "IDReclamo")
 
 
 # ---------------------------------------------------------------------------
@@ -857,6 +826,21 @@ class FieldValidator:
             self.tooltip.hide()
         self.last_error = error
 
+
+
+# Set a context for desired precision and rounding
+getcontext().prec = 10  # Set precision to 10 significant digits
+getcontext().rounding = ROUND_HALF_UP # Set rounding method
+
+def parse_decimal_amount(amount_string):
+    try:
+        # Replace comma with period if present
+        cleaned_string = amount_string.replace(',', '.')
+        decimal_value = Decimal(cleaned_string)
+        return decimal_value
+    except InvalidOperation:
+        print(f"Error: '{amount_string}' is not a valid decimal amount.")
+        return None
 # Callback global opcional para guardar versiones temporales
 SAVE_TEMP_CALLBACK = None
 
@@ -2092,14 +2076,13 @@ class FraudCaseApp:
         # fichero ``client_details.csv`` se obtiene un diccionario vacío. Este
         # diccionario se usa en ClientFrame.on_id_change() para rellenar
         # automáticamente campos del cliente cuando se reconoce su ID.
-        self.client_lookup = _merge_with_detail_catalog(
-            load_client_details(),
-            ("client", "cliente", "clientes", "clients"),
-        )
-        self.product_lookup = _merge_with_detail_catalog(
-            load_product_details(),
-            ("producto", "productos", "product", "products"),
-        )
+        self.client_lookup = load_client_details()
+        self.product_lookup = load_product_details()
+        self.detail_catalogs = {
+            'id_cliente': {'label': 'clientes', 'lookup': self.client_lookup},
+            'id_colaborador': {'label': 'colaboradores', 'lookup': self.team_lookup},
+            'id_producto': {'label': 'productos', 'lookup': self.product_lookup},
+        }
         # Datos en memoria: listas de frames
         self.client_frames = []
         self.team_frames = []
@@ -2136,6 +2119,204 @@ class FraudCaseApp:
         SAVE_TEMP_CALLBACK = self.save_temp_version
         # Cargar autosave si existe
         self.load_autosave()
+
+    def import_combined(self, filename=None):
+        """Importa datos combinados de productos, clientes y colaboradores."""
+
+        filename = filename or self._select_csv_file("combinado", "Seleccionar CSV combinado")
+        if not filename:
+            messagebox.showwarning("Sin archivo", "No hay CSV combinado disponible para importar.")
+            return
+        created_records = False
+        missing_clients = []
+        missing_team = []
+        missing_products = []
+        try:
+            for row in iter_massive_csv_rows(filename):
+                client_row, client_found = self._hydrate_row_from_details(row, 'id_cliente', CLIENT_ID_ALIASES)
+                client_id = (client_row.get('id_cliente') or '').strip()
+                if client_id:
+                    if not client_row.get('flag') and row.get('flag_cliente'):
+                        client_row['flag'] = row.get('flag_cliente')
+                    for key in ('telefonos', 'correos', 'direcciones', 'accionado', 'tipo_id'):
+                        if not client_row.get(key) and row.get(key):
+                            client_row[key] = row.get(key)
+                    _, created_client = self._ensure_client_exists(client_id, client_row)
+                    created_records = created_records or created_client
+                    if not client_found and 'id_cliente' in self.detail_catalogs:
+                        missing_clients.append(client_id)
+                team_row, team_found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
+                collaborator_id = (team_row.get('id_colaborador') or '').strip()
+                if collaborator_id:
+                    _, created_team = self._ensure_team_member_exists(collaborator_id, team_row)
+                    created_records = created_records or created_team
+                    if not team_found and 'id_colaborador' in self.detail_catalogs:
+                        missing_team.append(collaborator_id)
+                product_row, product_found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
+                product_id = (product_row.get('id_producto') or '').strip()
+                product_frame = None
+                if product_id:
+                    product_frame = self._find_product_frame(product_id)
+                    new_product = False
+                    if not product_frame:
+                        product_frame = self._obtain_product_slot_for_import()
+                        new_product = True
+                    client_for_product = (product_row.get('id_cliente') or '').strip()
+                    if client_for_product:
+                        client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
+                        self._ensure_client_exists(client_for_product, client_details)
+                    self._populate_product_frame_from_row(product_frame, product_row)
+                    created_records = created_records or new_product
+                    if not product_found and 'id_producto' in self.detail_catalogs:
+                        missing_products.append(product_id)
+                involvement_pairs = parse_involvement_entries(row.get('involucramiento', ''))
+                if not involvement_pairs and collaborator_id and row.get('monto_asignado'):
+                    involvement_pairs = [(collaborator_id, (row.get('monto_asignado') or '').strip())]
+                if product_frame and involvement_pairs:
+                    for collab_id, amount in involvement_pairs:
+                        collab_id = (collab_id or '').strip()
+                        if not collab_id:
+                            continue
+                        collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
+                        _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
+                        created_records = created_records or created_team
+                        if not collab_found and 'id_colaborador' in self.detail_catalogs:
+                            missing_team.append(collab_id)
+                        inv_row = next((inv for inv in product_frame.involvements if inv.team_var.get().strip() == collab_id), None)
+                        if not inv_row:
+                            inv_row = self._obtain_involvement_slot(product_frame)
+                        inv_row.team_var.set(collab_id)
+                        inv_row.monto_var.set(amount)
+                        created_records = True
+            self.save_auto()
+            log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
+            if created_records:
+                self.sync_main_form_after_import("datos combinados")
+                messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
+        except Exception as ex:
+            messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
+            return
+        self._report_missing_detail_ids("clientes", missing_clients)
+        self._report_missing_detail_ids("colaboradores", missing_team)
+        self._report_missing_detail_ids("productos", missing_products)
+
+    def import_risks(self, filename=None):
+        """Importa riesgos desde un archivo CSV."""
+
+        filename = filename or self._select_csv_file("riesgos", "Seleccionar CSV de riesgos")
+        if not filename:
+            messagebox.showwarning("Sin archivo", "No se encontró CSV de riesgos para importar.")
+            return
+        imported = 0
+        try:
+            for row in iter_massive_csv_rows(filename):
+                hydrated, _ = self._hydrate_row_from_details(row, 'id_riesgo', RISK_ID_ALIASES)
+                rid = (hydrated.get('id_riesgo') or '').strip()
+                if not rid:
+                    continue
+                if any(r.id_var.get().strip() == rid for r in self.risk_frames):
+                    log_event("validacion", f"Riesgo duplicado {rid} en importación", self.logs)
+                    continue
+                self.add_risk()
+                rf = self.risk_frames[-1]
+                rf.id_var.set(rid)
+                rf.lider_var.set((hydrated.get('lider') or '').strip())
+                rf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
+                crit = (hydrated.get('criticidad') or '').strip()
+                if crit in CRITICIDAD_LIST:
+                    rf.criticidad_var.set(crit)
+                rf.exposicion_var.set((hydrated.get('exposicion_residual') or '').strip())
+                rf.planes_var.set((hydrated.get('planes_accion') or '').strip())
+                imported += 1
+            self.save_auto()
+            log_event("navegacion", "Riesgos importados desde CSV", self.logs)
+            if imported:
+                messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
+        except Exception as ex:
+            messagebox.showerror("Error", f"No se pudo importar riesgos: {ex}")
+            return
+
+    def import_norms(self, filename=None):
+        """Importa normas transgredidas desde un archivo CSV."""
+
+        filename = filename or self._select_csv_file("normas", "Seleccionar CSV de normas")
+        if not filename:
+            messagebox.showwarning("Sin archivo", "No se encontró CSV de normas.")
+            return
+        imported = 0
+        try:
+            for row in iter_massive_csv_rows(filename):
+                hydrated, _ = self._hydrate_row_from_details(row, 'id_norma', NORM_ID_ALIASES)
+                nid = (hydrated.get('id_norma') or '').strip()
+                if not nid:
+                    continue
+                if any(n.id_var.get().strip() == nid for n in self.norm_frames):
+                    log_event("validacion", f"Norma duplicada {nid} en importación", self.logs)
+                    continue
+                self.add_norm()
+                nf = self.norm_frames[-1]
+                nf.id_var.set(nid)
+                nf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
+                nf.fecha_var.set((hydrated.get('fecha_vigencia') or '').strip())
+                imported += 1
+            self.save_auto()
+            log_event("navegacion", "Normas importadas desde CSV", self.logs)
+            if imported:
+                messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
+        except Exception as ex:
+            messagebox.showerror("Error", f"No se pudo importar normas: {ex}")
+            return
+
+    def import_claims(self, filename=None):
+        """Importa reclamos desde un archivo CSV."""
+
+        filename = filename or self._select_csv_file("reclamos", "Seleccionar CSV de reclamos")
+        if not filename:
+            messagebox.showwarning("Sin archivo", "No se encontró CSV de reclamos.")
+            return
+        imported = 0
+        missing_products = []
+        try:
+            for row in iter_massive_csv_rows(filename):
+                hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
+                product_id = (hydrated.get('id_producto') or '').strip()
+                if not product_id:
+                    continue
+                product_frame = self._find_product_frame(product_id)
+                new_product = False
+                if not product_frame:
+                    product_frame = self._obtain_product_slot_for_import()
+                    new_product = True
+                client_id = (hydrated.get('id_cliente') or '').strip()
+                if client_id:
+                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                    self._ensure_client_exists(client_id, client_details)
+                if new_product:
+                    self._populate_product_frame_from_row(product_frame, hydrated)
+                rid = (hydrated.get('id_reclamo') or row.get('id_reclamo') or '').strip()
+                product_frame.id_reclamo_var.set(rid)
+                product_frame.nombre_analitica_var.set((hydrated.get('nombre_analitica') or row.get('nombre_analitica') or '').strip())
+                product_frame.codigo_analitica_var.set((hydrated.get('codigo_analitica') or row.get('codigo_analitica') or '').strip())
+                imported += 1
+                if not found and 'id_producto' in self.detail_catalogs:
+                    missing_products.append(product_id)
+            self.save_auto()
+            log_event("navegacion", "Reclamos importados desde CSV", self.logs)
+            if imported:
+                self.sync_main_form_after_import("reclamos")
+                messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
+        except Exception as ex:
+            messagebox.showerror("Error", f"No se pudo importar reclamos: {ex}")
+            return
+        self._report_missing_detail_ids("productos", missing_products)
 
     # ---------------------------------------------------------------------
     # Construcción de la interfaz
@@ -2803,110 +2984,18 @@ class FraudCaseApp:
 
         self.refresh_summary_tables()
 
-    def _get_detail_catalog(self, *aliases):
-        """Obtiene el catálogo de detalles según una lista de alias."""
-
-        if not getattr(self, "detail_catalogs", None):
-            return {}
-        for alias in aliases:
-            data = self.detail_catalogs.get(alias)
-            if data:
-                return data
-        return {}
-
-    @staticmethod
-    def _extract_identifier(row, key_options):
-        """Devuelve el primer identificador no vacío disponible en ``key_options``."""
-
-        for key in key_options:
-            value = row.get(key)
-            if value in (None, ""):
-                continue
-            value = str(value).strip()
-            if value:
-                return value
-        return ""
-
-    def _hydrate_row_from_details(self, row, entity_key):
-        """Completa una fila con datos faltantes usando catálogos ``*_details``."""
-
-        metadata = DETAIL_ENRICHMENT_RULES.get(entity_key)
-        merged = dict(row or {})
-        if not metadata:
-            return merged, True, ""
-        catalog = self._get_detail_catalog(*metadata["aliases"])
-        identifier = self._extract_identifier(merged, metadata["row_keys"])
-        if identifier and not merged.get(metadata["id_field"]):
-            merged[metadata["id_field"]] = identifier
-        if not identifier or not catalog:
-            return merged, True, identifier
-        details = catalog.get(identifier)
-        if not details:
-            return merged, False, identifier
-        for field, value in details.items():
-            if merged.get(field) in (None, "") and value not in (None, ""):
-                merged[field] = value
-        return merged, True, identifier
-
-    def _report_missing_detail_ids(self, entity_label, identifiers):
-        """Muestra un único mensaje con los IDs sin cobertura en catálogos de detalle."""
-
-        unique_ids = sorted({identifier for identifier in identifiers if identifier})
-        if not unique_ids:
-            return
-        preview = ", ".join(unique_ids[:5])
-        remaining = len(unique_ids) - 5
-        if remaining > 0:
-            preview = f"{preview} y {remaining} más"
-        message = (
-            f"Los siguientes {entity_label} no se encontraron en los catálogos de detalle: {preview}. "
-            "Completa manualmente la información o actualiza los archivos *_details.csv."
-        )
-        log_event("validacion", message, self.logs)
-        messagebox.showwarning("Catálogos incompletos", message)
-
-    def _enrich_dataset_with_details(self, dataset):
-        """Completa filas con información faltante usando catálogos ``*_details``."""
-
-        if not getattr(self, "detail_catalogs", None):
-            return dataset
-
-        enriched = dict(dataset)
-        for section, metadata in DETAIL_ENRICHMENT_RULES.items():
-            rows = dataset.get(section)
-            if not rows:
-                continue
-            catalog = self._get_detail_catalog(*metadata["aliases"])
-            if not catalog:
-                continue
-            enriched_rows = []
-            for row in rows:
-                merged_row = dict(row)
-                key = (merged_row.get(metadata["id_field"]) or "").strip()
-                details = catalog.get(key)
-                if details:
-                    for field, value in details.items():
-                        if merged_row.get(field) in (None, "") and value not in (None, ""):
-                            merged_row[field] = value
-                enriched_rows.append(merged_row)
-            enriched[section] = enriched_rows
-        return enriched
-
     def refresh_summary_tables(self, data=None):
         """Actualiza las tablas de resumen con la información actual."""
 
         if not self.summary_tables:
             return
         dataset = data or self.gather_data()
-        dataset = self._enrich_dataset_with_details(dataset)
 
         def update_table(key, rows):
             tree = self.summary_tables.get(key)
             if not tree:
                 return
-            children = tree.get_children()
-            if children:
-                tree.delete(*children)
+            tree.delete(*tree.get_children())
             for row in rows:
                 tree.insert("", "end", values=row)
 
@@ -3003,6 +3092,76 @@ class FraudCaseApp:
                 )
         return filename
 
+    def _hydrate_row_from_details(self, row, id_column, alias_headers):
+        """Devuelve una copia de la fila complementada con catálogos de detalle."""
+
+        hydrated = dict(row or {})
+        alias_headers = alias_headers or ()
+        canonical_id = ""
+        for header in (id_column, *alias_headers):
+            value = hydrated.get(header)
+            if isinstance(value, str):
+                value = value.strip()
+            if value:
+                canonical_id = str(value).strip()
+                hydrated[id_column] = canonical_id
+                break
+        found = False
+        catalog = self.detail_catalogs.get(id_column)
+        if canonical_id and catalog:
+            lookup = catalog.get('lookup', {})
+            details = lookup.get(canonical_id)
+            if details:
+                for key, value in details.items():
+                    if hydrated.get(key):
+                        continue
+                    hydrated[key] = value
+                found = True
+        return hydrated, found
+
+    def _report_missing_detail_ids(self, entity_label, missing_ids):
+        """Registra y muestra un único aviso de IDs sin detalle catalogado."""
+
+        unique_ids = sorted({mid for mid in missing_ids if mid})
+        if not unique_ids:
+            return
+        message = (
+            f"No se encontraron detalles catalogados para los {entity_label} con ID: "
+            f"{', '.join(unique_ids)}."
+        )
+        log_event("validacion", message, self.logs)
+        try:
+            messagebox.showwarning("Detalles faltantes", message)
+        except tk.TclError:
+            pass
+
+    def _find_client_frame(self, client_id):
+        client_id = (client_id or '').strip()
+        if not client_id:
+            return None
+        for frame in self.client_frames:
+            if frame.id_var.get().strip() == client_id:
+                return frame
+        return None
+
+    def _find_team_frame(self, collaborator_id):
+        collaborator_id = (collaborator_id or '').strip()
+        if not collaborator_id:
+            return None
+        for frame in self.team_frames:
+            if frame.id_var.get().strip() == collaborator_id:
+                return frame
+        return None
+
+    def _find_product_frame(self, product_id):
+        product_id = (product_id or '').strip()
+        if not product_id:
+            return None
+        for frame in self.product_frames:
+            if frame.id_var.get().strip() == product_id:
+                return frame
+        return None
+
     def _obtain_client_slot_for_import(self):
         """Obtiene un ``ClientFrame`` vacío o crea uno nuevo para importación.
 
@@ -3029,6 +3188,27 @@ class FraudCaseApp:
                 return frame
         self.add_client()
         return self.client_frames[-1]
+
+    def _obtain_team_slot_for_import(self):
+        for frame in self.team_frames:
+            if not frame.id_var.get().strip():
+                return frame
+        self.add_team()
+        return self.team_frames[-1]
+
+    def _obtain_product_slot_for_import(self):
+        for frame in self.product_frames:
+            if not frame.id_var.get().strip():
+                return frame
+        self.add_product()
+        return self.product_frames[-1]
+
+    def _obtain_involvement_slot(self, product_frame):
+        empty = next((inv for inv in product_frame.involvements if not inv.team_var.get().strip()), None)
+        if empty:
+            return empty
+        product_frame.add_involvement()
+        return product_frame.involvements[-1]
 
     def _populate_client_frame_from_row(self, frame, row):
         """Traslada los datos de una fila CSV a un ``ClientFrame``.
@@ -3074,67 +3254,31 @@ class FraudCaseApp:
             'accionado': accionado_val,
         }
 
-    def _find_client_frame(self, client_id):
-        client_id = (client_id or '').strip()
-        if not client_id:
-            return None
-        return next((c for c in self.client_frames if c.id_var.get().strip() == client_id), None)
-
-    def _ensure_client_exists(self, client_id, row=None):
-        """Crea o reutiliza un cliente a partir de datos masivos."""
-
-        frame = self._find_client_frame(client_id)
-        created = False
-        if frame is None:
-            frame = self._obtain_client_slot_for_import()
-            created = True
-        was_empty = not frame.id_var.get().strip()
-        frame.id_var.set(client_id)
-        tipo_id = (row or {}).get('tipo_id') or (row or {}).get('TipoID') or frame.tipo_id_var.get() or TIPO_ID_LIST[0]
-        frame.tipo_id_var.set(tipo_id)
-        flag_value = (row or {}).get('flag_cliente') or (row or {}).get('flag') or frame.flag_var.get() or FLAG_CLIENTE_LIST[0]
-        frame.flag_var.set(flag_value)
-        frame.telefonos_var.set((row or {}).get('telefonos', frame.telefonos_var.get()))
-        frame.correos_var.set((row or {}).get('correos', frame.correos_var.get()))
-        frame.direcciones_var.set((row or {}).get('direcciones', frame.direcciones_var.get()))
-        accionado_val = (row or {}).get('accionado', frame.accionado_var.get())
-        if accionado_val:
-            frame.set_accionado_from_text(accionado_val)
-        self.client_lookup[client_id] = {
-            'tipo_id': frame.tipo_id_var.get(),
-            'flag': frame.flag_var.get(),
-            'telefonos': frame.telefonos_var.get(),
-            'correos': frame.correos_var.get(),
-            'direcciones': frame.direcciones_var.get(),
-            'accionado': frame.accionado_var.get(),
-        }
-        return frame, created or was_empty
-
-    def _find_team_frame(self, collaborator_id):
-        collaborator_id = (collaborator_id or '').strip()
-        if not collaborator_id:
-            return None
-        return next((t for t in self.team_frames if t.id_var.get().strip() == collaborator_id), None)
-
-    def _ensure_team_member_exists(self, collaborator_id, row=None):
-        frame = self._find_team_frame(collaborator_id)
-        created = False
-        if frame is None:
-            self.add_team()
-            frame = self.team_frames[-1]
-            created = True
-        was_empty = not frame.id_var.get().strip()
-        frame.id_var.set(collaborator_id)
-        frame.flag_var.set((row or {}).get('flag_colaborador') or (row or {}).get('flag') or frame.flag_var.get() or FLAG_COLABORADOR_LIST[0])
-        frame.division_var.set((row or {}).get('division', frame.division_var.get()))
-        frame.area_var.set((row or {}).get('area', frame.area_var.get()))
-        frame.servicio_var.set((row or {}).get('servicio', frame.servicio_var.get()))
-        frame.puesto_var.set((row or {}).get('puesto', frame.puesto_var.get()))
-        frame.nombre_agencia_var.set((row or {}).get('nombre_agencia', frame.nombre_agencia_var.get()))
-        frame.codigo_agencia_var.set((row or {}).get('codigo_agencia', frame.codigo_agencia_var.get()))
-        frame.tipo_falta_var.set((row or {}).get('tipo_falta', frame.tipo_falta_var.get() or TIPO_FALTA_LIST[0]))
-        frame.tipo_sancion_var.set((row or {}).get('tipo_sancion', frame.tipo_sancion_var.get() or TIPO_SANCION_LIST[0]))
-        self.team_lookup[collaborator_id] = {
+    def _populate_team_frame_from_row(self, frame, row):
+        id_col = (
+            row.get('id_colaborador')
+            or row.get('IdColaborador')
+            or row.get('IdTeamMember')
+            or row.get('id_col')
+            or ''
+        ).strip()
+        frame.id_var.set(id_col)
+        flag_val = (
+            row.get('flag_colaborador')
+            or row.get('flag')
+            or row.get('Flag')
+            or 'No aplica'
+        ).strip()
+        frame.flag_var.set(flag_val or 'No aplica')
+        frame.division_var.set((row.get('division') or '').strip())
+        frame.area_var.set((row.get('area') or '').strip())
+        frame.servicio_var.set((row.get('servicio') or '').strip())
+        frame.puesto_var.set((row.get('puesto') or '').strip())
+        frame.nombre_agencia_var.set((row.get('nombre_agencia') or '').strip())
+        frame.codigo_agencia_var.set((row.get('codigo_agencia') or '').strip())
+        frame.tipo_falta_var.set((row.get('tipo_falta') or '').strip() or 'No aplica')
+        frame.tipo_sancion_var.set((row.get('tipo_sancion') or '').strip() or 'No aplica')
+        self.team_lookup[id_col] = {
             'division': frame.division_var.get(),
             'area': frame.area_var.get(),
             'servicio': frame.servicio_var.get(),
@@ -3142,103 +3286,131 @@ class FraudCaseApp:
             'nombre_agencia': frame.nombre_agencia_var.get(),
             'codigo_agencia': frame.codigo_agencia_var.get(),
         }
-        return frame, created or was_empty
 
-    def _find_product_frame(self, product_id):
-        product_id = (product_id or '').strip()
+    def _populate_product_frame_from_row(self, frame, row):
+        product_id = (row.get('id_producto') or row.get('IdProducto') or '').strip()
         if not product_id:
-            return None
-        return next((p for p in self.product_frames if p.id_var.get().strip() == product_id), None)
-
-    def _obtain_involvement_slot(self, product_frame):
-        for inv in product_frame.involvements:
-            if not inv.team_var.get().strip() and not inv.monto_var.get().strip():
-                return inv
-        product_frame.add_involvement()
-        return product_frame.involvements[-1]
-
-    def _apply_taxonomy_to_product(self, product_frame, cat1, cat2, modalidad, product_id):
-        cat1 = (cat1 or '').strip()
-        cat2 = (cat2 or '').strip()
-        modalidad = (modalidad or '').strip()
-        if cat1 in TAXONOMIA:
-            product_frame.cat1_var.set(cat1)
-            product_frame.on_cat1_change()
-            if cat2 in TAXONOMIA[cat1]:
-                product_frame.cat2_var.set(cat2)
-                product_frame.on_cat2_change()
-                if modalidad in TAXONOMIA[cat1][cat2]:
-                    product_frame.mod_var.set(modalidad)
-                elif modalidad:
-                    self._notify_taxonomy_warning(
-                        f"Producto {product_id}: la modalidad '{modalidad}' no corresponde a {cat1}/{cat2}."
-                    )
-            elif cat2:
-                self._notify_taxonomy_warning(
-                    f"Producto {product_id}: la categoría 2 '{cat2}' no existe bajo {cat1}."
-                )
-        elif cat1:
-            self._notify_taxonomy_warning(
-                f"Producto {product_id}: la categoría 1 '{cat1}' no está en la taxonomía."
-            )
-            product_frame.cat1_var.set(cat1)
-
-    def _populate_product_frame_from_row(self, product_frame, row):
-        pid = (row.get('id_producto') or '').strip()
-        if pid:
-            product_frame.id_var.set(pid)
-        client_id = (row.get('id_cliente') or row.get('cliente') or '').strip()
+            return
+        frame.id_var.set(product_id)
+        client_id = (row.get('id_cliente') or row.get('IdCliente') or '').strip()
         if client_id:
-            product_frame.client_var.set(client_id)
-        self._apply_taxonomy_to_product(
-            product_frame,
-            row.get('categoria1', ''),
-            row.get('categoria2', ''),
-            row.get('modalidad', ''),
-            pid or product_frame.id_var.get().strip(),
-        )
-        product_frame.canal_var.set(row.get('canal', product_frame.canal_var.get() or CANAL_LIST[0]))
-        product_frame.proceso_var.set(row.get('proceso', product_frame.proceso_var.get() or PROCESO_LIST[0]))
-        product_frame.fecha_oc_var.set(row.get('fecha_ocurrencia', product_frame.fecha_oc_var.get()))
-        product_frame.fecha_desc_var.set(row.get('fecha_descubrimiento', product_frame.fecha_desc_var.get()))
-        product_frame.monto_inv_var.set(row.get('monto_investigado', product_frame.monto_inv_var.get()))
-        product_frame.moneda_var.set(row.get('tipo_moneda', product_frame.moneda_var.get() or TIPO_MONEDA_LIST[0]))
-        product_frame.monto_perdida_var.set(row.get('monto_perdida_fraude', product_frame.monto_perdida_var.get()))
-        product_frame.monto_falla_var.set(row.get('monto_falla_procesos', product_frame.monto_falla_var.get()))
-        product_frame.monto_cont_var.set(row.get('monto_contingencia', product_frame.monto_cont_var.get()))
-        product_frame.monto_rec_var.set(row.get('monto_recuperado', product_frame.monto_rec_var.get()))
-        product_frame.monto_pago_var.set(row.get('monto_pago_deuda', product_frame.monto_pago_var.get()))
-        tipo_prod = (row.get('tipo_producto') or '').strip()
+            values = list(frame.client_cb['values'])
+            if client_id not in values:
+                values.append(client_id)
+                frame.client_cb['values'] = values
+            frame.client_var.set(client_id)
+            frame.client_cb.set(client_id)
+        cat1 = (row.get('categoria1') or '').strip()
+        cat2 = (row.get('categoria2') or '').strip()
+        mod = (row.get('modalidad') or '').strip()
+        if cat1:
+            if cat1 in TAXONOMIA:
+                if frame.cat1_var.get() != cat1:
+                    frame.cat1_var.set(cat1)
+                    frame.on_cat1_change()
+            else:
+                self._notify_taxonomy_warning(
+                    f"Producto {product_id}: la categoría 1 '{cat1}' no está en la taxonomía."
+                )
+                frame.cat1_var.set(cat1)
+        if cat2:
+            if cat1 in TAXONOMIA and cat2 in TAXONOMIA[cat1]:
+                frame.cat2_var.set(cat2)
+                frame.cat2_cb.set(cat2)
+                frame.on_cat2_change()
+            else:
+                self._notify_taxonomy_warning(
+                    f"Producto {product_id}: la categoría 2 '{cat2}' no corresponde a {cat1}."
+                )
+                frame.cat2_var.set(cat2)
+        if mod:
+            valid_mods = TAXONOMIA.get(cat1, {}).get(cat2, [])
+            if mod in valid_mods:
+                frame.mod_var.set(mod)
+                frame.mod_cb.set(mod)
+            else:
+                self._notify_taxonomy_warning(
+                    f"Producto {product_id}: la modalidad '{mod}' no corresponde a {cat1}/{cat2}."
+                )
+                frame.mod_var.set(mod)
+        canal = (row.get('canal') or '').strip()
+        if canal in CANAL_LIST:
+            frame.canal_var.set(canal)
+        proceso = (row.get('proceso') or '').strip()
+        if proceso in PROCESO_LIST:
+            frame.proceso_var.set(proceso)
+        tipo_prod = (row.get('tipo_producto') or row.get('tipoProducto') or '').strip()
         if tipo_prod in TIPO_PRODUCTO_LIST:
-            product_frame.tipo_prod_var.set(tipo_prod)
-        elif tipo_prod:
-            product_frame.tipo_prod_var.set(tipo_prod)
-        product_frame.id_reclamo_var.set((row.get('id_reclamo') or '').strip())
-        product_frame.nombre_analitica_var.set((row.get('nombre_analitica') or '').strip())
-        product_frame.codigo_analitica_var.set((row.get('codigo_analitica') or '').strip())
-        pid_lookup = product_frame.id_var.get().strip()
-        if pid_lookup:
-            self.product_lookup[pid_lookup] = {
-                'id_cliente': product_frame.client_var.get(),
-                'tipo_producto': product_frame.tipo_prod_var.get(),
-                'categoria1': product_frame.cat1_var.get(),
-                'categoria2': product_frame.cat2_var.get(),
-                'modalidad': product_frame.mod_var.get(),
-                'canal': product_frame.canal_var.get(),
-                'proceso': product_frame.proceso_var.get(),
-                'fecha_ocurrencia': product_frame.fecha_oc_var.get(),
-                'fecha_descubrimiento': product_frame.fecha_desc_var.get(),
-                'monto_investigado': product_frame.monto_inv_var.get(),
-                'tipo_moneda': product_frame.moneda_var.get(),
-                'monto_perdida_fraude': product_frame.monto_perdida_var.get(),
-                'monto_falla_procesos': product_frame.monto_falla_var.get(),
-                'monto_contingencia': product_frame.monto_cont_var.get(),
-                'monto_recuperado': product_frame.monto_rec_var.get(),
-                'monto_pago_deuda': product_frame.monto_pago_var.get(),
-                'id_reclamo': product_frame.id_reclamo_var.get(),
-                'nombre_analitica': product_frame.nombre_analitica_var.get(),
-                'codigo_analitica': product_frame.codigo_analitica_var.get(),
-            }
+            frame.tipo_prod_var.set(tipo_prod)
+        fecha_occ = (row.get('fecha_ocurrencia') or '').strip()
+        if fecha_occ:
+            frame.fecha_oc_var.set(fecha_occ)
+        fecha_desc = (row.get('fecha_descubrimiento') or '').strip()
+        if fecha_desc:
+            frame.fecha_desc_var.set(fecha_desc)
+        frame.monto_inv_var.set((row.get('monto_investigado') or '').strip())
+        moneda = (row.get('tipo_moneda') or '').strip()
+        if moneda in TIPO_MONEDA_LIST:
+            frame.moneda_var.set(moneda)
+        frame.monto_perdida_var.set((row.get('monto_perdida_fraude') or '').strip())
+        frame.monto_falla_var.set((row.get('monto_falla_procesos') or '').strip())
+        frame.monto_cont_var.set((row.get('monto_contingencia') or '').strip())
+        frame.monto_rec_var.set((row.get('monto_recuperado') or '').strip())
+        frame.monto_pago_var.set((row.get('monto_pago_deuda') or '').strip())
+        frame.id_reclamo_var.set((row.get('id_reclamo') or '').strip())
+        frame.nombre_analitica_var.set((row.get('nombre_analitica') or '').strip())
+        frame.codigo_analitica_var.set((row.get('codigo_analitica') or '').strip())
+        self.product_lookup[product_id] = {
+            'id_cliente': frame.client_var.get(),
+            'tipo_producto': frame.tipo_prod_var.get(),
+            'categoria1': frame.cat1_var.get(),
+            'categoria2': frame.cat2_var.get(),
+            'modalidad': frame.mod_var.get(),
+            'canal': frame.canal_var.get(),
+            'proceso': frame.proceso_var.get(),
+            'fecha_ocurrencia': frame.fecha_oc_var.get(),
+            'fecha_descubrimiento': frame.fecha_desc_var.get(),
+            'monto_investigado': frame.monto_inv_var.get(),
+            'tipo_moneda': frame.moneda_var.get(),
+            'monto_perdida_fraude': frame.monto_perdida_var.get(),
+            'monto_falla_procesos': frame.monto_falla_var.get(),
+            'monto_contingencia': frame.monto_cont_var.get(),
+            'monto_recuperado': frame.monto_rec_var.get(),
+            'monto_pago_deuda': frame.monto_pago_var.get(),
+            'id_reclamo': frame.id_reclamo_var.get(),
+            'nombre_analitica': frame.nombre_analitica_var.get(),
+            'codigo_analitica': frame.codigo_analitica_var.get(),
+        }
+
+    def _ensure_client_exists(self, client_id, row_data=None):
+        client_id = (client_id or '').strip()
+        if not client_id:
+            return None, False
+        frame = self._find_client_frame(client_id)
+        created = False
+        if not frame:
+            frame = self._obtain_client_slot_for_import()
+            created = True
+        if created and row_data:
+            payload = dict(row_data)
+            payload['id_cliente'] = client_id
+            self._populate_client_frame_from_row(frame, payload)
+        return frame, created
+
+    def _ensure_team_member_exists(self, collaborator_id, row_data=None):
+        collaborator_id = (collaborator_id or '').strip()
+        if not collaborator_id:
+            return None, False
+        frame = self._find_team_frame(collaborator_id)
+        created = False
+        if not frame:
+            frame = self._obtain_team_slot_for_import()
+            created = True
+        if created and row_data:
+            payload = dict(row_data)
+            payload['id_colaborador'] = collaborator_id
+            self._populate_team_frame_from_row(frame, payload)
+        return frame, created
 
     def import_clients(self, filename=None):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
@@ -3247,440 +3419,98 @@ class FraudCaseApp:
         if not filename:
             messagebox.showwarning("Sin archivo", "No se seleccionó un CSV para clientes ni se encontró el ejemplo.")
             return
+        imported = 0
+        missing_ids = []
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            for row in iter_massive_csv_rows(filename):
+                hydrated, found = self._hydrate_row_from_details(row, 'id_cliente', CLIENT_ID_ALIASES)
+                id_cliente = (hydrated.get('id_cliente') or '').strip()
+                if not id_cliente:
+                    continue
+                frame = self._find_client_frame(id_cliente) or self._obtain_client_slot_for_import()
+                self._populate_client_frame_from_row(frame, hydrated)
+                imported += 1
+                if not found and 'id_cliente' in self.detail_catalogs:
+                    missing_ids.append(id_cliente)
+            self.save_auto()
+            log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
+            if imported:
+                self.sync_main_form_after_import("clientes")
+                messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
+            else:
+                messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar clientes: {ex}")
             return
-        imported = 0
-        missing_details = []
-        for raw_row in rows:
-            row, found_detail, identifier = self._hydrate_row_from_details(raw_row, "clientes")
-            id_cliente = identifier or (row.get('id_cliente') or row.get('IdCliente') or '').strip()
-            if not id_cliente:
-                continue
-            existing = self._find_client_frame(id_cliente)
-            target_frame = existing or self._obtain_client_slot_for_import()
-            if existing:
-                log_event("navegacion", f"Actualizó cliente {id_cliente} desde importación", self.logs)
-            self._populate_client_frame_from_row(target_frame, row)
-            imported += 1
-            if identifier and not found_detail:
-                missing_details.append(identifier)
-        self.update_client_options_global()
-        self._safe_update_idletasks()
-        self.save_auto()
-        log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
-        if imported:
-            self.sync_main_form_after_import("clientes")
-            messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
-        else:
-            messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
-        self._report_missing_detail_ids("clientes", missing_details)
+        self._report_missing_detail_ids("clientes", missing_ids)
 
     def import_team_members(self, filename=None):
-        """Importa colaboradores desde un archivo CSV y los añade a la lista.
+        """Importa colaboradores desde un archivo CSV y los añade a la lista."""
 
-        Esta función abre un diálogo para seleccionar un archivo CSV que debe
-        contener al menos una columna ``id_colaborador``.  Cada fila del
-        archivo se convierte en una nueva entrada de colaborador dentro del
-        formulario, rellenando los campos con la información encontrada.  Los
-        IDs duplicados se omiten para evitar crear dos registros con el mismo
-        identificador.  Tras la importación se actualizan las listas
-        desplegables que dependen de los colaboradores y se guarda un
-        autosave.
-
-        Ejemplo de uso:
-
-            >>> # El usuario hace clic en "Cargar colaboradores" y selecciona un CSV
-            # con columnas id_colaborador, flag, division, area, servicio, puesto,
-            # nombre_agencia, codigo_agencia, tipo_falta, tipo_sancion
-            app.import_team_members()
-
-        """
         filename = filename or self._select_csv_file("colaboradores", "Seleccionar CSV de colaboradores")
         if not filename:
             messagebox.showwarning("Sin archivo", "No hay CSV para colaboradores disponible.")
             return
+        imported = 0
+        missing_ids = []
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            for row in iter_massive_csv_rows(filename):
+                hydrated, found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
+                collaborator_id = (hydrated.get('id_colaborador') or '').strip()
+                if not collaborator_id:
+                    continue
+                frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
+                self._populate_team_frame_from_row(frame, hydrated)
+                imported += 1
+                if not found and 'id_colaborador' in self.detail_catalogs:
+                    missing_ids.append(collaborator_id)
+            self.save_auto()
+            log_event("navegacion", f"Colaboradores importados desde CSV: {imported}", self.logs)
+            if imported:
+                self.sync_main_form_after_import("colaboradores")
+                messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar colaboradores: {ex}")
             return
-        imported = 0
-        missing_details = []
-        for raw_row in rows:
-            row, found_detail, identifier = self._hydrate_row_from_details(raw_row, "colaboradores")
-            id_col = identifier or (row.get('id_colaborador') or row.get('IdColaborador') or '').strip()
-            if not id_col:
-                continue
-            frame = self._find_team_frame(id_col)
-            if frame:
-                log_event("navegacion", f"Actualizó colaborador {id_col} desde importación", self.logs)
-            self._ensure_team_member_exists(id_col, row)
-            imported += 1
-            if identifier and not found_detail:
-                missing_details.append(identifier)
-        self.update_team_options_global()
-        self._safe_update_idletasks()
-        self.save_auto()
-        log_event("navegacion", "Colaboradores importados desde CSV", self.logs)
-        if imported:
-            self.sync_main_form_after_import("colaboradores")
-            messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
-        else:
-            messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
-        self._report_missing_detail_ids("colaboradores", missing_details)
+        self._report_missing_detail_ids("colaboradores", missing_ids)
 
     def import_products(self, filename=None):
-        """Importa productos desde un archivo CSV y los añade a la lista.
+        """Importa productos desde un archivo CSV y los añade a la lista."""
 
-        Cada fila del CSV define un producto e incluye columnas como
-        ``id_producto``, ``id_cliente``, ``categoria1``, ``categoria2``,
-        ``modalidad``, ``canal``, ``proceso``, ``fecha_ocurrencia``,
-        ``fecha_descubrimiento``, ``monto_investigado``, ``tipo_moneda``,
-        ``monto_perdida_fraude``, ``monto_falla_procesos``,
-        ``monto_contingencia``, ``monto_recuperado``, ``monto_pago_deuda``,
-        ``tipo_producto``, ``id_reclamo``, ``nombre_analitica`` y
-        ``codigo_analitica``.  Esta función crea una entrada por cada
-        producto, asigna el cliente correcto (creándolo si no existe) y
-        selecciona la taxonomía adecuada si coincide con los valores
-        permitidos.  Los productos duplicados se omiten.  Las asignaciones
-        de montos a colaboradores no se cargan en esta función; para ello
-        utilice el importador combinado.  Después de la importación se
-        actualiza el autosave y se registra un evento de navegación.
-
-        """
         filename = filename or self._select_csv_file("productos", "Seleccionar CSV de productos")
         if not filename:
             messagebox.showwarning("Sin archivo", "No se seleccionó CSV de productos ni se encontró el ejemplo.")
             return
+        imported = 0
+        missing_ids = []
         try:
-            rows = list(iter_massive_csv_rows(filename))
+            for row in iter_massive_csv_rows(filename):
+                hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
+                product_id = (hydrated.get('id_producto') or '').strip()
+                if not product_id:
+                    continue
+                frame = self._find_product_frame(product_id) or self._obtain_product_slot_for_import()
+                client_id = (hydrated.get('id_cliente') or '').strip()
+                if client_id:
+                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                    self._ensure_client_exists(client_id, client_details)
+                self._populate_product_frame_from_row(frame, hydrated)
+                imported += 1
+                if not found and 'id_producto' in self.detail_catalogs:
+                    missing_ids.append(product_id)
+            self.save_auto()
+            log_event("navegacion", f"Productos importados desde CSV: {imported}", self.logs)
+            if imported:
+                self.sync_main_form_after_import("productos")
+                messagebox.showinfo("Importación completa", "Productos importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se detectaron productos nuevos en el archivo.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar productos: {ex}")
             return
-        imported = 0
-        missing_products = []
-        missing_clients = []
-        for raw_row in rows:
-            row, prod_found, prod_identifier = self._hydrate_row_from_details(raw_row, "productos")
-            row, client_found, client_identifier = self._hydrate_row_from_details(row, "clientes")
-            id_prod = prod_identifier or (row.get('id_producto') or '').strip()
-            if not id_prod:
-                continue
-            pr = self._find_product_frame(id_prod)
-            if pr:
-                log_event("navegacion", f"Actualizó producto {id_prod} desde importación", self.logs)
-            else:
-                self.add_product()
-                pr = self.product_frames[-1]
-                pr.id_var.set(id_prod)
-            client_id = client_identifier or (row.get('id_cliente') or row.get('cliente') or '').strip()
-            if client_id:
-                self._ensure_client_exists(client_id, row)
-                pr.client_var.set(client_id)
-            self._populate_product_frame_from_row(pr, row)
-            imported += 1
-            if prod_identifier and not prod_found:
-                missing_products.append(prod_identifier)
-            if client_identifier and not client_found:
-                missing_clients.append(client_identifier)
-        self.update_client_options_global()
-        self._safe_update_idletasks()
-        self.save_auto()
-        log_event("navegacion", "Productos importados desde CSV", self.logs)
-        if imported:
-            self.sync_main_form_after_import("productos")
-            messagebox.showinfo("Importación completa", "Productos importados correctamente.")
-        else:
-            messagebox.showwarning("Sin cambios", "No se añadieron productos nuevos.")
-        self._report_missing_detail_ids("productos", missing_products)
-        self._report_missing_detail_ids("clientes", missing_clients)
-
-    def import_combined(self, filename=None):
-        """Importa datos combinados de productos, clientes y colaboradores.
-
-        Este importador permite cargar en un único CSV toda la información
-        relacionada con un producto, incluyendo su cliente, colaborador(es),
-        montos asignados y taxonomía.  Cada fila puede contener columnas
-        ``id_cliente``, ``tipo_id``, ``flag_cliente``, ``telefonos``,
-        ``correos``, ``direcciones``, ``accionado``, ``id_colaborador``,
-        ``flag_colaborador``, ``division``, ``area``, ``servicio``,
-        ``puesto``, ``nombre_agencia``, ``codigo_agencia``, ``tipo_falta``,
-        ``tipo_sancion``, ``id_producto``, ``categoria1``, ``categoria2``,
-        ``modalidad``, ``canal``, ``proceso``, ``fecha_ocurrencia``,
-        ``fecha_descubrimiento``, ``monto_investigado``, ``tipo_moneda``,
-        ``monto_perdida_fraude``, ``monto_falla_procesos``,
-        ``monto_contingencia``, ``monto_recuperado``, ``monto_pago_deuda``,
-        ``tipo_producto``, ``id_reclamo``, ``nombre_analitica``,
-        ``codigo_analitica``, ``flag_colaborador``, ``monto_asignado``.
-
-        La función crea o actualiza clientes y colaboradores según sea
-        necesario y añade productos con toda su información.  Además
-        procesa las columnas de asignación de montos a colaboradores
-        (``monto_asignado``) creando entradas en la sección de
-        involucra‑miembros.  Los valores de categoría se validan
-        contra la taxonomía y se seleccionan en los desplegables
-        correspondientes.  Al finalizar se registra un evento de
-        navegación y se guarda un autosave.
-
-        """
-        filename = filename or self._select_csv_file("combinado", "Seleccionar CSV combinado")
-        if not filename:
-            messagebox.showwarning("Sin archivo", "No hay CSV combinado disponible para importar.")
-            return
-        try:
-            rows = list(iter_massive_csv_rows(filename))
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
-            return
-        created_records = False
-        missing_clients = []
-        missing_collaborators = []
-        missing_products = []
-        for raw_row in rows:
-            row, client_found, client_identifier = self._hydrate_row_from_details(raw_row, "clientes")
-            row, collaborator_found, collaborator_identifier = self._hydrate_row_from_details(row, "colaboradores")
-            row, product_found, product_identifier = self._hydrate_row_from_details(row, "productos")
-            id_cliente = client_identifier or (row.get('id_cliente') or '').strip()
-            id_col = collaborator_identifier or (row.get('id_colaborador') or '').strip()
-            id_prod = product_identifier or (row.get('id_producto') or '').strip()
-            if id_cliente:
-                _, created = self._ensure_client_exists(id_cliente, row)
-                created_records = created_records or created
-            if id_col:
-                _, created = self._ensure_team_member_exists(id_col, row)
-                created_records = created_records or created
-            if not id_prod:
-                continue
-            prod = self._find_product_frame(id_prod)
-            if not prod:
-                self.add_product()
-                prod = self.product_frames[-1]
-                prod.id_var.set(id_prod)
-                created_records = True
-            else:
-                log_event("navegacion", f"Actualizó producto {id_prod} desde combinado", self.logs)
-            if id_cliente:
-                prod.client_var.set(id_cliente)
-            self._populate_product_frame_from_row(prod, row)
-            involvement_pairs = parse_involvement_entries(row.get('involucramiento', ''))
-            if not involvement_pairs and id_col and row.get('monto_asignado'):
-                involvement_pairs = [(id_col, (row.get('monto_asignado') or '').strip())]
-            for collaborator_id, amount in involvement_pairs:
-                if not collaborator_id:
-                    continue
-                inv_row_data = {'id_colaborador': collaborator_id}
-                inv_row_data, found_detail, _ = self._hydrate_row_from_details(inv_row_data, "colaboradores")
-                _, created = self._ensure_team_member_exists(collaborator_id, inv_row_data)
-                created_records = created_records or created
-                inv_row = next((inv for inv in prod.involvements if inv.team_var.get().strip() == collaborator_id), None)
-                if not inv_row:
-                    inv_row = self._obtain_involvement_slot(prod)
-                inv_row.team_var.set(collaborator_id)
-                inv_row.monto_var.set(amount)
-                created_records = True
-                if collaborator_id and not found_detail:
-                    missing_collaborators.append(collaborator_id)
-            if client_identifier and not client_found:
-                missing_clients.append(client_identifier)
-            if collaborator_identifier and not collaborator_found:
-                missing_collaborators.append(collaborator_identifier)
-            if product_identifier and not product_found:
-                missing_products.append(product_identifier)
-        self.update_client_options_global()
-        self.update_team_options_global()
-        self._safe_update_idletasks()
-        self.save_auto()
-        log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
-        if created_records:
-            self.sync_main_form_after_import("datos combinados")
-            messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
-        else:
-            messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
-        self._report_missing_detail_ids("clientes", missing_clients)
-        self._report_missing_detail_ids("colaboradores", missing_collaborators)
-        self._report_missing_detail_ids("productos", missing_products)
-
-    def import_risks(self, filename=None):
-        """Importa riesgos desde un archivo CSV.
-
-        Cada fila del CSV debe contener las columnas ``id_riesgo``,
-        ``id_caso``, ``lider``, ``descripcion``, ``criticidad``,
-        ``exposicion_residual`` y ``planes_accion``.  La función crea
-        entradas de riesgo en la sección de riesgos y valida que los
-        identificadores no se repitan y que cumplan el formato
-        ``RSK-`` seguido de 6 a 10 dígitos.  Al importar, los riesgos
-        se vinculan al caso actual (si la columna ``id_caso`` coincide),
-        se registran eventos de navegación y se guarda un autosave.  Si
-        el CSV no contiene la columna ``id_caso``, todos los riesgos se
-        asocian al caso actual.
-
-        """
-        """Importa detalles de riesgos desde un archivo CSV.
-
-        El CSV debe contener columnas ``id_riesgo``, ``lider``, ``descripcion``,
-        ``criticidad``, ``exposicion_residual`` y ``planes_accion``. Crea
-        nuevas entradas de riesgo para cada fila. Si un ID de riesgo ya
-        existe, se registra en el log y se omite.
-        """
-        filename = filename or self._select_csv_file("riesgos", "Seleccionar CSV de riesgos")
-        if not filename:
-            messagebox.showwarning("Sin archivo", "No se encontró CSV de riesgos para importar.")
-            return
-        try:
-            rows = list(iter_massive_csv_rows(filename))
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar riesgos: {ex}")
-            return
-        imported = 0
-        missing_risks = []
-        for raw_row in rows:
-            row, found_detail, identifier = self._hydrate_row_from_details(raw_row, "riesgos")
-            rid = identifier or (row.get('id_riesgo') or '').strip()
-            if not rid:
-                continue
-            rf = next((r for r in self.risk_frames if r.id_var.get().strip() == rid), None)
-            if not rf:
-                self.add_risk()
-                rf = self.risk_frames[-1]
-                rf.id_var.set(rid)
-            else:
-                log_event("navegacion", f"Actualizó riesgo {rid} desde importación", self.logs)
-            rf.lider_var.set((row.get('lider') or '').strip())
-            rf.descripcion_var.set((row.get('descripcion') or '').strip())
-            crit = (row.get('criticidad') or '').strip()
-            if crit in CRITICIDAD_LIST:
-                rf.criticidad_var.set(crit)
-            rf.exposicion_var.set((row.get('exposicion_residual') or '').strip())
-            rf.planes_var.set((row.get('planes_accion') or '').strip())
-            imported += 1
-            if identifier and not found_detail:
-                missing_risks.append(identifier)
-        self._safe_update_idletasks()
-        self.save_auto()
-        log_event("navegacion", "Riesgos importados desde CSV", self.logs)
-        if imported:
-            messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
-        else:
-            messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
-        self._report_missing_detail_ids("riesgos", missing_risks)
-
-    def import_norms(self, filename=None):
-        """Importa normas transgredidas desde un archivo CSV.
-
-        El archivo CSV debe tener las columnas ``id_norma``, ``id_caso``,
-        ``descripcion`` y ``fecha_vigencia``.  Esta función añade
-        entradas de normas a la sección correspondiente, verificando que
-        cada identificador sea único y que cumpla el patrón
-        ``XXXX.XXX.XX.XX`` (o se deje en blanco para generarlo
-        automáticamente).  Se asocian al caso actual mediante la
-        columna ``id_caso`` si existe; en caso contrario se utiliza el
-        número de caso activo.  Tras la importación se registra un
-        autosave.
-
-        """
-        """Importa detalles de normas desde un archivo CSV.
-
-        El CSV debe contener columnas ``id_norma``, ``descripcion`` y
-        ``fecha_vigencia``. Crea nuevas normas para cada fila. Si un ID de
-        norma ya existe, se registra en el log y se omite.
-        """
-        filename = filename or self._select_csv_file("normas", "Seleccionar CSV de normas")
-        if not filename:
-            messagebox.showwarning("Sin archivo", "No se encontró CSV de normas.")
-            return
-        try:
-            rows = list(iter_massive_csv_rows(filename))
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar normas: {ex}")
-            return
-        imported = 0
-        missing_norms = []
-        for raw_row in rows:
-            row, found_detail, identifier = self._hydrate_row_from_details(raw_row, "normas")
-            nid = identifier or (row.get('id_norma') or '').strip()
-            if not nid:
-                continue
-            nf = next((n for n in self.norm_frames if n.id_var.get().strip() == nid), None)
-            if not nf:
-                self.add_norm()
-                nf = self.norm_frames[-1]
-                nf.id_var.set(nid)
-            else:
-                log_event("navegacion", f"Actualizó norma {nid} desde importación", self.logs)
-            nf.descripcion_var.set((row.get('descripcion') or '').strip())
-            nf.fecha_var.set((row.get('fecha_vigencia') or '').strip())
-            imported += 1
-            if identifier and not found_detail:
-                missing_norms.append(identifier)
-        self._safe_update_idletasks()
-        self.save_auto()
-        log_event("navegacion", "Normas importadas desde CSV", self.logs)
-        if imported:
-            messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
-        else:
-            messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
-        self._report_missing_detail_ids("normas", missing_norms)
-
-    def import_claims(self, filename=None):
-        """Importa reclamos desde un archivo CSV.
-
-        Cada fila del CSV debe incluir ``id_reclamo``, ``id_caso``,
-        ``id_producto``, ``nombre_analitica`` y ``codigo_analitica``.
-        Esta función crea o actualiza registros de reclamo vinculando
-        cada reclamo con su producto y su caso.  El identificador de
-        reclamo debe iniciar con ``C`` y estar seguido de ocho dígitos
-        (``CXXXXXXXX``) o puede estar vacío si el producto no tiene
-        montos de pérdida/falla/contingencia.  Los códigos de analítica
-        se validan para cumplir los requisitos de 10 dígitos y prefijo
-        permitido (43, 45, 46 o 56).  Al finalizar se guarda un autosave
-        y se registra el evento de navegación.
-
-        """
-        """Importa reclamos desde un archivo CSV.
-
-        El CSV debe contener columnas ``id_reclamo``, ``id_producto``,
-        ``nombre_analitica`` y ``codigo_analitica``. Para cada fila se
-        asignan los datos al producto correspondiente. Si el producto no
-        existe en la interfaz, se registra un error y se omite.
-        """
-        filename = filename or self._select_csv_file("reclamos", "Seleccionar CSV de reclamos")
-        if not filename:
-            messagebox.showwarning("Sin archivo", "No se encontró CSV de reclamos.")
-            return
-        try:
-            rows = list(iter_massive_csv_rows(filename))
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar reclamos: {ex}")
-            return
-        imported = 0
-        missing_claims = []
-        for raw_row in rows:
-            row, found_detail, identifier = self._hydrate_row_from_details(raw_row, "reclamos")
-            rid = identifier or (row.get('id_reclamo') or '').strip()
-            pid = (row.get('id_producto') or '').strip()
-            if not pid:
-                continue
-            prod = self._find_product_frame(pid)
-            if not prod:
-                log_event("validacion", f"Producto {pid} no encontrado para reclamo {rid}", self.logs)
-                continue
-            prod.id_reclamo_var.set(rid)
-            prod.nombre_analitica_var.set((row.get('nombre_analitica') or '').strip())
-            prod.codigo_analitica_var.set((row.get('codigo_analitica') or '').strip())
-            imported += 1
-            if identifier and not found_detail:
-                missing_claims.append(identifier)
-        self._safe_update_idletasks()
-        self.save_auto()
-        log_event("navegacion", "Reclamos importados desde CSV", self.logs)
-        if imported:
-            messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
-        else:
-            messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
-        self._report_missing_detail_ids("reclamos", missing_claims)
+        self._report_missing_detail_ids("productos", missing_ids)
 
     # ---------------------------------------------------------------------
     # Autoguardado y carga
