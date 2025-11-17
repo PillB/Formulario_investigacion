@@ -698,6 +698,17 @@ def validate_norm_id(value):
     return None
 
 
+def validate_risk_id(value):
+    """Valida el identificador de riesgo ``RSK-XXXXXX``."""
+
+    text = (value or "").strip()
+    if not text:
+        return "Debe ingresar el ID de riesgo."
+    if not re.fullmatch(r"RSK-\d{6}", text):
+        return "El ID de riesgo debe seguir el formato RSK-XXXXXX."
+    return None
+
+
 def validate_multi_selection(value, label):
     """Valida que exista al menos una selección en campos multiselección."""
     if not value.strip():
@@ -2202,10 +2213,7 @@ class RiskFrame:
 
     def _validate_risk_id(self):
         """Valida el formato del identificador de riesgo."""
-        value = self.id_var.get().strip()
-        if not re.match(r"^RSK-\d{4,10}$", value):
-            return "El ID de riesgo debe seguir el formato RSK-0000." 
-        return None
+        return validate_risk_id(self.id_var.get())
 
 
 class NormFrame:
@@ -3389,7 +3397,7 @@ class FraudCaseApp:
         except ValueError as exc:
             messagebox.showerror("Pegado no válido", str(exc))
             return "break"
-        ingestible_sections = {"clientes", "colaboradores", "productos"}
+        ingestible_sections = {"clientes", "colaboradores", "productos", "riesgos", "normas"}
         if key in ingestible_sections:
             try:
                 self.ingest_summary_rows(key, sanitized_rows)
@@ -3429,6 +3437,8 @@ class FraudCaseApp:
             "colaboradores": self._transform_clipboard_colaboradores,
             "productos": self._transform_clipboard_productos,
             "reclamos": self._transform_clipboard_reclamos,
+            "riesgos": self._transform_clipboard_riesgos,
+            "normas": self._transform_clipboard_normas,
         }
         handler = handlers.get(key)
         if not handler:
@@ -3542,6 +3552,68 @@ class FraudCaseApp:
             )
         return sanitized
 
+    def _transform_clipboard_riesgos(self, rows):
+        sanitized = []
+        valid_criticidades = set(CRITICIDAD_LIST)
+        valid_criticidades_text = ", ".join(CRITICIDAD_LIST)
+        for idx, values in enumerate(rows, start=1):
+            risk = {
+                "id_riesgo": values[0].strip().upper(),
+                "lider": values[1].strip(),
+                "criticidad": values[2].strip() or CRITICIDAD_LIST[0],
+                "exposicion": values[3].strip(),
+            }
+            message = validate_risk_id(risk["id_riesgo"])
+            if message:
+                raise ValueError(f"Riesgo fila {idx}: {message}")
+            if risk["criticidad"] not in valid_criticidades:
+                raise ValueError(
+                    f"Riesgo fila {idx}: la criticidad debe ser una de {valid_criticidades_text}."
+                )
+            exposure_message, exposure_decimal = validate_money_bounds(
+                risk["exposicion"],
+                "la exposición residual",
+                allow_blank=True,
+            )
+            if exposure_message:
+                raise ValueError(f"Riesgo fila {idx}: {exposure_message}")
+            exposure_text = f"{exposure_decimal:.2f}" if exposure_decimal is not None else ""
+            sanitized.append(
+                (
+                    risk["id_riesgo"],
+                    risk["lider"],
+                    risk["criticidad"],
+                    exposure_text,
+                )
+            )
+        return sanitized
+
+    def _transform_clipboard_normas(self, rows):
+        sanitized = []
+        for idx, values in enumerate(rows, start=1):
+            norm = {
+                "id_norma": values[0].strip(),
+                "descripcion": values[1].strip(),
+                "vigencia": values[2].strip(),
+            }
+            message = validate_norm_id(norm["id_norma"])
+            if message:
+                raise ValueError(f"Norma fila {idx}: {message}")
+            desc_message = validate_required_text(norm["descripcion"], "la descripción de la norma")
+            if desc_message:
+                raise ValueError(f"Norma fila {idx}: {desc_message}")
+            date_message = validate_date_text(norm["vigencia"], "la fecha de vigencia")
+            if date_message:
+                raise ValueError(f"Norma fila {idx}: {date_message}")
+            sanitized.append(
+                (
+                    norm["id_norma"],
+                    norm["descripcion"],
+                    norm["vigencia"],
+                )
+            )
+        return sanitized
+
     def ingest_summary_rows(self, section_key, rows):
         """Incorpora filas pegadas en las tablas de resumen al formulario principal."""
 
@@ -3650,6 +3722,45 @@ class FraudCaseApp:
             if processed:
                 self.save_auto()
                 self.sync_main_form_after_import("productos")
+            return processed
+        if section_key == "riesgos":
+            for values in rows:
+                risk_id = (values[0] or "").strip()
+                if not risk_id:
+                    continue
+                if any(r.id_var.get().strip() == risk_id for r in self.risk_frames):
+                    log_event("validacion", f"Riesgo duplicado {risk_id} en pegado", self.logs)
+                    continue
+                self.add_risk()
+                frame = self.risk_frames[-1]
+                frame.id_var.set(risk_id)
+                frame.lider_var.set((values[1] or "").strip())
+                criticidad = (values[2] or CRITICIDAD_LIST[0]).strip()
+                if criticidad in CRITICIDAD_LIST:
+                    frame.criticidad_var.set(criticidad)
+                frame.exposicion_var.set((values[3] or "").strip())
+                processed += 1
+            if processed:
+                self.save_auto()
+                self.sync_main_form_after_import("riesgos")
+            return processed
+        if section_key == "normas":
+            for values in rows:
+                norm_id = (values[0] or "").strip()
+                if not norm_id:
+                    continue
+                if any(n.id_var.get().strip() == norm_id for n in self.norm_frames):
+                    log_event("validacion", f"Norma duplicada {norm_id} en pegado", self.logs)
+                    continue
+                self.add_norm()
+                frame = self.norm_frames[-1]
+                frame.id_var.set(norm_id)
+                frame.descripcion_var.set((values[1] or "").strip())
+                frame.fecha_var.set((values[2] or "").strip())
+                processed += 1
+            if processed:
+                self.save_auto()
+                self.sync_main_form_after_import("normas")
             return processed
         raise ValueError("Esta tabla no admite pegado directo al formulario principal.")
 
@@ -4724,14 +4835,16 @@ class FraudCaseApp:
         risk_exposure_total = Decimal('0')
         risk_ids = set()
         plan_ids = set()
-        for r in self.risk_frames:
+        for idx, r in enumerate(self.risk_frames, start=1):
             rd = r.get_data()
             rid = rd['id_riesgo']
-            if not re.match(r"^RSK-\d{6,10}$", rid):
-                errors.append(f"ID de riesgo {rid} no sigue el formato RSK-XXXXXX (6-10 dígitos)")
-            if rid in risk_ids:
+            risk_message = validate_risk_id(rid)
+            if risk_message:
+                errors.append(f"Riesgo {idx}: {risk_message}")
+            elif rid in risk_ids:
                 errors.append(f"ID de riesgo duplicado: {rid}")
-            risk_ids.add(rid)
+            if rid:
+                risk_ids.add(rid)
             # Exposición
             message, exposure_decimal = validate_money_bounds(
                 rd['exposicion_residual'],
