@@ -2853,7 +2853,7 @@ class FraudCaseApp:
             # Si el widget ya no existe (por ejemplo, al cerrar la app), se ignora el error.
             pass
 
-    def sync_main_form_after_import(self, section_name):
+    def sync_main_form_after_import(self, section_name, stay_on_summary=False):
         """Sincroniza la interfaz principal después de importar datos masivos.
 
         La función se diseñó como respuesta directa al feedback de que los
@@ -2876,6 +2876,10 @@ class FraudCaseApp:
         Args:
             section_name (str): Nombre en español de la sección importada. Se
                 utiliza únicamente para detallar el mensaje del log.
+            stay_on_summary (bool): Cuando es ``True`` evita llamar a
+                :meth:`focus_main_tab` para que la vista permanezca en la
+                pestaña de Resumen tras pegar datos directamente en las tablas
+                auxiliares.
 
         Ejemplo::
 
@@ -2891,7 +2895,8 @@ class FraudCaseApp:
             # Si la ventana ya no existe (por ejemplo al cerrar la app) no es
             # necesario continuar con la sincronización.
             return
-        self.focus_main_tab()
+        if not stay_on_summary:
+            self.focus_main_tab()
         log_event(
             "navegacion",
             f"Sincronizó la pestaña principal tras importar {section_name}",
@@ -3483,7 +3488,7 @@ class FraudCaseApp:
         ingestible_sections = {"clientes", "colaboradores", "productos", "reclamos", "riesgos", "normas"}
         if key in ingestible_sections:
             try:
-                self.ingest_summary_rows(key, sanitized_rows)
+                self.ingest_summary_rows(key, sanitized_rows, stay_on_summary=True)
             except ValueError as exc:
                 messagebox.showerror("Pegado no válido", str(exc))
             return "break"
@@ -3710,7 +3715,7 @@ class FraudCaseApp:
             )
         return sanitized
 
-    def ingest_summary_rows(self, section_key, rows):
+    def ingest_summary_rows(self, section_key, rows, stay_on_summary=False):
         """Incorpora filas pegadas en las tablas de resumen al formulario principal."""
 
         if not rows:
@@ -3744,7 +3749,7 @@ class FraudCaseApp:
                 self._report_missing_detail_ids("clientes", missing_ids)
             if processed:
                 self.save_auto()
-                self.sync_main_form_after_import("clientes")
+                self.sync_main_form_after_import("clientes", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "colaboradores":
             for values in rows:
@@ -3775,7 +3780,7 @@ class FraudCaseApp:
                 self._report_missing_detail_ids("colaboradores", missing_ids)
             if processed:
                 self.save_auto()
-                self.sync_main_form_after_import("colaboradores")
+                self.sync_main_form_after_import("colaboradores", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "productos":
             for values in rows:
@@ -3820,7 +3825,7 @@ class FraudCaseApp:
                 self._report_missing_detail_ids("productos", missing_ids)
             if processed:
                 self.save_auto()
-                self.sync_main_form_after_import("productos")
+                self.sync_main_form_after_import("productos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "reclamos":
             for idx, values in enumerate(rows, start=1):
@@ -3853,7 +3858,7 @@ class FraudCaseApp:
                 processed += 1
             if processed:
                 self.save_auto()
-                self.sync_main_form_after_import("reclamos")
+                self.sync_main_form_after_import("reclamos", stay_on_summary=stay_on_summary)
                 log_event("navegacion", f"Reclamos pegados desde resumen: {processed}", self.logs)
             return processed
         if section_key == "riesgos":
@@ -3875,7 +3880,7 @@ class FraudCaseApp:
                 processed += 1
             if processed:
                 self.save_auto()
-                self.sync_main_form_after_import("riesgos")
+                self.sync_main_form_after_import("riesgos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "normas":
             for values in rows:
@@ -3893,7 +3898,7 @@ class FraudCaseApp:
                 processed += 1
             if processed:
                 self.save_auto()
-                self.sync_main_form_after_import("normas")
+                self.sync_main_form_after_import("normas", stay_on_summary=stay_on_summary)
             return processed
         raise ValueError("Esta tabla no admite pegado directo al formulario principal.")
 
