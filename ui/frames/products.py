@@ -511,16 +511,16 @@ class ProductFrame:
             self.monto_rec_var,
             self.monto_pago_var,
         ]
-        amount_consistency_validator = FieldValidator(
-            inv_entry,
-            self._validate_montos_consistentes,
-            self.logs,
-            f"Producto {self.idx+1} - Consistencia de montos",
-            variables=amount_vars,
+        shared_amount_vars = amount_vars + [self.tipo_prod_var]
+        self._create_amount_consistency_validators(
+            shared_amount_vars,
+            {
+                'inv': (inv_entry, "Monto investigado"),
+                'recuperado': (rec_entry, "Monto recuperado"),
+                'pago': (pago_entry, "Monto pago de deuda"),
+                'contingencia': (cont_entry, "Monto contingencia"),
+            },
         )
-        for entry in [perdida_entry, falla_entry, cont_entry, rec_entry, pago_entry]:
-            amount_consistency_validator.add_widget(entry)
-        self.validators.append(amount_consistency_validator)
 
     def on_cat1_change(self):
         cat1 = self.cat1_var.get()
@@ -582,6 +582,17 @@ class ProductFrame:
             self.add_claim()
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
+
+    def _create_amount_consistency_validators(self, variables, widget_map):
+        for key, (widget, label) in widget_map.items():
+            validator = FieldValidator(
+                widget,
+                lambda key=key: self._validate_montos_consistentes(key),
+                self.logs,
+                f"Producto {self.idx+1} - Consistencia de montos ({label})",
+                variables=variables,
+            )
+            self.validators.append(validator)
 
     def obtain_claim_slot(self):
         empty = next((claim for claim in self.claims if claim.is_empty()), None)
@@ -787,35 +798,44 @@ class ProductFrame:
             self.fecha_desc_var.get(),
         )
 
-    def _validate_montos_consistentes(self):
+    def _collect_amount_values(self):
         values = {}
         for _, var_attr, label, allow_blank, key in PRODUCT_MONEY_SPECS:
             raw_value = getattr(self, var_attr).get()
             message, decimal_value = validate_money_bounds(raw_value, label, allow_blank=allow_blank)
             if message:
-                return message
+                return None
             values[key] = decimal_value if decimal_value is not None else Decimal('0')
+        return values
 
+    def _validate_montos_consistentes(self, target_key: str | None = None):
+        values = self._collect_amount_values()
+        if values is None:
+            return None
         componentes = sum_investigation_components(
             perdida=values['perdida'],
             falla=values['falla'],
             contingencia=values['contingencia'],
             recuperado=values['recuperado'],
         )
+        errors = {}
         if abs(componentes - values['inv']) > Decimal('0.01'):
-            return (
+            errors['inv'] = (
                 "La suma de las cuatro partidas (pérdida, falla, contingencia y recuperación) "
                 "debe ser igual al monto investigado."
             )
         if values['recuperado'] > values['inv']:
-            return "El monto recuperado no puede superar el monto investigado."
+            errors['recuperado'] = "El monto recuperado no puede superar el monto investigado."
         if values['pago'] > values['inv']:
-            return "El pago de deuda no puede ser mayor al monto investigado."
+            errors['pago'] = "El pago de deuda no puede ser mayor al monto investigado."
         tipo_prod = normalize_without_accents(self.tipo_prod_var.get()).lower()
         if any(word in tipo_prod for word in ('credito', 'tarjeta')):
             if abs(values['contingencia'] - values['inv']) > Decimal('0.01'):
-                return "El monto de contingencia debe ser igual al monto investigado para créditos o tarjetas."
-        return None
+                errors['contingencia'] = (
+                    "El monto de contingencia debe ser igual al monto investigado para créditos o tarjetas."
+                )
+        target = target_key or 'inv'
+        return errors.get(target)
 
     def get_data(self):
         return {
