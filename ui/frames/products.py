@@ -384,7 +384,7 @@ class ProductFrame:
         self.validators.extend(
             [
                 FieldValidator(
-                    self.cat1_var,
+                    cat1_cb,
                     lambda: validate_required_text(self.cat1_var.get(), "la categoría 1"),
                     self.logs,
                     f"Producto {self.idx+1} - Categoría 1",
