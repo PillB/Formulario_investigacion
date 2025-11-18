@@ -2487,6 +2487,7 @@ class FraudCaseApp:
             try:
                 with open(AUTOSAVE_FILE, 'r', encoding="utf-8") as f:
                     data = json.load(f)
+                self._reset_form_state(confirm=False, save_autosave=False)
                 self.populate_from_data(data)
                 log_event("navegacion", "Se cargó el autosave", self.logs)
             except Exception as ex:
@@ -2515,19 +2516,27 @@ class FraudCaseApp:
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo cargar la versión: {ex}")
 
-    def clear_all(self):
-        """Elimina todos los datos actuales y restablece el formulario.
+    def _reset_form_state(self, confirm=True, save_autosave=True):
+        """Restablece el formulario a su estado inicial.
 
-        Este método solicita confirmación al usuario para borrar toda la
-        información cargada: clientes, colaboradores, productos, riesgos,
-        normas y narrativas.  Si el usuario confirma, todos los frames
-        dinámicos se destruyen, las listas se vacían y se restablecen los
-        valores por defecto de los campos del caso.  También se elimina el
-        autosave y se registran eventos de navegación y validación.
+        Args:
+            confirm: Si es ``True`` solicita confirmación al usuario antes de
+                continuar.
+            save_autosave: Si es ``True`` persiste inmediatamente el estado
+                vacío mediante ``save_auto``.
 
+        Returns:
+            ``True`` si el formulario se restableció, ``False`` si el usuario
+            canceló la acción.
         """
-        if not messagebox.askyesno("Confirmar", "¿Desea borrar todos los datos? Esta acción no se puede deshacer."):
-            return
+
+        if confirm:
+            confirmed = messagebox.askyesno(
+                "Confirmar",
+                "¿Desea borrar todos los datos? Esta acción no se puede deshacer.",
+            )
+            if not confirmed:
+                return False
         # Limpiar campos del caso
         self.id_caso_var.set("")
         self.tipo_informe_var.set(TIPO_INFORME_LIST[0])
@@ -2563,8 +2572,15 @@ class FraudCaseApp:
         self.descargos_var.set("")
         self.conclusiones_var.set("")
         self.recomendaciones_var.set("")
-        # Guardar auto
-        self.save_auto()
+        if save_autosave:
+            self.save_auto()
+        return True
+
+    def clear_all(self):
+        """Elimina todos los datos actuales y restablece el formulario."""
+
+        if not self._reset_form_state(confirm=True, save_autosave=True):
+            return
         log_event("navegacion", "Se borraron todos los datos", self.logs)
         messagebox.showinfo("Datos borrados", "Todos los datos han sido borrados.")
 
@@ -2627,8 +2643,8 @@ class FraudCaseApp:
 
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
-        # Limpiar primero
-        self.clear_all()
+        # Limpiar primero sin confirmar ni sobrescribir el autosave
+        self._reset_form_state(confirm=False, save_autosave=False)
         # Datos de caso
         caso = data.get('caso', {})
         self.id_caso_var.set(caso.get('id_caso', ''))
