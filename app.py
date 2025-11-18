@@ -3660,6 +3660,17 @@ class FraudCaseApp:
                 errors.append(f"ID de riesgo duplicado: {rid}")
             if rid:
                 risk_ids.add(rid)
+            criticidad_value = (rd.get('criticidad') or '').strip()
+            criticidad_message = validate_required_text(
+                criticidad_value,
+                "la criticidad del riesgo",
+            )
+            if criticidad_message:
+                errors.append(f"Riesgo {idx}: {criticidad_message}")
+            elif criticidad_value not in CRITICIDAD_LIST:
+                errors.append(
+                    f"Riesgo {idx}: La criticidad '{criticidad_value}' no está en el catálogo CM."
+                )
             # Exposición
             message, exposure_decimal = validate_money_bounds(
                 rd['exposicion_residual'],

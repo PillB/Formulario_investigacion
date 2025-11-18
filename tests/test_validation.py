@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 import pytest
 
 from app import FraudCaseApp
-from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_ID_LIST,
-                      TIPO_INFORME_LIST, TIPO_MONEDA_LIST)
+from settings import (CANAL_LIST, CRITICIDAD_LIST, PROCESO_LIST, TAXONOMIA,
+                      TIPO_ID_LIST, TIPO_INFORME_LIST, TIPO_MONEDA_LIST)
 
 
 class DummyVar:
@@ -115,6 +115,30 @@ class DummyProductFrame:
 DEFAULT_PRODUCT_ID = "1234567890123"
 
 
+class DummyRiskFrame:
+    def __init__(
+        self,
+        risk_id,
+        *,
+        criticidad,
+        lider="Líder del riesgo",
+        descripcion="Descripción del riesgo",
+        exposicion="0",
+        planes="Plan-1",
+    ):
+        self._data = {
+            "id_riesgo": risk_id,
+            "lider": lider,
+            "descripcion": descripcion,
+            "criticidad": criticidad,
+            "exposicion_residual": exposicion,
+            "planes_accion": planes,
+        }
+
+    def get_data(self):
+        return dict(self._data)
+
+
 class PopulateProductFrameStub:
     def __init__(self):
         self.id_var = DummyVar()
@@ -151,6 +175,7 @@ def build_headless_app(
     *,
     product_configs=None,
     team_configs=None,
+    risk_configs=None,
 ):
     app = FraudCaseApp.__new__(FraudCaseApp)
     app._suppress_messagebox = True
@@ -200,7 +225,21 @@ def build_headless_app(
         )
         for definition in product_definitions
     ]
-    app.risk_frames = []
+    risk_definitions = risk_configs or []
+    app.risk_frames = [
+        DummyRiskFrame(
+            config.get("id_riesgo", f"RSK-{idx+1:06d}"),
+            criticidad=config.get(
+                "criticidad",
+                CRITICIDAD_LIST[0],
+            ),
+            lider=config.get("lider", "Líder del riesgo"),
+            descripcion=config.get("descripcion", "Descripción del riesgo"),
+            exposicion=config.get("exposicion_residual", "0"),
+            planes=config.get("planes_accion", "Plan-1"),
+        )
+        for idx, config in enumerate(risk_definitions)
+    ]
     app.norm_frames = []
     return app
 
@@ -567,6 +606,27 @@ def test_validate_data_enforces_amount_rules(product_config, expected_error):
     app = build_headless_app("Crédito personal", product_configs=[product_config])
     errors, _ = app.validate_data()
     assert expected_error in errors
+
+
+def test_validate_data_requires_risk_criticidad():
+    app = build_headless_app("Crédito personal", risk_configs=[{"criticidad": ""}])
+
+    errors, _ = app.validate_data()
+
+    assert "Riesgo 1: Debe ingresar la criticidad del riesgo." in errors
+
+
+def test_validate_data_rejects_unknown_risk_criticidad():
+    invalid_value = "Inexistente"
+    app = build_headless_app(
+        "Crédito personal",
+        risk_configs=[{"criticidad": invalid_value}],
+    )
+
+    errors, _ = app.validate_data()
+
+    expected_message = f"Riesgo 1: La criticidad '{invalid_value}' no está en el catálogo CM."
+    assert expected_message in errors
 
 
 def test_validate_data_detects_duplicate_technical_keys():
