@@ -2513,19 +2513,23 @@ class FraudCaseApp:
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo cargar la versión: {ex}")
 
-    def clear_all(self):
+    def clear_all(self, *, confirm=True, notify=True):
         """Elimina todos los datos actuales y restablece el formulario.
 
-        Este método solicita confirmación al usuario para borrar toda la
-        información cargada: clientes, colaboradores, productos, riesgos,
-        normas y narrativas.  Si el usuario confirma, todos los frames
-        dinámicos se destruyen, las listas se vacían y se restablecen los
-        valores por defecto de los campos del caso.  También se elimina el
-        autosave y se registran eventos de navegación y validación.
+        Cuando ``confirm`` es ``True`` (valor por defecto) se solicita
+        confirmación al usuario mediante un ``messagebox`` antes de borrar
+        los datos para evitar eliminaciones accidentales.  Las llamadas
+        internas (por ejemplo, al cargar un autosave durante el arranque)
+        pueden establecer ``confirm=False`` para ejecutar el reseteo sin
+        interrumpir el flujo de inicio.
 
         """
-        if not messagebox.askyesno("Confirmar", "¿Desea borrar todos los datos? Esta acción no se puede deshacer."):
-            return
+        if confirm:
+            if not messagebox.askyesno(
+                "Confirmar",
+                "¿Desea borrar todos los datos? Esta acción no se puede deshacer.",
+            ):
+                return
         # Limpiar campos del caso
         self.id_caso_var.set("")
         self.tipo_informe_var.set(TIPO_INFORME_LIST[0])
@@ -2564,7 +2568,8 @@ class FraudCaseApp:
         # Guardar auto
         self.save_auto()
         log_event("navegacion", "Se borraron todos los datos", self.logs)
-        messagebox.showinfo("Datos borrados", "Todos los datos han sido borrados.")
+        if notify:
+            messagebox.showinfo("Datos borrados", "Todos los datos han sido borrados.")
 
     # ---------------------------------------------------------------------
     # Recolección y población de datos
@@ -2625,8 +2630,9 @@ class FraudCaseApp:
 
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
-        # Limpiar primero
-        self.clear_all()
+        # Limpiar primero sin solicitar confirmación (se trata de una
+        # operación interna para poblar el formulario con datos conocidos).
+        self.clear_all(confirm=False, notify=False)
         # Datos de caso
         caso = data.get('caso', {})
         self.id_caso_var.set(caso.get('id_caso', ''))
