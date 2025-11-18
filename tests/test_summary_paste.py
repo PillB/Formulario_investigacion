@@ -186,7 +186,30 @@ def _build_summary_app(monkeypatch, messagebox_spy):
     app.risk_frames = []
     app.norm_frames = []
     app.detail_catalogs = {}
-    app.detail_lookup_by_id = {}
+    app.detail_lookup_by_id = {
+        'id_producto': {
+            '1234567890123': {
+                'id_producto': '1234567890123',
+                'id_cliente': '12345678',
+                'tipo_producto': 'Crédito personal',
+                'monto_investigado': '0.00',
+            }
+        },
+        'id_colaborador': {
+            'T22222': {
+                'id_colaborador': 'T22222',
+                'division': 'Division resumen',
+                'area': 'Area resumen',
+                'tipo_sancion': TIPO_SANCION_LIST[0],
+            }
+        },
+        'id_cliente': {
+            '12345678': {
+                'id_cliente': '12345678',
+                'tipo_id': TIPO_ID_LIST[0],
+            }
+        },
+    }
     app.client_lookup = {}
     app.team_lookup = {}
     app.product_lookup = {}
