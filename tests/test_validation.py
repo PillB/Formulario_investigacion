@@ -3,8 +3,10 @@ from datetime import datetime, timedelta
 import pytest
 
 from app import FraudCaseApp
-from settings import (CANAL_LIST, CRITICIDAD_LIST, PROCESO_LIST, TAXONOMIA,
-                      TIPO_ID_LIST, TIPO_INFORME_LIST, TIPO_MONEDA_LIST)
+from settings import (CANAL_LIST, CRITICIDAD_LIST, FLAG_COLABORADOR_LIST,
+                      PROCESO_LIST, TAXONOMIA, TIPO_FALTA_LIST,
+                      TIPO_ID_LIST, TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
+                      TIPO_SANCION_LIST)
 
 
 class DummyVar:
@@ -54,13 +56,20 @@ class DummyTeam:
         area="otra area",
         nombre_agencia="",
         codigo_agencia="",
-        tipo_sancion="No aplica",
+        flag=None,
+        tipo_falta=None,
+        tipo_sancion=None,
     ):
+        flag = FLAG_COLABORADOR_LIST[0] if flag is None else flag
+        tipo_falta = TIPO_FALTA_LIST[0] if tipo_falta is None else tipo_falta
+        tipo_sancion = TIPO_SANCION_LIST[0] if tipo_sancion is None else tipo_sancion
         self.id_var = DummyVar(team_id)
         self.codigo_agencia_var = DummyVar(codigo_agencia)
         self.division_var = DummyVar(division)
         self.area_var = DummyVar(area)
         self.nombre_agencia_var = DummyVar(nombre_agencia)
+        self.flag_var = DummyVar(flag)
+        self.tipo_falta_var = DummyVar(tipo_falta)
         self.tipo_sancion_var = DummyVar(tipo_sancion)
 
 
@@ -200,7 +209,9 @@ def build_headless_app(
             area=config.get("area", "otra area"),
             nombre_agencia=config.get("nombre_agencia", ""),
             codigo_agencia=config.get("codigo_agencia", ""),
-            tipo_sancion=config.get("tipo_sancion", "No aplica"),
+            flag=config.get("flag"),
+            tipo_falta=config.get("tipo_falta"),
+            tipo_sancion=config.get("tipo_sancion"),
         )
         for config in team_definitions
     ]
@@ -544,6 +555,43 @@ def test_validate_data_flags_deleted_collaborator_reference():
     app.team_frames = []  # Simula que el colaborador fue eliminado del formulario.
     errors, _ = app.validate_data()
     assert any("referencia un colaborador eliminado" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "config_key,label",
+    [
+        ("flag", "el flag del colaborador"),
+        ("tipo_falta", "el tipo de falta del colaborador"),
+        ("tipo_sancion", "el tipo de sanción del colaborador"),
+    ],
+)
+def test_validate_data_requires_team_catalog_values(config_key, label):
+    team_config = {"team_id": "T12345", config_key: ""}
+    app = build_headless_app("Crédito personal", team_configs=[team_config])
+
+    errors, _ = app.validate_data()
+
+    expected = f"Colaborador 1: Debe seleccionar {label}."
+    assert expected in errors
+
+
+@pytest.mark.parametrize(
+    "config_key,label",
+    [
+        ("flag", "el flag del colaborador"),
+        ("tipo_falta", "el tipo de falta del colaborador"),
+        ("tipo_sancion", "el tipo de sanción del colaborador"),
+    ],
+)
+def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
+    invalid_value = "Valor fuera"
+    team_config = {"team_id": "T12345", config_key: invalid_value}
+    app = build_headless_app("Crédito personal", team_configs=[team_config])
+
+    errors, _ = app.validate_data()
+
+    expected = f"Colaborador 1: El {label} '{invalid_value}' no está en el catálogo CM."
+    assert expected in errors
 
 
 @pytest.mark.parametrize(
