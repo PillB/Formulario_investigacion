@@ -164,6 +164,60 @@ def test_validate_data_flags_unknown_product_type():
     assert any("no está en el catálogo" in error for error in errors)
 
 
+def test_validate_data_accepts_account_family_ids():
+    product_config = {
+        "tipo_producto": "Cuenta de ahorro",
+        "producto_overrides": {
+            "tipo_producto": "Cuenta de ahorro",
+            "id_producto": "1234567890",
+        },
+    }
+    app = build_headless_app("Cuenta de ahorro", product_configs=[product_config])
+    errors, warnings = app.validate_data()
+    assert errors == []
+    assert warnings == []
+
+
+def test_validate_data_rejects_short_account_ids():
+    product_config = {
+        "tipo_producto": "Cuenta de ahorro",
+        "producto_overrides": {
+            "tipo_producto": "Cuenta de ahorro",
+            "id_producto": "123",
+        },
+    }
+    app = build_headless_app("Cuenta de ahorro", product_configs=[product_config])
+    errors, _ = app.validate_data()
+    assert any("ahorro" in error for error in errors)
+
+
+def test_validate_data_accepts_generic_alphanumeric_ids():
+    product_config = {
+        "tipo_producto": "Fondos mutuos",
+        "producto_overrides": {
+            "tipo_producto": "Fondos mutuos",
+            "id_producto": "ABCD1234",
+        },
+    }
+    app = build_headless_app("Fondos mutuos", product_configs=[product_config])
+    errors, warnings = app.validate_data()
+    assert errors == []
+    assert warnings == []
+
+
+def test_validate_data_rejects_short_generic_ids():
+    product_config = {
+        "tipo_producto": "Fondos mutuos",
+        "producto_overrides": {
+            "tipo_producto": "Fondos mutuos",
+            "id_producto": "Ab1",
+        },
+    }
+    app = build_headless_app("Fondos mutuos", product_configs=[product_config])
+    errors, _ = app.validate_data()
+    assert any("alfanumérico" in error for error in errors)
+
+
 @pytest.mark.parametrize(
     "producto_overrides,expected_error",
     [
