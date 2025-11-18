@@ -20,9 +20,18 @@ class BaseFrameStub:
         self.id_var = DummyVar("")
         self.on_id_change_calls = []
         self.populated_rows = []
+        self.id_change_callback = None
+        self._last_tracked_id = ""
 
     def on_id_change(self, **kwargs):
         self.on_id_change_calls.append(kwargs)
+        new_id = self.id_var.get().strip()
+        if new_id == self._last_tracked_id:
+            return
+        previous = self._last_tracked_id
+        self._last_tracked_id = new_id
+        if callable(self.id_change_callback):
+            self.id_change_callback(self, previous, new_id)
 
 
 class ClientFrameStub(BaseFrameStub):
@@ -91,10 +100,12 @@ class InvolvementRowStub:
         self.monto_var = DummyVar("")
 
 
-def build_slot_factory(container, factory):
+def build_slot_factory(container, factory, *, on_create=None):
     def _obtain(self):
         frame = factory()
         container.append(frame)
+        if callable(on_create):
+            on_create(self, frame)
         return frame
 
     return _obtain
@@ -121,15 +132,3 @@ def build_populate_method(id_field):
     return _populate
 
 
-def build_frame_finder(attribute_name):
-    def _find(self, identifier):
-        ident = (identifier or "").strip()
-        if not ident:
-            return None
-        for frame in getattr(self, attribute_name, []):
-            current = frame.id_var.get().strip() if hasattr(frame, 'id_var') else ""
-            if current == ident:
-                return frame
-        return None
-
-    return _find
