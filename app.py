@@ -3402,17 +3402,31 @@ class FraudCaseApp:
                         f"Cliente {idx}: El flag de cliente '{flag_value}' no está en el catálogo CM."
                     )
             if hasattr(cframe, 'telefonos_var'):
-                phone_message = validate_phone_list(
-                    cframe.telefonos_var.get(), "los teléfonos del cliente"
+                phone_value = cframe.telefonos_var.get()
+                phone_required = validate_required_text(
+                    phone_value, "los teléfonos del cliente"
                 )
-                if phone_message:
-                    errors.append(f"Cliente {idx}: {phone_message}")
+                if phone_required:
+                    errors.append(f"Cliente {idx}: {phone_required}")
+                else:
+                    phone_message = validate_phone_list(
+                        phone_value, "los teléfonos del cliente"
+                    )
+                    if phone_message:
+                        errors.append(f"Cliente {idx}: {phone_message}")
             if hasattr(cframe, 'correos_var'):
-                email_message = validate_email_list(
-                    cframe.correos_var.get(), "los correos del cliente"
+                email_value = cframe.correos_var.get()
+                email_required = validate_required_text(
+                    email_value, "los correos del cliente"
                 )
-                if email_message:
-                    errors.append(f"Cliente {idx}: {email_message}")
+                if email_required:
+                    errors.append(f"Cliente {idx}: {email_required}")
+                else:
+                    email_message = validate_email_list(
+                        email_value, "los correos del cliente"
+                    )
+                    if email_message:
+                        errors.append(f"Cliente {idx}: {email_message}")
             if hasattr(cframe, 'accionado_var'):
                 accionado_message = validate_multi_selection(
                     cframe.accionado_var.get(), "Accionado"
