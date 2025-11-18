@@ -1017,7 +1017,6 @@ class FraudCaseApp:
         add_btn = ttk.Button(frame, text="Agregar norma", command=self.add_norm)
         add_btn.pack(side="left", padx=5)
         self.register_tooltip(add_btn, "Agrega otra norma transgredida.")
-        self.add_norm()
 
     def add_norm(self):
         idx = len(self.norm_frames)
@@ -2686,7 +2685,6 @@ class FraudCaseApp:
         self.add_client()
         self.add_team()
         self.add_risk()
-        self.add_norm()
         # Limpiar análisis
         self.antecedentes_var.set("")
         self.modus_var.set("")
@@ -2753,7 +2751,13 @@ class FraudCaseApp:
         data['reclamos'] = reclamos
         data['involucramientos'] = involucs
         data['riesgos'] = [r.get_data() for r in self.risk_frames]
-        data['normas'] = [n.get_data() for n in self.norm_frames]
+        normas = []
+        for n in self.norm_frames:
+            norm_data = n.get_data()
+            if not norm_data:
+                continue
+            normas.append(norm_data)
+        data['normas'] = normas
         data['analisis'] = {
             "antecedentes": self.antecedentes_var.get().strip(),
             "modus_operandi": self.modus_var.get().strip(),
@@ -3168,7 +3172,10 @@ class FraudCaseApp:
         norm_ids = set()
         for idx, n in enumerate(self.norm_frames, start=1):
             nd = n.get_data()
+            if not nd:
+                continue
             nid = nd['id_norma']
+            descripcion = nd['descripcion']
             message = validate_norm_id(nid)
             if message:
                 errors.append(f"Norma {idx}: {message}")
@@ -3176,6 +3183,8 @@ class FraudCaseApp:
                 errors.append(f"ID de norma duplicado: {nid}")
             else:
                 norm_ids.add(nid)
+            if not descripcion:
+                errors.append(f"Norma {idx}: Debe ingresar la descripción de la norma.")
             # Fecha vigencia
             fvig = nd['fecha_vigencia']
             if fvig:
