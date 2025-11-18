@@ -97,6 +97,8 @@ def sum_investigation_components(*, perdida: Decimal, falla: Decimal, contingenc
 
 def validate_email_list(value: str, label: str) -> Optional[str]:
     emails = [item.strip() for item in value.split(';') if item.strip()]
+    if not emails:
+        return f"Debe ingresar {label}."
     pattern = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     for email in emails:
         if not pattern.fullmatch(email):
@@ -106,6 +108,8 @@ def validate_email_list(value: str, label: str) -> Optional[str]:
 
 def validate_phone_list(value: str, label: str) -> Optional[str]:
     phones = [item.strip() for item in value.split(';') if item.strip()]
+    if not phones:
+        return f"Debe ingresar {label}."
     for phone in phones:
         if not re.fullmatch(r"^\+?\d{6,15}$", phone):
             return f"{label} contiene un teléfono inválido: {phone}"
