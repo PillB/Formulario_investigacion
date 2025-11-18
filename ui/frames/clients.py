@@ -41,7 +41,7 @@ class ClientFrame:
         self.client_lookup = client_lookup or {}
         self.validators = []
         self._last_missing_lookup_id = None
-        self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
+        self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
 
         self.tipo_id_var = tk.StringVar()
@@ -162,7 +162,7 @@ class ClientFrame:
         cid = self.id_var.get().strip()
         if not cid:
             self._last_missing_lookup_id = None
-            self.schedule_summary_refresh()
+            self.schedule_summary_refresh('clientes')
             return
         data = self.client_lookup.get(cid)
         if data:
@@ -191,7 +191,7 @@ class ClientFrame:
                     ),
                 )
                 self._last_missing_lookup_id = cid
-        self.schedule_summary_refresh()
+        self.schedule_summary_refresh('clientes')
 
     def get_data(self):
         return {

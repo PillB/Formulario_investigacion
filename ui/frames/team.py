@@ -39,7 +39,7 @@ class TeamMemberFrame:
         self.tooltip_register = tooltip_register
         self.validators = []
         self._last_missing_lookup_id = None
-        self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
+        self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
 
         self.id_var = tk.StringVar()
@@ -171,7 +171,7 @@ class TeamMemberFrame:
         else:
             self._last_missing_lookup_id = None
         self.update_team_options()
-        self.schedule_summary_refresh()
+        self.schedule_summary_refresh('colaboradores')
 
     def get_data(self):
         return {

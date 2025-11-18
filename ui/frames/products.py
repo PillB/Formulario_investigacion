@@ -216,7 +216,7 @@ class ProductFrame:
         self.involvements = []
         self.claims = []
         self._last_missing_lookup_id = None
-        self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
+        self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
 
         self.id_var = tk.StringVar()
@@ -498,7 +498,7 @@ class ProductFrame:
         idx = len(self.claims)
         row = ClaimRow(self.claims_frame, self, idx, self.remove_claim, self.logs, self.tooltip_register)
         self.claims.append(row)
-        self.schedule_summary_refresh()
+        self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
         return row
 
@@ -507,7 +507,7 @@ class ProductFrame:
             self.claims.remove(row)
         if not self.claims:
             self.add_claim()
-        self.schedule_summary_refresh()
+        self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
 
     def clear_claims(self):
@@ -526,7 +526,7 @@ class ProductFrame:
             added = True
         if not added:
             self.add_claim()
-        self.schedule_summary_refresh()
+        self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
 
     def obtain_claim_slot(self):
@@ -653,7 +653,7 @@ class ProductFrame:
         self.log_change(f"Producto {self.idx+1}: modificó ID a {pid}")
         if not pid:
             self._last_missing_lookup_id = None
-            self.schedule_summary_refresh()
+            self.schedule_summary_refresh({'productos', 'reclamos'})
             return
         data = self.product_lookup.get(pid)
         if not data:
@@ -666,7 +666,7 @@ class ProductFrame:
                     ),
                 )
                 self._last_missing_lookup_id = pid
-            self.schedule_summary_refresh()
+            self.schedule_summary_refresh({'productos', 'reclamos'})
             return
 
         def set_if_present(var, key):
@@ -716,7 +716,7 @@ class ProductFrame:
                 self.set_claims_from_data(claims_payload)
         self._last_missing_lookup_id = None
         self.log_change(f"Producto {self.idx+1}: autopoblado desde catálogo")
-        self.schedule_summary_refresh()
+        self.schedule_summary_refresh({'productos', 'reclamos'})
         self.persist_lookup_snapshot()
 
     def _validate_fecha_descubrimiento(self):

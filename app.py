@@ -129,6 +129,7 @@ from validators import (
 )
 class FraudCaseApp:
     AUTOSAVE_DELAY_MS = 4000
+    SUMMARY_REFRESH_DELAY_MS = 250
 
     """Clase que encapsula la aplicación de gestión de casos de fraude."""
 
@@ -223,7 +224,9 @@ class FraudCaseApp:
         self.summary_tables = {}
         self.summary_config = {}
         self.summary_context_menus = {}
+        self.summary_tab = None
         self._summary_refresh_after_id = None
+        self._summary_dirty_sections = set()
         self._autosave_job_id = None
         self._autosave_dirty = False
 
@@ -491,6 +494,7 @@ class FraudCaseApp:
         """Construye la interfaz del usuario en diferentes pestañas."""
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True)
+        self.notebook.bind("<<NotebookTabChanged>>", self._handle_notebook_tab_change)
 
         # --- Pestaña principal: caso y participantes ---
         self.main_tab = ttk.Frame(self.notebook)
@@ -653,7 +657,6 @@ class FraudCaseApp:
 
         self.update_client_options_global()
         self.update_team_options_global()
-        self.refresh_summary_tables()
         try:
             self.root.update_idletasks()
         except tk.TclError:
@@ -848,7 +851,7 @@ class FraudCaseApp:
         )
         self.client_frames.append(client)
         self.update_client_options_global()
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh('clientes')
 
     def remove_client(self, client_frame):
         self.client_frames.remove(client_frame)
@@ -857,7 +860,7 @@ class FraudCaseApp:
             cl.idx = i
             cl.frame.config(text=f"Cliente {i+1}")
         self.update_client_options_global()
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh('clientes')
 
     def update_client_options_global(self):
         """Actualiza la lista de clientes en todos los productos y envolvimientos."""
@@ -892,7 +895,7 @@ class FraudCaseApp:
         )
         self.team_frames.append(team)
         self.update_team_options_global()
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh('colaboradores')
 
     def remove_team(self, team_frame):
         self.team_frames.remove(team_frame)
@@ -901,7 +904,7 @@ class FraudCaseApp:
             tm.idx = i
             tm.frame.config(text=f"Colaborador {i+1}")
         self.update_team_options_global()
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh('colaboradores')
 
     def update_team_options_global(self):
         """Actualiza listas de colaboradores en productos e involucra."""
@@ -958,14 +961,14 @@ class FraudCaseApp:
         for i, p in enumerate(self.product_frames):
             p.idx = i
             p.frame.config(text=f"Producto {i+1}")
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh({'productos', 'reclamos'})
 
     def remove_product(self, prod_frame):
         self.product_frames.remove(prod_frame)
         for i, p in enumerate(self.product_frames):
             p.idx = i
             p.frame.config(text=f"Producto {i+1}")
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh({'productos', 'reclamos'})
 
     def get_client_ids(self):
         return [c.id_var.get().strip() for c in self.client_frames if c.id_var.get().strip()]
@@ -997,14 +1000,14 @@ class FraudCaseApp:
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh('riesgos')
 
     def remove_risk(self, risk_frame):
         self.risk_frames.remove(risk_frame)
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh('riesgos')
 
     def build_norm_tab(self, parent):
         frame = ttk.Frame(parent)
@@ -1030,14 +1033,14 @@ class FraudCaseApp:
         for i, n in enumerate(self.norm_frames):
             n.idx = i
             n.frame.config(text=f"Norma {i+1}")
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh('normas')
 
     def remove_norm(self, norm_frame):
         self.norm_frames.remove(norm_frame)
         for i, n in enumerate(self.norm_frames):
             n.idx = i
             n.frame.config(text=f"Norma {i+1}")
-        self._schedule_summary_refresh()
+        self._schedule_summary_refresh('normas')
 
     def build_analysis_tab(self, parent):
         frame = ttk.Frame(parent)
@@ -1136,6 +1139,7 @@ class FraudCaseApp:
     def build_summary_tab(self, parent):
         """Construye la pestaña de resumen con tablas compactas."""
 
+        self.summary_tab = parent
         container = ttk.Frame(parent)
         container.pack(fill="both", expand=True, padx=5, pady=5)
         ttk.Label(
@@ -1228,6 +1232,14 @@ class FraudCaseApp:
             self._register_summary_tree_bindings(tree, key)
 
         self.refresh_summary_tables()
+
+    def _handle_notebook_tab_change(self, event):
+        if getattr(self, "notebook", None) is None:
+            return
+        if event.widget is not self.notebook:
+            return
+        if self._is_summary_tab_visible():
+            self._flush_summary_refresh()
 
     def _register_summary_tree_bindings(self, tree, key):
         """Configura atajos de pegado y el menú contextual para una tabla."""
@@ -1779,41 +1791,87 @@ class FraudCaseApp:
             return processed
         raise ValueError("Esta tabla no admite pegado directo al formulario principal.")
 
-    def _schedule_summary_refresh(self):
-        """Programa la actualización del resumen en la cola ``after_idle`` de Tk."""
+    def _schedule_summary_refresh(self, sections=None):
+        """Programa la actualización del resumen aplicando un debounce corto."""
 
         if not self.summary_tables:
+            return
+        normalized = self._normalize_summary_sections(sections)
+        if not normalized:
+            return
+        self._summary_dirty_sections.update(normalized)
+        if self._is_summary_tab_visible():
+            self._flush_summary_refresh(normalized)
             return
         if self._summary_refresh_after_id:
             return
         try:
-            self._summary_refresh_after_id = self.root.after_idle(self._run_scheduled_summary_refresh)
+            self._summary_refresh_after_id = self.root.after(
+                self.SUMMARY_REFRESH_DELAY_MS,
+                self._run_scheduled_summary_refresh,
+            )
         except tk.TclError:
             self._summary_refresh_after_id = None
-            self.refresh_summary_tables()
+            self._flush_summary_refresh()
 
     def _run_scheduled_summary_refresh(self):
         self._summary_refresh_after_id = None
-        self.refresh_summary_tables()
+        self._flush_summary_refresh()
 
-    def refresh_summary_tables(self, data=None):
+    def _flush_summary_refresh(self, sections=None):
+        if sections is None:
+            targets = set(self._summary_dirty_sections)
+        else:
+            targets = self._normalize_summary_sections(sections)
+        if not targets:
+            return
+        self.refresh_summary_tables(sections=targets)
+
+    def _normalize_summary_sections(self, sections):
+        if not self.summary_tables:
+            return set()
+        if sections is None:
+            return set(self.summary_tables.keys())
+        if isinstance(sections, str):
+            sections = {sections}
+        return {section for section in sections if section in self.summary_tables}
+
+    def _cancel_summary_refresh_job(self):
+        if not self._summary_refresh_after_id:
+            return
+        try:
+            self.root.after_cancel(self._summary_refresh_after_id)
+        except tk.TclError:
+            pass
+        self._summary_refresh_after_id = None
+
+    def _is_summary_tab_visible(self):
+        if getattr(self, "notebook", None) is None or self.summary_tab is None:
+            return False
+        try:
+            return self.notebook.select() == str(self.summary_tab)
+        except tk.TclError:
+            return False
+
+    def refresh_summary_tables(self, data=None, sections=None):
         """Actualiza las tablas de resumen con la información actual."""
 
         if not self.summary_tables:
             return
+        normalized = self._normalize_summary_sections(sections)
+        if not normalized:
+            return
+        self._cancel_summary_refresh_job()
+        self._summary_dirty_sections.difference_update(normalized)
         dataset = data or self.gather_data()
+        ordered_sections = [key for key in self.summary_tables.keys() if key in normalized]
+        for key in ordered_sections:
+            rows = self._build_summary_rows(key, dataset)
+            self._render_summary_rows(key, rows)
 
-        def update_table(key, rows):
-            tree = self.summary_tables.get(key)
-            if not tree:
-                return
-            tree.delete(*tree.get_children())
-            for row in rows:
-                tree.insert("", "end", values=row)
-
-        update_table(
-            "clientes",
-            [
+    def _build_summary_rows(self, section, dataset):
+        if section == "clientes":
+            return [
                 (
                     client.get("id_cliente", ""),
                     client.get("tipo_id", ""),
@@ -1824,11 +1882,9 @@ class FraudCaseApp:
                     client.get("accionado", ""),
                 )
                 for client in dataset.get("clientes", [])
-            ],
-        )
-        update_table(
-            "colaboradores",
-            [
+            ]
+        if section == "colaboradores":
+            return [
                 (
                     col.get("id_colaborador", ""),
                     col.get("division", ""),
@@ -1836,11 +1892,9 @@ class FraudCaseApp:
                     col.get("tipo_sancion", ""),
                 )
                 for col in dataset.get("colaboradores", [])
-            ],
-        )
-        update_table(
-            "productos",
-            [
+            ]
+        if section == "productos":
+            return [
                 (
                     prod.get("id_producto", ""),
                     prod.get("id_cliente", ""),
@@ -1848,11 +1902,9 @@ class FraudCaseApp:
                     prod.get("monto_investigado", ""),
                 )
                 for prod in dataset.get("productos", [])
-            ],
-        )
-        update_table(
-            "riesgos",
-            [
+            ]
+        if section == "riesgos":
+            return [
                 (
                     risk.get("id_riesgo", ""),
                     risk.get("lider", ""),
@@ -1860,11 +1912,9 @@ class FraudCaseApp:
                     risk.get("exposicion_residual", ""),
                 )
                 for risk in dataset.get("riesgos", [])
-            ],
-        )
-        update_table(
-            "reclamos",
-            [
+            ]
+        if section == "reclamos":
+            return [
                 (
                     rec.get("id_reclamo", ""),
                     rec.get("id_producto", ""),
@@ -1872,19 +1922,25 @@ class FraudCaseApp:
                     rec.get("codigo_analitica", ""),
                 )
                 for rec in dataset.get("reclamos", [])
-            ],
-        )
-        update_table(
-            "normas",
-            [
+            ]
+        if section == "normas":
+            return [
                 (
                     norm.get("id_norma", ""),
                     norm.get("descripcion", ""),
                     norm.get("fecha_vigencia", ""),
                 )
                 for norm in dataset.get("normas", [])
-            ],
-        )
+            ]
+        return []
+
+    def _render_summary_rows(self, key, rows):
+        tree = self.summary_tables.get(key)
+        if not tree:
+            return
+        tree.delete(*tree.get_children())
+        for row in rows:
+            tree.insert("", "end", values=row)
 
     # ---------------------------------------------------------------------
     # Importación desde CSV
@@ -2494,7 +2550,7 @@ class FraudCaseApp:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
-        self.refresh_summary_tables(data)
+        self.refresh_summary_tables(data=data)
         self.request_autosave()
 
     def load_autosave(self):
@@ -2829,7 +2885,7 @@ class FraudCaseApp:
         self.descargos_var.set(analisis.get('descargos', ''))
         self.conclusiones_var.set(analisis.get('conclusiones', ''))
         self.recomendaciones_var.set(analisis.get('recomendaciones', ''))
-        self.refresh_summary_tables(data)
+        self.refresh_summary_tables(data=data)
 
     # ---------------------------------------------------------------------
     # Validación de reglas de negocio
