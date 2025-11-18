@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import os
 import re
 import unicodedata
 from datetime import datetime
@@ -12,8 +10,11 @@ from typing import Callable, Iterable, List, Optional
 
 from tkinter import ttk
 
-from settings import LOGS_FILE, TIPO_PRODUCTO_LIST
+from settings import TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
+
+
+_LOG_QUEUE: List[dict] = []
 
 
 def validate_required_text(value: str, label: str) -> Optional[str]:
@@ -327,24 +328,17 @@ def log_event(event_type: str, message: str, logs: List[dict]) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     row = {"timestamp": timestamp, "tipo": event_type, "mensaje": message}
     logs.append(row)
-    _append_log_to_disk(row)
+    _LOG_QUEUE.append(row)
 
 
-def _append_log_to_disk(row: dict) -> None:
-    if not LOGS_FILE:
-        return
-    folder = os.path.dirname(LOGS_FILE)
-    if folder and not os.path.exists(folder):
-        os.makedirs(folder, exist_ok=True)
-    file_exists = os.path.exists(LOGS_FILE)
-    try:
-        with open(LOGS_FILE, 'a', newline='', encoding='utf-8') as file_handle:
-            writer = csv.DictWriter(file_handle, fieldnames=['timestamp', 'tipo', 'mensaje'])
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(row)
-    except OSError:
-        pass
+def drain_log_queue() -> List[dict]:
+    """Devuelve y limpia los registros pendientes de escritura en disco."""
+
+    if not _LOG_QUEUE:
+        return []
+    rows = list(_LOG_QUEUE)
+    _LOG_QUEUE.clear()
+    return rows
 
 
 def escape_csv(value) -> str:
@@ -359,6 +353,7 @@ def escape_csv(value) -> str:
 
 __all__ = [
     'FieldValidator',
+    'drain_log_queue',
     'escape_csv',
     'log_event',
     'normalize_without_accents',

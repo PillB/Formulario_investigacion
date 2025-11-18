@@ -60,6 +60,7 @@ import json
 import os
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -104,6 +105,7 @@ from ui.tooltips import HoverTooltip
 from validators import (
     FieldValidator,
     TIPO_PRODUCTO_NORMALIZED,
+    drain_log_queue,
     log_event,
     normalize_without_accents,
     parse_decimal_amount,
@@ -130,6 +132,7 @@ from validators import (
 class FraudCaseApp:
     AUTOSAVE_DELAY_MS = 4000
     SUMMARY_REFRESH_DELAY_MS = 250
+    LOG_FLUSH_INTERVAL_MS = 5000
 
     """Clase que encapsula la aplicación de gestión de casos de fraude."""
 
@@ -141,6 +144,8 @@ class FraudCaseApp:
         self._hover_tooltips = []
         self.validators = []
         self._last_validated_risk_exposure_total = Decimal('0')
+        self._log_flush_job_id: Optional[str] = None
+        self._log_file_initialized = bool(LOGS_FILE and os.path.exists(LOGS_FILE))
 
         def register_tooltip(widget, text):
             if widget is None or not text:
@@ -150,6 +155,7 @@ class FraudCaseApp:
             return tip
 
         self.register_tooltip = register_tooltip
+        self.root.protocol("WM_DELETE_WINDOW", self._handle_window_close)
         # Cargar catálogos para autopoblado conservando los valores originales
         raw_detail_catalogs = load_detail_catalogs()
         self.detail_catalogs = {
@@ -183,6 +189,8 @@ class FraudCaseApp:
 
         for canonical in DETAIL_LOOKUP_ALIASES:
             _ensure_canonical_catalog(canonical)
+
+        self._schedule_log_flush()
 
         def _merge_with_detail_catalog(base_lookup, aliases):
             merged = {}
@@ -2612,6 +2620,63 @@ class FraudCaseApp:
             except Exception as ex:
                 log_event("validacion", f"Error cargando autosave: {ex}", self.logs)
 
+    def _handle_window_close(self):
+        self.flush_autosave()
+        self.flush_logs_now(reschedule=False)
+        self.root.destroy()
+
+    def _schedule_log_flush(self) -> None:
+        if not LOGS_FILE:
+            return
+        if self._log_flush_job_id is not None:
+            return
+        try:
+            self._log_flush_job_id = self.root.after(
+                self.LOG_FLUSH_INTERVAL_MS,
+                self._on_log_flush_timer,
+            )
+        except tk.TclError:
+            self._log_flush_job_id = None
+            self._flush_log_queue_to_disk()
+
+    def _on_log_flush_timer(self) -> None:
+        self._log_flush_job_id = None
+        self._flush_log_queue_to_disk()
+        self._schedule_log_flush()
+
+    def _cancel_log_flush_job(self) -> None:
+        if self._log_flush_job_id is None:
+            return
+        try:
+            self.root.after_cancel(self._log_flush_job_id)
+        except tk.TclError:
+            pass
+        self._log_flush_job_id = None
+
+    def flush_logs_now(self, reschedule: bool = True) -> None:
+        self._cancel_log_flush_job()
+        self._flush_log_queue_to_disk()
+        if reschedule:
+            self._schedule_log_flush()
+
+    def _flush_log_queue_to_disk(self) -> None:
+        rows = drain_log_queue()
+        if not rows or not LOGS_FILE:
+            return
+        folder = os.path.dirname(LOGS_FILE)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder, exist_ok=True)
+        file_exists = self._log_file_initialized or os.path.exists(LOGS_FILE)
+        try:
+            with open(LOGS_FILE, 'a', newline='', encoding='utf-8') as file_handle:
+                writer = csv.DictWriter(file_handle, fieldnames=['timestamp', 'tipo', 'mensaje'])
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerows(rows)
+            self._log_file_initialized = True
+        except OSError:
+            pass
+
     def _log_navigation(self, message: str, autosave: bool = False) -> None:
         log_event("navegacion", message, self.logs)
         if autosave:
@@ -3416,6 +3481,7 @@ class FraudCaseApp:
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta elegida."""
         self.flush_autosave()
+        self.flush_logs_now()
         errors, warnings = self.validate_data()
         if errors:
             messagebox.showerror("Errores de validación", "\n".join(errors))
@@ -3486,6 +3552,7 @@ class FraudCaseApp:
             f"Los archivos se han guardado como {case_id}_*.csv, {case_id}_version.json y {case_id}_informe.md.",
         )
         log_event("navegacion", "Datos guardados y enviados", self.logs)
+        self.flush_logs_now()
 
     def save_temp_version(self):
         """Guarda una versión temporal del estado actual del formulario.
