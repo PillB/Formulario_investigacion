@@ -2514,20 +2514,33 @@ class FraudCaseApp:
         elif not flag_value and not preserve_existing:
             frame.flag_var.set('')
         telefonos = (row.get('telefonos') or row.get('Telefono') or '').strip()
-        frame.telefonos_var.set(telefonos)
+        if telefonos and should_autofill_field(frame.telefonos_var.get(), preserve_existing):
+            frame.telefonos_var.set(telefonos)
+        elif not telefonos and not preserve_existing:
+            frame.telefonos_var.set('')
         correos = (row.get('correos') or row.get('Correo') or '').strip()
-        frame.correos_var.set(correos)
+        if correos and should_autofill_field(frame.correos_var.get(), preserve_existing):
+            frame.correos_var.set(correos)
+        elif not correos and not preserve_existing:
+            frame.correos_var.set('')
         direcciones = (row.get('direcciones') or row.get('Direccion') or '').strip()
-        frame.direcciones_var.set(direcciones)
+        if direcciones and should_autofill_field(frame.direcciones_var.get(), preserve_existing):
+            frame.direcciones_var.set(direcciones)
+        elif not direcciones and not preserve_existing:
+            frame.direcciones_var.set('')
         accionado_val = (row.get('accionado') or row.get('Accionado') or '').strip()
-        frame.set_accionado_from_text(accionado_val)
+        if accionado_val and should_autofill_field(frame.accionado_var.get(), preserve_existing):
+            frame.set_accionado_from_text(accionado_val)
+        elif not accionado_val and not preserve_existing:
+            frame.set_accionado_from_text('')
+        accionado_final = frame.accionado_var.get().strip()
         self.client_lookup[id_cliente] = {
             'tipo_id': frame.tipo_id_var.get(),
             'flag': frame.flag_var.get(),
             'telefonos': frame.telefonos_var.get(),
             'correos': frame.correos_var.get(),
             'direcciones': frame.direcciones_var.get(),
-            'accionado': accionado_val,
+            'accionado': accionado_final,
         }
 
     def _populate_team_frame_from_row(self, frame, row):

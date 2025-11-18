@@ -24,6 +24,28 @@ class DummyClient:
         self.id_var = DummyVar(client_id)
 
 
+class DummyClientWithContacts(DummyClient):
+    def __init__(
+        self,
+        client_id,
+        *,
+        telefonos="999-888",
+        correos="demo@example.com",
+        direcciones="Av. Principal 123",
+        accionado="Fiscalía",
+        flag="No aplica",
+    ):
+        super().__init__(client_id)
+        self.flag_var = DummyVar(flag)
+        self.telefonos_var = DummyVar(telefonos)
+        self.correos_var = DummyVar(correos)
+        self.direcciones_var = DummyVar(direcciones)
+        self.accionado_var = DummyVar(accionado)
+
+    def set_accionado_from_text(self, value):
+        self.accionado_var.set(value.strip())
+
+
 class DummyTeam:
     def __init__(
         self,
@@ -373,3 +395,35 @@ def test_validate_data_requires_agency_data_for_commercial_channels():
         "El colaborador 1 debe registrar nombre y código de agencia por pertenecer a canales comerciales."
         in errors
     )
+
+
+def test_preserve_existing_client_contacts_on_partial_import():
+    app = build_headless_app("Crédito personal")
+    app.client_lookup = {}
+    existing_client = DummyClientWithContacts(
+        "12345678",
+        telefonos="999-111",
+        correos="cliente@correo.com",
+        direcciones="Calle Falsa 123",
+        accionado="Fiscalía; Penal",
+    )
+    app.client_frames = [existing_client]
+    blank_row = {
+        "id_cliente": "12345678",
+        "telefonos": "",
+        "correos": "",
+        "direcciones": "",
+        "accionado": "",
+    }
+    app._populate_client_frame_from_row(existing_client, blank_row, preserve_existing=True)
+    assert existing_client.telefonos_var.get() == "999-111"
+    assert existing_client.correos_var.get() == "cliente@correo.com"
+    assert existing_client.direcciones_var.get() == "Calle Falsa 123"
+    assert existing_client.accionado_var.get() == "Fiscalía; Penal"
+    assert app.client_lookup["12345678"]["telefonos"] == "999-111"
+    assert app.client_lookup["12345678"]["correos"] == "cliente@correo.com"
+    assert app.client_lookup["12345678"]["direcciones"] == "Calle Falsa 123"
+    assert app.client_lookup["12345678"]["accionado"] == "Fiscalía; Penal"
+    errors, warnings = app.validate_data()
+    assert errors == []
+    assert warnings == []
