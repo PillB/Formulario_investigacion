@@ -104,6 +104,7 @@ from ui.frames import (
 from ui.tooltips import HoverTooltip
 from validators import (
     FieldValidator,
+    TIPO_PRODUCTO_NORMALIZED,
     log_event,
     normalize_without_accents,
     parse_decimal_amount,
