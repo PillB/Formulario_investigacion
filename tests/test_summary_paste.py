@@ -255,13 +255,16 @@ def test_invalid_catalog_and_amount_errors(summary_app):
         summary_app._transform_clipboard_productos(
             [["1234567890123", "12345678", "tipo inexistente", "100.00"]]
         )
-    assert "tipo de producto 'tipo inexistente'" in str(exc_info.value)
+    assert (
+        str(exc_info.value)
+        == "Producto fila 1: el tipo de producto 'tipo inexistente' no está en el catálogo CM."
+    )
 
     with pytest.raises(ValueError) as exc_info:
         summary_app._transform_clipboard_riesgos(
             [["RSK-000001", "Líder", "Bajo", "monto"]]
         )
-    assert "la exposición residual debe ser un número válido" in str(exc_info.value)
+    assert str(exc_info.value) == "Riesgo fila 1: la exposición residual debe ser un número válido."
 
 
 def test_duplicate_risk_and_norm_paste_logs_warning(monkeypatch, summary_app):
