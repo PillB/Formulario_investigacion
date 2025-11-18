@@ -53,10 +53,8 @@ class InvolvementRow:
         monto_entry.pack(side="left", padx=5)
         monto_entry.bind(
             "<FocusOut>",
-            lambda e: log_event(
-                "navegacion",
-                f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto",
-                self.logs,
+            lambda e: self.product_frame.log_change(
+                f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto"
             ),
         )
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
@@ -86,10 +84,8 @@ class InvolvementRow:
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar esta asignación?"):
-            log_event(
-                "navegacion",
-                f"Se eliminó asignación de colaborador en producto {self.product_frame.idx+1}",
-                self.logs,
+            self.product_frame.log_change(
+                f"Se eliminó asignación de colaborador en producto {self.product_frame.idx+1}"
             )
             self.frame.destroy()
             self.remove_callback(self)
@@ -174,10 +170,8 @@ class ClaimRow:
 
     def remove(self):
         if messagebox.askyesno("Confirmar", "¿Desea eliminar este reclamo?"):
-            log_event(
-                "navegacion",
-                f"Se eliminó reclamo del producto {self.product_frame.idx+1}",
-                self.logs,
+            self.product_frame.log_change(
+                f"Se eliminó reclamo del producto {self.product_frame.idx+1}"
             )
             self.frame.destroy()
             self.remove_callback(self)
@@ -207,6 +201,7 @@ class ProductFrame:
         product_lookup,
         tooltip_register,
         summary_refresh_callback=None,
+        change_notifier=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -222,6 +217,7 @@ class ProductFrame:
         self.claims = []
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
+        self.change_notifier = change_notifier
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -268,7 +264,7 @@ class ProductFrame:
         self.client_cb.set('')
         self.client_cb.bind(
             "<FocusOut>",
-            lambda e: log_event("navegacion", f"Producto {self.idx+1}: seleccionó cliente", self.logs),
+            lambda e: self.log_change(f"Producto {self.idx+1}: seleccionó cliente"),
         )
         self.tooltip_register(self.client_cb, "Selecciona al cliente dueño del producto.")
 
@@ -487,7 +483,7 @@ class ProductFrame:
 
         # Always refresh modalidades to keep them aligned with the selected categorías
         self.on_cat2_change()
-        log_event("navegacion", f"Producto {self.idx+1}: cambió categoría 1", self.logs)
+        self.log_change(f"Producto {self.idx+1}: cambió categoría 1")
 
     def on_cat2_change(self):
         cat1 = self.cat1_var.get()
@@ -496,7 +492,7 @@ class ProductFrame:
         self.mod_cb['values'] = modalities
         self.mod_var.set('')
         self.mod_cb.set('')
-        log_event("navegacion", f"Producto {self.idx+1}: cambió categoría 2", self.logs)
+        self.log_change(f"Producto {self.idx+1}: cambió categoría 2")
 
     def add_claim(self):
         idx = len(self.claims)
@@ -654,7 +650,7 @@ class ProductFrame:
 
     def on_id_change(self, from_focus=False, preserve_existing=False):
         pid = self.id_var.get().strip()
-        log_event("navegacion", f"Producto {self.idx+1}: modificó ID a {pid}", self.logs)
+        self.log_change(f"Producto {self.idx+1}: modificó ID a {pid}")
         if not pid:
             self._last_missing_lookup_id = None
             self.schedule_summary_refresh()
@@ -719,7 +715,7 @@ class ProductFrame:
             if not (preserve_existing and self.claims_have_content()):
                 self.set_claims_from_data(claims_payload)
         self._last_missing_lookup_id = None
-        log_event("navegacion", f"Producto {self.idx+1}: autopoblado desde catálogo", self.logs)
+        self.log_change(f"Producto {self.idx+1}: autopoblado desde catálogo")
         self.schedule_summary_refresh()
         self.persist_lookup_snapshot()
 
@@ -792,9 +788,15 @@ class ProductFrame:
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el producto {self.idx+1}?"):
-            log_event("navegacion", f"Se eliminó producto {self.idx+1}", self.logs)
+            self.log_change(f"Se eliminó producto {self.idx+1}")
             self.frame.destroy()
             self.remove_callback(self)
+
+    def log_change(self, message: str):
+        if callable(self.change_notifier):
+            self.change_notifier(message)
+        else:
+            log_event("navegacion", message, self.logs)
 
 
 __all__ = [

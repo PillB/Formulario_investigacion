@@ -64,7 +64,6 @@ from decimal import Decimal
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-import validators
 from models import (
     iter_massive_csv_rows,
     load_client_details,
@@ -129,6 +128,8 @@ from validators import (
     validate_team_member_id,
 )
 class FraudCaseApp:
+    AUTOSAVE_DELAY_MS = 4000
+
     """Clase que encapsula la aplicación de gestión de casos de fraude."""
 
     def __init__(self, root):
@@ -223,6 +224,8 @@ class FraudCaseApp:
         self.summary_config = {}
         self.summary_context_menus = {}
         self._summary_refresh_after_id = None
+        self._autosave_job_id = None
+        self._autosave_dirty = False
 
         # Variables de caso
         self.id_caso_var = tk.StringVar()
@@ -245,10 +248,6 @@ class FraudCaseApp:
 
         # Construir interfaz
         self.build_ui()
-        # Registrar la función de guardado temporal en el callback global. De
-        # este modo, ``log_event`` invocará ``self.save_temp_version`` cada
-        # vez que se registre un evento de navegación.
-        validators.SAVE_TEMP_CALLBACK = self.save_temp_version
         # Cargar autosave si existe
         self.load_autosave()
 
@@ -679,7 +678,7 @@ class FraudCaseApp:
         ttk.Label(row1, text="Número de caso (AAAA-NNNN):").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_caso_var, width=20)
         id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó número de caso", self.logs))
+        id_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó número de caso"))
         self.register_tooltip(id_entry, "Identificador del expediente con formato AAAA-NNNN.")
         ttk.Label(row1, text="Tipo de informe:").pack(side="left")
         tipo_cb = ttk.Combobox(row1, textvariable=self.tipo_informe_var, values=TIPO_INFORME_LIST, state="readonly", width=15)
@@ -795,7 +794,7 @@ class FraudCaseApp:
         self.case_mod_cb['values'] = []
         self.mod_caso_var.set('')
         self.case_mod_cb.set('')
-        log_event("navegacion", "Modificó categoría 1 del caso", self.logs)
+        self._log_navigation_change("Modificó categoría 1 del caso")
 
     def on_case_cat2_change(self):
         cat1 = self.cat_caso1_var.get()
@@ -806,7 +805,7 @@ class FraudCaseApp:
         self.case_mod_cb['values'] = mods
         self.mod_caso_var.set('')
         self.case_mod_cb.set('')
-        log_event("navegacion", "Modificó categoría 2 del caso", self.logs)
+        self._log_navigation_change("Modificó categoría 2 del caso")
         if self.cat_caso2_var.get() == 'Fraude Externo':
             messagebox.showwarning(
                 "Analítica de fraude externo",
@@ -845,6 +844,7 @@ class FraudCaseApp:
             self.register_tooltip,
             client_lookup=self.client_lookup,
             summary_refresh_callback=self._schedule_summary_refresh,
+            change_notifier=self._log_navigation_change,
         )
         self.client_frames.append(client)
         self.update_client_options_global()
@@ -888,6 +888,7 @@ class FraudCaseApp:
             self.logs,
             self.register_tooltip,
             summary_refresh_callback=self._schedule_summary_refresh,
+            change_notifier=self._log_navigation_change,
         )
         self.team_frames.append(team)
         self.update_team_options_global()
@@ -950,6 +951,7 @@ class FraudCaseApp:
             self.product_lookup,
             self.register_tooltip,
             summary_refresh_callback=self._schedule_summary_refresh,
+            change_notifier=self._log_navigation_change,
         )
         self.product_frames.append(prod)
         # Renombrar
@@ -983,7 +985,14 @@ class FraudCaseApp:
 
     def add_risk(self):
         idx = len(self.risk_frames)
-        risk = RiskFrame(self.risk_container, idx, self.remove_risk, self.logs, self.register_tooltip)
+        risk = RiskFrame(
+            self.risk_container,
+            idx,
+            self.remove_risk,
+            self.logs,
+            self.register_tooltip,
+            change_notifier=self._log_navigation_change,
+        )
         self.risk_frames.append(risk)
         for i, r in enumerate(self.risk_frames):
             r.idx = i
@@ -1009,7 +1018,14 @@ class FraudCaseApp:
 
     def add_norm(self):
         idx = len(self.norm_frames)
-        norm = NormFrame(self.norm_container, idx, self.remove_norm, self.logs, self.register_tooltip)
+        norm = NormFrame(
+            self.norm_container,
+            idx,
+            self.remove_norm,
+            self.logs,
+            self.register_tooltip,
+            change_notifier=self._log_navigation_change,
+        )
         self.norm_frames.append(norm)
         for i, n in enumerate(self.norm_frames):
             n.idx = i
@@ -1032,42 +1048,42 @@ class FraudCaseApp:
         ttk.Label(row1, text="Antecedentes:").pack(side="left")
         antecedentes_entry = ttk.Entry(row1, textvariable=self.antecedentes_var, width=80)
         antecedentes_entry.pack(side="left", padx=5)
-        antecedentes_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó antecedentes", self.logs))
+        antecedentes_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó antecedentes"))
         self.register_tooltip(antecedentes_entry, "Resume los hechos previos y contexto del caso.")
         row2 = ttk.Frame(frame)
         row2.pack(fill="x", pady=1)
         ttk.Label(row2, text="Modus operandi:").pack(side="left")
         modus_entry = ttk.Entry(row2, textvariable=self.modus_var, width=80)
         modus_entry.pack(side="left", padx=5)
-        modus_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó modus operandi", self.logs))
+        modus_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó modus operandi"))
         self.register_tooltip(modus_entry, "Describe la forma en que se ejecutó el fraude.")
         row3 = ttk.Frame(frame)
         row3.pack(fill="x", pady=1)
         ttk.Label(row3, text="Hallazgos principales:").pack(side="left")
         hall_entry = ttk.Entry(row3, textvariable=self.hallazgos_var, width=80)
         hall_entry.pack(side="left", padx=5)
-        hall_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó hallazgos", self.logs))
+        hall_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó hallazgos"))
         self.register_tooltip(hall_entry, "Menciona los hallazgos clave de la investigación.")
         row4 = ttk.Frame(frame)
         row4.pack(fill="x", pady=1)
         ttk.Label(row4, text="Descargos del colaborador:").pack(side="left")
         desc_entry = ttk.Entry(row4, textvariable=self.descargos_var, width=80)
         desc_entry.pack(side="left", padx=5)
-        desc_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó descargos", self.logs))
+        desc_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó descargos"))
         self.register_tooltip(desc_entry, "Registra los descargos formales del colaborador.")
         row5 = ttk.Frame(frame)
         row5.pack(fill="x", pady=1)
         ttk.Label(row5, text="Conclusiones:").pack(side="left")
         concl_entry = ttk.Entry(row5, textvariable=self.conclusiones_var, width=80)
         concl_entry.pack(side="left", padx=5)
-        concl_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó conclusiones", self.logs))
+        concl_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó conclusiones"))
         self.register_tooltip(concl_entry, "Escribe las conclusiones generales del informe.")
         row6 = ttk.Frame(frame)
         row6.pack(fill="x", pady=1)
         ttk.Label(row6, text="Recomendaciones y mejoras:").pack(side="left")
         reco_entry = ttk.Entry(row6, textvariable=self.recomendaciones_var, width=80)
         reco_entry.pack(side="left", padx=5)
-        reco_entry.bind("<FocusOut>", lambda e: log_event("navegacion", "Modificó recomendaciones", self.logs))
+        reco_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó recomendaciones"))
         self.register_tooltip(reco_entry, "Propón acciones correctivas y preventivas.")
 
     def build_actions_tab(self, parent):
@@ -2479,6 +2495,7 @@ class FraudCaseApp:
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
         self.refresh_summary_tables(data)
+        self.request_autosave()
 
     def load_autosave(self):
         """Carga el estado guardado automáticamente si el archivo existe."""
@@ -2491,6 +2508,45 @@ class FraudCaseApp:
                 log_event("navegacion", "Se cargó el autosave", self.logs)
             except Exception as ex:
                 log_event("validacion", f"Error cargando autosave: {ex}", self.logs)
+
+    def _log_navigation(self, message: str, autosave: bool = False) -> None:
+        log_event("navegacion", message, self.logs)
+        if autosave:
+            self.request_autosave()
+
+    def _log_navigation_change(self, message: str) -> None:
+        self._log_navigation(message, autosave=True)
+
+    def request_autosave(self) -> None:
+        self._autosave_dirty = True
+        if self._autosave_job_id is not None:
+            return
+        try:
+            self._autosave_job_id = self.root.after(
+                self.AUTOSAVE_DELAY_MS,
+                self._perform_debounced_autosave,
+            )
+        except tk.TclError:
+            self._autosave_job_id = None
+            self.flush_autosave()
+
+    def _perform_debounced_autosave(self) -> None:
+        self._autosave_job_id = None
+        if not self._autosave_dirty:
+            return
+        self._autosave_dirty = False
+        self.save_temp_version()
+
+    def flush_autosave(self) -> None:
+        if self._autosave_job_id is not None:
+            try:
+                self.root.after_cancel(self._autosave_job_id)
+            except tk.TclError:
+                pass
+            self._autosave_job_id = None
+        if self._autosave_dirty:
+            self._autosave_dirty = False
+            self.save_temp_version()
 
     def load_version_dialog(self):
         """Abre un diálogo para cargar una versión previa del formulario.
@@ -3245,6 +3301,7 @@ class FraudCaseApp:
 
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta elegida."""
+        self.flush_autosave()
         errors, warnings = self.validate_data()
         if errors:
             messagebox.showerror("Errores de validación", "\n".join(errors))
@@ -3323,9 +3380,9 @@ class FraudCaseApp:
         escribe en un archivo JSON con un sufijo de marca de tiempo. El
         fichero se guarda en el mismo directorio que el script y se nombra
         ``<id_caso>_temp_<YYYYMMDD_HHMMSS>.json``. Si no se ha especificado
-        un ID de caso todavía, se utiliza ``caso`` como prefijo. La función
-        se invoca automáticamente desde ``log_event`` cada vez que el usuario
-        edita un campo (evento de navegación).
+        un ID de caso todavía, se utiliza ``caso`` como prefijo. El planificador
+        de autosave lo ejecuta de forma diferida para consolidar múltiples
+        ediciones cercanas.
 
         Examples:
             >>> app.save_temp_version()
@@ -3337,7 +3394,7 @@ class FraudCaseApp:
         case_id = data.get('caso', {}).get('id_caso', '') or 'caso'
         filename = f"{case_id}_temp_{timestamp}.json"
         try:
-            path = os.path.join(os.path.dirname(os.getcdw()), filename)
+            path = os.path.join(os.getcwd(), filename)
             with open(path, 'w', encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as ex:

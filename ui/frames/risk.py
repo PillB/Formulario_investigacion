@@ -12,7 +12,7 @@ from validators import FieldValidator, log_event, validate_money_bounds, validat
 class RiskFrame:
     """Representa un riesgo identificado en la sección de riesgos."""
 
-    def __init__(self, parent, idx, remove_callback, logs, tooltip_register):
+    def __init__(self, parent, idx, remove_callback, logs, tooltip_register, change_notifier=None):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
@@ -20,6 +20,7 @@ class RiskFrame:
         self.tooltip_register = tooltip_register
         self.validators = []
         self._last_exposicion_decimal = None
+        self.change_notifier = change_notifier
 
         self.id_var = tk.StringVar(value=f"RSK-{idx+1:06d}")
         self.lider_var = tk.StringVar()
@@ -112,12 +113,18 @@ class RiskFrame:
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el riesgo {self.idx+1}?"):
-            log_event("navegacion", f"Se eliminó riesgo {self.idx+1}", self.logs)
+            self._log_change(f"Se eliminó riesgo {self.idx+1}")
             self.frame.destroy()
             self.remove_callback(self)
 
     def _validate_risk_id(self):
         return validate_risk_id(self.id_var.get())
+
+    def _log_change(self, message: str):
+        if callable(self.change_notifier):
+            self.change_notifier(message)
+        else:
+            log_event("navegacion", message, self.logs)
 
 
 __all__ = ["RiskFrame"]

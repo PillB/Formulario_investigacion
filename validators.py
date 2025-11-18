@@ -323,19 +323,11 @@ def should_autofill_field(current_value, preserve_existing: bool) -> bool:
     return False
 
 
-SAVE_TEMP_CALLBACK = None
-
-
 def log_event(event_type: str, message: str, logs: List[dict]) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     row = {"timestamp": timestamp, "tipo": event_type, "mensaje": message}
     logs.append(row)
     _append_log_to_disk(row)
-    if SAVE_TEMP_CALLBACK is not None and event_type == 'navegacion':
-        try:
-            SAVE_TEMP_CALLBACK()
-        except Exception:
-            pass
 
 
 def _append_log_to_disk(row: dict) -> None:
@@ -367,7 +359,6 @@ def escape_csv(value) -> str:
 
 __all__ = [
     'FieldValidator',
-    'SAVE_TEMP_CALLBACK',
     'escape_csv',
     'log_event',
     'normalize_without_accents',

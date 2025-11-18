@@ -12,13 +12,14 @@ from validators import FieldValidator, log_event, validate_date_text, validate_n
 class NormFrame:
     """Representa una norma transgredida en la sección de normas."""
 
-    def __init__(self, parent, idx, remove_callback, logs, tooltip_register):
+    def __init__(self, parent, idx, remove_callback, logs, tooltip_register, change_notifier=None):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self.change_notifier = change_notifier
 
         self.id_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
@@ -83,7 +84,7 @@ class NormFrame:
         if not norm_id:
             norm_id = f"{random.randint(1000, 9999)}.{random.randint(100, 999):03d}.{random.randint(10, 99):02d}.{random.randint(10, 99):02d}"
             self.id_var.set(norm_id)
-            log_event("navegacion", f"Norma {self.idx+1} sin ID: se asignó correlativo {norm_id}", self.logs)
+            self._log_change(f"Norma {self.idx+1} sin ID: se asignó correlativo {norm_id}")
         return {
             "id_norma": norm_id,
             "descripcion": self.descripcion_var.get().strip(),
@@ -92,9 +93,15 @@ class NormFrame:
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar la norma {self.idx+1}?"):
-            log_event("navegacion", f"Se eliminó norma {self.idx+1}", self.logs)
+            self._log_change(f"Se eliminó norma {self.idx+1}")
             self.frame.destroy()
             self.remove_callback(self)
+
+    def _log_change(self, message: str):
+        if callable(self.change_notifier):
+            self.change_notifier(message)
+        else:
+            log_event("navegacion", message, self.logs)
 
 
 __all__ = ["NormFrame"]
