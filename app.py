@@ -105,6 +105,7 @@ from ui.tooltips import HoverTooltip
 from validators import (
     FieldValidator,
     log_event,
+    normalize_without_accents,
     parse_decimal_amount,
     resolve_catalog_product_type,
     should_autofill_field,
