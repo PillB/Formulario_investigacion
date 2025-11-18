@@ -956,7 +956,7 @@ class ProductFrame:
             recuperado=values['recuperado'],
         )
         errors = {}
-        if abs(componentes - values['inv']) > Decimal('0.01'):
+        if componentes != values['inv']:
             errors['inv'] = (
                 "La suma de las cuatro partidas (pérdida, falla, contingencia y recuperación) "
                 "debe ser igual al monto investigado."
@@ -967,7 +967,7 @@ class ProductFrame:
             errors['pago'] = "El pago de deuda no puede ser mayor al monto investigado."
         tipo_prod = normalize_without_accents(self.tipo_prod_var.get()).lower()
         if any(word in tipo_prod for word in ('credito', 'tarjeta')):
-            if abs(values['contingencia'] - values['inv']) > Decimal('0.01'):
+            if values['contingencia'] != values['inv']:
                 errors['contingencia'] = (
                     "El monto de contingencia debe ser igual al monto investigado para créditos o tarjetas."
                 )

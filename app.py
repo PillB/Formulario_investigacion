@@ -3629,7 +3629,7 @@ class FraudCaseApp:
                 contingencia=m_cont,
                 recuperado=m_rec,
             )
-            if abs(componentes - m_inv) > Decimal('0.01'):
+            if componentes != m_inv:
                 errors.append(
                     f"Las cuatro partidas (pérdida, falla, contingencia y recuperación) deben ser iguales al monto investigado en el producto {producto['id_producto']}"
                 )
@@ -3678,14 +3678,14 @@ class FraudCaseApp:
             # Tipo producto vs contingencia
             tipo_prod = normalize_without_accents(producto['tipo_producto']).lower()
             if any(word in tipo_prod for word in ['credito', 'tarjeta']):
-                if abs(m_cont - m_inv) > Decimal('0.01'):
+                if m_cont != m_inv:
                     errors.append(f"El monto de contingencia debe ser igual al monto investigado en el producto {producto['id_producto']} porque es un crédito o tarjeta")
             # Fraude externo
             if producto['categoria2'] == 'Fraude Externo':
                 warnings.append(
                     f"Producto {producto['id_producto']} con categoría 2 'Fraude Externo': verifique la analítica registrada."
                 )
-        if self.product_frames and abs(total_componentes - total_investigado) > Decimal('0.01'):
+        if self.product_frames and total_componentes != total_investigado:
             errors.append(
                 "Las cuatro partidas (pérdida, falla, contingencia y recuperación) sumadas en el caso no coinciden con el total investigado."
             )
