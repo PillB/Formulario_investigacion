@@ -168,10 +168,10 @@ SUMMARY_CASES = [
         key="involucramientos",
         columns=_columns(3),
         valid_row=["1234567890123", "T22222", "250.75"],
-        invalid_row=["1234567890123", "bad", "100.00"],
+        invalid_row=["1234567890123", "T22222", "10.5"],
         state_getter=_collect_involvements,
         expected_state=[("1234567890123", "T22222", "250.75")],
-        error_fragment="colaborador",
+        error_fragment="dos decimales",
     ),
 ]
 
