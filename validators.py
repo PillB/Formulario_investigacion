@@ -6,9 +6,7 @@ import re
 import unicodedata
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
-from typing import Callable, Iterable, List, Optional
-
-from tkinter import ttk
+from typing import Callable, List, Optional
 
 from settings import TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
@@ -265,8 +263,7 @@ class FieldValidator:
     def _bind_widget_events(self, widget) -> None:
         widget.bind("<FocusOut>", self._on_change)
         widget.bind("<KeyRelease>", self._on_change)
-        if isinstance(widget, ttk.Combobox):
-            widget.bind("<<ComboboxSelected>>", self._on_change)
+        widget.bind("<<ComboboxSelected>>", self._on_change)
 
     def add_widget(self, widget) -> None:
         """Incluye widgets adicionales cuyos eventos deben disparar la validación."""
