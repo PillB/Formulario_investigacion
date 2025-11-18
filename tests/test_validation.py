@@ -283,6 +283,40 @@ def test_validate_data_accepts_catalog_product_type():
     assert warnings == []
 
 
+def test_validate_data_rejects_products_without_taxonomy_values():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            "categoria1": "",
+            "categoria2": "",
+            "modalidad": "",
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    errors, _warnings = app.validate_data()
+    assert any("Debe ingresar la categoría 1" in error for error in errors)
+    assert any("Debe ingresar la categoría 2" in error for error in errors)
+    assert any("Debe ingresar la modalidad" in error for error in errors)
+
+
+def test_validate_data_accepts_products_with_explicit_taxonomy_values():
+    cat1 = next(iter(TAXONOMIA))
+    cat2 = next(iter(TAXONOMIA[cat1]))
+    modalidad = TAXONOMIA[cat1][cat2][0]
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            "categoria1": cat1,
+            "categoria2": cat2,
+            "modalidad": modalidad,
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    errors, warnings = app.validate_data()
+    assert errors == []
+    assert warnings == []
+
+
 def test_validate_data_flags_unknown_product_type():
     app = build_headless_app("Producto inventado fuera de catálogo")
     errors, _warnings = app.validate_data()

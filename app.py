@@ -2430,11 +2430,9 @@ class FraudCaseApp:
     def _obtain_product_slot_for_import(self):
         for frame in self.product_frames:
             if not frame.id_var.get().strip():
-                self._apply_case_taxonomy_defaults(frame)
                 return frame
         self.add_product()
         new_frame = self.product_frames[-1]
-        self._apply_case_taxonomy_defaults(new_frame)
         return new_frame
 
     def _obtain_involvement_slot(self, product_frame):
@@ -3254,6 +3252,55 @@ class FraudCaseApp:
                 _report_catalog_error(catalog_message)
                 return None
             return None
+
+        def _validate_product_taxonomy(producto, product_label):
+            """Valida que categoría 1, 2 y modalidad del producto existan en TAXONOMIA."""
+
+            messages = []
+            cat1 = (producto.get('categoria1') or '').strip()
+            cat2 = (producto.get('categoria2') or '').strip()
+            modalidad = (producto.get('modalidad') or '').strip()
+
+            cat1_message = validate_required_text(cat1, "la categoría 1 del producto")
+            if cat1_message:
+                messages.append(f"Producto {product_label}: {cat1_message}")
+            elif cat1 not in TAXONOMIA:
+                messages.append(
+                    f"Producto {product_label}: La categoría 1 '{cat1}' no está en el catálogo CM."
+                )
+            cat1_valid = bool(cat1) and cat1 in TAXONOMIA
+
+            cat2_message = validate_required_text(cat2, "la categoría 2 del producto")
+            if cat2_message:
+                messages.append(f"Producto {product_label}: {cat2_message}")
+                cat2_valid = False
+            else:
+                if not cat1_valid:
+                    messages.append(
+                        f"Producto {product_label}: La categoría 2 '{cat2}' no puede validarse porque la categoría 1 es inválida."
+                    )
+                    cat2_valid = False
+                elif cat2 not in TAXONOMIA[cat1]:
+                    messages.append(
+                        f"Producto {product_label}: La categoría 2 '{cat2}' no pertenece a la categoría 1 '{cat1}' del catálogo CM."
+                    )
+                    cat2_valid = False
+                else:
+                    cat2_valid = True
+
+            mod_message = validate_required_text(modalidad, "la modalidad del producto")
+            if mod_message:
+                messages.append(f"Producto {product_label}: {mod_message}")
+            else:
+                if not (cat1_valid and cat2_valid):
+                    messages.append(
+                        f"Producto {product_label}: La modalidad '{modalidad}' no puede validarse porque las categorías registradas son inválidas."
+                    )
+                elif modalidad not in TAXONOMIA[cat1][cat2]:
+                    messages.append(
+                        f"Producto {product_label}: La modalidad '{modalidad}' no pertenece a la categoría 1 '{cat1}' y categoría 2 '{cat2}' del catálogo CM."
+                    )
+            return messages
         # Validar número de caso
         id_caso = self.id_caso_var.get().strip()
         case_message = validate_case_id(id_caso)
@@ -3396,6 +3443,8 @@ class FraudCaseApp:
                     errors.append(f"El producto {pid} está duplicado en el formulario.")
             else:
                 product_client_map[pid] = cid
+            for taxonomy_error in _validate_product_taxonomy(producto, producto_label):
+                errors.append(taxonomy_error)
             catalog_validations = [
                 (
                     producto.get('canal'),
