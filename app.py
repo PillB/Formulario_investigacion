@@ -65,69 +65,33 @@ from typing import Optional
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from models import (
-    build_detail_catalog_id_index,
-    iter_massive_csv_rows,
-    load_detail_catalogs,
-    normalize_detail_catalog_key,
-    parse_involvement_entries,
-)
-from settings import (
-    AUTOSAVE_FILE,
-    CANAL_LIST,
-    CLIENT_ID_ALIASES,
-    CRITICIDAD_LIST,
-    DETAIL_LOOKUP_ALIASES,
-    FLAG_CLIENTE_LIST,
-    LOGS_FILE,
-    MASSIVE_SAMPLE_FILES,
-    NORM_ID_ALIASES,
-    PRODUCT_ID_ALIASES,
-    PROCESO_LIST,
-    RISK_ID_ALIASES,
-    TEAM_ID_ALIASES,
-    TAXONOMIA,
-    TIPO_ID_LIST,
-    TIPO_INFORME_LIST,
-    TIPO_MONEDA_LIST,
-    TIPO_PRODUCTO_LIST,
-)
-from ui.frames import (
-    ClientFrame,
-    NormFrame,
-    PRODUCT_MONEY_SPECS,
-    ProductFrame,
-    RiskFrame,
-    TeamMemberFrame,
-)
+from models import (build_detail_catalog_id_index, iter_massive_csv_rows,
+                    load_detail_catalogs, normalize_detail_catalog_key,
+                    parse_involvement_entries)
+from settings import (AUTOSAVE_FILE, CANAL_LIST, CLIENT_ID_ALIASES,
+                      CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
+                      FLAG_CLIENTE_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
+                      NORM_ID_ALIASES, PROCESO_LIST, PRODUCT_ID_ALIASES,
+                      RISK_ID_ALIASES, TAXONOMIA, TEAM_ID_ALIASES,
+                      TIPO_ID_LIST, TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
+                      TIPO_PRODUCTO_LIST)
+from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
+                       ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
-from validators import (
-    FieldValidator,
-    TIPO_PRODUCTO_NORMALIZED,
-    drain_log_queue,
-    log_event,
-    normalize_without_accents,
-    parse_decimal_amount,
-    resolve_catalog_product_type,
-    should_autofill_field,
-    sum_investigation_components,
-    validate_agency_code,
-    validate_amount_text,
-    validate_case_id,
-    validate_client_id,
-    validate_codigo_analitica,
-    validate_date_text,
-    validate_email_list,
-    validate_money_bounds,
-    validate_norm_id,
-    validate_phone_list,
-    validate_product_dates,
-    validate_product_id,
-    validate_reclamo_id,
-    validate_required_text,
-    validate_risk_id,
-    validate_team_member_id,
-)
+from validators import (drain_log_queue, FieldValidator, log_event,
+                        normalize_without_accents, parse_decimal_amount,
+                        resolve_catalog_product_type, should_autofill_field,
+                        sum_investigation_components, TIPO_PRODUCTO_NORMALIZED,
+                        validate_agency_code, validate_amount_text,
+                        validate_case_id, validate_client_id,
+                        validate_codigo_analitica, validate_date_text,
+                        validate_email_list, validate_money_bounds,
+                        validate_norm_id, validate_phone_list,
+                        validate_product_dates, validate_product_id,
+                        validate_reclamo_id, validate_required_text,
+                        validate_risk_id, validate_team_member_id)
+
+
 class FraudCaseApp:
     AUTOSAVE_DELAY_MS = 4000
     SUMMARY_REFRESH_DELAY_MS = 250

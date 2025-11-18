@@ -6,13 +6,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
-from validators import (
-    FieldValidator,
-    log_event,
-    should_autofill_field,
-    validate_agency_code,
-    validate_team_member_id,
-)
+from validators import (FieldValidator, log_event, should_autofill_field,
+                        validate_agency_code, validate_team_member_id)
 
 
 class TeamMemberFrame:
