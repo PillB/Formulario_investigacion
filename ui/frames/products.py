@@ -86,7 +86,21 @@ class InvolvementRow:
         }
 
     def update_team_options(self):
-        self.team_cb['values'] = self.team_getter()
+        options = self.team_getter()
+        self.team_cb['values'] = options
+        current_value = self.team_var.get().strip()
+        if not current_value:
+            return
+        known_ids = {option.strip() for option in options if option and option.strip()}
+        if current_value not in known_ids:
+            message = (
+                "El colaborador seleccionado ya no está disponible. Selecciona un nuevo colaborador."
+            )
+            if self.team_validator:
+                self.team_validator.show_custom_error(message)
+            else:
+                messagebox.showerror("Colaborador eliminado", message)
+            self._notify_summary_change()
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar esta asignación?"):
