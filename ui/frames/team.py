@@ -60,7 +60,13 @@ class TeamMemberFrame:
         id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
         self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
         ttk.Label(row1, text="Flag:").pack(side="left")
-        flag_cb = ttk.Combobox(row1, textvariable=self.flag_var, values=FLAG_COLABORADOR_LIST, state="readonly", width=20)
+        flag_cb = ttk.Combobox(
+            row1,
+            textvariable=self.flag_var,
+            values=FLAG_COLABORADOR_LIST,
+            state="readonly",
+            width=20,
+        )
         flag_cb.pack(side="left", padx=5)
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
@@ -99,12 +105,24 @@ class TeamMemberFrame:
         row4 = ttk.Frame(self.frame)
         row4.pack(fill="x", pady=1)
         ttk.Label(row4, text="Tipo de falta:").pack(side="left")
-        falta_cb = ttk.Combobox(row4, textvariable=self.tipo_falta_var, values=TIPO_FALTA_LIST, state="readonly", width=20)
+        falta_cb = ttk.Combobox(
+            row4,
+            textvariable=self.tipo_falta_var,
+            values=TIPO_FALTA_LIST,
+            state="readonly",
+            width=20,
+        )
         falta_cb.pack(side="left", padx=5)
         falta_cb.set('')
         self.tooltip_register(falta_cb, "Selecciona la falta disciplinaria tipificada.")
         ttk.Label(row4, text="Tipo de sanción:").pack(side="left")
-        sanc_cb = ttk.Combobox(row4, textvariable=self.tipo_sancion_var, values=TIPO_SANCION_LIST, state="readonly", width=20)
+        sanc_cb = ttk.Combobox(
+            row4,
+            textvariable=self.tipo_sancion_var,
+            values=TIPO_SANCION_LIST,
+            state="readonly",
+            width=20,
+        )
         sanc_cb.pack(side="left", padx=5)
         sanc_cb.set('')
         self.tooltip_register(sanc_cb, "Describe la sanción propuesta o aplicada.")
@@ -133,6 +151,36 @@ class TeamMemberFrame:
                 variables=[self.codigo_agencia_var],
             )
         )
+        catalog_validations = [
+            (
+                flag_cb,
+                self.flag_var,
+                FLAG_COLABORADOR_LIST,
+                "el flag del colaborador",
+            ),
+            (
+                falta_cb,
+                self.tipo_falta_var,
+                TIPO_FALTA_LIST,
+                "el tipo de falta del colaborador",
+            ),
+            (
+                sanc_cb,
+                self.tipo_sancion_var,
+                TIPO_SANCION_LIST,
+                "el tipo de sanción del colaborador",
+            ),
+        ]
+        for widget, variable, catalog, label in catalog_validations:
+            self.validators.append(
+                FieldValidator(
+                    widget,
+                    lambda v=variable, c=catalog, l=label: self._validate_catalog_selection(v.get(), l, c),
+                    self.logs,
+                    f"Colaborador {self.idx+1} - {label.capitalize()}",
+                    variables=[variable],
+                )
+            )
 
     def set_lookup(self, lookup):
         self.team_lookup = lookup or {}
@@ -198,6 +246,15 @@ class TeamMemberFrame:
             self.change_notifier(message)
         else:
             log_event("navegacion", message, self.logs)
+
+    @staticmethod
+    def _validate_catalog_selection(value: str, label: str, catalog) -> str | None:
+        text = (value or "").strip()
+        if not text:
+            return f"Debe seleccionar {label}."
+        if text not in catalog:
+            return f"El {label} '{text}' no está en el catálogo CM."
+        return None
 
 
 __all__ = ["TeamMemberFrame"]

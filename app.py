@@ -71,11 +71,12 @@ from models import (build_detail_catalog_id_index, iter_massive_csv_rows,
                     parse_involvement_entries)
 from settings import (AUTOSAVE_FILE, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
-                      FLAG_CLIENTE_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
-                      NORM_ID_ALIASES, PROCESO_LIST, PRODUCT_ID_ALIASES,
-                      RISK_ID_ALIASES, TAXONOMIA, TEAM_ID_ALIASES,
-                      TIPO_ID_LIST, TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
-                      TIPO_PRODUCTO_LIST)
+                      FLAG_CLIENTE_LIST, FLAG_COLABORADOR_LIST, LOGS_FILE,
+                      MASSIVE_SAMPLE_FILES, NORM_ID_ALIASES, PROCESO_LIST,
+                      PRODUCT_ID_ALIASES, RISK_ID_ALIASES, TAXONOMIA,
+                      TEAM_ID_ALIASES, TIPO_FALTA_LIST, TIPO_ID_LIST,
+                      TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
+                      TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST)
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
@@ -3301,6 +3302,15 @@ class FraudCaseApp:
                         f"Producto {product_label}: La modalidad '{modalidad}' no pertenece a la categoría 1 '{cat1}' y categoría 2 '{cat2}' del catálogo CM."
                     )
             return messages
+
+        def _validate_team_catalog_value(value, label, catalog, collaborator_idx):
+            text = (value or '').strip()
+            if not text:
+                errors.append(f"Colaborador {collaborator_idx}: Debe seleccionar {label}.")
+            elif text not in catalog:
+                errors.append(
+                    f"Colaborador {collaborator_idx}: El {label} '{text}' no está en el catálogo CM."
+                )
         # Validar número de caso
         id_caso = self.id_caso_var.get().strip()
         case_message = validate_case_id(id_caso)
@@ -3403,6 +3413,27 @@ class FraudCaseApp:
             agency_message = validate_agency_code(tm.codigo_agencia_var.get(), allow_blank=True)
             if agency_message:
                 errors.append(f"Colaborador {idx}: {agency_message}")
+            flag_value = tm.flag_var.get() if hasattr(tm, 'flag_var') else ''
+            falta_value = tm.tipo_falta_var.get() if hasattr(tm, 'tipo_falta_var') else ''
+            sancion_value = tm.tipo_sancion_var.get() if hasattr(tm, 'tipo_sancion_var') else ''
+            _validate_team_catalog_value(
+                flag_value,
+                "el flag del colaborador",
+                FLAG_COLABORADOR_LIST,
+                idx,
+            )
+            _validate_team_catalog_value(
+                falta_value,
+                "el tipo de falta del colaborador",
+                TIPO_FALTA_LIST,
+                idx,
+            )
+            _validate_team_catalog_value(
+                sancion_value,
+                "el tipo de sanción del colaborador",
+                TIPO_SANCION_LIST,
+                idx,
+            )
             division = tm.division_var.get().strip().lower()
             area = tm.area_var.get().strip().lower()
             division_norm = division.replace('á', 'a').replace('é', 'e').replace('ó', 'o')
