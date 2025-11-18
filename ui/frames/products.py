@@ -444,6 +444,13 @@ class ProductFrame:
                     variables=[self.monto_inv_var],
                 ),
                 FieldValidator(
+                    moneda_cb,
+                    lambda: validate_required_text(self.moneda_var.get(), "la moneda"),
+                    self.logs,
+                    f"Producto {self.idx+1} - Moneda",
+                    variables=[self.moneda_var],
+                ),
+                FieldValidator(
                     pago_entry,
                     lambda: validate_amount_text(self.monto_pago_var.get(), "el monto pago de deuda", allow_blank=True),
                     self.logs,
