@@ -338,20 +338,9 @@ def drain_log_queue() -> List[dict]:
     return rows
 
 
-def escape_csv(value) -> str:
-    if value is None:
-        return ""
-    text = str(value)
-    if any(ch in text for ch in [',', '\n', '"']):
-        text = text.replace('"', '""')
-        text = f'"{text}"'
-    return text
-
-
 __all__ = [
     'FieldValidator',
     'drain_log_queue',
-    'escape_csv',
     'log_event',
     'normalize_without_accents',
     'parse_decimal_amount',
