@@ -164,31 +164,28 @@ def test_validate_data_flags_unknown_product_type():
     assert any("no está en el catálogo" in error for error in errors)
 
 
-def test_validate_data_accepts_account_family_ids():
+@pytest.mark.parametrize(
+    "product_id,expect_error",
+    [
+        ("1234567890", None),
+        ("123", "ahorro"),
+    ],
+)
+def test_validate_data_validates_account_family_ids(product_id, expect_error):
     product_config = {
         "tipo_producto": "Cuenta de ahorro",
         "producto_overrides": {
             "tipo_producto": "Cuenta de ahorro",
-            "id_producto": "1234567890",
+            "id_producto": product_id,
         },
     }
     app = build_headless_app("Cuenta de ahorro", product_configs=[product_config])
     errors, warnings = app.validate_data()
-    assert errors == []
-    assert warnings == []
-
-
-def test_validate_data_rejects_short_account_ids():
-    product_config = {
-        "tipo_producto": "Cuenta de ahorro",
-        "producto_overrides": {
-            "tipo_producto": "Cuenta de ahorro",
-            "id_producto": "123",
-        },
-    }
-    app = build_headless_app("Cuenta de ahorro", product_configs=[product_config])
-    errors, _ = app.validate_data()
-    assert any("ahorro" in error for error in errors)
+    if expect_error:
+        assert any(expect_error in error for error in errors)
+    else:
+        assert errors == []
+        assert warnings == []
 
 
 def test_validate_data_accepts_generic_alphanumeric_ids():
@@ -307,29 +304,26 @@ def test_validate_data_errors_when_involvement_missing_collaborator():
             },
             f"El monto pagado de deuda excede el monto investigado en el producto {DEFAULT_PRODUCT_ID}",
         ),
+        (
+            {
+                "tipo_producto": "Crédito personal",
+                "producto_overrides": {
+                    "monto_investigado": "100.123",
+                    "monto_perdida_fraude": "0",
+                    "monto_falla_procesos": "0",
+                    "monto_contingencia": "0",
+                    "monto_recuperado": "0",
+                    "monto_pago_deuda": "0",
+                },
+            },
+            f"Monto investigado del producto {DEFAULT_PRODUCT_ID} solo puede tener dos decimales como máximo.",
+        ),
     ],
 )
 def test_validate_data_enforces_amount_rules(product_config, expected_error):
     app = build_headless_app("Crédito personal", product_configs=[product_config])
     errors, _ = app.validate_data()
     assert expected_error in errors
-
-
-def test_validate_data_rejects_amount_with_three_decimals():
-    product_config = {
-        "tipo_producto": "Crédito personal",
-        "producto_overrides": {
-            "monto_investigado": "100.123",
-            "monto_perdida_fraude": "0",
-            "monto_falla_procesos": "0",
-            "monto_contingencia": "0",
-            "monto_recuperado": "0",
-            "monto_pago_deuda": "0",
-        },
-    }
-    app = build_headless_app("Crédito personal", product_configs=[product_config])
-    errors, _ = app.validate_data()
-    assert any("dos decimales" in error for error in errors)
 
 
 def test_validate_data_detects_duplicate_technical_keys():
