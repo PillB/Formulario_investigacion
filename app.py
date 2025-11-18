@@ -3254,19 +3254,30 @@ class FraudCaseApp:
             errors.append(proceso_message)
         # Validar IDs de clientes
         for idx, cframe in enumerate(self.client_frames, start=1):
-            tipo_id_value = cframe.tipo_id_var.get()
+            tipo_id_value = (cframe.tipo_id_var.get() or "").strip()
             tipo_message = validate_required_text(tipo_id_value, "el tipo de ID del cliente")
             if tipo_message:
                 errors.append(f"Cliente {idx}: {tipo_message}")
-                continue
-            if tipo_id_value not in TIPO_ID_LIST:
-                errors.append(
-                    f"Cliente {idx}: El tipo de ID '{tipo_id_value}' no está en el catálogo CM."
-                )
-                continue
-            message = validate_client_id(tipo_id_value, cframe.id_var.get())
-            if message:
-                errors.append(f"Cliente {idx}: {message}")
+            else:
+                if tipo_id_value not in TIPO_ID_LIST:
+                    errors.append(
+                        f"Cliente {idx}: El tipo de ID '{tipo_id_value}' no está en el catálogo CM."
+                    )
+                else:
+                    message = validate_client_id(tipo_id_value, cframe.id_var.get())
+                    if message:
+                        errors.append(f"Cliente {idx}: {message}")
+
+            flag_var = getattr(cframe, "flag_var", None)
+            if flag_var is not None:
+                flag_value = (flag_var.get() or "").strip()
+                flag_message = validate_required_text(flag_value, "el flag del cliente")
+                if flag_message:
+                    errors.append(f"Cliente {idx}: {flag_message}")
+                elif flag_value not in FLAG_CLIENTE_LIST:
+                    errors.append(
+                        f"Cliente {idx}: El flag de cliente '{flag_value}' no está en el catálogo CM."
+                    )
         # Validar duplicidad del key técnico (caso, producto, cliente, colaborador, fecha ocurrencia, reclamo)
         key_set = set()
         product_client_map = {}
