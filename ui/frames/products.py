@@ -746,16 +746,21 @@ class ProductFrame:
             ],
         }
 
-    def on_id_change(self, from_focus=False, preserve_existing=False):
+    def set_product_lookup(self, lookup):
+        self.product_lookup = lookup or {}
+        self._last_missing_lookup_id = None
+
+    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         pid = self.id_var.get().strip()
-        self.log_change(f"Producto {self.idx+1}: modificó ID a {pid}")
+        if not silent:
+            self.log_change(f"Producto {self.idx+1}: modificó ID a {pid}")
         if not pid:
             self._last_missing_lookup_id = None
             self.schedule_summary_refresh({'productos', 'reclamos'})
             return
         data = self.product_lookup.get(pid)
         if not data:
-            if from_focus and self.product_lookup and self._last_missing_lookup_id != pid:
+            if from_focus and not silent and self.product_lookup and self._last_missing_lookup_id != pid:
                 messagebox.showerror(
                     "Producto no encontrado",
                     (

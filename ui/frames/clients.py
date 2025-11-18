@@ -160,8 +160,13 @@ class ClientFrame:
             )
         )
 
-    def on_id_change(self, from_focus=False, preserve_existing=False):
-        self._log_change(f"Cliente {self.idx+1}: cambió ID a {self.id_var.get()}")
+    def set_lookup(self, lookup):
+        self.client_lookup = lookup or {}
+        self._last_missing_lookup_id = None
+
+    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
+        if not silent:
+            self._log_change(f"Cliente {self.idx+1}: cambió ID a {self.id_var.get()}")
         self.update_client_options()
         cid = self.id_var.get().strip()
         if not cid:
@@ -185,7 +190,7 @@ class ClientFrame:
                 self.set_accionado_from_text(accionado)
             self._last_missing_lookup_id = None
             self._log_change(f"Autopoblado datos del cliente {cid}")
-        elif from_focus and self.client_lookup:
+        elif from_focus and not silent and self.client_lookup:
             if self._last_missing_lookup_id != cid:
                 messagebox.showerror(
                     "Cliente no encontrado",

@@ -134,7 +134,11 @@ class TeamMemberFrame:
             )
         )
 
-    def on_id_change(self, from_focus=False, preserve_existing=False):
+    def set_lookup(self, lookup):
+        self.team_lookup = lookup or {}
+        self._last_missing_lookup_id = None
+
+    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         cid = self.id_var.get().strip()
         if cid:
             data = self.team_lookup.get(cid)
@@ -152,7 +156,7 @@ class TeamMemberFrame:
                 set_if_present(self.codigo_agencia_var, "codigo_agencia")
                 self._last_missing_lookup_id = None
                 self._log_change(f"Autopoblado colaborador {self.idx+1} desde team_details.csv")
-            elif from_focus and self.team_lookup:
+            elif from_focus and not silent and self.team_lookup:
                 log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
                 if self._last_missing_lookup_id != cid:
                     messagebox.showerror(

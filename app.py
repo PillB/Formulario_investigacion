@@ -58,6 +58,7 @@ correos, direcciones y planes de acción).
 import csv
 import json
 import os
+import threading
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -109,6 +110,23 @@ class FraudCaseApp:
         self._last_validated_risk_exposure_total = Decimal('0')
         self._log_flush_job_id: Optional[str] = None
         self._log_file_initialized = bool(LOGS_FILE and os.path.exists(LOGS_FILE))
+        self.catalog_status_var = tk.StringVar(
+            value="Catálogos de detalle pendientes. Usa 'Cargar catálogos' para habilitar el autopoblado."
+        )
+        self._catalog_loading = False
+        self._catalog_ready = False
+        self._catalog_prompted = False
+        self._catalog_progress_visible = False
+        self._catalog_loading_thread = None
+        self._catalog_dependent_widgets = []
+        self.catalog_load_button = None
+        self.catalog_skip_button = None
+        self.catalog_progress = None
+        self.detail_catalogs = {}
+        self.detail_lookup_by_id = {}
+        self.team_lookup = {}
+        self.client_lookup = {}
+        self.product_lookup = {}
 
         def register_tooltip(widget, text):
             if widget is None or not text:
@@ -119,77 +137,7 @@ class FraudCaseApp:
 
         self.register_tooltip = register_tooltip
         self.root.protocol("WM_DELETE_WINDOW", self._handle_window_close)
-        # Cargar catálogos para autopoblado conservando los valores originales
-        raw_detail_catalogs = load_detail_catalogs()
-        self.detail_catalogs = {
-            normalize_detail_catalog_key(key): (value or {})
-            for key, value in raw_detail_catalogs.items()
-        }
-        self.detail_lookup_by_id = build_detail_catalog_id_index(self.detail_catalogs)
-
-        def _sync_catalog_aliases(canonical_key):
-            canonical_key = normalize_detail_catalog_key(canonical_key)
-            lookup = self.detail_catalogs.get(canonical_key)
-            if not lookup:
-                return
-            for alias in DETAIL_LOOKUP_ALIASES.get(canonical_key, ()): 
-                alias_key = normalize_detail_catalog_key(alias)
-                if not alias_key:
-                    continue
-                self.detail_catalogs[alias_key] = lookup
-
-        def _ensure_canonical_catalog(canonical_key):
-            canonical_key = normalize_detail_catalog_key(canonical_key)
-            if canonical_key in self.detail_catalogs:
-                _sync_catalog_aliases(canonical_key)
-                return
-            for alias in DETAIL_LOOKUP_ALIASES.get(canonical_key, ()): 
-                alias_key = normalize_detail_catalog_key(alias)
-                lookup = self.detail_catalogs.get(alias_key)
-                if lookup:
-                    self.detail_catalogs[canonical_key] = lookup
-                    _sync_catalog_aliases(canonical_key)
-                    return
-
-        for canonical in DETAIL_LOOKUP_ALIASES:
-            _ensure_canonical_catalog(canonical)
-
         self._schedule_log_flush()
-
-        def _lookup_or_empty(canonical_key):
-            normalized_key = normalize_detail_catalog_key(canonical_key)
-            lookup = self.detail_lookup_by_id.get(normalized_key)
-            return lookup if lookup is not None else {}
-
-        self.team_lookup = _lookup_or_empty("id_colaborador")
-        # Cargar client details para autopoblar clientes. Si no existe el
-        # fichero ``client_details.csv`` se obtiene un diccionario vacío. Este
-        # diccionario se usa en ClientFrame.on_id_change() para rellenar
-        # automáticamente campos del cliente cuando se reconoce su ID.
-        self.client_lookup = _lookup_or_empty("id_cliente")
-        self.product_lookup = _lookup_or_empty("id_producto")
-
-        def _register_normalized_catalog(canonical_key, lookup):
-            canonical_key = normalize_detail_catalog_key(canonical_key)
-            if not lookup:
-                return
-            existing = self.detail_catalogs.get(canonical_key)
-            if existing is lookup:
-                self.detail_lookup_by_id[canonical_key] = lookup
-                _sync_catalog_aliases(canonical_key)
-                return
-            if existing:
-                existing.update(lookup)
-                target = existing
-            else:
-                target = lookup
-            self.detail_catalogs[canonical_key] = target
-            self.detail_lookup_by_id[canonical_key] = target
-            _sync_catalog_aliases(canonical_key)
-
-        _register_normalized_catalog("id_cliente", self.client_lookup)
-        _register_normalized_catalog("id_colaborador", self.team_lookup)
-        _register_normalized_catalog("id_producto", self.product_lookup)
         # Datos en memoria: listas de frames
         self.client_frames = []
         self.team_frames = []
@@ -230,6 +178,7 @@ class FraudCaseApp:
         self.build_ui()
         # Cargar autosave si existe
         self.load_autosave()
+        self.root.after(250, self._prompt_initial_catalog_loading)
 
     def import_combined(self, filename=None):
         """Importa datos combinados de productos, clientes y colaboradores."""
@@ -1104,6 +1053,30 @@ class FraudCaseApp:
     def build_actions_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True, padx=5, pady=5)
+        catalog_group = ttk.LabelFrame(frame, text="Catálogos de detalle")
+        catalog_group.pack(fill="x", expand=False, pady=(0, 10))
+        ttk.Label(
+            catalog_group,
+            textvariable=self.catalog_status_var,
+            wraplength=500,
+            justify="left",
+        ).pack(anchor="w", padx=5, pady=(5, 2))
+        catalog_controls = ttk.Frame(catalog_group)
+        catalog_controls.pack(fill="x", padx=5, pady=(0, 5))
+        self.catalog_load_button = ttk.Button(
+            catalog_controls,
+            text="Cargar catálogos",
+            command=self.request_catalog_loading,
+        )
+        self.catalog_load_button.pack(side="left", padx=2)
+        self.catalog_skip_button = ttk.Button(
+            catalog_controls,
+            text="Iniciar sin catálogos",
+            command=self._mark_catalogs_skipped,
+        )
+        self.catalog_skip_button.pack(side="left", padx=2)
+        self.catalog_progress = ttk.Progressbar(catalog_controls, mode="indeterminate", length=160)
+        self._catalog_progress_visible = False
         # Botones de importación
         ttk.Label(frame, text="Importar datos masivos (CSV)").pack(anchor="w")
         import_buttons = ttk.Frame(frame)
@@ -1130,6 +1103,16 @@ class FraudCaseApp:
         btn_reclamos = ttk.Button(import_buttons, text="Cargar reclamos", command=self.import_claims)
         btn_reclamos.pack(side="left", padx=2)
         self.register_tooltip(btn_reclamos, "Vincula reclamos con los productos.")
+        for widget in (
+            btn_clientes,
+            btn_colabs,
+            btn_productos,
+            btn_combo,
+            btn_riesgos,
+            btn_normas,
+            btn_reclamos,
+        ):
+            self._register_catalog_dependent_widget(widget)
 
         # Botones de guardado y carga
         ttk.Label(frame, text="Guardar y cargar versiones").pack(anchor="w", pady=(10,2))
@@ -1151,6 +1134,222 @@ class FraudCaseApp:
 
         # Información adicional
         ttk.Label(frame, text="El auto‑guardado se realiza automáticamente en un archivo JSON").pack(anchor="w", pady=(10,2))
+        self._set_catalog_dependent_state(self._catalog_loading)
+
+    def _register_catalog_dependent_widget(self, widget):
+        if widget is None:
+            return
+        self._catalog_dependent_widgets.append(widget)
+        if self._catalog_loading:
+            try:
+                widget.state(['disabled'])
+            except tk.TclError:
+                pass
+
+    def _set_catalog_dependent_state(self, disabled):
+        for widget in self._catalog_dependent_widgets:
+            if widget is None:
+                continue
+            try:
+                if disabled:
+                    widget.state(['disabled'])
+                else:
+                    widget.state(['!disabled'])
+            except tk.TclError:
+                continue
+
+    def _show_catalog_progress(self):
+        if not self.catalog_progress:
+            return
+        if not self._catalog_progress_visible:
+            self.catalog_progress.pack(side="left", fill="x", expand=True, padx=5)
+            self._catalog_progress_visible = True
+        try:
+            self.catalog_progress.start(10)
+        except tk.TclError:
+            pass
+
+    def _hide_catalog_progress(self):
+        if not self.catalog_progress:
+            return
+        try:
+            self.catalog_progress.stop()
+        except tk.TclError:
+            pass
+        if self._catalog_progress_visible:
+            self.catalog_progress.pack_forget()
+            self._catalog_progress_visible = False
+
+    def _prompt_initial_catalog_loading(self):
+        if self._catalog_prompted or self._catalog_loading or self._catalog_ready:
+            return
+        self._catalog_prompted = True
+        try:
+            should_load = messagebox.askyesno(
+                "Catálogos de detalle",
+                (
+                    "El formulario puede autopoblar clientes, productos y colaboradores "
+                    "si cargas los catálogos de detalle. ¿Deseas cargarlos ahora?"
+                ),
+                parent=self.root,
+            )
+        except tk.TclError:
+            should_load = True
+        if should_load:
+            self.request_catalog_loading()
+        else:
+            self._mark_catalogs_skipped()
+
+    def _mark_catalogs_skipped(self):
+        if self._catalog_loading:
+            return
+        self._catalog_prompted = True
+        self._catalog_ready = False
+        self.catalog_status_var.set(
+            "Trabajarás sin catálogos. Puedes cargarlos más adelante desde la pestaña Acciones."
+        )
+        self._set_catalog_dependent_state(False)
+
+    def request_catalog_loading(self):
+        if self._catalog_loading:
+            return
+        self._catalog_prompted = True
+        self._catalog_loading = True
+        self._catalog_ready = False
+        self.catalog_status_var.set(
+            "Cargando catálogos de detalle. Este proceso puede tardar algunos segundos..."
+        )
+        self._show_catalog_progress()
+        self._set_catalog_dependent_state(True)
+        for button in (self.catalog_load_button, self.catalog_skip_button):
+            if button is None:
+                continue
+            try:
+                button.state(['disabled'])
+            except tk.TclError:
+                pass
+        self._catalog_loading_thread = threading.Thread(
+            target=self._load_catalogs_in_background,
+            daemon=True,
+            name="catalog-loader",
+        )
+        self._catalog_loading_thread.start()
+
+    def _load_catalogs_in_background(self):
+        try:
+            raw_catalogs = load_detail_catalogs()
+            detail_catalogs, detail_lookup_by_id = self._normalize_detail_catalog_payload(raw_catalogs)
+        except Exception as exc:  # pragma: no cover - errores inusuales de IO
+            self._dispatch_to_ui(self._handle_catalog_load_failure, exc)
+            return
+        self._dispatch_to_ui(self._handle_catalog_load_success, detail_catalogs, detail_lookup_by_id)
+
+    def _dispatch_to_ui(self, callback, *args, **kwargs):
+        if getattr(self, 'root', None) is None:
+            return
+        try:
+            self.root.after(0, lambda: callback(*args, **kwargs))
+        except tk.TclError:
+            pass
+
+    def _handle_catalog_load_success(self, detail_catalogs, detail_lookup_by_id):
+        self._catalog_ready = True
+        self._apply_catalog_lookups(detail_catalogs, detail_lookup_by_id)
+        if detail_lookup_by_id:
+            self.catalog_status_var.set(
+                "Catálogos de detalle cargados. El autopoblado e importación están habilitados."
+            )
+        else:
+            self.catalog_status_var.set(
+                "No se encontraron catálogos de detalle. Puedes seguir trabajando manualmente."
+            )
+        self._finalize_catalog_loading_state()
+
+    def _handle_catalog_load_failure(self, error):
+        self._catalog_ready = False
+        self.catalog_status_var.set(
+            "No se pudieron cargar los catálogos. Intenta nuevamente desde 'Cargar catálogos'."
+        )
+        self._finalize_catalog_loading_state(failed=True)
+        try:
+            messagebox.showerror(
+                "Catálogos de detalle",
+                f"No se pudieron cargar los catálogos: {error}",
+            )
+        except tk.TclError:
+            pass
+
+    def _finalize_catalog_loading_state(self, failed=False):
+        self._catalog_loading = False
+        self._hide_catalog_progress()
+        self._set_catalog_dependent_state(False)
+        self._catalog_loading_thread = None
+        target_text = "Recargar catálogos" if not failed else "Reintentar carga"
+        if self.catalog_load_button is not None:
+            try:
+                self.catalog_load_button.config(text=target_text)
+                self.catalog_load_button.state(['!disabled'])
+            except tk.TclError:
+                pass
+        if self.catalog_skip_button is not None:
+            try:
+                self.catalog_skip_button.state(['!disabled'])
+            except tk.TclError:
+                pass
+
+    def _normalize_detail_catalog_payload(self, raw_catalogs):
+        normalized = {
+            normalize_detail_catalog_key(key): dict(value or {})
+            for key, value in (raw_catalogs or {}).items()
+        }
+        lookup_by_id = build_detail_catalog_id_index(normalized)
+        for canonical_key, aliases in (DETAIL_LOOKUP_ALIASES or {}).items():
+            canonical = normalize_detail_catalog_key(canonical_key)
+            lookup = normalized.get(canonical) or lookup_by_id.get(canonical)
+            if not lookup:
+                for alias in aliases or ():
+                    alias_key = normalize_detail_catalog_key(alias)
+                    alias_lookup = normalized.get(alias_key)
+                    if alias_lookup:
+                        lookup = alias_lookup
+                        break
+            if not lookup:
+                continue
+            normalized[canonical] = lookup
+            lookup_by_id[canonical] = lookup
+            for alias in aliases or ():
+                alias_key = normalize_detail_catalog_key(alias)
+                if not alias_key:
+                    continue
+                normalized[alias_key] = lookup
+                lookup_by_id[alias_key] = lookup
+        return normalized, lookup_by_id
+
+    def _apply_catalog_lookups(self, detail_catalogs, detail_lookup_by_id):
+        self.detail_catalogs = detail_catalogs or {}
+        self.detail_lookup_by_id = detail_lookup_by_id or {}
+        self.client_lookup = self._extract_lookup_or_empty("id_cliente")
+        self.team_lookup = self._extract_lookup_or_empty("id_colaborador")
+        self.product_lookup = self._extract_lookup_or_empty("id_producto")
+        for frame in self.client_frames:
+            if hasattr(frame, 'set_lookup'):
+                frame.set_lookup(self.client_lookup)
+                frame.on_id_change(preserve_existing=True, silent=True)
+        for frame in self.team_frames:
+            if hasattr(frame, 'set_lookup'):
+                frame.set_lookup(self.team_lookup)
+                frame.on_id_change(preserve_existing=True, silent=True)
+        for frame in self.product_frames:
+            if hasattr(frame, 'set_product_lookup'):
+                frame.set_product_lookup(self.product_lookup)
+                frame.on_id_change(preserve_existing=True, silent=True)
+
+    def _extract_lookup_or_empty(self, canonical_key):
+        normalized = normalize_detail_catalog_key(canonical_key)
+        lookup = self.detail_lookup_by_id.get(normalized)
+        if isinstance(lookup, dict):
+            return lookup
+        return {}
 
     def build_summary_tab(self, parent):
         """Construye la pestaña de resumen con tablas compactas."""
