@@ -3025,16 +3025,15 @@ class FraudCaseApp:
         self._last_validated_risk_exposure_total = risk_exposure_total
         # Validar normas
         norm_ids = set()
-        for n in self.norm_frames:
+        for idx, n in enumerate(self.norm_frames, start=1):
             nd = n.get_data()
             nid = nd['id_norma']
-            if nid:
-                # Debe seguir formato de números con puntos
-                import re
-                if not re.match(r'\d{4}\.\d{3}\.\d{2}\.\d{2}$', nid):
-                    errors.append(f"ID de norma {nid} no tiene el formato XXXX.XXX.XX.XX")
-                if nid in norm_ids:
-                    errors.append(f"ID de norma duplicado: {nid}")
+            message = validate_norm_id(nid)
+            if message:
+                errors.append(f"Norma {idx}: {message}")
+            elif nid in norm_ids:
+                errors.append(f"ID de norma duplicado: {nid}")
+            else:
                 norm_ids.add(nid)
             # Fecha vigencia
             fvig = nd['fecha_vigencia']

@@ -31,7 +31,7 @@ class NormFrame:
         ttk.Label(row1, text="ID de norma:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
-        self.tooltip_register(id_entry, "Formato sugerido: 0000.000.00.00")
+        self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         ttk.Label(row1, text="Fecha de vigencia (YYYY-MM-DD):").pack(side="left")
         fecha_entry = ttk.Entry(row1, textvariable=self.fecha_var, width=15)
         fecha_entry.pack(side="left", padx=5)
