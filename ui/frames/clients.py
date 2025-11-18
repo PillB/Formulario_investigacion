@@ -14,6 +14,7 @@ from validators import (
     validate_email_list,
     validate_multi_selection,
     validate_phone_list,
+    validate_required_text,
 )
 
 
@@ -126,6 +127,15 @@ class ClientFrame:
                 self.logs,
                 f"Cliente {self.idx+1} - ID",
                 variables=[self.id_var, self.tipo_id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                tipo_id_cb,
+                lambda: validate_required_text(self.tipo_id_var.get(), "el tipo de ID del cliente"),
+                self.logs,
+                f"Cliente {self.idx+1} - Tipo de ID",
+                variables=[self.tipo_id_var],
             )
         )
         self.validators.append(

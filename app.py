@@ -2239,7 +2239,7 @@ class FraudCaseApp:
             entry = lookup.setdefault(product_id, {})
             entry['reclamos'] = claim_values
 
-    def _populate_client_frame_from_row(self, frame, row):
+    def _populate_client_frame_from_row(self, frame, row, preserve_existing=False):
         """Traslada los datos de una fila CSV a un ``ClientFrame``.
 
         Cada línea de este método tiene como fin dejar explícito qué campo se
@@ -2253,6 +2253,7 @@ class FraudCaseApp:
         Args:
             frame (ClientFrame): Cliente objetivo.
             row (dict): Fila leída por ``csv.DictReader``.
+            preserve_existing (bool): Si es ``True`` solo completa campos vacíos.
 
         Ejemplo::
 
@@ -2262,10 +2263,16 @@ class FraudCaseApp:
 
         id_cliente = (row.get('id_cliente') or row.get('IdCliente') or '').strip()
         frame.id_var.set(id_cliente)
-        tipo_id = (row.get('tipo_id') or row.get('TipoID') or TIPO_ID_LIST[0]).strip()
-        frame.tipo_id_var.set(tipo_id)
-        flag_value = (row.get('flag') or row.get('Flag') or FLAG_CLIENTE_LIST[0]).strip()
-        frame.flag_var.set(flag_value)
+        tipo_id = (row.get('tipo_id') or row.get('TipoID') or '').strip()
+        if tipo_id and should_autofill_field(frame.tipo_id_var.get(), preserve_existing):
+            frame.tipo_id_var.set(tipo_id)
+        elif not tipo_id and not preserve_existing:
+            frame.tipo_id_var.set('')
+        flag_value = (row.get('flag') or row.get('Flag') or '').strip()
+        if flag_value and should_autofill_field(frame.flag_var.get(), preserve_existing):
+            frame.flag_var.set(flag_value)
+        elif not flag_value and not preserve_existing:
+            frame.flag_var.set('')
         telefonos = (row.get('telefonos') or row.get('Telefono') or '').strip()
         frame.telefonos_var.set(telefonos)
         correos = (row.get('correos') or row.get('Correo') or '').strip()
@@ -2441,7 +2448,7 @@ class FraudCaseApp:
                 if not id_cliente:
                     continue
                 frame = self._find_client_frame(id_cliente) or self._obtain_client_slot_for_import()
-                self._populate_client_frame_from_row(frame, hydrated)
+                self._populate_client_frame_from_row(frame, hydrated, preserve_existing=True)
                 self._trigger_import_id_refresh(
                     frame,
                     id_cliente,
