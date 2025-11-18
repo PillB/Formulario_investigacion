@@ -1651,27 +1651,40 @@ class FraudCaseApp:
             )
         return sanitized
 
+    def _resolve_product_type_for_involvement(self, product_id):
+        """Busca el tipo de producto desde el resumen o el formulario si está disponible."""
+
+        lookup = getattr(self, "product_lookup", None)
+        if isinstance(lookup, dict):
+            entry = lookup.get(product_id)
+            if isinstance(entry, dict):
+                tipo = (entry.get("tipo_producto") or "").strip()
+                if tipo:
+                    return tipo
+        finder = getattr(self, "_find_product_frame", None)
+        if callable(finder):
+            frame = finder(product_id)
+            tipo_var = getattr(frame, "tipo_prod_var", None) if frame else None
+            if tipo_var and hasattr(tipo_var, "get"):
+                return (tipo_var.get() or "").strip()
+        return ""
+
     def _transform_clipboard_involucramientos(self, rows):
         sanitized = []
         for idx, values in enumerate(rows, start=1):
             product_id = (values[0] or "").strip()
             collaborator_id = (values[1] or "").strip()
             amount_text = (values[2] or "").strip()
-            product_message = validate_required_text(product_id, "el ID del producto involucrado")
-            if product_message:
-                raise ValueError(f"Involucramiento fila {idx}: {product_message}")
-            tipo_producto = ""
-            lookup_entry = self.product_lookup.get(product_id) if hasattr(self, 'product_lookup') else None
-            if isinstance(lookup_entry, dict):
-                tipo_producto = (lookup_entry.get('tipo_producto') or '').strip()
-            if not tipo_producto and hasattr(self, '_find_product_frame'):
-                frame = self._find_product_frame(product_id)
-                if frame and hasattr(frame, 'tipo_prod_var'):
-                    tipo_producto = (frame.tipo_prod_var.get() or '').strip()
+            tipo_producto = self._resolve_product_type_for_involvement(product_id)
             if tipo_producto:
                 product_message = validate_product_id(tipo_producto, product_id)
-                if product_message:
-                    raise ValueError(f"Involucramiento fila {idx}: {product_message}")
+            else:
+                product_message = validate_required_text(
+                    product_id,
+                    "el ID del producto involucrado",
+                )
+            if product_message:
+                raise ValueError(f"Involucramiento fila {idx}: {product_message}")
             collaborator_message = validate_team_member_id(collaborator_id)
             if collaborator_message:
                 raise ValueError(f"Involucramiento fila {idx}: {collaborator_message}")
