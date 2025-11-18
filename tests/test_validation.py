@@ -412,6 +412,38 @@ def test_validate_data_rejects_imported_clients_with_invalid_email():
     assert any("correo inválido" in error for error in errors)
 
 
+def test_validate_data_rejects_imported_clients_with_missing_phone():
+    app = build_headless_app("Crédito personal")
+    invalid_client = DummyClientWithContacts(
+        "12345678",
+        telefonos=" ",
+        correos="demo@example.com",
+        accionado=ACCIONADO_OPTIONS[0],
+    )
+    app.client_frames = [invalid_client]
+
+    errors, _ = app.validate_data()
+
+    expected = "Cliente 1: Debe ingresar los teléfonos del cliente."
+    assert expected in errors
+
+
+def test_validate_data_rejects_imported_clients_with_missing_email():
+    app = build_headless_app("Crédito personal")
+    invalid_client = DummyClientWithContacts(
+        "12345678",
+        telefonos="999888777",
+        correos="",
+        accionado=ACCIONADO_OPTIONS[0],
+    )
+    app.client_frames = [invalid_client]
+
+    errors, _ = app.validate_data()
+
+    expected = "Cliente 1: Debe ingresar los correos del cliente."
+    assert expected in errors
+
+
 def test_validate_data_requires_accionado_for_imported_clients():
     app = build_headless_app("Crédito personal")
     invalid_client = DummyClientWithContacts(
