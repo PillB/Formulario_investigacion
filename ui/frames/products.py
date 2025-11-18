@@ -464,11 +464,18 @@ class ProductFrame:
     def on_cat1_change(self):
         cat1 = self.cat1_var.get()
         subcats = list(TAXONOMIA.get(cat1, {}).keys()) or [""]
+        previous_cat2 = self.cat2_var.get()
         self.cat2_cb['values'] = subcats
-        self.cat2_var.set('')
-        self.cat2_cb.set('')
-        self.mod_cb['values'] = []
-        self.mod_var.set('')
+
+        if previous_cat2 in subcats:
+            self.cat2_var.set(previous_cat2)
+            self.cat2_cb.set(previous_cat2)
+        else:
+            self.cat2_var.set('')
+            self.cat2_cb.set('')
+
+        # Always refresh modalidades to keep them aligned with the selected categorías
+        self.on_cat2_change()
         log_event("navegacion", f"Producto {self.idx+1}: cambió categoría 1", self.logs)
 
     def on_cat2_change(self):
