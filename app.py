@@ -270,7 +270,7 @@ class FraudCaseApp:
                         inv_row.team_var.set(collab_id)
                         inv_row.monto_var.set(amount)
                         created_records = True
-            self.save_auto()
+            self._notify_dataset_changed()
             log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
             if created_records:
                 self.sync_main_form_after_import("datos combinados")
@@ -312,7 +312,7 @@ class FraudCaseApp:
                 rf.exposicion_var.set((hydrated.get('exposicion_residual') or '').strip())
                 rf.planes_var.set((hydrated.get('planes_accion') or '').strip())
                 imported += 1
-            self.save_auto()
+            self._notify_dataset_changed(summary_sections="riesgos")
             log_event("navegacion", "Riesgos importados desde CSV", self.logs)
             if imported:
                 messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
@@ -345,7 +345,7 @@ class FraudCaseApp:
                 nf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
                 nf.fecha_var.set((hydrated.get('fecha_vigencia') or '').strip())
                 imported += 1
-            self.save_auto()
+            self._notify_dataset_changed(summary_sections="normas")
             log_event("navegacion", "Normas importadas desde CSV", self.logs)
             if imported:
                 messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
@@ -403,7 +403,7 @@ class FraudCaseApp:
                 imported += 1
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_products.append(product_id)
-            self.save_auto()
+            self._notify_dataset_changed(summary_sections="reclamos")
             log_event("navegacion", "Reclamos importados desde CSV", self.logs)
             if imported:
                 self.sync_main_form_after_import("reclamos")
@@ -598,6 +598,12 @@ class FraudCaseApp:
             f"Sincronizó la pestaña principal tras importar {section_name}",
             self.logs,
         )
+
+    def _notify_dataset_changed(self, summary_sections=None):
+        """Marca el formulario como modificado y agenda el autosave diferido."""
+
+        self.request_autosave()
+        self._schedule_summary_refresh(sections=summary_sections)
 
     def build_case_tab(self, parent):
         """Construye la pestaña de detalles del caso."""
@@ -1812,7 +1818,7 @@ class FraudCaseApp:
             if missing_ids:
                 self._report_missing_detail_ids("clientes", missing_ids)
             if processed:
-                self.save_auto()
+                self._notify_dataset_changed(summary_sections="clientes")
                 self.sync_main_form_after_import("clientes", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "colaboradores":
@@ -1848,7 +1854,7 @@ class FraudCaseApp:
             if missing_ids:
                 self._report_missing_detail_ids("colaboradores", missing_ids)
             if processed:
-                self.save_auto()
+                self._notify_dataset_changed(summary_sections="colaboradores")
                 self.sync_main_form_after_import("colaboradores", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "productos":
@@ -1898,7 +1904,7 @@ class FraudCaseApp:
             if missing_ids:
                 self._report_missing_detail_ids("productos", missing_ids)
             if processed:
-                self.save_auto()
+                self._notify_dataset_changed(summary_sections="productos")
                 self.sync_main_form_after_import("productos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "reclamos":
@@ -1954,7 +1960,7 @@ class FraudCaseApp:
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_products.append(product_id)
             if processed:
-                self.save_auto()
+                self._notify_dataset_changed(summary_sections="reclamos")
                 self.sync_main_form_after_import("reclamos", stay_on_summary=stay_on_summary)
                 log_event("navegacion", f"Reclamos pegados desde resumen: {processed}", self.logs)
             if missing_products:
@@ -1987,7 +1993,7 @@ class FraudCaseApp:
                     "Se ignoraron los siguientes riesgos ya existentes:\n" + ", ".join(duplicate_ids),
                 )
             if processed:
-                self.save_auto()
+                self._notify_dataset_changed(summary_sections="riesgos")
                 self.sync_main_form_after_import("riesgos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "normas":
@@ -2012,7 +2018,7 @@ class FraudCaseApp:
                     "Se ignoraron las siguientes normas ya existentes:\n" + ", ".join(duplicate_ids),
                 )
             if processed:
-                self.save_auto()
+                self._notify_dataset_changed(summary_sections="normas")
                 self.sync_main_form_after_import("normas", stay_on_summary=stay_on_summary)
             return processed
         raise ValueError("Esta tabla no admite pegado directo al formulario principal.")
@@ -2711,7 +2717,7 @@ class FraudCaseApp:
                 imported += 1
                 if not found and 'id_cliente' in self.detail_catalogs:
                     missing_ids.append(id_cliente)
-            self.save_auto()
+            self._notify_dataset_changed(summary_sections="clientes")
             log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
             if imported:
                 self.sync_main_form_after_import("clientes")
@@ -2749,7 +2755,7 @@ class FraudCaseApp:
                 imported += 1
                 if not found and 'id_colaborador' in self.detail_catalogs:
                     missing_ids.append(collaborator_id)
-            self.save_auto()
+            self._notify_dataset_changed(summary_sections="colaboradores")
             log_event("navegacion", f"Colaboradores importados desde CSV: {imported}", self.logs)
             if imported:
                 self.sync_main_form_after_import("colaboradores")
@@ -2791,7 +2797,7 @@ class FraudCaseApp:
                 imported += 1
                 if not found and 'id_producto' in self.detail_catalogs:
                     missing_ids.append(product_id)
-            self.save_auto()
+            self._notify_dataset_changed(summary_sections="productos")
             log_event("navegacion", f"Productos importados desde CSV: {imported}", self.logs)
             if imported:
                 self.sync_main_form_after_import("productos")
@@ -2806,16 +2812,17 @@ class FraudCaseApp:
     # ---------------------------------------------------------------------
     # Autoguardado y carga
 
-    def save_auto(self):
+    def save_auto(self, data=None):
         """Guarda automáticamente el estado actual en un archivo JSON."""
-        data = self.gather_data()
+
+        dataset = data or self.gather_data()
         try:
             with open(AUTOSAVE_FILE, 'w', encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                json.dump(dataset, f, ensure_ascii=False, indent=2)
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
-        self._schedule_summary_refresh(data=data)
-        self.request_autosave()
+        self._schedule_summary_refresh(data=dataset)
+        return dataset
 
     def load_autosave(self):
         """Carga el estado guardado automáticamente si el archivo existe."""
@@ -2912,7 +2919,8 @@ class FraudCaseApp:
         if not self._autosave_dirty:
             return
         self._autosave_dirty = False
-        self.save_temp_version()
+        dataset = self.save_auto()
+        self.save_temp_version(dataset)
 
     def flush_autosave(self) -> None:
         if self._autosave_job_id is not None:
@@ -2923,7 +2931,8 @@ class FraudCaseApp:
             self._autosave_job_id = None
         if self._autosave_dirty:
             self._autosave_dirty = False
-            self.save_temp_version()
+            dataset = self.save_auto()
+            self.save_temp_version(dataset)
 
     def load_version_dialog(self):
         """Abre un diálogo para cargar una versión previa del formulario.
@@ -4034,7 +4043,7 @@ class FraudCaseApp:
         log_event("navegacion", "Datos guardados y enviados", self.logs)
         self.flush_logs_now()
 
-    def save_temp_version(self):
+    def save_temp_version(self, data=None):
         """Guarda una versión temporal del estado actual del formulario.
 
         Este método recoge los datos actuales mediante ``gather_data`` y los
@@ -4050,7 +4059,7 @@ class FraudCaseApp:
             # Crea un archivo como ``2025-0001_temp_20251114_154501.json`` con
             # el contenido completo del formulario.
         """
-        data = self.gather_data()
+        data = data or self.gather_data()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         case_id = data.get('caso', {}).get('id_caso', '') or 'caso'
         filename = f"{case_id}_temp_{timestamp}.json"
