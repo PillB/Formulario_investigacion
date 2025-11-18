@@ -707,7 +707,7 @@ def test_validate_data_requires_risk_criticidad():
 
     errors, _ = app.validate_data()
 
-    assert "Riesgo 1: Debe ingresar la criticidad del riesgo." in errors
+    assert "Riesgo 1: Debe seleccionar la criticidad del riesgo." in errors
 
 
 def test_validate_data_rejects_unknown_risk_criticidad():
@@ -721,6 +721,19 @@ def test_validate_data_rejects_unknown_risk_criticidad():
 
     expected_message = f"Riesgo 1: La criticidad '{invalid_value}' no está en el catálogo CM."
     assert expected_message in errors
+
+
+def test_validate_data_accepts_allowed_risk_criticidad():
+    allowed_value = CRITICIDAD_LIST[0]
+    app = build_headless_app(
+        "Crédito personal",
+        risk_configs=[{"criticidad": allowed_value}],
+    )
+
+    errors, _ = app.validate_data()
+
+    assert not any("Riesgo 1: Debe seleccionar la criticidad del riesgo." in err for err in errors)
+    assert not any("Riesgo 1: La criticidad" in err for err in errors)
 
 
 def test_validate_data_detects_duplicate_technical_keys():

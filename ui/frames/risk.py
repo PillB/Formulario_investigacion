@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 
 from settings import CRITICIDAD_LIST
 from validators import (FieldValidator, log_event, validate_money_bounds,
-                        validate_required_text, validate_risk_id)
+                        validate_risk_id)
 
 
 class RiskFrame:
@@ -153,9 +153,8 @@ class RiskFrame:
 
     def _validate_criticidad(self):
         value = (self.criticidad_var.get() or "").strip()
-        message = validate_required_text(value, "la criticidad del riesgo")
-        if message:
-            return message
+        if not value:
+            return "Debe seleccionar la criticidad del riesgo."
         if value not in CRITICIDAD_LIST:
             return f"La criticidad '{value}' no está en el catálogo CM."
         return None
