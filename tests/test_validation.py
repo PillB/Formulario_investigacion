@@ -1262,7 +1262,7 @@ def test_populate_from_data_keeps_product_dropdowns_blank_when_missing():
     app.product_frames = [product_frame]
     app.risk_frames = []
     app.norm_frames = []
-    app._reset_form_state = lambda confirm=False, save_autosave=False: True
+    app._clear_case_state = lambda save_autosave=False: None
     app._schedule_summary_refresh = lambda data=None: None
     app.on_case_cat1_change = lambda: None
     app.on_case_cat2_change = lambda: None

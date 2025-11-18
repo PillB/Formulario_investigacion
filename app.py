@@ -3033,7 +3033,6 @@ class FraudCaseApp:
             try:
                 with open(AUTOSAVE_FILE, 'r', encoding="utf-8") as f:
                     data = json.load(f)
-                self._reset_form_state(confirm=False, save_autosave=False)
                 self.populate_from_data(data)
                 log_event("navegacion", "Se cargó el autosave", self.logs)
             except Exception as ex:
@@ -3160,27 +3159,9 @@ class FraudCaseApp:
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo cargar la versión: {ex}")
 
-    def _reset_form_state(self, confirm=True, save_autosave=True):
-        """Restablece el formulario a su estado inicial.
+    def _clear_case_state(self, *, save_autosave: bool = True) -> None:
+        """Elimina los datos cargados y restablece los frames dinámicos."""
 
-        Args:
-            confirm: Si es ``True`` solicita confirmación al usuario antes de
-                continuar.
-            save_autosave: Si es ``True`` persiste inmediatamente el estado
-                vacío mediante ``save_auto``.
-
-        Returns:
-            ``True`` si el formulario se restableció, ``False`` si el usuario
-            canceló la acción.
-        """
-
-        if confirm:
-            confirmed = messagebox.askyesno(
-                "Confirmar",
-                "¿Desea borrar todos los datos? Esta acción no se puede deshacer.",
-            )
-            if not confirmed:
-                return False
         # Limpiar campos del caso
         self.id_caso_var.set("")
         self.tipo_informe_var.set(TIPO_INFORME_LIST[0])
@@ -3206,6 +3187,9 @@ class FraudCaseApp:
         self.norm_frames.clear()
         self.next_risk_number = 1
         self._rebuild_frame_id_indexes()
+        # Reiniciar bitácora antes de poblar los frames por defecto
+        self.logs.clear()
+        drain_log_queue()
         # Volver a crear uno por cada sección donde corresponde
         self.add_client()
         self.add_team()
@@ -3219,6 +3203,29 @@ class FraudCaseApp:
         self.recomendaciones_var.set("")
         if save_autosave:
             self.save_auto()
+
+    def _reset_form_state(self, confirm=True, save_autosave=True):
+        """Restablece el formulario a su estado inicial.
+
+        Args:
+            confirm: Si es ``True`` solicita confirmación al usuario antes de
+                continuar.
+            save_autosave: Si es ``True`` persiste inmediatamente el estado
+                vacío mediante ``save_auto``.
+
+        Returns:
+            ``True`` si el formulario se restableció, ``False`` si el usuario
+            canceló la acción.
+        """
+
+        if confirm:
+            confirmed = messagebox.askyesno(
+                "Confirmar",
+                "¿Desea borrar todos los datos? Esta acción no se puede deshacer.",
+            )
+            if not confirmed:
+                return False
+        self._clear_case_state(save_autosave=save_autosave)
         return True
 
     def clear_all(self, notify=True):
@@ -3296,7 +3303,7 @@ class FraudCaseApp:
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
         # Limpiar primero sin confirmar ni sobrescribir el autosave
-        self._reset_form_state(confirm=False, save_autosave=False)
+        self._clear_case_state(save_autosave=False)
         # Datos de caso
         def _set_dropdown_value(var, value, valid_values):
             """Establece el valor de un combobox solo si está en el catálogo."""
@@ -4233,7 +4240,8 @@ class FraudCaseApp:
         # ANALISIS
         write_csv('analisis.csv', [dict({'id_caso': data['caso']['id_caso']}, **data['analisis'])], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
         # LOGS
-        write_csv('logs.csv', self.logs, ['timestamp', 'tipo', 'mensaje'])
+        if self.logs:
+            write_csv('logs.csv', self.logs, ['timestamp', 'tipo', 'mensaje'])
         # Guardar JSON
         with open(os.path.join(folder, f"{case_id}_version.json"), 'w', encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
