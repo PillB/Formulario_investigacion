@@ -8,9 +8,10 @@ import app as app_module
 from app import FraudCaseApp
 from settings import (ACCIONADO_OPTIONS, CRITICIDAD_LIST, FLAG_CLIENTE_LIST,
                       TIPO_ID_LIST, TIPO_SANCION_LIST)
-from tests.stubs import (ClientFrameStub, DummyVar, ProductFrameStub,
-                         TeamFrameStub, build_involvement_slot,
-                         build_populate_method, build_slot_factory)
+from tests.stubs import (ClientFrameStub, NormFrameStub, ProductFrameStub,
+                         RiskFrameStub, TeamFrameStub, build_frame_finder,
+                         build_involvement_slot, build_populate_method,
+                         build_slot_factory)
 
 
 class MessageboxSpy:
@@ -48,23 +49,6 @@ class SummaryTableStub:
 
     def insert(self, *_args, **_kwargs):
         return None
-
-
-class RiskFrameStub:
-    def __init__(self):
-        self.id_var = DummyVar("")
-        self.lider_var = DummyVar("")
-        self.descripcion_var = DummyVar("")
-        self.criticidad_var = DummyVar("")
-        self.exposicion_var = DummyVar("")
-        self.planes_var = DummyVar("")
-
-
-class NormFrameStub:
-    def __init__(self):
-        self.id_var = DummyVar("")
-        self.descripcion_var = DummyVar("")
-        self.fecha_var = DummyVar("")
 
 
 @dataclass
@@ -107,19 +91,6 @@ def _collect_involvements(app):
             if team:
                 values.append((product_id, team, amount))
     return values
-
-
-def _finder_factory(attribute_name):
-    def _find(self, identifier):
-        ident = (identifier or "").strip()
-        if not ident:
-            return None
-        for frame in getattr(self, attribute_name, []):
-            if frame.id_var.get().strip() == ident:
-                return frame
-        return None
-
-    return _find
 
 
 SUMMARY_CASES = [
@@ -275,9 +246,9 @@ def _build_summary_app(monkeypatch, messagebox_spy):
 
     app.add_risk = types.MethodType(_add_risk, app)
     app.add_norm = types.MethodType(_add_norm, app)
-    app._find_client_frame = types.MethodType(_finder_factory('client_frames'), app)
-    app._find_team_frame = types.MethodType(_finder_factory('team_frames'), app)
-    app._find_product_frame = types.MethodType(_finder_factory('product_frames'), app)
+    app._find_client_frame = types.MethodType(build_frame_finder('client_frames'), app)
+    app._find_team_frame = types.MethodType(build_frame_finder('team_frames'), app)
+    app._find_product_frame = types.MethodType(build_frame_finder('product_frames'), app)
     return app
 
 
