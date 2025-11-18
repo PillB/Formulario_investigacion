@@ -1579,35 +1579,6 @@ class FraudCaseApp:
             raise ValueError("Esta tabla no admite pegado desde portapapeles.")
         return handler(rows)
 
-    def _transform_clipboard_involucramientos(self, rows):
-        sanitized = []
-        for idx, values in enumerate(rows, start=1):
-            product_id = values[0].strip()
-            collaborator_id = values[1].strip()
-            amount_text = values[2].strip()
-            if not product_id:
-                raise ValueError(
-                    f"Involucramiento fila {idx}: el ID de producto es obligatorio."
-                )
-            message = validate_team_member_id(collaborator_id)
-            if message:
-                raise ValueError(f"Involucramiento fila {idx}: {message}")
-            amount_message, amount_decimal, _ = validate_money_bounds(
-                amount_text,
-                "el monto asignado",
-                allow_blank=False,
-            )
-            if amount_message:
-                raise ValueError(f"Involucramiento fila {idx}: {amount_message}")
-            sanitized.append(
-                (
-                    product_id,
-                    collaborator_id,
-                    f"{amount_decimal:.2f}",
-                )
-            )
-        return sanitized
-
     def _transform_clipboard_clients(self, rows):
         sanitized = []
         for idx, values in enumerate(rows, start=1):
@@ -1683,12 +1654,24 @@ class FraudCaseApp:
     def _transform_clipboard_involucramientos(self, rows):
         sanitized = []
         for idx, values in enumerate(rows, start=1):
-            product_id = values[0].strip()
-            collaborator_id = values[1].strip()
-            amount_text = values[2].strip()
+            product_id = (values[0] or "").strip()
+            collaborator_id = (values[1] or "").strip()
+            amount_text = (values[2] or "").strip()
             product_message = validate_required_text(product_id, "el ID del producto involucrado")
             if product_message:
                 raise ValueError(f"Involucramiento fila {idx}: {product_message}")
+            tipo_producto = ""
+            lookup_entry = self.product_lookup.get(product_id) if hasattr(self, 'product_lookup') else None
+            if isinstance(lookup_entry, dict):
+                tipo_producto = (lookup_entry.get('tipo_producto') or '').strip()
+            if not tipo_producto and hasattr(self, '_find_product_frame'):
+                frame = self._find_product_frame(product_id)
+                if frame and hasattr(frame, 'tipo_prod_var'):
+                    tipo_producto = (frame.tipo_prod_var.get() or '').strip()
+            if tipo_producto:
+                product_message = validate_product_id(tipo_producto, product_id)
+                if product_message:
+                    raise ValueError(f"Involucramiento fila {idx}: {product_message}")
             collaborator_message = validate_team_member_id(collaborator_id)
             if collaborator_message:
                 raise ValueError(f"Involucramiento fila {idx}: {collaborator_message}")
@@ -2002,7 +1985,7 @@ class FraudCaseApp:
             if unhydrated_products:
                 self._notify_products_created_without_details(unhydrated_products)
             if processed:
-                self.save_auto()
+                self._notify_dataset_changed(summary_sections="involucramientos")
                 self.sync_main_form_after_import("involucramientos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "productos":

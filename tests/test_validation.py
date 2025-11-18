@@ -1390,12 +1390,12 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
         return slot
 
     app._obtain_team_slot_for_import = _obtain_team_slot
-    app.save_auto_called = False
+    notify_payload = {}
 
-    def _save_auto():
-        app.save_auto_called = True
+    def _notify(summary_sections=None):
+        notify_payload['sections'] = summary_sections
 
-    app.save_auto = _save_auto
+    app._notify_dataset_changed = _notify
     sync_payload = {}
 
     def _sync(section_name, stay_on_summary=False):
@@ -1412,7 +1412,7 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
     processed = app.ingest_summary_rows("involucramientos", rows, stay_on_summary=True)
 
     assert processed == 2
-    assert app.save_auto_called is True
+    assert notify_payload == {"sections": "involucramientos"}
     assert sync_payload == {"section": "involucramientos", "stay": True}
     assert len(product_frame.involvements) == 2
     assert existing_row.monto_var.get() == "100.00"
