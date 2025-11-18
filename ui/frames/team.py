@@ -25,6 +25,7 @@ class TeamMemberFrame:
         tooltip_register,
         summary_refresh_callback=None,
         change_notifier=None,
+        id_change_callback=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -37,6 +38,8 @@ class TeamMemberFrame:
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
+        self.id_change_callback = id_change_callback
+        self._last_tracked_id = ''
 
         self.id_var = tk.StringVar()
         self.flag_var = tk.StringVar()
@@ -198,6 +201,7 @@ class TeamMemberFrame:
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         cid = self.id_var.get().strip()
+        self._notify_id_change(cid)
         if cid:
             data = self.team_lookup.get(cid)
             if data:
@@ -229,6 +233,14 @@ class TeamMemberFrame:
             self._last_missing_lookup_id = None
         self.update_team_options()
         self.schedule_summary_refresh('colaboradores')
+
+    def _notify_id_change(self, new_id):
+        if new_id == self._last_tracked_id:
+            return
+        previous = self._last_tracked_id
+        self._last_tracked_id = new_id
+        if callable(self.id_change_callback):
+            self.id_change_callback(self, previous, new_id)
 
     def get_data(self):
         return {
