@@ -33,6 +33,23 @@ class TeamFrameStub(BaseFrameStub):
     pass
 
 
+class RiskFrameStub:
+    def __init__(self):
+        self.id_var = DummyVar("")
+        self.lider_var = DummyVar("")
+        self.descripcion_var = DummyVar("")
+        self.criticidad_var = DummyVar("")
+        self.exposicion_var = DummyVar("")
+        self.planes_var = DummyVar("")
+
+
+class NormFrameStub:
+    def __init__(self):
+        self.id_var = DummyVar("")
+        self.descripcion_var = DummyVar("")
+        self.fecha_var = DummyVar("")
+
+
 class ClaimStub:
     def __init__(self):
         self.data = {}
@@ -102,3 +119,17 @@ def build_populate_method(id_field):
         frame.populated_rows.append(dict(row))
 
     return _populate
+
+
+def build_frame_finder(attribute_name):
+    def _find(self, identifier):
+        ident = (identifier or "").strip()
+        if not ident:
+            return None
+        for frame in getattr(self, attribute_name, []):
+            current = frame.id_var.get().strip() if hasattr(frame, 'id_var') else ""
+            if current == ident:
+                return frame
+        return None
+
+    return _find
