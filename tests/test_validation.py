@@ -1318,3 +1318,104 @@ def test_populate_from_data_keeps_product_dropdowns_blank_when_missing():
     assert product_frame.canal_var.get() == ""
     assert product_frame.proceso_var.get() == ""
     assert product_frame.moneda_var.get() == ""
+
+
+def test_transform_summary_involucramientos_formats_amount():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+
+    sanitized = app._transform_summary_clipboard_rows(
+        "involucramientos",
+        [["PRD-001", "T12345", "001.50"]],
+    )
+
+    assert sanitized == [("PRD-001", "T12345", "1.50")]
+
+
+def test_transform_summary_involucramientos_rejects_invalid_amount():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+
+    with pytest.raises(ValueError) as excinfo:
+        app._transform_summary_clipboard_rows(
+            "involucramientos",
+            [["PRD-001", "T12345", "10.5"]],
+        )
+
+    assert "dos decimales exactos" in str(excinfo.value)
+
+
+def test_ingest_summary_rows_involucramientos_updates_assignments():
+    class _DummyCombo:
+        def __init__(self, target_var):
+            self._target_var = target_var
+
+        def set(self, value):
+            self._target_var.set(value)
+
+    class _DummyInvolvement:
+        def __init__(self, team_id=""):
+            self.team_var = DummyVar(team_id)
+            self.monto_var = DummyVar("")
+            self.team_cb = _DummyCombo(self.team_var)
+
+    class _ProductFrameStub:
+        def __init__(self, product_id):
+            self.id_var = DummyVar(product_id)
+            self.involvements = []
+
+        def add_involvement(self):
+            row = _DummyInvolvement()
+            self.involvements.append(row)
+            return row
+
+        def on_id_change(self, *_args, **_kwargs):
+            return None
+
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app.logs = []
+    app.detail_catalogs = {}
+    app.detail_lookup_by_id = {}
+    app._notify_products_created_without_details = lambda _ids: None
+    app._report_missing_detail_ids = lambda *_args, **_kwargs: None
+    product_frame = _ProductFrameStub("PRD-001")
+    existing_row = _DummyInvolvement("T12345")
+    existing_row.monto_var.set("")
+    product_frame.involvements.append(existing_row)
+    app.product_frames = [product_frame]
+    app.team_frames = [DummyTeam("T12345"), DummyTeam("T54321")]
+    app._obtain_product_slot_for_import = lambda: product_frame
+
+    def _obtain_team_slot():
+        slot = DummyTeam("TMP001")
+        app.team_frames.append(slot)
+        return slot
+
+    app._obtain_team_slot_for_import = _obtain_team_slot
+    app.save_auto_called = False
+
+    def _save_auto():
+        app.save_auto_called = True
+
+    app.save_auto = _save_auto
+    sync_payload = {}
+
+    def _sync(section_name, stay_on_summary=False):
+        sync_payload["section"] = section_name
+        sync_payload["stay"] = stay_on_summary
+
+    app.sync_main_form_after_import = _sync
+
+    rows = [
+        ("PRD-001", "T12345", "100.00"),
+        ("PRD-001", "T54321", "50.50"),
+    ]
+
+    processed = app.ingest_summary_rows("involucramientos", rows, stay_on_summary=True)
+
+    assert processed == 2
+    assert app.save_auto_called is True
+    assert sync_payload == {"section": "involucramientos", "stay": True}
+    assert len(product_frame.involvements) == 2
+    assert existing_row.monto_var.get() == "100.00"
+    new_row = product_frame.involvements[-1]
+    assert new_row.team_var.get() == "T54321"
+    assert new_row.monto_var.get() == "50.50"
