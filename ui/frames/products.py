@@ -800,16 +800,22 @@ class ProductFrame:
 
     def _collect_amount_values(self):
         values = {}
+        errors = {}
         for _, var_attr, label, allow_blank, key in PRODUCT_MONEY_SPECS:
             raw_value = getattr(self, var_attr).get()
             message, decimal_value = validate_money_bounds(raw_value, label, allow_blank=allow_blank)
             if message:
-                return None
+                errors[key] = message
+                continue
             values[key] = decimal_value if decimal_value is not None else Decimal('0')
-        return values
+        if errors:
+            return None, errors
+        return values, {}
 
     def _validate_montos_consistentes(self, target_key: str | None = None):
-        values = self._collect_amount_values()
+        values, errors = self._collect_amount_values()
+        if target_key and target_key in errors:
+            return errors[target_key]
         if values is None:
             return None
         componentes = sum_investigation_components(
