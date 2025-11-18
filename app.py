@@ -66,11 +66,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from models import (
+    build_detail_catalog_id_index,
     iter_massive_csv_rows,
-    load_client_details,
     load_detail_catalogs,
-    load_product_details,
-    load_team_details,
     normalize_detail_catalog_key,
     parse_involvement_entries,
 )
@@ -162,6 +160,7 @@ class FraudCaseApp:
             normalize_detail_catalog_key(key): (value or {})
             for key, value in raw_detail_catalogs.items()
         }
+        self.detail_lookup_by_id = build_detail_catalog_id_index(self.detail_catalogs)
 
         def _sync_catalog_aliases(canonical_key):
             canonical_key = normalize_detail_catalog_key(canonical_key)
@@ -192,32 +191,35 @@ class FraudCaseApp:
 
         self._schedule_log_flush()
 
-        def _merge_with_detail_catalog(base_lookup, aliases):
-            merged = {}
-            for alias in aliases:
-                alias_key = normalize_detail_catalog_key(alias)
-                merged.update(self.detail_catalogs.get(alias_key, {}))
-            merged.update(base_lookup or {})
-            return merged
+        def _lookup_or_empty(canonical_key):
+            normalized_key = normalize_detail_catalog_key(canonical_key)
+            lookup = self.detail_lookup_by_id.get(normalized_key)
+            return lookup if lookup is not None else {}
 
-        self.team_lookup = _merge_with_detail_catalog(
-            load_team_details(),
-            ("team", "teams", "colaboradores", "colaborador", "id_colaborador"),
-        )
+        self.team_lookup = _lookup_or_empty("id_colaborador")
         # Cargar client details para autopoblar clientes. Si no existe el
         # fichero ``client_details.csv`` se obtiene un diccionario vacío. Este
         # diccionario se usa en ClientFrame.on_id_change() para rellenar
         # automáticamente campos del cliente cuando se reconoce su ID.
-        self.client_lookup = load_client_details()
-        self.product_lookup = load_product_details()
+        self.client_lookup = _lookup_or_empty("id_cliente")
+        self.product_lookup = _lookup_or_empty("id_producto")
 
         def _register_normalized_catalog(canonical_key, lookup):
             canonical_key = normalize_detail_catalog_key(canonical_key)
             if not lookup:
                 return
-            combined = dict(self.detail_catalogs.get(canonical_key, {}))
-            combined.update(lookup)
-            self.detail_catalogs[canonical_key] = combined
+            existing = self.detail_catalogs.get(canonical_key)
+            if existing is lookup:
+                self.detail_lookup_by_id[canonical_key] = lookup
+                _sync_catalog_aliases(canonical_key)
+                return
+            if existing:
+                existing.update(lookup)
+                target = existing
+            else:
+                target = lookup
+            self.detail_catalogs[canonical_key] = target
+            self.detail_lookup_by_id[canonical_key] = target
             _sync_catalog_aliases(canonical_key)
 
         _register_normalized_catalog("id_cliente", self.client_lookup)
@@ -2016,6 +2018,9 @@ class FraudCaseApp:
         """Obtiene el diccionario de detalles considerando alias configurados."""
 
         normalized = normalize_detail_catalog_key(id_column)
+        lookup = self.detail_lookup_by_id.get(normalized)
+        if isinstance(lookup, dict):
+            return lookup
         candidate_keys = [normalized]
         candidate_keys.extend(
             normalize_detail_catalog_key(alias)
