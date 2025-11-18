@@ -30,6 +30,7 @@ class ClientFrame:
         tooltip_register,
         client_lookup=None,
         summary_refresh_callback=None,
+        change_notifier=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -41,6 +42,7 @@ class ClientFrame:
         self.validators = []
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
+        self.change_notifier = change_notifier
 
         self.tipo_id_var = tk.StringVar()
         self.id_var = tk.StringVar()
@@ -98,17 +100,17 @@ class ClientFrame:
         ttk.Label(row3, text="Teléfonos (separados por ;):").pack(side="left")
         tel_entry = ttk.Entry(row3, textvariable=self.telefonos_var, width=30)
         tel_entry.pack(side="left", padx=5)
-        tel_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Cliente {self.idx+1}: modificó teléfonos", self.logs))
+        tel_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó teléfonos"))
         self.tooltip_register(tel_entry, "Ingresa números separados por ; sin guiones.")
         ttk.Label(row3, text="Correos (separados por ;):").pack(side="left")
         cor_entry = ttk.Entry(row3, textvariable=self.correos_var, width=30)
         cor_entry.pack(side="left", padx=5)
-        cor_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Cliente {self.idx+1}: modificó correos", self.logs))
+        cor_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó correos"))
         self.tooltip_register(cor_entry, "Coloca correos electrónicos separados por ;.")
         ttk.Label(row3, text="Direcciones (separados por ;):").pack(side="left")
         dir_entry = ttk.Entry(row3, textvariable=self.direcciones_var, width=30)
         dir_entry.pack(side="left", padx=5)
-        dir_entry.bind("<FocusOut>", lambda e: log_event("navegacion", f"Cliente {self.idx+1}: modificó direcciones", self.logs))
+        dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
         self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
 
         btn_frame = ttk.Frame(self.frame)
@@ -155,7 +157,7 @@ class ClientFrame:
         )
 
     def on_id_change(self, from_focus=False, preserve_existing=False):
-        log_event("navegacion", f"Cliente {self.idx+1}: cambió ID a {self.id_var.get()}", self.logs)
+        self._log_change(f"Cliente {self.idx+1}: cambió ID a {self.id_var.get()}")
         self.update_client_options()
         cid = self.id_var.get().strip()
         if not cid:
@@ -178,7 +180,7 @@ class ClientFrame:
             if accionado and should_autofill_field(self.accionado_var.get(), preserve_existing):
                 self.set_accionado_from_text(accionado)
             self._last_missing_lookup_id = None
-            log_event("navegacion", f"Autopoblado datos del cliente {cid}", self.logs)
+            self._log_change(f"Autopoblado datos del cliente {cid}")
         elif from_focus and self.client_lookup:
             if self._last_missing_lookup_id != cid:
                 messagebox.showerror(
@@ -219,9 +221,15 @@ class ClientFrame:
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el cliente {self.idx+1}?"):
-            log_event("navegacion", f"Se eliminó cliente {self.idx+1}", self.logs)
+            self._log_change(f"Se eliminó cliente {self.idx+1}")
             self.frame.destroy()
             self.remove_callback(self)
+
+    def _log_change(self, message: str):
+        if callable(self.change_notifier):
+            self.change_notifier(message)
+        else:
+            log_event("navegacion", message, self.logs)
 
 
 __all__ = ["ClientFrame"]

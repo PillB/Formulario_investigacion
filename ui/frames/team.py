@@ -28,6 +28,7 @@ class TeamMemberFrame:
         logs,
         tooltip_register,
         summary_refresh_callback=None,
+        change_notifier=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -39,6 +40,7 @@ class TeamMemberFrame:
         self.validators = []
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
+        self.change_notifier = change_notifier
 
         self.id_var = tk.StringVar()
         self.flag_var = tk.StringVar()
@@ -67,7 +69,7 @@ class TeamMemberFrame:
         flag_cb.pack(side="left", padx=5)
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
-        flag_cb.bind("<FocusOut>", lambda e: log_event("navegacion", f"Colaborador {self.idx+1}: modificó flag", self.logs))
+        flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
 
         row2 = ttk.Frame(self.frame)
         row2.pack(fill="x", pady=1)
@@ -154,7 +156,7 @@ class TeamMemberFrame:
                 set_if_present(self.nombre_agencia_var, "nombre_agencia")
                 set_if_present(self.codigo_agencia_var, "codigo_agencia")
                 self._last_missing_lookup_id = None
-                log_event("navegacion", f"Autopoblado colaborador {self.idx+1} desde team_details.csv", self.logs)
+                self._log_change(f"Autopoblado colaborador {self.idx+1} desde team_details.csv")
             elif from_focus and self.team_lookup:
                 log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
                 if self._last_missing_lookup_id != cid:
@@ -188,9 +190,15 @@ class TeamMemberFrame:
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el colaborador {self.idx+1}?"):
-            log_event("navegacion", f"Se eliminó colaborador {self.idx+1}", self.logs)
+            self._log_change(f"Se eliminó colaborador {self.idx+1}")
             self.frame.destroy()
             self.remove_callback(self)
+
+    def _log_change(self, message: str):
+        if callable(self.change_notifier):
+            self.change_notifier(message)
+        else:
+            log_event("navegacion", message, self.logs)
 
 
 __all__ = ["TeamMemberFrame"]
