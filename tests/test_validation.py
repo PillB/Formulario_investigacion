@@ -153,6 +153,7 @@ def build_headless_app(
     team_configs=None,
 ):
     app = FraudCaseApp.__new__(FraudCaseApp)
+    app._suppress_messagebox = True
     case_cat1 = next(iter(TAXONOMIA))
     case_cat2 = next(iter(TAXONOMIA[case_cat1]))
     case_modalidad = TAXONOMIA[case_cat1][case_cat2][0]
@@ -202,6 +203,77 @@ def build_headless_app(
     app.risk_frames = []
     app.norm_frames = []
     return app
+
+
+@pytest.mark.parametrize(
+    "field_name,invalid_value,expected_fragment",
+    [
+        (
+            "tipo_informe_var",
+            "Tipo inventado",
+            "El tipo de informe 'Tipo inventado' no está en el catálogo CM.",
+        ),
+        (
+            "canal_caso_var",
+            "Canal inventado",
+            "El canal del caso 'Canal inventado' no está en el catálogo CM.",
+        ),
+        (
+            "proceso_caso_var",
+            "Proceso inventado",
+            "El proceso del caso 'Proceso inventado' no está en el catálogo CM.",
+        ),
+    ],
+)
+def test_validate_data_rejects_invalid_case_catalog_values(
+    field_name, invalid_value, expected_fragment
+):
+    app = build_headless_app("Crédito personal")
+    getattr(app, field_name).set(invalid_value)
+
+    errors, _ = app.validate_data()
+
+    assert any(expected_fragment in error for error in errors)
+
+
+def test_validate_data_rejects_unknown_case_category_level1():
+    app = build_headless_app("Crédito personal")
+    invalid_cat1 = "Categoría inventada"
+    app.cat_caso1_var.set(invalid_cat1)
+
+    errors, _ = app.validate_data()
+
+    expected_fragment = f"La categoría nivel 1 '{invalid_cat1}' no está en el catálogo CM."
+    assert any(expected_fragment in error for error in errors)
+
+
+def test_validate_data_rejects_unknown_case_category_level2():
+    app = build_headless_app("Crédito personal")
+    parent_cat = app.cat_caso1_var.get()
+    invalid_subcat = "Subcategoría fuera"
+    app.cat_caso2_var.set(invalid_subcat)
+
+    errors, _ = app.validate_data()
+
+    expected_fragment = (
+        f"La categoría nivel 2 '{invalid_subcat}' no está dentro de la categoría '{parent_cat}' del catálogo CM."
+    )
+    assert any(expected_fragment in error for error in errors)
+
+
+def test_validate_data_rejects_unknown_case_modality():
+    app = build_headless_app("Crédito personal")
+    invalid_mod = "Modalidad inexistente"
+    app.mod_caso_var.set(invalid_mod)
+
+    errors, _ = app.validate_data()
+
+    parent_cat1 = app.cat_caso1_var.get()
+    parent_cat2 = app.cat_caso2_var.get()
+    expected_fragment = (
+        f"La modalidad '{invalid_mod}' no existe dentro de la categoría '{parent_cat1}'/'{parent_cat2}' del catálogo CM."
+    )
+    assert any(expected_fragment in error for error in errors)
 
 
 def test_validate_data_accepts_catalog_product_type():

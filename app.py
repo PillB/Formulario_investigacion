@@ -103,6 +103,7 @@ class FraudCaseApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Gestión de Casos de Fraude (App de escritorio)")
+        self._suppress_messagebox = False
         # Lista para logs de navegación y validación
         self.logs = []
         self._hover_tooltips = []
@@ -3228,14 +3229,30 @@ class FraudCaseApp:
         """Valida los datos del formulario y retorna errores y advertencias."""
         errors = []
         warnings = []
-        
+
+        def _report_catalog_error(message):
+            errors.append(message)
+            if getattr(self, "_suppress_messagebox", False):
+                return
+            target_root = getattr(self, "root", None) or tk._default_root
+            if not target_root:
+                return
+            try:
+                messagebox.showerror("Valor fuera de catálogo", message)
+            except Exception:
+                pass
+
         def _validate_product_catalog_field(value, label, catalog, catalog_label, product_label):
             text = (value or '').strip()
             message = validate_required_text(text, label)
             if message:
                 return f"Producto {product_label}: {message}"
             if text not in catalog:
-                return f"Producto {product_label}: El {catalog_label} '{text}' no está en el catálogo CM."
+                catalog_message = (
+                    f"Producto {product_label}: El {catalog_label} '{text}' no está en el catálogo CM."
+                )
+                _report_catalog_error(catalog_message)
+                return None
             return None
         # Validar número de caso
         id_caso = self.id_caso_var.get().strip()
@@ -3243,24 +3260,63 @@ class FraudCaseApp:
         if case_message:
             errors.append(case_message)
         # Validar campos obligatorios del caso antes de validar entidades hijas
-        tipo_message = validate_required_text(self.tipo_informe_var.get(), "el tipo de informe")
+        tipo_informe_value = (self.tipo_informe_var.get() or '').strip()
+        tipo_message = validate_required_text(tipo_informe_value, "el tipo de informe")
         if tipo_message:
             errors.append(tipo_message)
-        cat1_message = validate_required_text(self.cat_caso1_var.get(), "la categoría nivel 1")
+        elif tipo_informe_value not in TIPO_INFORME_LIST:
+            _report_catalog_error(
+                f"El tipo de informe '{tipo_informe_value}' no está en el catálogo CM."
+            )
+        cat1_value = (self.cat_caso1_var.get() or '').strip()
+        cat1_message = validate_required_text(cat1_value, "la categoría nivel 1")
+        cat1_valid = False
         if cat1_message:
             errors.append(cat1_message)
-        cat2_message = validate_required_text(self.cat_caso2_var.get(), "la categoría nivel 2")
+        elif cat1_value not in TAXONOMIA:
+            _report_catalog_error(
+                f"La categoría nivel 1 '{cat1_value}' no está en el catálogo CM."
+            )
+        else:
+            cat1_valid = True
+        cat2_value = (self.cat_caso2_var.get() or '').strip()
+        cat2_message = validate_required_text(cat2_value, "la categoría nivel 2")
+        cat2_valid = False
         if cat2_message:
             errors.append(cat2_message)
-        mod_message = validate_required_text(self.mod_caso_var.get(), "la modalidad del caso")
+        elif cat1_valid:
+            if cat2_value not in TAXONOMIA[cat1_value]:
+                _report_catalog_error(
+                    f"La categoría nivel 2 '{cat2_value}' no está dentro de la categoría '{cat1_value}' del catálogo CM."
+                )
+            else:
+                cat2_valid = True
+        mod_value = (self.mod_caso_var.get() or '').strip()
+        mod_message = validate_required_text(mod_value, "la modalidad del caso")
         if mod_message:
             errors.append(mod_message)
-        canal_message = validate_required_text(self.canal_caso_var.get(), "el canal del caso")
+        elif cat1_valid and cat2_valid:
+            modalidades = TAXONOMIA[cat1_value][cat2_value]
+            if mod_value not in modalidades:
+                _report_catalog_error(
+                    f"La modalidad '{mod_value}' no existe dentro de la categoría '{cat1_value}'/'{cat2_value}' del catálogo CM."
+                )
+        canal_value = (self.canal_caso_var.get() or '').strip()
+        canal_message = validate_required_text(canal_value, "el canal del caso")
         if canal_message:
             errors.append(canal_message)
-        proceso_message = validate_required_text(self.proceso_caso_var.get(), "el proceso impactado")
+        elif canal_value not in CANAL_LIST:
+            _report_catalog_error(
+                f"El canal del caso '{canal_value}' no está en el catálogo CM."
+            )
+        proceso_value = (self.proceso_caso_var.get() or '').strip()
+        proceso_message = validate_required_text(proceso_value, "el proceso impactado")
         if proceso_message:
             errors.append(proceso_message)
+        elif proceso_value not in PROCESO_LIST:
+            _report_catalog_error(
+                f"El proceso del caso '{proceso_value}' no está en el catálogo CM."
+            )
         # Validar IDs de clientes
         for idx, cframe in enumerate(self.client_frames, start=1):
             tipo_id_value = (cframe.tipo_id_var.get() or "").strip()
