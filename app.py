@@ -1187,6 +1187,15 @@ class FraudCaseApp:
                 ],
             ),
             (
+                "involucramientos",
+                "Asignaciones por colaborador",
+                [
+                    ("producto", "Producto"),
+                    ("colaborador", "Colaborador"),
+                    ("monto", "Monto asignado"),
+                ],
+            ),
+            (
                 "productos",
                 "Productos investigados",
                 [
@@ -1907,6 +1916,15 @@ class FraudCaseApp:
                     col.get("tipo_sancion", ""),
                 )
                 for col in dataset.get("colaboradores", [])
+            ]
+        if section == "involucramientos":
+            return [
+                (
+                    inv.get("id_producto", ""),
+                    inv.get("id_colaborador", ""),
+                    inv.get("monto_asignado", ""),
+                )
+                for inv in dataset.get("involucramientos", [])
             ]
         if section == "productos":
             return [
@@ -3066,13 +3084,26 @@ class FraudCaseApp:
                     if key in key_set:
                         errors.append(f"Registro duplicado de clave técnica (producto {pid})")
                     key_set.add(key)
-            for inv in prod_data['asignaciones']:
+            for inv_idx, inv in enumerate(prod_data['asignaciones'], start=1):
+                collaborator_id = (inv.get('id_colaborador') or '').strip()
+                amount_value = (inv.get('monto_asignado') or '').strip()
+                if amount_value and not collaborator_id:
+                    errors.append(
+                        f"Producto {pid}: la asignación {inv_idx} tiene un monto sin colaborador."
+                    )
                 for claim in claim_rows:
                     claim_id = (claim.get('id_reclamo') or '').strip()
-                    key = (id_caso, pid, cid, inv['id_colaborador'], prod_data['producto']['fecha_ocurrencia'], claim_id)
+                    key = (
+                        id_caso,
+                        pid,
+                        cid,
+                        collaborator_id,
+                        prod_data['producto']['fecha_ocurrencia'],
+                        claim_id,
+                    )
                     if key in key_set:
                         errors.append(
-                            f"Registro duplicado de clave técnica (producto {pid}, colaborador {inv['id_colaborador']})"
+                            f"Registro duplicado de clave técnica (producto {pid}, colaborador {collaborator_id})"
                         )
                     key_set.add(key)
         # Validar fechas y montos por producto

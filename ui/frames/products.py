@@ -29,6 +29,7 @@ class InvolvementRow:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self.team_validator = None
 
         self.team_var = tk.StringVar()
         self.monto_var = tk.StringVar()
@@ -37,34 +38,46 @@ class InvolvementRow:
         self.frame.pack(fill="x", pady=1)
 
         ttk.Label(self.frame, text="Colaborador:").pack(side="left")
-        self.team_cb = ttk.Combobox(self.frame, textvariable=self.team_var, values=self.team_getter(), state="readonly", width=20)
+        self.team_cb = ttk.Combobox(
+            self.frame,
+            textvariable=self.team_var,
+            values=self.team_getter(),
+            state="readonly",
+            width=20,
+        )
         self.team_cb.pack(side="left", padx=5)
         self.team_cb.set('')
+        self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
+        self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
         self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
         ttk.Label(self.frame, text="Monto asignado:").pack(side="left")
         monto_entry = ttk.Entry(self.frame, textvariable=self.monto_var, width=15)
         monto_entry.pack(side="left", padx=5)
-        monto_entry.bind(
-            "<FocusOut>",
-            lambda e: self.product_frame.log_change(
-                f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto"
-            ),
-        )
+        monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
 
         remove_btn = ttk.Button(self.frame, text="Eliminar", command=self.remove)
         remove_btn.pack(side="left", padx=5)
         self.tooltip_register(remove_btn, "Elimina esta asignación específica.")
 
-        self.validators.append(
-            FieldValidator(
-                monto_entry,
-                lambda: validate_amount_text(self.monto_var.get(), "el monto asignado", allow_blank=True),
-                self.logs,
-                f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1}",
-                variables=[self.monto_var],
-            )
+        amount_validator = FieldValidator(
+            monto_entry,
+            lambda: validate_amount_text(self.monto_var.get(), "el monto asignado", allow_blank=True),
+            self.logs,
+            f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1}",
+            variables=[self.monto_var],
         )
+        self.validators.append(amount_validator)
+
+        self.team_validator = FieldValidator(
+            self.team_cb,
+            self._validate_team_selection,
+            self.logs,
+            f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1} colaborador",
+            variables=[self.team_var, self.monto_var],
+        )
+        self.team_validator.add_widget(monto_entry)
+        self.validators.append(self.team_validator)
 
     def get_data(self):
         return {
@@ -82,6 +95,54 @@ class InvolvementRow:
             )
             self.frame.destroy()
             self.remove_callback(self)
+
+    def _handle_amount_focus_out(self):
+        self.product_frame.log_change(
+            f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto"
+        )
+        self._notify_summary_change()
+
+    def _handle_team_focus_out(self):
+        self.product_frame.log_change(
+            f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó colaborador"
+        )
+        self._notify_summary_change()
+
+    def _notify_summary_change(self):
+        if hasattr(self.product_frame, 'schedule_summary_refresh'):
+            self.product_frame.schedule_summary_refresh('involucramientos')
+
+    def _get_known_team_ids(self):
+        return {option.strip() for option in self.team_getter() if option and option.strip()}
+
+    def _clear_if_completely_blank(self):
+        if self.team_var.get().strip() or self.monto_var.get().strip():
+            return
+
+        def _clear():
+            self.team_cb.set('')
+            self.team_var.set('')
+            self.monto_var.set('')
+
+        if self.team_validator:
+            self.team_validator.suppress_during(_clear)
+        else:
+            _clear()
+        self._notify_summary_change()
+
+    def _validate_team_selection(self):
+        monto_text = self.monto_var.get().strip()
+        team_value = self.team_var.get().strip()
+        if not monto_text:
+            if team_value and team_value not in self._get_known_team_ids():
+                return "Debe seleccionar un colaborador válido."
+            self._clear_if_completely_blank()
+            return None
+        if not team_value:
+            return "Debe seleccionar un colaborador para este monto asignado."
+        if team_value not in self._get_known_team_ids():
+            return "Debe seleccionar un colaborador válido."
+        return None
 
 
 class ClaimRow:
@@ -566,10 +627,13 @@ class ProductFrame:
         idx = len(self.involvements)
         row = InvolvementRow(self.invol_frame, self, idx, self.get_team_options, self.remove_involvement, self.logs, self.tooltip_register)
         self.involvements.append(row)
+        self.schedule_summary_refresh('involucramientos')
+        return row
 
     def remove_involvement(self, row):
         if row in self.involvements:
             self.involvements.remove(row)
+        self.schedule_summary_refresh('involucramientos')
 
     def update_client_options(self):
         current = self.client_var.get().strip()
@@ -776,7 +840,11 @@ class ProductFrame:
                 "tipo_producto": self.tipo_prod_var.get(),
             },
             "reclamos": [claim.get_data() for claim in self.claims],
-            "asignaciones": [inv.get_data() for inv in self.involvements],
+            "asignaciones": [
+                data
+                for data in (inv.get_data() for inv in self.involvements)
+                if any(data.values())
+            ],
         }
 
     def remove(self):

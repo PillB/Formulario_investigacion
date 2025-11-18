@@ -201,6 +201,18 @@ def _complete_claim(claim_id="C12345678"):
     }
 
 
+def test_validate_data_errors_when_involvement_missing_collaborator():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [
+            {"id_colaborador": "", "monto_asignado": "150"},
+        ],
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    errors, _ = app.validate_data()
+    assert any("monto sin colaborador" in error for error in errors)
+
+
 @pytest.mark.parametrize(
     "product_config,expected_error",
     [
