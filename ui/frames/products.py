@@ -292,6 +292,7 @@ class ProductFrame:
         tooltip_register,
         summary_refresh_callback=None,
         change_notifier=None,
+        id_change_callback=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -308,6 +309,8 @@ class ProductFrame:
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
+        self.id_change_callback = id_change_callback
+        self._last_tracked_id = ''
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -836,6 +839,7 @@ class ProductFrame:
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         pid = self.id_var.get().strip()
+        self._notify_id_change(pid)
         if not silent:
             self.log_change(f"Producto {self.idx+1}: modificó ID a {pid}")
         if not pid:
@@ -905,6 +909,14 @@ class ProductFrame:
         self.log_change(f"Producto {self.idx+1}: autopoblado desde catálogo")
         self.schedule_summary_refresh({'productos', 'reclamos'})
         self.persist_lookup_snapshot()
+
+    def _notify_id_change(self, new_id):
+        if new_id == self._last_tracked_id:
+            return
+        previous = self._last_tracked_id
+        self._last_tracked_id = new_id
+        if callable(self.id_change_callback):
+            self.id_change_callback(self, previous, new_id)
 
     def _validate_fecha_descubrimiento(self):
         msg = validate_date_text(self.fecha_desc_var.get(), "la fecha de descubrimiento", allow_blank=False)

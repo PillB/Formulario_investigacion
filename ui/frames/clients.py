@@ -26,6 +26,7 @@ class ClientFrame:
         client_lookup=None,
         summary_refresh_callback=None,
         change_notifier=None,
+        id_change_callback=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -38,6 +39,8 @@ class ClientFrame:
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
+        self.id_change_callback = id_change_callback
+        self._last_tracked_id = ''
 
         self.tipo_id_var = tk.StringVar()
         self.id_var = tk.StringVar()
@@ -167,6 +170,7 @@ class ClientFrame:
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         if not silent:
             self._log_change(f"Cliente {self.idx+1}: cambió ID a {self.id_var.get()}")
+        self._notify_id_change()
         self.update_client_options()
         cid = self.id_var.get().strip()
         if not cid:
@@ -201,6 +205,15 @@ class ClientFrame:
                 )
                 self._last_missing_lookup_id = cid
         self.schedule_summary_refresh('clientes')
+
+    def _notify_id_change(self):
+        new_id = self.id_var.get().strip()
+        if new_id == self._last_tracked_id:
+            return
+        previous = self._last_tracked_id
+        self._last_tracked_id = new_id
+        if callable(self.id_change_callback):
+            self.id_change_callback(self, previous, new_id)
 
     def get_data(self):
         return {

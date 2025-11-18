@@ -146,6 +146,9 @@ class FraudCaseApp:
         self.product_frames = []
         self.risk_frames = []
         self.norm_frames = []
+        self._client_frames_by_id = {}
+        self._team_frames_by_id = {}
+        self._product_frames_by_id = {}
         self.next_risk_number = 1
         self.summary_tables = {}
         self.summary_config = {}
@@ -776,12 +779,14 @@ class FraudCaseApp:
             client_lookup=self.client_lookup,
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
+            id_change_callback=self._handle_client_id_change,
         )
         self.client_frames.append(client)
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
 
     def remove_client(self, client_frame):
+        self._handle_client_id_change(client_frame, client_frame.id_var.get(), None)
         self.client_frames.remove(client_frame)
         # Renombrar las etiquetas
         for i, cl in enumerate(self.client_frames):
@@ -820,12 +825,14 @@ class FraudCaseApp:
             self.register_tooltip,
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
+            id_change_callback=self._handle_team_id_change,
         )
         self.team_frames.append(team)
         self.update_team_options_global()
         self._schedule_summary_refresh('colaboradores')
 
     def remove_team(self, team_frame):
+        self._handle_team_id_change(team_frame, team_frame.id_var.get(), None)
         self.team_frames.remove(team_frame)
         # Renombrar
         for i, tm in enumerate(self.team_frames):
@@ -883,6 +890,7 @@ class FraudCaseApp:
             self.register_tooltip,
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
+            id_change_callback=self._handle_product_id_change,
         )
         self.product_frames.append(prod)
         # Renombrar
@@ -892,6 +900,7 @@ class FraudCaseApp:
         self._schedule_summary_refresh({'productos', 'reclamos'})
 
     def remove_product(self, prod_frame):
+        self._handle_product_id_change(prod_frame, prod_frame.id_var.get(), None)
         self.product_frames.remove(prod_frame)
         for i, p in enumerate(self.product_frames):
             p.idx = i
@@ -2477,32 +2486,79 @@ class FraudCaseApp:
         except tk.TclError:
             pass
 
+    @staticmethod
+    def _normalize_identifier(identifier):
+        return (identifier or '').strip()
+
+    def _update_frame_id_index(self, index, frame, previous_id, new_id):
+        if index is None:
+            return
+        previous = self._normalize_identifier(previous_id)
+        new = self._normalize_identifier(new_id)
+        if previous and index.get(previous) is frame:
+            index.pop(previous, None)
+        else:
+            for key, value in list(index.items()):
+                if value is frame and key != new:
+                    index.pop(key, None)
+        if hasattr(frame, '_last_tracked_id'):
+            frame._last_tracked_id = new
+        if not new:
+            return
+        index[new] = frame
+
+    def _handle_client_id_change(self, frame, previous_id, new_id):
+        self._ensure_frame_id_maps()
+        self._update_frame_id_index(self._client_frames_by_id, frame, previous_id, new_id)
+
+    def _handle_team_id_change(self, frame, previous_id, new_id):
+        self._ensure_frame_id_maps()
+        self._update_frame_id_index(self._team_frames_by_id, frame, previous_id, new_id)
+
+    def _handle_product_id_change(self, frame, previous_id, new_id):
+        self._ensure_frame_id_maps()
+        self._update_frame_id_index(self._product_frames_by_id, frame, previous_id, new_id)
+
+    def _rebuild_frame_id_indexes(self):
+        self._ensure_frame_id_maps()
+        def _rebuild(target, frames):
+            target.clear()
+            for frame in frames:
+                identifier = self._normalize_identifier(frame.id_var.get() if hasattr(frame, 'id_var') else '')
+                if hasattr(frame, '_last_tracked_id'):
+                    frame._last_tracked_id = identifier
+                if identifier:
+                    target[identifier] = frame
+
+        _rebuild(self._client_frames_by_id, self.client_frames)
+        _rebuild(self._team_frames_by_id, self.team_frames)
+        _rebuild(self._product_frames_by_id, self.product_frames)
+
+    def _ensure_frame_id_maps(self):
+        if not hasattr(self, '_client_frames_by_id'):
+            self._client_frames_by_id = {}
+        if not hasattr(self, '_team_frames_by_id'):
+            self._team_frames_by_id = {}
+        if not hasattr(self, '_product_frames_by_id'):
+            self._product_frames_by_id = {}
+
     def _find_client_frame(self, client_id):
-        client_id = (client_id or '').strip()
+        client_id = self._normalize_identifier(client_id)
         if not client_id:
             return None
-        for frame in self.client_frames:
-            if frame.id_var.get().strip() == client_id:
-                return frame
-        return None
+        return getattr(self, '_client_frames_by_id', {}).get(client_id)
 
     def _find_team_frame(self, collaborator_id):
-        collaborator_id = (collaborator_id or '').strip()
+        collaborator_id = self._normalize_identifier(collaborator_id)
         if not collaborator_id:
             return None
-        for frame in self.team_frames:
-            if frame.id_var.get().strip() == collaborator_id:
-                return frame
-        return None
+        return getattr(self, '_team_frames_by_id', {}).get(collaborator_id)
 
     def _find_product_frame(self, product_id):
-        product_id = (product_id or '').strip()
+        product_id = self._normalize_identifier(product_id)
         if not product_id:
             return None
-        for frame in self.product_frames:
-            if frame.id_var.get().strip() == product_id:
-                return frame
-        return None
+        return getattr(self, '_product_frames_by_id', {}).get(product_id)
 
     def _obtain_client_slot_for_import(self):
         """Obtiene un ``ClientFrame`` vacío o crea uno nuevo para importación.
@@ -3103,6 +3159,7 @@ class FraudCaseApp:
             nf.frame.destroy()
         self.norm_frames.clear()
         self.next_risk_number = 1
+        self._rebuild_frame_id_indexes()
         # Volver a crear uno por cada sección donde corresponde
         self.add_client()
         self.add_team()
@@ -3329,6 +3386,7 @@ class FraudCaseApp:
         self.descargos_var.set(analisis.get('descargos', ''))
         self.conclusiones_var.set(analisis.get('conclusiones', ''))
         self.recomendaciones_var.set(analisis.get('recomendaciones', ''))
+        self._rebuild_frame_id_indexes()
         self._schedule_summary_refresh(data=data)
 
     # ---------------------------------------------------------------------
