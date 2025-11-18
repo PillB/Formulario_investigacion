@@ -15,13 +15,29 @@ from validators import validate_money_bounds
     ],
 )
 def test_validate_money_bounds_allows_up_to_twelve_integer_digits(value, expected):
-    error, amount = validate_money_bounds(value, "Monto")
+    error, amount, normalized = validate_money_bounds(value, "Monto")
     assert error is None
     assert amount == expected
+    assert normalized == f"{expected:.2f}"
 
 
 def test_validate_money_bounds_rejects_more_than_twelve_integer_digits():
-    error, amount = validate_money_bounds("1000000000000.00", "Monto")
+    error, amount, normalized = validate_money_bounds("1000000000000.00", "Monto")
     assert error is not None
     assert amount is None
     assert "12 dígitos" in error
+    assert normalized == ""
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("100", "100.00"),
+        ("100.5", "100.50"),
+    ],
+)
+def test_validate_money_bounds_formats_missing_decimals(value, expected):
+    error, amount, normalized = validate_money_bounds(value, "Monto")
+    assert error is None
+    assert normalized == expected
+    assert f"{amount:.2f}" == expected

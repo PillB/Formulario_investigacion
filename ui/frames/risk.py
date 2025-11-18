@@ -104,11 +104,13 @@ class RiskFrame:
         )
 
         def _validate_exposure_amount():
-            message, decimal_value = validate_money_bounds(
+            message, decimal_value, normalized_text = validate_money_bounds(
                 self.exposicion_var.get(),
                 "la exposición residual",
                 allow_blank=True,
             )
+            if not message and normalized_text != (self.exposicion_var.get() or "").strip():
+                self.exposicion_var.set(normalized_text)
             self._last_exposicion_decimal = decimal_value
             return message
 
