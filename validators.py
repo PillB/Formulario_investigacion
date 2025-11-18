@@ -260,9 +260,8 @@ class FieldValidator:
         self._bind_widget_events(widget)
 
     def _bind_widget_events(self, widget) -> None:
-        widget.bind("<FocusOut>", self._on_change)
-        widget.bind("<KeyRelease>", self._on_change)
-        widget.bind("<<ComboboxSelected>>", self._on_change)
+        for event_name in ("<FocusOut>", "<KeyRelease>", "<<ComboboxSelected>>"):
+            widget.bind(event_name, self._on_change, add="+")
 
     def add_widget(self, widget) -> None:
         """Incluye widgets adicionales cuyos eventos deben disparar la validación."""
