@@ -77,8 +77,13 @@ def validate_money_bounds(value: str, label: str, allow_blank: bool = True):
     quantized = amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     if quantized < 0:
         return (f"{label} no puede ser negativo.", None)
-    if len(quantized.as_tuple().digits) > 12:
-        return (f"{label} no puede tener más de 12 dígitos.", None)
+    quantized_tuple = quantized.as_tuple()
+    digits = len(quantized_tuple.digits)
+    exponent = quantized_tuple.exponent
+    integer_digits = digits if exponent >= 0 else digits + exponent
+    integer_digits = max(integer_digits, 0)
+    if integer_digits > 12:
+        return (f"{label} no puede tener más de 12 dígitos en la parte entera.", None)
     return (None, quantized)
 
 
