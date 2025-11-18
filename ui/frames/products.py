@@ -524,6 +524,24 @@ class ProductFrame:
                     variables=[self.monto_falla_var],
                 ),
                 FieldValidator(
+                    cont_entry,
+                    lambda: validate_amount_text(
+                        self.monto_cont_var.get(), "el monto contingencia", allow_blank=True
+                    ),
+                    self.logs,
+                    f"Producto {self.idx+1} - Monto contingencia",
+                    variables=[self.monto_cont_var],
+                ),
+                FieldValidator(
+                    rec_entry,
+                    lambda: validate_amount_text(
+                        self.monto_rec_var.get(), "el monto recuperado", allow_blank=True
+                    ),
+                    self.logs,
+                    f"Producto {self.idx+1} - Monto recuperado",
+                    variables=[self.monto_rec_var],
+                ),
+                FieldValidator(
                     pago_entry,
                     lambda: validate_amount_text(self.monto_pago_var.get(), "el monto pago de deuda", allow_blank=True),
                     self.logs,
