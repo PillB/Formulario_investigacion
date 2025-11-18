@@ -88,10 +88,11 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_case_id, validate_client_id,
                         validate_codigo_analitica, validate_date_text,
                         validate_email_list, validate_money_bounds,
-                        validate_norm_id, validate_phone_list,
-                        validate_product_dates, validate_product_id,
-                        validate_reclamo_id, validate_required_text,
-                        validate_risk_id, validate_team_member_id)
+                        validate_multi_selection, validate_norm_id,
+                        validate_phone_list, validate_product_dates,
+                        validate_product_id, validate_reclamo_id,
+                        validate_required_text, validate_risk_id,
+                        validate_team_member_id)
 
 
 class FraudCaseApp:
@@ -3400,6 +3401,24 @@ class FraudCaseApp:
                     errors.append(
                         f"Cliente {idx}: El flag de cliente '{flag_value}' no está en el catálogo CM."
                     )
+            if hasattr(cframe, 'telefonos_var'):
+                phone_message = validate_phone_list(
+                    cframe.telefonos_var.get(), "los teléfonos del cliente"
+                )
+                if phone_message:
+                    errors.append(f"Cliente {idx}: {phone_message}")
+            if hasattr(cframe, 'correos_var'):
+                email_message = validate_email_list(
+                    cframe.correos_var.get(), "los correos del cliente"
+                )
+                if email_message:
+                    errors.append(f"Cliente {idx}: {email_message}")
+            if hasattr(cframe, 'accionado_var'):
+                accionado_message = validate_multi_selection(
+                    cframe.accionado_var.get(), "Accionado"
+                )
+                if accionado_message:
+                    errors.append(f"Cliente {idx}: {accionado_message}")
         # Validar duplicidad del key técnico (caso, producto, cliente, colaborador, fecha ocurrencia, reclamo)
         key_set = set()
         product_client_map = {}

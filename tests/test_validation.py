@@ -3,10 +3,10 @@ from datetime import datetime, timedelta
 import pytest
 
 from app import FraudCaseApp
-from settings import (CANAL_LIST, CRITICIDAD_LIST, FLAG_COLABORADOR_LIST,
-                      PROCESO_LIST, TAXONOMIA, TIPO_FALTA_LIST,
-                      TIPO_ID_LIST, TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
-                      TIPO_SANCION_LIST)
+from settings import (ACCIONADO_OPTIONS, CANAL_LIST, CRITICIDAD_LIST,
+                      FLAG_COLABORADOR_LIST, PROCESO_LIST, TAXONOMIA,
+                      TIPO_FALTA_LIST, TIPO_ID_LIST, TIPO_INFORME_LIST,
+                      TIPO_MONEDA_LIST, TIPO_SANCION_LIST)
 
 
 class DummyVar:
@@ -31,7 +31,7 @@ class DummyClientWithContacts(DummyClient):
         self,
         client_id,
         *,
-        telefonos="999-888",
+        telefonos="999888777",
         correos="demo@example.com",
         direcciones="Av. Principal 123",
         accionado="Fiscalía",
@@ -380,6 +380,52 @@ def test_validate_data_requires_client_tipo_id():
     errors, _warnings = app.validate_data()
 
     assert any("Debe ingresar el tipo de ID del cliente" in error for error in errors)
+
+
+def test_validate_data_rejects_imported_clients_with_invalid_phone():
+    app = build_headless_app("Crédito personal")
+    invalid_client = DummyClientWithContacts(
+        "12345678",
+        telefonos="999-888",
+        correos="demo@example.com",
+        accionado=ACCIONADO_OPTIONS[0],
+    )
+    app.client_frames = [invalid_client]
+
+    errors, _ = app.validate_data()
+
+    assert any("teléfono inválido" in error for error in errors)
+
+
+def test_validate_data_rejects_imported_clients_with_invalid_email():
+    app = build_headless_app("Crédito personal")
+    invalid_client = DummyClientWithContacts(
+        "12345678",
+        telefonos="999888777",
+        correos="correo-invalido",
+        accionado=ACCIONADO_OPTIONS[0],
+    )
+    app.client_frames = [invalid_client]
+
+    errors, _ = app.validate_data()
+
+    assert any("correo inválido" in error for error in errors)
+
+
+def test_validate_data_requires_accionado_for_imported_clients():
+    app = build_headless_app("Crédito personal")
+    invalid_client = DummyClientWithContacts(
+        "12345678",
+        telefonos="999888777",
+        correos="demo@example.com",
+        accionado="",
+    )
+    app.client_frames = [invalid_client]
+
+    errors, _ = app.validate_data()
+
+    expected = "Cliente 1: Debe seleccionar al menos una opción en Accionado."
+    assert expected in errors
 
 
 @pytest.mark.parametrize(
@@ -731,7 +777,7 @@ def test_preserve_existing_client_contacts_on_partial_import():
     app.client_lookup = {}
     existing_client = DummyClientWithContacts(
         "12345678",
-        telefonos="999-111",
+        telefonos="999111222",
         correos="cliente@correo.com",
         direcciones="Calle Falsa 123",
         accionado="Fiscalía; Penal",
@@ -745,11 +791,11 @@ def test_preserve_existing_client_contacts_on_partial_import():
         "accionado": "",
     }
     app._populate_client_frame_from_row(existing_client, blank_row, preserve_existing=True)
-    assert existing_client.telefonos_var.get() == "999-111"
+    assert existing_client.telefonos_var.get() == "999111222"
     assert existing_client.correos_var.get() == "cliente@correo.com"
     assert existing_client.direcciones_var.get() == "Calle Falsa 123"
     assert existing_client.accionado_var.get() == "Fiscalía; Penal"
-    assert app.client_lookup["12345678"]["telefonos"] == "999-111"
+    assert app.client_lookup["12345678"]["telefonos"] == "999111222"
     assert app.client_lookup["12345678"]["correos"] == "cliente@correo.com"
     assert app.client_lookup["12345678"]["direcciones"] == "Calle Falsa 123"
     assert app.client_lookup["12345678"]["accionado"] == "Fiscalía; Penal"
