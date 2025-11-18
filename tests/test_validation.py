@@ -386,6 +386,19 @@ def test_validate_data_errors_when_involvement_missing_collaborator():
     assert any("monto sin colaborador" in error for error in errors)
 
 
+def test_validate_data_flags_deleted_collaborator_reference():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [
+            {"id_colaborador": "T12345", "monto_asignado": "75"},
+        ],
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    app.team_frames = []  # Simula que el colaborador fue eliminado del formulario.
+    errors, _ = app.validate_data()
+    assert any("referencia un colaborador eliminado" in error for error in errors)
+
+
 @pytest.mark.parametrize(
     "product_config,expected_error",
     [

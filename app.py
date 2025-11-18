@@ -3312,6 +3312,11 @@ class FraudCaseApp:
                     errors.append(
                         f"El colaborador {idx} debe registrar nombre y código de agencia por pertenecer a canales comerciales."
                     )
+        collaborator_ids = {
+            tm.id_var.get().strip()
+            for tm in self.team_frames
+            if tm.id_var.get().strip()
+        }
         for idx, p in enumerate(self.product_frames, start=1):
             prod_data = p.get_data()
             producto = prod_data['producto']
@@ -3380,6 +3385,10 @@ class FraudCaseApp:
                 if amount_value and not collaborator_id:
                     errors.append(
                         f"Producto {pid}: la asignación {inv_idx} tiene un monto sin colaborador."
+                    )
+                if collaborator_id and collaborator_id not in collaborator_ids:
+                    errors.append(
+                        f"Producto {pid}: la asignación {inv_idx} referencia un colaborador eliminado (ID {collaborator_id})."
                     )
                 for claim in claim_rows:
                     claim_id = (claim.get('id_reclamo') or '').strip()
