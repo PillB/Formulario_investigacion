@@ -29,15 +29,25 @@ def test_validate_money_bounds_rejects_more_than_twelve_integer_digits():
     assert normalized == ""
 
 
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        ("100", "100.00"),
-        ("100.5", "100.50"),
-    ],
-)
-def test_validate_money_bounds_formats_missing_decimals(value, expected):
+@pytest.mark.parametrize("value", ["100", "100.5", "0", "2500.0"])
+def test_validate_money_bounds_rejects_missing_decimal_places(value):
+    error, amount, normalized = validate_money_bounds(value, "Monto")
+    assert error == "Monto debe tener dos decimales exactos."
+    assert amount is None
+    assert normalized == ""
+
+
+@pytest.mark.parametrize("value", ["0.00", "10.50", "999999999999.99"])
+def test_validate_money_bounds_accepts_exact_two_decimals(value):
     error, amount, normalized = validate_money_bounds(value, "Monto")
     assert error is None
-    assert normalized == expected
-    assert f"{amount:.2f}" == expected
+    assert normalized == value
+    assert f"{amount:.2f}" == value
+
+
+def test_validate_money_bounds_rejects_more_than_two_decimal_places():
+    error, amount, normalized = validate_money_bounds("1.234", "Monto")
+    assert error is not None
+    assert "dos decimales" in error
+    assert amount is None
+    assert normalized == ""

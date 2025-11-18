@@ -127,14 +127,14 @@ def test_loss_fields_have_inline_validation():
     assert perdida_validator is not None
     assert falla_validator is not None
 
-    product.monto_perdida_var.set("-10")
+    product.monto_perdida_var.set("-10.00")
     error = perdida_validator.validate_callback()
     assert error is not None
     assert "fraude" in error.lower()
     assert "no puede ser negativo" in error.lower()
     assert perdida_validator.variables and perdida_validator.variables[0] is product.monto_perdida_var
 
-    product.monto_falla_var.set("-5")
+    product.monto_falla_var.set("-5.00")
     error = falla_validator.validate_callback()
     assert error is not None
     assert "falla" in error.lower()
@@ -156,7 +156,7 @@ def test_contingency_and_recovered_fields_have_inline_validation():
     assert "número" in error.lower()
     assert contingencia_validator.variables and contingencia_validator.variables[0] is product.monto_cont_var
 
-    product.monto_rec_var.set("-1")
+    product.monto_rec_var.set("-1.00")
     error = recuperado_validator.validate_callback()
     assert error is not None
     assert "recuperado" in error.lower()
