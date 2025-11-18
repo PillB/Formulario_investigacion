@@ -46,6 +46,7 @@ class InvolvementRow:
         ttk.Label(self.frame, text="Colaborador:").pack(side="left")
         self.team_cb = ttk.Combobox(self.frame, textvariable=self.team_var, values=self.team_getter(), state="readonly", width=20)
         self.team_cb.pack(side="left", padx=5)
+        self.team_cb.set('')
         self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
         ttk.Label(self.frame, text="Monto asignado:").pack(side="left")
         monto_entry = ttk.Entry(self.frame, textvariable=self.monto_var, width=15)
@@ -224,23 +225,25 @@ class ProductFrame:
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
-        self.cat1_var = tk.StringVar(value=list(TAXONOMIA.keys())[0])
-        first_subcats = list(TAXONOMIA[self.cat1_var.get()].keys())
-        self.cat2_var = tk.StringVar(value=first_subcats[0])
-        first_modalities = TAXONOMIA[self.cat1_var.get()][self.cat2_var.get()]
-        self.mod_var = tk.StringVar(value=first_modalities[0])
-        self.canal_var = tk.StringVar(value=CANAL_LIST[0])
-        self.proceso_var = tk.StringVar(value=PROCESO_LIST[0])
+        taxonomy_keys = list(TAXONOMIA.keys())
+        default_cat1 = taxonomy_keys[0] if taxonomy_keys else ""
+        first_subcats = list(TAXONOMIA.get(default_cat1, {}).keys()) or ['']
+        first_modalities = TAXONOMIA.get(default_cat1, {}).get(first_subcats[0], []) or ['']
+        self.cat1_var = tk.StringVar()
+        self.cat2_var = tk.StringVar()
+        self.mod_var = tk.StringVar()
+        self.canal_var = tk.StringVar()
+        self.proceso_var = tk.StringVar()
         self.fecha_oc_var = tk.StringVar()
         self.fecha_desc_var = tk.StringVar()
         self.monto_inv_var = tk.StringVar()
-        self.moneda_var = tk.StringVar(value=TIPO_MONEDA_LIST[0])
+        self.moneda_var = tk.StringVar()
         self.monto_perdida_var = tk.StringVar()
         self.monto_falla_var = tk.StringVar()
         self.monto_cont_var = tk.StringVar()
         self.monto_rec_var = tk.StringVar()
         self.monto_pago_var = tk.StringVar()
-        self.tipo_prod_var = tk.StringVar(value=TIPO_PRODUCTO_LIST[0])
+        self.tipo_prod_var = tk.StringVar()
 
         self.frame = ttk.LabelFrame(parent, text=f"Producto {self.idx+1}")
         self.frame.pack(fill="x", padx=5, pady=2)
@@ -262,6 +265,7 @@ class ProductFrame:
             width=20,
         )
         self.client_cb.pack(side="left", padx=5)
+        self.client_cb.set('')
         self.client_cb.bind(
             "<FocusOut>",
             lambda e: log_event("navegacion", f"Producto {self.idx+1}: seleccionó cliente", self.logs),
@@ -273,18 +277,21 @@ class ProductFrame:
         ttk.Label(row2, text="Categoría 1:").pack(side="left")
         cat1_cb = ttk.Combobox(row2, textvariable=self.cat1_var, values=list(TAXONOMIA.keys()), state="readonly", width=20)
         cat1_cb.pack(side="left", padx=5)
+        cat1_cb.set('')
         cat1_cb.bind("<FocusOut>", lambda e: self.on_cat1_change())
         cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat1_change())
         self.tooltip_register(cat1_cb, "Define la categoría principal del riesgo de producto.")
         ttk.Label(row2, text="Categoría 2:").pack(side="left")
         self.cat2_cb = ttk.Combobox(row2, textvariable=self.cat2_var, values=first_subcats, state="readonly", width=20)
         self.cat2_cb.pack(side="left", padx=5)
+        self.cat2_cb.set('')
         self.cat2_cb.bind("<FocusOut>", lambda e: self.on_cat2_change())
         self.cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat2_change())
         self.tooltip_register(self.cat2_cb, "Selecciona la subcategoría específica.")
         ttk.Label(row2, text="Modalidad:").pack(side="left")
         self.mod_cb = ttk.Combobox(row2, textvariable=self.mod_var, values=first_modalities, state="readonly", width=25)
         self.mod_cb.pack(side="left", padx=5)
+        self.mod_cb.set('')
         self.tooltip_register(self.mod_cb, "Indica la modalidad concreta del fraude.")
 
         row3 = ttk.Frame(self.frame)
@@ -292,10 +299,12 @@ class ProductFrame:
         ttk.Label(row3, text="Canal:").pack(side="left")
         canal_cb = ttk.Combobox(row3, textvariable=self.canal_var, values=CANAL_LIST, state="readonly", width=20)
         canal_cb.pack(side="left", padx=5)
+        canal_cb.set('')
         self.tooltip_register(canal_cb, "Canal por donde ocurrió el evento.")
         ttk.Label(row3, text="Proceso:").pack(side="left")
         proc_cb = ttk.Combobox(row3, textvariable=self.proceso_var, values=PROCESO_LIST, state="readonly", width=25)
         proc_cb.pack(side="left", padx=5)
+        proc_cb.set('')
         self.tooltip_register(proc_cb, "Proceso impactado por el incidente.")
         ttk.Label(row3, text="Tipo de producto:").pack(side="left")
         tipo_prod_cb = ttk.Combobox(
@@ -306,6 +315,7 @@ class ProductFrame:
             width=25,
         )
         tipo_prod_cb.pack(side="left", padx=5)
+        tipo_prod_cb.set('')
         self.tooltip_register(tipo_prod_cb, "Clasificación comercial del producto.")
 
         row4 = ttk.Frame(self.frame)
@@ -328,6 +338,7 @@ class ProductFrame:
         ttk.Label(row5, text="Moneda:").pack(side="left")
         moneda_cb = ttk.Combobox(row5, textvariable=self.moneda_var, values=TIPO_MONEDA_LIST, state="readonly", width=12)
         moneda_cb.pack(side="left", padx=5)
+        moneda_cb.set('')
         self.tooltip_register(moneda_cb, "Tipo de moneda principal del caso.")
 
         row6 = ttk.Frame(self.frame)
