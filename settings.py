@@ -173,11 +173,26 @@ TIPO_MONEDA_LIST = ["Soles", "Dólares", "No aplica"]
 CRITICIDAD_LIST = ["Bajo", "Moderado", "Relevante", "Alto", "Crítico"]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _resolve_writable_dir() -> str:
+    """Return a directory that should be writable by the current user."""
+
+    override = os.environ.get("FORMULARIO_DATA_DIR")
+    if override:
+        expanded = os.path.abspath(os.path.expanduser(override))
+        os.makedirs(expanded, exist_ok=True)
+        return expanded
+
+    return os.getcwd()
+
+
+WRITABLE_DIR = _resolve_writable_dir()
 TEAM_DETAILS_FILE = os.path.join(BASE_DIR, "team_details.csv")
 CLIENT_DETAILS_FILE = os.path.join(BASE_DIR, "client_details.csv")
 PRODUCT_DETAILS_FILE = os.path.join(BASE_DIR, "productos_masivos.csv")
-AUTOSAVE_FILE = os.path.join(BASE_DIR, "autosave.json")
-LOGS_FILE = os.path.join(BASE_DIR, "logs.csv")
+AUTOSAVE_FILE = os.path.join(WRITABLE_DIR, "autosave.json")
+LOGS_FILE = os.path.join(WRITABLE_DIR, "logs.csv")
 MASSIVE_SAMPLE_FILES = {
     "clientes": os.path.join(BASE_DIR, "clientes_masivos.csv"),
     "colaboradores": os.path.join(BASE_DIR, "colaboradores_masivos.csv"),
@@ -238,4 +253,5 @@ __all__ = [
     "TIPO_INFORME_LIST",
     "TIPO_MONEDA_LIST",
     "TIPO_PRODUCTO_LIST",
+    "WRITABLE_DIR",
 ]
