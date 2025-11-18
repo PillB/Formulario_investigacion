@@ -12,7 +12,16 @@ from validators import FieldValidator, log_event, validate_money_bounds, validat
 class RiskFrame:
     """Representa un riesgo identificado en la sección de riesgos."""
 
-    def __init__(self, parent, idx, remove_callback, logs, tooltip_register, change_notifier=None):
+    def __init__(
+        self,
+        parent,
+        idx,
+        remove_callback,
+        logs,
+        tooltip_register,
+        change_notifier=None,
+        default_risk_id: str | None = None,
+    ):
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
@@ -22,7 +31,12 @@ class RiskFrame:
         self._last_exposicion_decimal = None
         self.change_notifier = change_notifier
 
-        self.id_var = tk.StringVar(value=f"RSK-{idx+1:06d}")
+        self.id_var = tk.StringVar()
+        self._auto_id_value = ""
+        self._id_user_modified = False
+        self._suppress_id_trace = False
+        self.id_var.trace_add("write", self._on_id_var_change)
+        self.assign_new_auto_id(default_risk_id or f"RSK-{idx+1:06d}")
         self.lider_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
         self.criticidad_var = tk.StringVar()
@@ -125,6 +139,30 @@ class RiskFrame:
             self.change_notifier(message)
         else:
             log_event("navegacion", message, self.logs)
+
+    # ------------------------------------------------------------------
+    # Gestión del identificador
+
+    def _on_id_var_change(self, *_):
+        if self._suppress_id_trace:
+            return
+        current_value = self.id_var.get()
+        if current_value != self._auto_id_value:
+            self._id_user_modified = True
+
+    def assign_new_auto_id(self, value: str):
+        """Asigna un identificador automático sin marcarlo como editado."""
+
+        self._auto_id_value = value
+        self._suppress_id_trace = True
+        self.id_var.set(value)
+        self._suppress_id_trace = False
+        self._id_user_modified = False
+
+    def has_user_modified_id(self) -> bool:
+        """Indica si el usuario cambió manualmente el identificador."""
+
+        return self._id_user_modified
 
 
 __all__ = ["RiskFrame"]
