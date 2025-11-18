@@ -2582,7 +2582,8 @@ class FraudCaseApp:
         if not self._reset_form_state(confirm=True, save_autosave=True):
             return
         log_event("navegacion", "Se borraron todos los datos", self.logs)
-        messagebox.showinfo("Datos borrados", "Todos los datos han sido borrados.")
+        if notify:
+            messagebox.showinfo("Datos borrados", "Todos los datos han sido borrados.")
 
     # ---------------------------------------------------------------------
     # Recolección y población de datos
