@@ -1579,6 +1579,35 @@ class FraudCaseApp:
             raise ValueError("Esta tabla no admite pegado desde portapapeles.")
         return handler(rows)
 
+    def _transform_clipboard_involucramientos(self, rows):
+        sanitized = []
+        for idx, values in enumerate(rows, start=1):
+            product_id = values[0].strip()
+            collaborator_id = values[1].strip()
+            amount_text = values[2].strip()
+            if not product_id:
+                raise ValueError(
+                    f"Involucramiento fila {idx}: el ID de producto es obligatorio."
+                )
+            message = validate_team_member_id(collaborator_id)
+            if message:
+                raise ValueError(f"Involucramiento fila {idx}: {message}")
+            amount_message, amount_decimal, _ = validate_money_bounds(
+                amount_text,
+                "el monto asignado",
+                allow_blank=False,
+            )
+            if amount_message:
+                raise ValueError(f"Involucramiento fila {idx}: {amount_message}")
+            sanitized.append(
+                (
+                    product_id,
+                    collaborator_id,
+                    f"{amount_decimal:.2f}",
+                )
+            )
+        return sanitized
+
     def _transform_clipboard_clients(self, rows):
         sanitized = []
         for idx, values in enumerate(rows, start=1):
