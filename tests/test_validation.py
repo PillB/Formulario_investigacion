@@ -217,6 +217,15 @@ def test_validate_data_flags_unknown_product_type():
     assert any("no está en el catálogo" in error for error in errors)
 
 
+def test_validate_data_requires_client_tipo_id():
+    app = build_headless_app("Crédito personal")
+    app.client_frames[0].tipo_id_var.set("")
+
+    errors, _warnings = app.validate_data()
+
+    assert any("Debe ingresar el tipo de ID del cliente" in error for error in errors)
+
+
 @pytest.mark.parametrize(
     "product_id,expect_error",
     [

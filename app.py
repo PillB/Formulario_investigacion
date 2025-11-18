@@ -3254,7 +3254,17 @@ class FraudCaseApp:
             errors.append(proceso_message)
         # Validar IDs de clientes
         for idx, cframe in enumerate(self.client_frames, start=1):
-            message = validate_client_id(cframe.tipo_id_var.get(), cframe.id_var.get())
+            tipo_id_value = cframe.tipo_id_var.get()
+            tipo_message = validate_required_text(tipo_id_value, "el tipo de ID del cliente")
+            if tipo_message:
+                errors.append(f"Cliente {idx}: {tipo_message}")
+                continue
+            if tipo_id_value not in TIPO_ID_LIST:
+                errors.append(
+                    f"Cliente {idx}: El tipo de ID '{tipo_id_value}' no está en el catálogo CM."
+                )
+                continue
+            message = validate_client_id(tipo_id_value, cframe.id_var.get())
             if message:
                 errors.append(f"Cliente {idx}: {message}")
         # Validar duplicidad del key técnico (caso, producto, cliente, colaborador, fecha ocurrencia, reclamo)
