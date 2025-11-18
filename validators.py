@@ -124,12 +124,15 @@ def validate_codigo_analitica(value: str) -> Optional[str]:
     return None
 
 
+NORM_ID_PATTERN = re.compile(r"^\d{4}\.\d{3}\.\d{2}\.\d{2}$")
+
+
 def validate_norm_id(value: str) -> Optional[str]:
     text = (value or "").strip()
     if not text:
         return "Debe ingresar el ID de norma."
-    if not re.fullmatch(r"NRM-\d{5}$", text):
-        return "El ID de norma debe seguir el formato NRM-XXXXX."
+    if not NORM_ID_PATTERN.fullmatch(text):
+        return "El ID de norma debe seguir el formato XXXX.XXX.XX.XX."
     return None
 
 
