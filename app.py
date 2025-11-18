@@ -2571,23 +2571,46 @@ class FraudCaseApp:
         if not hasattr(self, '_product_frames_by_id'):
             self._product_frames_by_id = {}
 
-    def _find_client_frame(self, client_id):
-        client_id = self._normalize_identifier(client_id)
-        if not client_id:
+    def _lookup_frame(self, index_attr, frames_attr, identifier):
+        """Busca un frame reutilizable usando primero el índice y luego la lista."""
+
+        normalized = self._normalize_identifier(identifier)
+        if not normalized:
             return None
-        return getattr(self, '_client_frames_by_id', {}).get(client_id)
+        self._ensure_frame_id_maps()
+        index = getattr(self, index_attr, None)
+        frame = index.get(normalized) if isinstance(index, dict) else None
+        if frame:
+            return frame
+        frames = getattr(self, frames_attr, []) or []
+        for candidate in frames:
+            var = getattr(candidate, 'id_var', None)
+            current_id = self._normalize_identifier(var.get() if hasattr(var, 'get') else None)
+            if current_id == normalized:
+                if isinstance(index, dict):
+                    index[normalized] = candidate
+                return candidate
+        return None
+
+    def _find_client_frame(self, client_id):
+        """Localiza un cliente existente incluso si aún no hay índice construido.
+
+        Esta búsqueda resiliente es clave para cumplir la regla del documento de
+        diseño que impide duplicar registros técnicos: cuando los frames se
+        crean desde importaciones (p. ej. en ``import_combined``) es posible que
+        ``_handle_client_id_change`` no se haya invocado todavía y, por ende, el
+        diccionario ``_client_frames_by_id`` siga vacío. Al recorrer
+        ``self.client_frames`` como respaldo garantizamos que cada ID se reuse en
+        lugar de crear copias, manteniendo la unicidad exigida por CM.
+        """
+
+        return self._lookup_frame('_client_frames_by_id', 'client_frames', client_id)
 
     def _find_team_frame(self, collaborator_id):
-        collaborator_id = self._normalize_identifier(collaborator_id)
-        if not collaborator_id:
-            return None
-        return getattr(self, '_team_frames_by_id', {}).get(collaborator_id)
+        return self._lookup_frame('_team_frames_by_id', 'team_frames', collaborator_id)
 
     def _find_product_frame(self, product_id):
-        product_id = self._normalize_identifier(product_id)
-        if not product_id:
-            return None
-        return getattr(self, '_product_frames_by_id', {}).get(product_id)
+        return self._lookup_frame('_product_frames_by_id', 'product_frames', product_id)
 
     def _obtain_client_slot_for_import(self):
         """Obtiene un ``ClientFrame`` vacío o crea uno nuevo para importación.
