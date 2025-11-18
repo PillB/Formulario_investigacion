@@ -218,13 +218,13 @@ class DummyProductFrame:
                 "proceso": PROCESO_LIST[0],
                 "fecha_ocurrencia": "2023-01-01",
                 "fecha_descubrimiento": "2023-01-02",
-                "monto_investigado": "0",
+                "monto_investigado": "0.00",
                 "tipo_moneda": TIPO_MONEDA_LIST[0],
-                "monto_perdida_fraude": "0",
-                "monto_falla_procesos": "0",
-                "monto_contingencia": "0",
-                "monto_recuperado": "0",
-                "monto_pago_deuda": "0",
+                "monto_perdida_fraude": "0.00",
+                "monto_falla_procesos": "0.00",
+                "monto_contingencia": "0.00",
+                "monto_recuperado": "0.00",
+                "monto_pago_deuda": "0.00",
                 "tipo_producto": tipo_producto,
             },
             "reclamos": list(reclamos or []),
@@ -735,7 +735,7 @@ def test_validate_data_errors_when_involvement_missing_collaborator():
     product_config = {
         "tipo_producto": "Crédito personal",
         "asignaciones": [
-            {"id_colaborador": "", "monto_asignado": "150"},
+            {"id_colaborador": "", "monto_asignado": "150.00"},
         ],
     }
     app = build_headless_app("Crédito personal", product_configs=[product_config])
@@ -747,7 +747,7 @@ def test_validate_data_flags_deleted_collaborator_reference():
     product_config = {
         "tipo_producto": "Crédito personal",
         "asignaciones": [
-            {"id_colaborador": "T12345", "monto_asignado": "75"},
+            {"id_colaborador": "T12345", "monto_asignado": "75.00"},
         ],
     }
     app = build_headless_app("Crédito personal", product_configs=[product_config])
@@ -808,11 +808,11 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
             {
                 "tipo_producto": "Crédito personal",
                 "producto_overrides": {
-                    "monto_investigado": "100",
-                    "monto_perdida_fraude": "0",
-                    "monto_falla_procesos": "0",
-                    "monto_contingencia": "0",
-                    "monto_recuperado": "0",
+                    "monto_investigado": "100.00",
+                    "monto_perdida_fraude": "0.00",
+                    "monto_falla_procesos": "0.00",
+                    "monto_contingencia": "0.00",
+                    "monto_recuperado": "0.00",
                 },
             },
             f"Las cuatro partidas (pérdida, falla, contingencia y recuperación) deben ser iguales al monto investigado en el producto {DEFAULT_PRODUCT_ID}",
@@ -823,9 +823,9 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
                 "producto_overrides": {
                     "monto_investigado": "100.00",
                     "monto_perdida_fraude": "99.99",
-                    "monto_falla_procesos": "0",
-                    "monto_contingencia": "0",
-                    "monto_recuperado": "0",
+                    "monto_falla_procesos": "0.00",
+                    "monto_contingencia": "0.00",
+                    "monto_recuperado": "0.00",
                 },
                 "reclamos": [_complete_claim()],
             },
@@ -835,11 +835,11 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
             {
                 "tipo_producto": "Tarjeta de crédito",
                 "producto_overrides": {
-                    "monto_investigado": "50",
-                    "monto_perdida_fraude": "40",
-                    "monto_falla_procesos": "0",
-                    "monto_contingencia": "10",
-                    "monto_recuperado": "0",
+                    "monto_investigado": "50.00",
+                    "monto_perdida_fraude": "40.00",
+                    "monto_falla_procesos": "0.00",
+                    "monto_contingencia": "10.00",
+                    "monto_recuperado": "0.00",
                 },
                 "reclamos": [_complete_claim()],
             },
@@ -850,8 +850,8 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
                 "tipo_producto": "Tarjeta de crédito",
                 "producto_overrides": {
                     "monto_investigado": "50.00",
-                    "monto_perdida_fraude": "0",
-                    "monto_falla_procesos": "0",
+                    "monto_perdida_fraude": "0.00",
+                    "monto_falla_procesos": "0.00",
                     "monto_contingencia": "49.99",
                     "monto_recuperado": "0.01",
                 },
@@ -863,8 +863,8 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
             {
                 "tipo_producto": "Crédito personal",
                 "producto_overrides": {
-                    "monto_investigado": "50",
-                    "monto_pago_deuda": "60",
+                    "monto_investigado": "50.00",
+                    "monto_pago_deuda": "60.00",
                 },
             },
             f"El monto pagado de deuda excede el monto investigado en el producto {DEFAULT_PRODUCT_ID}",
@@ -873,12 +873,38 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
             {
                 "tipo_producto": "Crédito personal",
                 "producto_overrides": {
+                    "monto_investigado": "100",
+                    "monto_perdida_fraude": "0.00",
+                    "monto_falla_procesos": "0.00",
+                    "monto_contingencia": "0.00",
+                    "monto_recuperado": "0.00",
+                },
+            },
+            f"Monto investigado del producto {DEFAULT_PRODUCT_ID} debe tener dos decimales exactos.",
+        ),
+        (
+            {
+                "tipo_producto": "Crédito personal",
+                "producto_overrides": {
+                    "monto_investigado": "100.5",
+                    "monto_perdida_fraude": "0.00",
+                    "monto_falla_procesos": "0.00",
+                    "monto_contingencia": "0.00",
+                    "monto_recuperado": "0.00",
+                },
+            },
+            f"Monto investigado del producto {DEFAULT_PRODUCT_ID} debe tener dos decimales exactos.",
+        ),
+        (
+            {
+                "tipo_producto": "Crédito personal",
+                "producto_overrides": {
                     "monto_investigado": "100.123",
-                    "monto_perdida_fraude": "0",
-                    "monto_falla_procesos": "0",
-                    "monto_contingencia": "0",
-                    "monto_recuperado": "0",
-                    "monto_pago_deuda": "0",
+                    "monto_perdida_fraude": "0.00",
+                    "monto_falla_procesos": "0.00",
+                    "monto_contingencia": "0.00",
+                    "monto_recuperado": "0.00",
+                    "monto_pago_deuda": "0.00",
                 },
             },
             f"Monto investigado del producto {DEFAULT_PRODUCT_ID} solo puede tener dos decimales como máximo.",
@@ -896,9 +922,9 @@ def test_validate_data_flags_case_level_one_cent_gap():
         "tipo_producto": "Crédito personal",
         "producto_overrides": {
             "monto_investigado": "0.00",
-            "monto_perdida_fraude": "0",
-            "monto_falla_procesos": "0",
-            "monto_contingencia": "0",
+            "monto_perdida_fraude": "0.00",
+            "monto_falla_procesos": "0.00",
+            "monto_contingencia": "0.00",
             "monto_recuperado": "0.01",
         },
     }
@@ -910,7 +936,34 @@ def test_validate_data_flags_case_level_one_cent_gap():
     assert expected in errors
 
 
-def test_product_frame_amount_fields_format_text(monkeypatch):
+def test_validate_data_reports_product_and_case_gap():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            "monto_investigado": "10.00",
+            "monto_perdida_fraude": "5.00",
+            "monto_falla_procesos": "5.00",
+            "monto_contingencia": "0.00",
+            "monto_recuperado": "0.01",
+            "monto_pago_deuda": "0.00",
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+
+    errors, _ = app.validate_data()
+
+    product_message = (
+        f"Las cuatro partidas (pérdida, falla, contingencia y recuperación) deben ser iguales al monto investigado en el producto {DEFAULT_PRODUCT_ID}"
+    )
+    case_message = (
+        "Las cuatro partidas (pérdida, falla, contingencia y recuperación) sumadas en el caso no coinciden con el total investigado."
+    )
+
+    assert product_message in errors
+    assert case_message in errors
+
+
+def test_product_frame_amount_fields_require_two_decimals(monkeypatch):
     products, validator_cls = _patch_products_module(monkeypatch)
     product = products.ProductFrame(
         parent=_UIStubWidget(),
@@ -932,11 +985,15 @@ def test_product_frame_amount_fields_format_text(monkeypatch):
     assert inv_validator is not None
     assert rec_validator is not None
 
-    assert inv_validator.validate_callback() is None
-    assert product.monto_inv_var.get() == "100.00"
+    inv_error = inv_validator.validate_callback()
+    assert inv_error is not None
+    assert "dos decimales exactos" in inv_error
+    assert product.monto_inv_var.get() == "100"
 
-    assert rec_validator.validate_callback() is None
-    assert product.monto_rec_var.get() == "100.50"
+    rec_error = rec_validator.validate_callback()
+    assert rec_error is not None
+    assert "dos decimales exactos" in rec_error
+    assert product.monto_rec_var.get() == "100.5"
 
 
 def test_product_frame_detects_one_cent_gap(monkeypatch):
@@ -954,10 +1011,10 @@ def test_product_frame_detects_one_cent_gap(monkeypatch):
 
     product.monto_inv_var.set("100.00")
     product.monto_perdida_var.set("99.99")
-    product.monto_falla_var.set("0")
-    product.monto_cont_var.set("0")
-    product.monto_rec_var.set("0")
-    product.monto_pago_var.set("0")
+    product.monto_falla_var.set("0.00")
+    product.monto_cont_var.set("0.00")
+    product.monto_rec_var.set("0.00")
+    product.monto_pago_var.set("0.00")
 
     assert product._validate_montos_consistentes('inv') is not None
 
@@ -977,16 +1034,16 @@ def test_product_frame_requires_exact_contingencia_for_credit(monkeypatch):
 
     product.tipo_prod_var.set("Tarjeta de crédito")
     product.monto_inv_var.set("50.00")
-    product.monto_perdida_var.set("0")
-    product.monto_falla_var.set("0")
+    product.monto_perdida_var.set("0.00")
+    product.monto_falla_var.set("0.00")
     product.monto_cont_var.set("49.99")
     product.monto_rec_var.set("0.01")
-    product.monto_pago_var.set("0")
+    product.monto_pago_var.set("0.00")
 
     assert product._validate_montos_consistentes('contingencia') is not None
 
 
-def test_involvement_row_formats_amount_text(monkeypatch):
+def test_involvement_row_requires_two_decimal_places(monkeypatch):
     products, validator_cls = _patch_products_module(monkeypatch)
 
     class _ProductFrameStub:
@@ -1014,11 +1071,13 @@ def test_involvement_row_formats_amount_text(monkeypatch):
     amount_validator = _find_validator_instance(validator_cls.instances, "Asignación 1")
 
     assert amount_validator is not None
-    assert amount_validator.validate_callback() is None
-    assert row.monto_var.get() == "100.50"
+    error = amount_validator.validate_callback()
+    assert error is not None
+    assert "dos decimales exactos" in error
+    assert row.monto_var.get() == "100.5"
 
 
-def test_risk_frame_formats_exposure_text(monkeypatch):
+def test_risk_frame_requires_two_decimal_places(monkeypatch):
     risk_module, validator_cls = _patch_risk_module(monkeypatch)
     risk_frame = risk_module.RiskFrame(
         parent=_UIStubWidget(),
@@ -1032,12 +1091,16 @@ def test_risk_frame_formats_exposure_text(monkeypatch):
     exposure_validator = _find_validator_instance(validator_cls.instances, "Exposición")
 
     assert exposure_validator is not None
-    assert exposure_validator.validate_callback() is None
-    assert risk_frame.exposicion_var.get() == "100.00"
+    first_error = exposure_validator.validate_callback()
+    assert first_error is not None
+    assert "dos decimales exactos" in first_error
+    assert risk_frame.exposicion_var.get() == "100"
 
     risk_frame.exposicion_var.set("100.5")
-    assert exposure_validator.validate_callback() is None
-    assert risk_frame.exposicion_var.get() == "100.50"
+    second_error = exposure_validator.validate_callback()
+    assert second_error is not None
+    assert "dos decimales exactos" in second_error
+    assert risk_frame.exposicion_var.get() == "100.5"
 
 
 def test_validate_data_requires_risk_criticidad():
@@ -1076,8 +1139,8 @@ def test_validate_data_accepts_allowed_risk_criticidad():
 
 def test_validate_data_detects_duplicate_technical_keys():
     duplicate_assignments = [
-        {"id_colaborador": "T12345", "monto_asignado": "10"},
-        {"id_colaborador": "T12345", "monto_asignado": "5"},
+        {"id_colaborador": "T12345", "monto_asignado": "10.00"},
+        {"id_colaborador": "T12345", "monto_asignado": "5.00"},
     ]
     app = build_headless_app(
         "Crédito personal",
@@ -1094,11 +1157,11 @@ def test_validate_data_requires_claim_when_losses_exist():
     product_config = {
         "tipo_producto": "Crédito personal",
         "producto_overrides": {
-            "monto_investigado": "100",
-            "monto_perdida_fraude": "100",
-            "monto_falla_procesos": "0",
-            "monto_contingencia": "0",
-            "monto_recuperado": "0",
+            "monto_investigado": "100.00",
+            "monto_perdida_fraude": "100.00",
+            "monto_falla_procesos": "0.00",
+            "monto_contingencia": "0.00",
+            "monto_recuperado": "0.00",
         },
     }
     app = build_headless_app("Crédito personal", product_configs=[product_config])
@@ -1233,13 +1296,13 @@ def test_populate_from_data_keeps_product_dropdowns_blank_when_missing():
                 'proceso': '',
                 'fecha_ocurrencia': '2023-01-01',
                 'fecha_descubrimiento': '2023-01-02',
-                'monto_investigado': '100',
+                'monto_investigado': '100.00',
                 'tipo_moneda': None,
-                'monto_perdida_fraude': '0',
-                'monto_falla_procesos': '0',
-                'monto_contingencia': '0',
-                'monto_recuperado': '0',
-                'monto_pago_deuda': '0',
+                'monto_perdida_fraude': '0.00',
+                'monto_falla_procesos': '0.00',
+                'monto_contingencia': '0.00',
+                'monto_recuperado': '0.00',
+                'monto_pago_deuda': '0.00',
                 'tipo_producto': 'Crédito personal',
             }
         ],
