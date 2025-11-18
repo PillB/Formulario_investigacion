@@ -494,6 +494,24 @@ class ProductFrame:
                     variables=[self.monto_inv_var],
                 ),
                 FieldValidator(
+                    perdida_entry,
+                    lambda: validate_amount_text(
+                        self.monto_perdida_var.get(), "el monto pérdida de fraude", allow_blank=True
+                    ),
+                    self.logs,
+                    f"Producto {self.idx+1} - Monto pérdida fraude",
+                    variables=[self.monto_perdida_var],
+                ),
+                FieldValidator(
+                    falla_entry,
+                    lambda: validate_amount_text(
+                        self.monto_falla_var.get(), "el monto falla de procesos", allow_blank=True
+                    ),
+                    self.logs,
+                    f"Producto {self.idx+1} - Monto falla procesos",
+                    variables=[self.monto_falla_var],
+                ),
+                FieldValidator(
                     pago_entry,
                     lambda: validate_amount_text(self.monto_pago_var.get(), "el monto pago de deuda", allow_blank=True),
                     self.logs,
