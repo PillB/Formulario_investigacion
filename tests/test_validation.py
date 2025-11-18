@@ -115,6 +115,37 @@ class DummyProductFrame:
 DEFAULT_PRODUCT_ID = "1234567890123"
 
 
+class PopulateProductFrameStub:
+    def __init__(self):
+        self.id_var = DummyVar()
+        self.client_var = DummyVar()
+        self.cat1_var = DummyVar()
+        self.cat2_var = DummyVar()
+        self.mod_var = DummyVar()
+        self.canal_var = DummyVar("PREV_CANAL")
+        self.proceso_var = DummyVar("PREV_PROCESO")
+        self.fecha_oc_var = DummyVar()
+        self.fecha_desc_var = DummyVar()
+        self.monto_inv_var = DummyVar()
+        self.moneda_var = DummyVar("PREV_MONEDA")
+        self.monto_perdida_var = DummyVar()
+        self.monto_falla_var = DummyVar()
+        self.monto_cont_var = DummyVar()
+        self.monto_rec_var = DummyVar()
+        self.monto_pago_var = DummyVar()
+        self.tipo_prod_var = DummyVar()
+        self.claims_payload = None
+
+    def on_cat1_change(self):
+        return None
+
+    def on_cat2_change(self):
+        return None
+
+    def set_claims_from_data(self, claims):
+        self.claims_payload = claims
+
+
 def build_headless_app(
     tipo_producto,
     *,
@@ -427,3 +458,86 @@ def test_preserve_existing_client_contacts_on_partial_import():
     errors, warnings = app.validate_data()
     assert errors == []
     assert warnings == []
+
+
+def test_populate_from_data_keeps_product_dropdowns_blank_when_missing():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    product_frame = PopulateProductFrameStub()
+    app.logs = []
+    for attr in [
+        'id_caso_var',
+        'tipo_informe_var',
+        'cat_caso1_var',
+        'cat_caso2_var',
+        'mod_caso_var',
+        'canal_caso_var',
+        'proceso_caso_var',
+        'antecedentes_var',
+        'modus_var',
+        'hallazgos_var',
+        'descargos_var',
+        'conclusiones_var',
+        'recomendaciones_var',
+    ]:
+        setattr(app, attr, DummyVar())
+    app.client_frames = []
+    app.team_frames = []
+    app.product_frames = [product_frame]
+    app.risk_frames = []
+    app.norm_frames = []
+    app._reset_form_state = lambda confirm=False, save_autosave=False: True
+    app._schedule_summary_refresh = lambda data=None: None
+    app.on_case_cat1_change = lambda: None
+    app.on_case_cat2_change = lambda: None
+    app.add_client = lambda: None
+    app.add_team = lambda: None
+    app.add_product = lambda: app.product_frames.append(PopulateProductFrameStub())
+    app.add_risk = lambda: None
+    app.add_norm = lambda: None
+
+    cat1 = next(iter(TAXONOMIA))
+    cat2 = next(iter(TAXONOMIA[cat1]))
+    modalidad = TAXONOMIA[cat1][cat2][0]
+    payload = {
+        'caso': {
+            'id_caso': '2024-0001',
+            'tipo_informe': TIPO_INFORME_LIST[0],
+            'categoria1': cat1,
+            'categoria2': cat2,
+            'modalidad': modalidad,
+        },
+        'clientes': [],
+        'colaboradores': [],
+        'productos': [
+            {
+                'id_producto': 'PRD1',
+                'id_cliente': 'CLI1',
+                'categoria1': cat1,
+                'categoria2': cat2,
+                'modalidad': modalidad,
+                'canal': None,
+                'proceso': '',
+                'fecha_ocurrencia': '2023-01-01',
+                'fecha_descubrimiento': '2023-01-02',
+                'monto_investigado': '100',
+                'tipo_moneda': None,
+                'monto_perdida_fraude': '0',
+                'monto_falla_procesos': '0',
+                'monto_contingencia': '0',
+                'monto_recuperado': '0',
+                'monto_pago_deuda': '0',
+                'tipo_producto': 'Crédito personal',
+            }
+        ],
+        'reclamos': [],
+        'involucramientos': [],
+        'riesgos': [],
+        'normas': [],
+        'analisis': {},
+    }
+
+    app.populate_from_data(payload)
+
+    assert product_frame.canal_var.get() == ""
+    assert product_frame.proceso_var.get() == ""
+    assert product_frame.moneda_var.get() == ""
