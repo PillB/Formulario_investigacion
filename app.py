@@ -203,6 +203,7 @@ class FraudCaseApp:
         self.summary_tab = None
         self._summary_refresh_after_id = None
         self._summary_dirty_sections = set()
+        self._summary_pending_dataset = None
         self._autosave_job_id = None
         self._autosave_dirty = False
 
@@ -1255,7 +1256,7 @@ class FraudCaseApp:
             self.summary_tables[key] = tree
             self._register_summary_tree_bindings(tree, key)
 
-        self.refresh_summary_tables()
+        self._schedule_summary_refresh()
 
     def _handle_notebook_tab_change(self, event):
         if getattr(self, "notebook", None) is None:
@@ -1815,8 +1816,8 @@ class FraudCaseApp:
             return processed
         raise ValueError("Esta tabla no admite pegado directo al formulario principal.")
 
-    def _schedule_summary_refresh(self, sections=None):
-        """Programa la actualización del resumen aplicando un debounce corto."""
+    def _schedule_summary_refresh(self, sections=None, data=None):
+        """Marca secciones como sucias y actualiza el resumen cuando proceda."""
 
         if not self.summary_tables:
             return
@@ -1824,8 +1825,10 @@ class FraudCaseApp:
         if not normalized:
             return
         self._summary_dirty_sections.update(normalized)
-        if self._is_summary_tab_visible():
-            self._flush_summary_refresh(normalized)
+        self._summary_pending_dataset = data
+        summary_visible = self._is_summary_tab_visible()
+        if not summary_visible:
+            self._cancel_summary_refresh_job()
             return
         if self._summary_refresh_after_id:
             return
@@ -1836,20 +1839,26 @@ class FraudCaseApp:
             )
         except tk.TclError:
             self._summary_refresh_after_id = None
-            self._flush_summary_refresh()
+            self._flush_summary_refresh(sections=normalized, data=data)
 
     def _run_scheduled_summary_refresh(self):
         self._summary_refresh_after_id = None
+        if not self._is_summary_tab_visible():
+            return
         self._flush_summary_refresh()
 
-    def _flush_summary_refresh(self, sections=None):
+    def _flush_summary_refresh(self, sections=None, data=None):
         if sections is None:
             targets = set(self._summary_dirty_sections)
         else:
             targets = self._normalize_summary_sections(sections)
         if not targets:
             return
-        self.refresh_summary_tables(sections=targets)
+        dataset = data
+        if dataset is None:
+            dataset = self._summary_pending_dataset
+        self.refresh_summary_tables(data=dataset, sections=targets)
+        self._summary_pending_dataset = None
 
     def _normalize_summary_sections(self, sections):
         if not self.summary_tables:
@@ -2593,7 +2602,7 @@ class FraudCaseApp:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
-        self.refresh_summary_tables(data=data)
+        self._schedule_summary_refresh(data=data)
         self.request_autosave()
 
     def load_autosave(self):
@@ -2991,7 +3000,7 @@ class FraudCaseApp:
         self.descargos_var.set(analisis.get('descargos', ''))
         self.conclusiones_var.set(analisis.get('conclusiones', ''))
         self.recomendaciones_var.set(analisis.get('recomendaciones', ''))
-        self.refresh_summary_tables(data=data)
+        self._schedule_summary_refresh(data=data)
 
     # ---------------------------------------------------------------------
     # Validación de reglas de negocio
