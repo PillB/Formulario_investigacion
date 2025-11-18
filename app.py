@@ -3085,6 +3085,15 @@ class FraudCaseApp:
         # Limpiar primero sin confirmar ni sobrescribir el autosave
         self._reset_form_state(confirm=False, save_autosave=False)
         # Datos de caso
+        def _set_dropdown_value(var, value, valid_values):
+            """Establece el valor de un combobox solo si está en el catálogo."""
+
+            normalized = value.strip() if isinstance(value, str) else value
+            if normalized and normalized in valid_values:
+                var.set(normalized)
+            else:
+                var.set('')
+
         caso = data.get('caso', {})
         self.id_caso_var.set(caso.get('id_caso', ''))
         if caso.get('tipo_informe') in TIPO_INFORME_LIST:
@@ -3099,10 +3108,8 @@ class FraudCaseApp:
                 mod_list = TAXONOMIA[self.cat_caso1_var.get()][self.cat_caso2_var.get()]
                 if caso.get('modalidad') in mod_list:
                     self.mod_caso_var.set(caso.get('modalidad'))
-        if caso.get('canal') in CANAL_LIST:
-            self.canal_caso_var.set(caso.get('canal'))
-        if caso.get('proceso') in PROCESO_LIST:
-            self.proceso_caso_var.set(caso.get('proceso'))
+        _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
+        _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
         # Clientes
         for i, cliente in enumerate(data.get('clientes', [])):
             if i >= len(self.client_frames):
@@ -3160,12 +3167,12 @@ class FraudCaseApp:
                     mod = prod.get('modalidad')
                     if mod in TAXONOMIA[cat1][cat2]:
                         pframe.mod_var.set(mod)
-            pframe.canal_var.set(prod.get('canal', CANAL_LIST[0]))
-            pframe.proceso_var.set(prod.get('proceso', PROCESO_LIST[0]))
+            _set_dropdown_value(pframe.canal_var, prod.get('canal'), CANAL_LIST)
+            _set_dropdown_value(pframe.proceso_var, prod.get('proceso'), PROCESO_LIST)
             pframe.fecha_oc_var.set(prod.get('fecha_ocurrencia', ''))
             pframe.fecha_desc_var.set(prod.get('fecha_descubrimiento', ''))
             pframe.monto_inv_var.set(prod.get('monto_investigado', ''))
-            pframe.moneda_var.set(prod.get('tipo_moneda', TIPO_MONEDA_LIST[0]))
+            _set_dropdown_value(pframe.moneda_var, prod.get('tipo_moneda'), TIPO_MONEDA_LIST)
             pframe.monto_perdida_var.set(prod.get('monto_perdida_fraude', ''))
             pframe.monto_falla_var.set(prod.get('monto_falla_procesos', ''))
             pframe.monto_cont_var.set(prod.get('monto_contingencia', ''))
