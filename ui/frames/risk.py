@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 
 from settings import CRITICIDAD_LIST
 from validators import (FieldValidator, log_event, validate_money_bounds,
-                        validate_risk_id)
+                        validate_required_text, validate_risk_id)
 
 
 class RiskFrame:
@@ -58,7 +58,13 @@ class RiskFrame:
         lider_entry.pack(side="left", padx=5)
         self.tooltip_register(lider_entry, "Responsable del seguimiento del riesgo.")
         ttk.Label(row1, text="Criticidad:").pack(side="left")
-        crit_cb = ttk.Combobox(row1, textvariable=self.criticidad_var, values=CRITICIDAD_LIST, state="readonly", width=12)
+        crit_cb = ttk.Combobox(
+            row1,
+            textvariable=self.criticidad_var,
+            values=CRITICIDAD_LIST,
+            state="readonly",
+            width=12,
+        )
         crit_cb.pack(side="left", padx=5)
         crit_cb.set('')
         self.tooltip_register(crit_cb, "Nivel de severidad del riesgo.")
@@ -116,6 +122,16 @@ class RiskFrame:
             )
         )
 
+        self.validators.append(
+            FieldValidator(
+                crit_cb,
+                self._validate_criticidad,
+                self.logs,
+                f"Riesgo {self.idx+1} - Criticidad",
+                variables=[self.criticidad_var],
+            )
+        )
+
     def get_data(self):
         return {
             "id_riesgo": self.id_var.get().strip(),
@@ -134,6 +150,15 @@ class RiskFrame:
 
     def _validate_risk_id(self):
         return validate_risk_id(self.id_var.get())
+
+    def _validate_criticidad(self):
+        value = (self.criticidad_var.get() or "").strip()
+        message = validate_required_text(value, "la criticidad del riesgo")
+        if message:
+            return message
+        if value not in CRITICIDAD_LIST:
+            return f"La criticidad '{value}' no está en el catálogo CM."
+        return None
 
     def _log_change(self, message: str):
         if callable(self.change_notifier):
