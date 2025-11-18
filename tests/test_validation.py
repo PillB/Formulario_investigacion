@@ -261,6 +261,23 @@ def test_validate_data_enforces_amount_rules(product_config, expected_error):
     assert expected_error in errors
 
 
+def test_validate_data_rejects_amount_with_three_decimals():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            "monto_investigado": "100.123",
+            "monto_perdida_fraude": "0",
+            "monto_falla_procesos": "0",
+            "monto_contingencia": "0",
+            "monto_recuperado": "0",
+            "monto_pago_deuda": "0",
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    errors, _ = app.validate_data()
+    assert any("dos decimales" in error for error in errors)
+
+
 def test_validate_data_detects_duplicate_technical_keys():
     duplicate_assignments = [
         {"id_colaborador": "T12345", "monto_asignado": "10"},
