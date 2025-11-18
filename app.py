@@ -1129,7 +1129,11 @@ class FraudCaseApp:
         btn_load = ttk.Button(version_buttons, text="Cargar versión", command=self.load_version_dialog)
         btn_load.pack(side="left", padx=2)
         self.register_tooltip(btn_load, "Restaura una versión previa en formato JSON.")
-        btn_clear = ttk.Button(version_buttons, text="Borrar todos los datos", command=self.clear_all)
+        btn_clear = ttk.Button(
+            version_buttons,
+            text="Borrar todos los datos",
+            command=lambda: self.clear_all(notify=True),
+        )
         btn_clear.pack(side="left", padx=2)
         self.register_tooltip(btn_clear, "Limpia el formulario completo para iniciar desde cero.")
 
@@ -2687,7 +2691,7 @@ class FraudCaseApp:
             self.save_auto()
         return True
 
-    def clear_all(self):
+    def clear_all(self, notify=True):
         """Elimina todos los datos actuales y restablece el formulario."""
 
         if not self._reset_form_state(confirm=True, save_autosave=True):
