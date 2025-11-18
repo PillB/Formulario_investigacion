@@ -142,6 +142,28 @@ def test_loss_fields_have_inline_validation():
     assert falla_validator.variables and falla_validator.variables[0] is product.monto_falla_var
 
 
+def test_contingency_and_recovered_fields_have_inline_validation():
+    product = _build_product_frame()
+    contingencia_validator = _find_validator("Monto contingencia")
+    recuperado_validator = _find_validator("Monto recuperado")
+    assert contingencia_validator is not None
+    assert recuperado_validator is not None
+
+    product.monto_cont_var.set("abc")
+    error = contingencia_validator.validate_callback()
+    assert error is not None
+    assert "contingencia" in error.lower()
+    assert "número" in error.lower()
+    assert contingencia_validator.variables and contingencia_validator.variables[0] is product.monto_cont_var
+
+    product.monto_rec_var.set("-1")
+    error = recuperado_validator.validate_callback()
+    assert error is not None
+    assert "recuperado" in error.lower()
+    assert "no puede ser negativo" in error.lower()
+    assert recuperado_validator.variables and recuperado_validator.variables[0] is product.monto_rec_var
+
+
 def test_claim_row_requires_name_even_before_save():
     claim_row = products.ClaimRow(
         parent=DummyWidget(),
