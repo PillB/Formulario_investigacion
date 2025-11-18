@@ -1923,55 +1923,76 @@ class FraudCaseApp:
                 self.sync_main_form_after_import("colaboradores", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "involucramientos":
-            missing_products = []
-            missing_team = []
-            unhydrated_products = []
-            for values in rows:
+            processed = 0
+
+            def _fallback_frame(frames, identifier):
+                normalized = (identifier or '').strip()
+                if not normalized:
+                    return None
+                for frame in frames or []:
+                    id_var = getattr(frame, 'id_var', None)
+                    current = ''
+                    if id_var and hasattr(id_var, 'get'):
+                        current = (id_var.get() or '').strip()
+                    if current == normalized:
+                        return frame
+                return None
+
+            for idx, values in enumerate(rows, start=1):
                 product_id = (values[0] or "").strip()
                 collaborator_id = (values[1] or "").strip()
                 amount_text = (values[2] or "").strip()
                 if not product_id or not collaborator_id:
                     continue
-                product_payload, product_found = self._hydrate_row_from_details(
-                    {"id_producto": product_id},
-                    'id_producto',
-                    PRODUCT_ID_ALIASES,
-                )
-                collaborator_payload, collaborator_found = self._hydrate_row_from_details(
-                    {"id_colaborador": collaborator_id},
-                    'id_colaborador',
-                    TEAM_ID_ALIASES,
-                )
-                product_frame = self._find_product_frame(product_id)
-                new_product = False
+                product_frame = self._find_product_frame(product_id) or _fallback_frame(getattr(self, 'product_frames', []), product_id)
                 if not product_frame:
+                    product_payload, product_found = self._hydrate_row_from_details(
+                        {"id_producto": product_id},
+                        'id_producto',
+                        PRODUCT_ID_ALIASES,
+                    )
+                    if not product_found:
+                        raise ValueError(
+                            f"Involucramiento fila {idx}: el producto '{product_id}' no existe en el formulario ni en los catálogos de detalle."
+                        )
+                    client_for_product = (product_payload.get('id_cliente') or '').strip()
+                    if client_for_product:
+                        client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
+                        self._ensure_client_exists(client_for_product, client_details)
                     product_frame = self._obtain_product_slot_for_import()
-                    new_product = True
-                if new_product:
-                    if product_found:
-                        self._populate_product_frame_from_row(product_frame, product_payload)
-                    else:
-                        product_frame.id_var.set(product_id)
-                        unhydrated_products.append(product_id)
+                    merged = self._merge_product_payload_with_frame(product_frame, product_payload)
+                    self._populate_product_frame_from_row(product_frame, merged)
                 self._trigger_import_id_refresh(
                     product_frame,
                     product_id,
                     notify_on_missing=True,
                     preserve_existing=True,
                 )
-                team_frame = self._find_team_frame(collaborator_id)
+                team_frame = self._find_team_frame(collaborator_id) or _fallback_frame(getattr(self, 'team_frames', []), collaborator_id)
                 if not team_frame:
-                    team_frame = self._obtain_team_slot_for_import()
-                    if collaborator_found:
-                        self._populate_team_frame_from_row(team_frame, collaborator_payload)
-                    else:
-                        team_frame.id_var.set(collaborator_id)
+                    collaborator_payload, collaborator_found = self._hydrate_row_from_details(
+                        {"id_colaborador": collaborator_id},
+                        'id_colaborador',
+                        TEAM_ID_ALIASES,
+                    )
+                    if not collaborator_found:
+                        raise ValueError(
+                            f"Involucramiento fila {idx}: el colaborador '{collaborator_id}' no existe en el formulario ni en los catálogos de detalle."
+                        )
+                    team_frame, _created = self._ensure_team_member_exists(collaborator_id, collaborator_payload)
                 self._trigger_import_id_refresh(
                     team_frame,
                     collaborator_id,
                     notify_on_missing=True,
                     preserve_existing=True,
                 )
+                amount_message, _amount_decimal, normalized_amount = validate_money_bounds(
+                    amount_text,
+                    "el monto asignado",
+                    allow_blank=False,
+                )
+                if amount_message:
+                    raise ValueError(f"Involucramiento fila {idx}: {amount_message}")
                 existing_row = next(
                     (inv for inv in getattr(product_frame, 'involvements', []) if inv.team_var.get().strip() == collaborator_id),
                     None,
@@ -1985,20 +2006,11 @@ class FraudCaseApp:
                         team_widget.set(collaborator_id)
                     except tk.TclError:
                         pass
-                existing_row.monto_var.set(amount_text)
+                existing_row.monto_var.set(normalized_amount)
                 processed += 1
-                if not product_found and 'id_producto' in self.detail_catalogs:
-                    missing_products.append(product_id)
-                if not collaborator_found and 'id_colaborador' in self.detail_catalogs:
-                    missing_team.append(collaborator_id)
-            if missing_products:
-                self._report_missing_detail_ids("productos", missing_products)
-            if missing_team:
-                self._report_missing_detail_ids("colaboradores", missing_team)
-            if unhydrated_products:
-                self._notify_products_created_without_details(unhydrated_products)
             if processed:
                 self._notify_dataset_changed(summary_sections="involucramientos")
+                self.save_auto()
                 self.sync_main_form_after_import("involucramientos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "productos":

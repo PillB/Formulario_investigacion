@@ -1390,6 +1390,7 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
         return slot
 
     app._obtain_team_slot_for_import = _obtain_team_slot
+    app.save_auto = lambda: None
     notify_payload = {}
 
     def _notify(summary_sections=None):
@@ -1419,3 +1420,131 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
     new_row = product_frame.involvements[-1]
     assert new_row.team_var.get() == "T54321"
     assert new_row.monto_var.get() == "50.50"
+
+
+def test_ingest_summary_rows_involucramientos_requires_known_product():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app.logs = []
+    app.detail_catalogs = {}
+    app.detail_lookup_by_id = {}
+    app.product_frames = []
+    app.team_frames = [DummyTeam("T12345")]
+    app.client_frames = []
+    app._notify_dataset_changed = lambda *_args, **_kwargs: None
+    app.save_auto = lambda: None
+    app.sync_main_form_after_import = lambda *_args, **_kwargs: None
+
+    rows = [("PRD-404", "T12345", "10.00")]
+
+    with pytest.raises(ValueError) as excinfo:
+        app.ingest_summary_rows("involucramientos", rows)
+
+    assert "PRD-404" in str(excinfo.value)
+
+
+def test_ingest_summary_rows_involucramientos_requires_known_collaborator():
+    class _ProductFrameStub:
+        def __init__(self):
+            self.id_var = DummyVar("PRD-001")
+            self.involvements = []
+
+        def on_id_change(self, *_args, **_kwargs):
+            return None
+
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app.logs = []
+    app.detail_catalogs = {}
+    app.detail_lookup_by_id = {}
+    product_frame = _ProductFrameStub()
+    app.product_frames = [product_frame]
+    app.team_frames = []
+    app.client_frames = []
+    app._notify_dataset_changed = lambda *_args, **_kwargs: None
+    app.save_auto = lambda: None
+    app.sync_main_form_after_import = lambda *_args, **_kwargs: None
+
+    rows = [("PRD-001", "T99999", "10.00")]
+
+    with pytest.raises(ValueError) as excinfo:
+        app.ingest_summary_rows("involucramientos", rows)
+
+    assert "T99999" in str(excinfo.value)
+
+
+def test_ingest_summary_rows_involucramientos_creates_product_from_details():
+    class _ProductFrameStub:
+        def __init__(self):
+            self.id_var = DummyVar("")
+            self.involvements = []
+            self.populated_rows = []
+
+        def on_id_change(self, *_args, **_kwargs):
+            return None
+
+    class _InvolvementRowStub:
+        def __init__(self):
+            self.team_var = DummyVar("")
+            self.monto_var = DummyVar("")
+
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app.logs = []
+    app.detail_catalogs = {}
+    app.detail_lookup_by_id = {
+        'id_producto': {
+            'PRD-NEW': {
+                'id_producto': 'PRD-NEW',
+                'id_cliente': 'CLI-1',
+                'tipo_producto': 'Crédito personal',
+            }
+        }
+    }
+    app.client_frames = []
+    app.team_frames = [DummyTeam("T12345")]
+    app.product_frames = []
+    created_frames = []
+
+    def _obtain_product_slot():
+        frame = _ProductFrameStub()
+        created_frames.append(frame)
+        app.product_frames.append(frame)
+        return frame
+
+    app._obtain_product_slot_for_import = _obtain_product_slot
+
+    def _merge_product_payload(frame, payload):
+        frame.populated_rows.append(dict(payload))
+        return dict(payload)
+
+    app._merge_product_payload_with_frame = _merge_product_payload
+
+    def _populate_product_frame(frame, row):
+        frame.id_var.set(row.get('id_producto', ''))
+
+    app._populate_product_frame_from_row = _populate_product_frame
+    app._ensure_client_exists = lambda *_args, **_kwargs: (None, False)
+    app._trigger_import_id_refresh = lambda *_args, **_kwargs: None
+
+    def _obtain_involvement_slot(product_frame):
+        row = _InvolvementRowStub()
+        product_frame.involvements.append(row)
+        return row
+
+    app._obtain_involvement_slot = _obtain_involvement_slot
+    autosave_called = []
+    app.save_auto = lambda: autosave_called.append(True)
+    sync_calls = []
+    app.sync_main_form_after_import = lambda section, stay_on_summary=False: sync_calls.append((section, stay_on_summary))
+    app._notify_dataset_changed = lambda *_args, **_kwargs: None
+
+    rows = [("PRD-NEW", "T12345", "001.50")]
+
+    processed = app.ingest_summary_rows("involucramientos", rows)
+
+    assert processed == 1
+    assert created_frames
+    frame = created_frames[0]
+    assert frame.id_var.get() == "PRD-NEW"
+    assert frame.involvements[0].team_var.get() == "T12345"
+    assert frame.involvements[0].monto_var.get() == "1.50"
+    assert autosave_called
+    assert sync_calls == [("involucramientos", False)]
