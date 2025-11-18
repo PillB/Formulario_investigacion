@@ -9,9 +9,8 @@ from app import FraudCaseApp
 from settings import (ACCIONADO_OPTIONS, CRITICIDAD_LIST, FLAG_CLIENTE_LIST,
                       TIPO_ID_LIST, TIPO_SANCION_LIST)
 from tests.stubs import (ClientFrameStub, NormFrameStub, ProductFrameStub,
-                         RiskFrameStub, TeamFrameStub, build_frame_finder,
-                         build_involvement_slot, build_populate_method,
-                         build_slot_factory)
+                         RiskFrameStub, TeamFrameStub, build_involvement_slot,
+                         build_populate_method, build_slot_factory)
 
 
 class MessageboxSpy:
@@ -183,6 +182,9 @@ def _build_summary_app(monkeypatch, messagebox_spy):
     app.client_frames = []
     app.team_frames = []
     app.product_frames = []
+    app._client_frames_by_id = {}
+    app._team_frames_by_id = {}
+    app._product_frames_by_id = {}
     app.risk_frames = []
     app.norm_frames = []
     app.detail_catalogs = {}
@@ -225,15 +227,27 @@ def _build_summary_app(monkeypatch, messagebox_spy):
     app.sync_main_form_after_import = lambda *_args, **_kwargs: None
 
     app._obtain_client_slot_for_import = types.MethodType(
-        build_slot_factory(app.client_frames, ClientFrameStub),
+        build_slot_factory(
+            app.client_frames,
+            ClientFrameStub,
+            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_client_id_change),
+        ),
         app,
     )
     app._obtain_team_slot_for_import = types.MethodType(
-        build_slot_factory(app.team_frames, TeamFrameStub),
+        build_slot_factory(
+            app.team_frames,
+            TeamFrameStub,
+            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_team_id_change),
+        ),
         app,
     )
     app._obtain_product_slot_for_import = types.MethodType(
-        build_slot_factory(app.product_frames, ProductFrameStub),
+        build_slot_factory(
+            app.product_frames,
+            ProductFrameStub,
+            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_product_id_change),
+        ),
         app,
     )
     app._obtain_involvement_slot = types.MethodType(build_involvement_slot(), app)
@@ -269,9 +283,6 @@ def _build_summary_app(monkeypatch, messagebox_spy):
 
     app.add_risk = types.MethodType(_add_risk, app)
     app.add_norm = types.MethodType(_add_norm, app)
-    app._find_client_frame = types.MethodType(build_frame_finder('client_frames'), app)
-    app._find_team_frame = types.MethodType(build_frame_finder('team_frames'), app)
-    app._find_product_frame = types.MethodType(build_frame_finder('product_frames'), app)
     return app
 
 
