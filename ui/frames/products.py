@@ -478,6 +478,30 @@ class ProductFrame:
                     variables=[self.mod_var],
                 ),
                 FieldValidator(
+                    canal_cb,
+                    lambda: self._validate_catalog_selection(
+                        self.canal_var.get(),
+                        "el canal del producto",
+                        CANAL_LIST,
+                        "canales",
+                    ),
+                    self.logs,
+                    f"Producto {self.idx+1} - Canal",
+                    variables=[self.canal_var],
+                ),
+                FieldValidator(
+                    proc_cb,
+                    lambda: self._validate_catalog_selection(
+                        self.proceso_var.get(),
+                        "el proceso del producto",
+                        PROCESO_LIST,
+                        "procesos",
+                    ),
+                    self.logs,
+                    f"Producto {self.idx+1} - Proceso",
+                    variables=[self.proceso_var],
+                ),
+                FieldValidator(
                     tipo_prod_cb,
                     lambda: validate_required_text(self.tipo_prod_var.get(), "el tipo de producto"),
                     self.logs,
@@ -504,6 +528,18 @@ class ProductFrame:
                     self.logs,
                     f"Producto {self.idx+1} - Monto investigado",
                     variables=[self.monto_inv_var],
+                ),
+                FieldValidator(
+                    moneda_cb,
+                    lambda: self._validate_catalog_selection(
+                        self.moneda_var.get(),
+                        "la moneda del producto",
+                        TIPO_MONEDA_LIST,
+                        "tipos de moneda",
+                    ),
+                    self.logs,
+                    f"Producto {self.idx+1} - Moneda",
+                    variables=[self.moneda_var],
                 ),
                 FieldValidator(
                     perdida_entry,
@@ -889,6 +925,15 @@ class ProductFrame:
                 )
         target = target_key or 'inv'
         return errors.get(target)
+
+    def _validate_catalog_selection(self, value, label, catalog, catalog_label):
+        message = validate_required_text(value, label)
+        if message:
+            return message
+        normalized = (value or '').strip()
+        if normalized not in catalog:
+            return f"El valor '{value}' no está en el catálogo CM de {catalog_label}."
+        return None
 
     def get_data(self):
         return {

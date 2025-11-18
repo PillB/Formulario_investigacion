@@ -3228,6 +3228,15 @@ class FraudCaseApp:
         """Valida los datos del formulario y retorna errores y advertencias."""
         errors = []
         warnings = []
+        
+        def _validate_product_catalog_field(value, label, catalog, catalog_label, product_label):
+            text = (value or '').strip()
+            message = validate_required_text(text, label)
+            if message:
+                return f"Producto {product_label}: {message}"
+            if text not in catalog:
+                return f"Producto {product_label}: El {catalog_label} '{text}' no está en el catálogo CM."
+            return None
         # Validar número de caso
         id_caso = self.id_caso_var.get().strip()
         case_message = validate_case_id(id_caso)
@@ -3305,11 +3314,13 @@ class FraudCaseApp:
                     )
         for idx, p in enumerate(self.product_frames, start=1):
             prod_data = p.get_data()
-            pid = prod_data['producto']['id_producto']
+            producto = prod_data['producto']
+            producto_label = producto.get('id_producto') or f"Producto {idx}"
+            pid = producto['id_producto']
             pid_message = validate_product_id(p.tipo_prod_var.get(), p.id_var.get())
             if pid_message:
                 errors.append(f"Producto {idx}: {pid_message}")
-            cid = prod_data['producto']['id_cliente']
+            cid = producto['id_cliente']
             if not cid:
                 errors.append(
                     f"Producto {idx}: el cliente vinculado fue eliminado. Selecciona un nuevo titular antes de exportar."
@@ -3324,6 +3335,36 @@ class FraudCaseApp:
                     errors.append(f"El producto {pid} está duplicado en el formulario.")
             else:
                 product_client_map[pid] = cid
+            catalog_validations = [
+                (
+                    producto.get('canal'),
+                    "el canal del producto",
+                    CANAL_LIST,
+                    "canal",
+                ),
+                (
+                    producto.get('proceso'),
+                    "el proceso del producto",
+                    PROCESO_LIST,
+                    "proceso",
+                ),
+                (
+                    producto.get('tipo_moneda'),
+                    "la moneda del producto",
+                    TIPO_MONEDA_LIST,
+                    "tipo de moneda",
+                ),
+            ]
+            for value, label, catalog, catalog_label in catalog_validations:
+                catalog_error = _validate_product_catalog_field(
+                    value,
+                    label,
+                    catalog,
+                    catalog_label,
+                    producto_label,
+                )
+                if catalog_error:
+                    errors.append(catalog_error)
             # For each involvement; if no assignments, use empty string for id_colaborador
             claim_rows = prod_data['reclamos'] or [{'id_reclamo': ''}]
             if not prod_data['asignaciones']:
