@@ -6,10 +6,7 @@ import csv
 import os
 from typing import Dict, Iterable, Iterator, List, Tuple
 
-from settings import (
-    BASE_DIR,
-    DETAIL_LOOKUP_ALIASES,
-)
+from settings import BASE_DIR, DETAIL_LOOKUP_ALIASES
 
 
 def normalize_detail_catalog_key(key: str) -> str:

@@ -6,7 +6,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from settings import CRITICIDAD_LIST
-from validators import FieldValidator, log_event, validate_money_bounds, validate_risk_id
+from validators import (FieldValidator, log_event, validate_money_bounds,
+                        validate_risk_id)
 
 
 class RiskFrame:

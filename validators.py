@@ -5,12 +5,11 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import datetime
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
+from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_UP
 from typing import Callable, List, Optional
 
 from settings import TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
-
 
 _LOG_QUEUE: List[dict] = []
 

@@ -1,12 +1,6 @@
 from app import FraudCaseApp
-from settings import (
-    CANAL_LIST,
-    PROCESO_LIST,
-    TAXONOMIA,
-    TIPO_ID_LIST,
-    TIPO_INFORME_LIST,
-    TIPO_MONEDA_LIST,
-)
+from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_ID_LIST,
+                      TIPO_INFORME_LIST, TIPO_MONEDA_LIST)
 
 
 class DummyVar:

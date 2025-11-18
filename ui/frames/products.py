@@ -2,26 +2,19 @@
 
 from __future__ import annotations
 
-import tkinter as tk
-from tkinter import messagebox, ttk
 from decimal import Decimal
 
-from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST
-from validators import (
-    FieldValidator,
-    log_event,
-    normalize_without_accents,
-    should_autofill_field,
-    sum_investigation_components,
-    validate_amount_text,
-    validate_codigo_analitica,
-    validate_date_text,
-    validate_money_bounds,
-    validate_product_dates,
-    validate_product_id,
-    validate_reclamo_id,
-    validate_required_text,
-)
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
+                      TIPO_PRODUCTO_LIST)
+from validators import (FieldValidator, log_event, normalize_without_accents,
+                        should_autofill_field, sum_investigation_components,
+                        validate_amount_text, validate_codigo_analitica,
+                        validate_date_text, validate_money_bounds,
+                        validate_product_dates, validate_product_id,
+                        validate_reclamo_id, validate_required_text)
 
 
 class InvolvementRow:

@@ -5,7 +5,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from validators import FieldValidator, log_event, validate_date_text, validate_norm_id, validate_required_text
+from validators import (FieldValidator, log_event, validate_date_text,
+                        validate_norm_id, validate_required_text)
 
 
 class NormFrame:

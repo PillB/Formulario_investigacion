@@ -6,16 +6,10 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from settings import ACCIONADO_OPTIONS, FLAG_CLIENTE_LIST, TIPO_ID_LIST
-from validators import (
-    FieldValidator,
-    log_event,
-    should_autofill_field,
-    validate_client_id,
-    validate_email_list,
-    validate_multi_selection,
-    validate_phone_list,
-    validate_required_text,
-)
+from validators import (FieldValidator, log_event, should_autofill_field,
+                        validate_client_id, validate_email_list,
+                        validate_multi_selection, validate_phone_list,
+                        validate_required_text)
 
 
 class ClientFrame:
