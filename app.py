@@ -221,6 +221,7 @@ class FraudCaseApp:
         self.product_frames = []
         self.risk_frames = []
         self.norm_frames = []
+        self.next_risk_number = 1
         self.summary_tables = {}
         self.summary_config = {}
         self.summary_context_menus = {}
@@ -988,6 +989,7 @@ class FraudCaseApp:
 
     def add_risk(self):
         idx = len(self.risk_frames)
+        default_risk_id = self._generate_next_risk_id()
         risk = RiskFrame(
             self.risk_container,
             idx,
@@ -995,11 +997,13 @@ class FraudCaseApp:
             self.logs,
             self.register_tooltip,
             change_notifier=self._log_navigation_change,
+            default_risk_id=default_risk_id,
         )
         self.risk_frames.append(risk)
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
+        self._refresh_risk_auto_ids()
         self._schedule_summary_refresh('riesgos')
 
     def remove_risk(self, risk_frame):
@@ -1007,7 +1011,40 @@ class FraudCaseApp:
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
+        self._refresh_risk_auto_ids()
         self._schedule_summary_refresh('riesgos')
+
+    def _generate_next_risk_id(self, used_ids=None):
+        """Obtiene el siguiente ID automático disponible para riesgos."""
+
+        normalized_used = {rid for rid in (used_ids or set()) if rid}
+        if used_ids is None:
+            normalized_used.update(r.id_var.get().strip() for r in self.risk_frames if r.id_var.get().strip())
+        while True:
+            candidate = f"RSK-{self.next_risk_number:06d}"
+            self.next_risk_number += 1
+            if candidate not in normalized_used:
+                return candidate
+            # En caso de colisión continuar buscando
+        # Not reachable
+
+    def _refresh_risk_auto_ids(self):
+        """Normaliza los IDs automáticos sin afectar los editados manualmente."""
+
+        used_ids = set()
+        frames_to_update = []
+        for frame in self.risk_frames:
+            rid = frame.id_var.get().strip()
+            if rid and rid not in used_ids:
+                used_ids.add(rid)
+                continue
+            frames_to_update.append(frame)
+        for frame in frames_to_update:
+            if frame.has_user_modified_id():
+                continue
+            new_id = self._generate_next_risk_id(used_ids)
+            frame.assign_new_auto_id(new_id)
+            used_ids.add(new_id)
 
     def build_norm_tab(self, parent):
         frame = ttk.Frame(parent)
@@ -2675,6 +2712,7 @@ class FraudCaseApp:
         for nf in self.norm_frames:
             nf.frame.destroy()
         self.norm_frames.clear()
+        self.next_risk_number = 1
         # Volver a crear uno por cada sección donde corresponde
         self.add_client()
         self.add_team()
