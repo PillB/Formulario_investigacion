@@ -468,6 +468,12 @@ class ProductFrame:
             f"Producto {self.idx+1} - Cliente",
             variables=[self.client_var],
         )
+        self._register_product_catalog_validators(
+            canal_cb,
+            proc_cb,
+            moneda_cb,
+        )
+
         self.validators.extend(
             [
                 FieldValidator(
@@ -490,30 +496,6 @@ class ProductFrame:
                     self.logs,
                     f"Producto {self.idx+1} - Modalidad",
                     variables=[self.mod_var],
-                ),
-                FieldValidator(
-                    canal_cb,
-                    lambda: self._validate_catalog_selection(
-                        self.canal_var.get(),
-                        "el canal del producto",
-                        CANAL_LIST,
-                        "canales",
-                    ),
-                    self.logs,
-                    f"Producto {self.idx+1} - Canal",
-                    variables=[self.canal_var],
-                ),
-                FieldValidator(
-                    proc_cb,
-                    lambda: self._validate_catalog_selection(
-                        self.proceso_var.get(),
-                        "el proceso del producto",
-                        PROCESO_LIST,
-                        "procesos",
-                    ),
-                    self.logs,
-                    f"Producto {self.idx+1} - Proceso",
-                    variables=[self.proceso_var],
                 ),
                 FieldValidator(
                     tipo_prod_cb,
@@ -542,18 +524,6 @@ class ProductFrame:
                     self.logs,
                     f"Producto {self.idx+1} - Monto investigado",
                     variables=[self.monto_inv_var],
-                ),
-                FieldValidator(
-                    moneda_cb,
-                    lambda: self._validate_catalog_selection(
-                        self.moneda_var.get(),
-                        "la moneda del producto",
-                        TIPO_MONEDA_LIST,
-                        "tipos de moneda",
-                    ),
-                    self.logs,
-                    f"Producto {self.idx+1} - Moneda",
-                    variables=[self.moneda_var],
                 ),
                 FieldValidator(
                     perdida_entry,
@@ -691,6 +661,50 @@ class ProductFrame:
                 variables=variables,
             )
             self.validators.append(validator)
+
+    def _register_product_catalog_validators(self, canal_cb, proc_cb, moneda_cb):
+        catalog_specs = [
+            (
+                canal_cb,
+                self.canal_var,
+                "el canal del producto",
+                CANAL_LIST,
+                "canales",
+                "Canal",
+            ),
+            (
+                proc_cb,
+                self.proceso_var,
+                "el proceso del producto",
+                PROCESO_LIST,
+                "procesos",
+                "Proceso",
+            ),
+            (
+                moneda_cb,
+                self.moneda_var,
+                "la moneda del producto",
+                TIPO_MONEDA_LIST,
+                "tipos de moneda",
+                "Moneda",
+            ),
+        ]
+
+        for widget, variable, label, catalog, catalog_label, log_suffix in catalog_specs:
+            self.validators.append(
+                FieldValidator(
+                    widget,
+                    lambda var=variable, label=label, catalog=catalog, catalog_label=catalog_label: self._validate_catalog_selection(
+                        var.get(),
+                        label,
+                        catalog,
+                        catalog_label,
+                    ),
+                    self.logs,
+                    f"Producto {self.idx+1} - {log_suffix}",
+                    variables=[variable],
+                )
+            )
 
     def obtain_claim_slot(self):
         empty = next((claim for claim in self.claims if claim.is_empty()), None)
