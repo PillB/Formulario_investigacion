@@ -104,7 +104,9 @@ from ui.frames import (
 from ui.tooltips import HoverTooltip
 from validators import (
     FieldValidator,
+    TIPO_PRODUCTO_NORMALIZED,
     log_event,
+    normalize_without_accents,
     parse_decimal_amount,
     resolve_catalog_product_type,
     should_autofill_field,
@@ -2485,6 +2487,7 @@ class FraudCaseApp:
             try:
                 with open(AUTOSAVE_FILE, 'r', encoding="utf-8") as f:
                     data = json.load(f)
+                self._reset_form_state(confirm=False, save_autosave=False)
                 self.populate_from_data(data)
                 log_event("navegacion", "Se cargó el autosave", self.logs)
             except Exception as ex:
@@ -2513,23 +2516,27 @@ class FraudCaseApp:
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo cargar la versión: {ex}")
 
-    def clear_all(self, *, confirm=True, notify=True):
-        """Elimina todos los datos actuales y restablece el formulario.
+    def _reset_form_state(self, confirm=True, save_autosave=True):
+        """Restablece el formulario a su estado inicial.
 
-        Cuando ``confirm`` es ``True`` (valor por defecto) se solicita
-        confirmación al usuario mediante un ``messagebox`` antes de borrar
-        los datos para evitar eliminaciones accidentales.  Las llamadas
-        internas (por ejemplo, al cargar un autosave durante el arranque)
-        pueden establecer ``confirm=False`` para ejecutar el reseteo sin
-        interrumpir el flujo de inicio.
+        Args:
+            confirm: Si es ``True`` solicita confirmación al usuario antes de
+                continuar.
+            save_autosave: Si es ``True`` persiste inmediatamente el estado
+                vacío mediante ``save_auto``.
 
+        Returns:
+            ``True`` si el formulario se restableció, ``False`` si el usuario
+            canceló la acción.
         """
+
         if confirm:
-            if not messagebox.askyesno(
+            confirmed = messagebox.askyesno(
                 "Confirmar",
                 "¿Desea borrar todos los datos? Esta acción no se puede deshacer.",
-            ):
-                return
+            )
+            if not confirmed:
+                return False
         # Limpiar campos del caso
         self.id_caso_var.set("")
         self.tipo_informe_var.set(TIPO_INFORME_LIST[0])
@@ -2565,8 +2572,15 @@ class FraudCaseApp:
         self.descargos_var.set("")
         self.conclusiones_var.set("")
         self.recomendaciones_var.set("")
-        # Guardar auto
-        self.save_auto()
+        if save_autosave:
+            self.save_auto()
+        return True
+
+    def clear_all(self):
+        """Elimina todos los datos actuales y restablece el formulario."""
+
+        if not self._reset_form_state(confirm=True, save_autosave=True):
+            return
         log_event("navegacion", "Se borraron todos los datos", self.logs)
         if notify:
             messagebox.showinfo("Datos borrados", "Todos los datos han sido borrados.")
@@ -2630,9 +2644,8 @@ class FraudCaseApp:
 
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
-        # Limpiar primero sin solicitar confirmación (se trata de una
-        # operación interna para poblar el formulario con datos conocidos).
-        self.clear_all(confirm=False, notify=False)
+        # Limpiar primero sin confirmar ni sobrescribir el autosave
+        self._reset_form_state(confirm=False, save_autosave=False)
         # Datos de caso
         caso = data.get('caso', {})
         self.id_caso_var.set(caso.get('id_caso', ''))
@@ -3031,16 +3044,15 @@ class FraudCaseApp:
         self._last_validated_risk_exposure_total = risk_exposure_total
         # Validar normas
         norm_ids = set()
-        for n in self.norm_frames:
+        for idx, n in enumerate(self.norm_frames, start=1):
             nd = n.get_data()
             nid = nd['id_norma']
-            if nid:
-                # Debe seguir formato de números con puntos
-                import re
-                if not re.match(r'\d{4}\.\d{3}\.\d{2}\.\d{2}$', nid):
-                    errors.append(f"ID de norma {nid} no tiene el formato XXXX.XXX.XX.XX")
-                if nid in norm_ids:
-                    errors.append(f"ID de norma duplicado: {nid}")
+            message = validate_norm_id(nid)
+            if message:
+                errors.append(f"Norma {idx}: {message}")
+            elif nid in norm_ids:
+                errors.append(f"ID de norma duplicado: {nid}")
+            else:
                 norm_ids.add(nid)
             # Fecha vigencia
             fvig = nd['fecha_vigencia']

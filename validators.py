@@ -124,12 +124,15 @@ def validate_codigo_analitica(value: str) -> Optional[str]:
     return None
 
 
+NORM_ID_PATTERN = re.compile(r"^\d{4}\.\d{3}\.\d{2}\.\d{2}$")
+
+
 def validate_norm_id(value: str) -> Optional[str]:
     text = (value or "").strip()
     if not text:
         return "Debe ingresar el ID de norma."
-    if not re.fullmatch(r"NRM-\d{5}$", text):
-        return "El ID de norma debe seguir el formato NRM-XXXXX."
+    if not NORM_ID_PATTERN.fullmatch(text):
+        return "El ID de norma debe seguir el formato XXXX.XXX.XX.XX."
     return None
 
 
@@ -256,10 +259,18 @@ class FieldValidator:
         self._validation_armed = False
         for var in self.variables:
             self._traces.append(var.trace_add("write", self._on_change))
+        self._bind_widget_events(widget)
+
+    def _bind_widget_events(self, widget) -> None:
         widget.bind("<FocusOut>", self._on_change)
         widget.bind("<KeyRelease>", self._on_change)
         if isinstance(widget, ttk.Combobox):
             widget.bind("<<ComboboxSelected>>", self._on_change)
+
+    def add_widget(self, widget) -> None:
+        """Incluye widgets adicionales cuyos eventos deben disparar la validación."""
+
+        self._bind_widget_events(widget)
 
     def _on_change(self, *_args):
         if self._suspend_count > 0:
