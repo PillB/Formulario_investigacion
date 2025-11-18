@@ -819,6 +819,20 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
         ),
         (
             {
+                "tipo_producto": "Crédito personal",
+                "producto_overrides": {
+                    "monto_investigado": "100.00",
+                    "monto_perdida_fraude": "99.99",
+                    "monto_falla_procesos": "0",
+                    "monto_contingencia": "0",
+                    "monto_recuperado": "0",
+                },
+                "reclamos": [_complete_claim()],
+            },
+            f"Las cuatro partidas (pérdida, falla, contingencia y recuperación) deben ser iguales al monto investigado en el producto {DEFAULT_PRODUCT_ID}",
+        ),
+        (
+            {
                 "tipo_producto": "Tarjeta de crédito",
                 "producto_overrides": {
                     "monto_investigado": "50",
@@ -826,6 +840,20 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
                     "monto_falla_procesos": "0",
                     "monto_contingencia": "10",
                     "monto_recuperado": "0",
+                },
+                "reclamos": [_complete_claim()],
+            },
+            f"El monto de contingencia debe ser igual al monto investigado en el producto {DEFAULT_PRODUCT_ID} porque es un crédito o tarjeta",
+        ),
+        (
+            {
+                "tipo_producto": "Tarjeta de crédito",
+                "producto_overrides": {
+                    "monto_investigado": "50.00",
+                    "monto_perdida_fraude": "0",
+                    "monto_falla_procesos": "0",
+                    "monto_contingencia": "49.99",
+                    "monto_recuperado": "0.01",
                 },
                 "reclamos": [_complete_claim()],
             },
@@ -863,6 +891,25 @@ def test_validate_data_enforces_amount_rules(product_config, expected_error):
     assert expected_error in errors
 
 
+def test_validate_data_flags_case_level_one_cent_gap():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            "monto_investigado": "0.00",
+            "monto_perdida_fraude": "0",
+            "monto_falla_procesos": "0",
+            "monto_contingencia": "0",
+            "monto_recuperado": "0.01",
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+
+    errors, _ = app.validate_data()
+
+    expected = "Las cuatro partidas (pérdida, falla, contingencia y recuperación) sumadas en el caso no coinciden con el total investigado."
+    assert expected in errors
+
+
 def test_product_frame_amount_fields_format_text(monkeypatch):
     products, validator_cls = _patch_products_module(monkeypatch)
     product = products.ProductFrame(
@@ -890,6 +937,53 @@ def test_product_frame_amount_fields_format_text(monkeypatch):
 
     assert rec_validator.validate_callback() is None
     assert product.monto_rec_var.get() == "100.50"
+
+
+def test_product_frame_detects_one_cent_gap(monkeypatch):
+    products, _ = _patch_products_module(monkeypatch)
+    product = products.ProductFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        get_client_options=lambda: ["CLI1"],
+        get_team_options=lambda: ["T12345"],
+        logs=[],
+        product_lookup={},
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    product.monto_inv_var.set("100.00")
+    product.monto_perdida_var.set("99.99")
+    product.monto_falla_var.set("0")
+    product.monto_cont_var.set("0")
+    product.monto_rec_var.set("0")
+    product.monto_pago_var.set("0")
+
+    assert product._validate_montos_consistentes('inv') is not None
+
+
+def test_product_frame_requires_exact_contingencia_for_credit(monkeypatch):
+    products, _ = _patch_products_module(monkeypatch)
+    product = products.ProductFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        get_client_options=lambda: ["CLI1"],
+        get_team_options=lambda: ["T12345"],
+        logs=[],
+        product_lookup={},
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    product.tipo_prod_var.set("Tarjeta de crédito")
+    product.monto_inv_var.set("50.00")
+    product.monto_perdida_var.set("0")
+    product.monto_falla_var.set("0")
+    product.monto_cont_var.set("49.99")
+    product.monto_rec_var.set("0.01")
+    product.monto_pago_var.set("0")
+
+    assert product._validate_montos_consistentes('contingencia') is not None
 
 
 def test_involvement_row_formats_amount_text(monkeypatch):
