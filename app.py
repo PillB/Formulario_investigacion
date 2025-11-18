@@ -2720,10 +2720,19 @@ class FraudCaseApp:
         if not frame:
             frame = self._obtain_client_slot_for_import()
             created = True
-        if created and row_data:
-            payload = dict(row_data)
-            payload['id_cliente'] = client_id
-            self._populate_client_frame_from_row(frame, payload)
+        if created:
+            if row_data:
+                payload = dict(row_data)
+                payload['id_cliente'] = client_id
+                self._populate_client_frame_from_row(frame, payload)
+            else:
+                frame.id_var.set(client_id)
+            self._trigger_import_id_refresh(
+                frame,
+                client_id,
+                notify_on_missing=False,
+                preserve_existing=bool(row_data),
+            )
         return frame, created
 
     def _ensure_team_member_exists(self, collaborator_id, row_data=None):
@@ -2735,10 +2744,19 @@ class FraudCaseApp:
         if not frame:
             frame = self._obtain_team_slot_for_import()
             created = True
-        if created and row_data:
-            payload = dict(row_data)
-            payload['id_colaborador'] = collaborator_id
-            self._populate_team_frame_from_row(frame, payload)
+        if created:
+            if row_data:
+                payload = dict(row_data)
+                payload['id_colaborador'] = collaborator_id
+                self._populate_team_frame_from_row(frame, payload)
+            else:
+                frame.id_var.set(collaborator_id)
+            self._trigger_import_id_refresh(
+                frame,
+                collaborator_id,
+                notify_on_missing=False,
+                preserve_existing=bool(row_data),
+            )
         return frame, created
 
     def import_clients(self, filename=None):
