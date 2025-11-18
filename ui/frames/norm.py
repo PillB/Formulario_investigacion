@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -81,14 +80,14 @@ class NormFrame:
 
     def get_data(self):
         norm_id = self.id_var.get().strip()
-        if not norm_id:
-            norm_id = f"{random.randint(1000, 9999)}.{random.randint(100, 999):03d}.{random.randint(10, 99):02d}.{random.randint(10, 99):02d}"
-            self.id_var.set(norm_id)
-            self._log_change(f"Norma {self.idx+1} sin ID: se asignó correlativo {norm_id}")
+        descripcion = self.descripcion_var.get().strip()
+        fecha = self.fecha_var.get().strip()
+        if not (norm_id or descripcion or fecha):
+            return None
         return {
             "id_norma": norm_id,
-            "descripcion": self.descripcion_var.get().strip(),
-            "fecha_vigencia": self.fecha_var.get().strip(),
+            "descripcion": descripcion,
+            "fecha_vigencia": fecha,
         }
 
     def remove(self):
