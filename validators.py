@@ -71,6 +71,9 @@ def validate_money_bounds(value: str, label: str, allow_blank: bool = True):
             amount = Decimal(text)
     except InvalidOperation:
         return (f"{label} debe ser un número válido.", None)
+    exponent = amount.as_tuple().exponent
+    if exponent < -2:
+        return (f"{label} solo puede tener dos decimales como máximo.", None)
     quantized = amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     if quantized < 0:
         return (f"{label} no puede ser negativo.", None)
