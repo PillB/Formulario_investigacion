@@ -3432,15 +3432,16 @@ class FraudCaseApp:
             agency_message = validate_agency_code(tm.codigo_agencia_var.get(), allow_blank=True)
             if agency_message:
                 errors.append(f"Colaborador {idx}: {agency_message}")
-            flag_value = tm.flag_var.get() if hasattr(tm, 'flag_var') else ''
+            flag_value = (tm.flag_var.get() if hasattr(tm, 'flag_var') else '').strip()
+            flag_message = validate_required_text(flag_value, "el flag del colaborador")
+            if flag_message:
+                errors.append(f"Colaborador {idx}: {flag_message}")
+            elif flag_value not in FLAG_COLABORADOR_LIST:
+                errors.append(
+                    f"Colaborador {idx}: El flag del colaborador '{flag_value}' no está en el catálogo CM."
+                )
             falta_value = tm.tipo_falta_var.get() if hasattr(tm, 'tipo_falta_var') else ''
             sancion_value = tm.tipo_sancion_var.get() if hasattr(tm, 'tipo_sancion_var') else ''
-            _validate_team_catalog_value(
-                flag_value,
-                "el flag del colaborador",
-                FLAG_COLABORADOR_LIST,
-                idx,
-            )
             _validate_team_catalog_value(
                 falta_value,
                 "el tipo de falta del colaborador",

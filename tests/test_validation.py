@@ -617,7 +617,10 @@ def test_validate_data_requires_team_catalog_values(config_key, label):
 
     errors, _ = app.validate_data()
 
-    expected = f"Colaborador 1: Debe seleccionar {label}."
+    if config_key == "flag":
+        expected = "Colaborador 1: Debe ingresar el flag del colaborador."
+    else:
+        expected = f"Colaborador 1: Debe seleccionar {label}."
     assert expected in errors
 
 
@@ -636,7 +639,12 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
 
     errors, _ = app.validate_data()
 
-    expected = f"Colaborador 1: El {label} '{invalid_value}' no está en el catálogo CM."
+    if config_key == "flag":
+        expected = (
+            f"Colaborador 1: El flag del colaborador '{invalid_value}' no está en el catálogo CM."
+        )
+    else:
+        expected = f"Colaborador 1: El {label} '{invalid_value}' no está en el catálogo CM."
     assert expected in errors
 
 
@@ -756,6 +764,25 @@ def test_validate_data_requires_claim_when_losses_exist():
         f"Debe ingresar al menos un reclamo completo en el producto {DEFAULT_PRODUCT_ID} porque hay montos de pérdida, falla o contingencia"
         in errors
     )
+
+
+def test_validate_data_rejects_collaborator_with_blank_flag():
+    team_config = {"team_id": "T12345", "flag": ""}
+    app = build_headless_app("Crédito personal", team_configs=[team_config])
+
+    errors, _ = app.validate_data()
+
+    assert "Colaborador 1: Debe ingresar el flag del colaborador." in errors
+
+
+def test_validate_data_accepts_collaborator_flag_in_catalog():
+    team_config = {"team_id": "T12345", "flag": FLAG_COLABORADOR_LIST[-1]}
+    app = build_headless_app("Crédito personal", team_configs=[team_config])
+
+    errors, warnings = app.validate_data()
+
+    assert errors == []
+    assert warnings == []
 
 
 def test_validate_data_requires_agency_data_for_commercial_channels():

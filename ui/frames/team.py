@@ -7,7 +7,8 @@ from tkinter import messagebox, ttk
 
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
 from validators import (FieldValidator, log_event, should_autofill_field,
-                        validate_agency_code, validate_team_member_id)
+                        validate_agency_code, validate_required_text,
+                        validate_team_member_id)
 
 
 class TeamMemberFrame:
@@ -140,6 +141,15 @@ class TeamMemberFrame:
                 self.logs,
                 f"Colaborador {self.idx+1} - ID",
                 variables=[self.id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                flag_cb,
+                lambda: validate_required_text(self.flag_var.get(), "el flag del colaborador"),
+                self.logs,
+                f"Colaborador {self.idx+1} - Flag",
+                variables=[self.flag_var],
             )
         )
         self.validators.append(
