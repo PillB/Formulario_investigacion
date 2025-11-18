@@ -262,10 +262,10 @@ class FieldValidator:
         self._bind_widget_events(widget)
 
     def _bind_widget_events(self, widget) -> None:
-        widget.bind("<FocusOut>", self._on_change)
-        widget.bind("<KeyRelease>", self._on_change)
+        widget.bind("<FocusOut>", self._on_change, add='+')
+        widget.bind("<KeyRelease>", self._on_change, add='+')
         if isinstance(widget, ttk.Combobox):
-            widget.bind("<<ComboboxSelected>>", self._on_change)
+            widget.bind("<<ComboboxSelected>>", self._on_change, add='+')
 
     def add_widget(self, widget) -> None:
         """Incluye widgets adicionales cuyos eventos deben disparar la validación."""
