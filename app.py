@@ -3726,12 +3726,10 @@ class FraudCaseApp:
             if rid:
                 risk_ids.add(rid)
             criticidad_value = (rd.get('criticidad') or '').strip()
-            criticidad_message = validate_required_text(
-                criticidad_value,
-                "la criticidad del riesgo",
-            )
-            if criticidad_message:
-                errors.append(f"Riesgo {idx}: {criticidad_message}")
+            if not criticidad_value:
+                errors.append(
+                    f"Riesgo {idx}: Debe seleccionar la criticidad del riesgo."
+                )
             elif criticidad_value not in CRITICIDAD_LIST:
                 errors.append(
                     f"Riesgo {idx}: La criticidad '{criticidad_value}' no está en el catálogo CM."
