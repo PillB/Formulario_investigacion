@@ -1,143 +1,14 @@
-import types
-
 import pytest
 
 import app as app_module
-from app import FraudCaseApp
 from settings import (CRITICIDAD_LIST, FLAG_CLIENTE_LIST, TIPO_ID_LIST,
                       TIPO_SANCION_LIST)
-from tests.stubs import (ClientFrameStub, NormFrameStub, ProductFrameStub,
-                         RiskFrameStub, TeamFrameStub, build_involvement_slot,
-                         build_populate_method, build_slot_factory)
-
-
-class MessageboxSpy:
-    def __init__(self):
-        self.infos = []
-        self.warnings = []
-        self.errors = []
-
-    def showinfo(self, title, message):
-        self.infos.append((title, message))
-
-    def showwarning(self, title, message):
-        self.warnings.append((title, message))
-
-    def showerror(self, title, message):
-        self.errors.append((title, message))
-
-
-@pytest.fixture
-def messagebox_spy(monkeypatch):
-    spy = MessageboxSpy()
-    monkeypatch.setattr(app_module.messagebox, "showinfo", spy.showinfo)
-    monkeypatch.setattr(app_module.messagebox, "showwarning", spy.showwarning)
-    monkeypatch.setattr(app_module.messagebox, "showerror", spy.showerror)
-    return spy
-
-
-def _prepare_import_app(monkeypatch, messagebox_spy):
-    app = FraudCaseApp.__new__(FraudCaseApp)
-    app._suppress_messagebox = True
-    app.logs = []
-    app.client_frames = []
-    app.team_frames = []
-    app.product_frames = []
-    app._client_frames_by_id = {}
-    app._team_frames_by_id = {}
-    app._product_frames_by_id = {}
-    app.detail_catalogs = {
-        'id_cliente': {},
-        'id_colaborador': {},
-        'id_producto': {},
-    }
-    app.detail_lookup_by_id = {}
-    app.client_lookup = {}
-    app.team_lookup = {}
-    app.product_lookup = {}
-    app.summary_tables = {}
-    app.summary_config = {}
-    app._schedule_summary_refresh = lambda *_args, **_kwargs: None
-    app._notify_taxonomy_warning = lambda *_args, **_kwargs: None
-    app._notify_products_created_without_details = lambda *_args, **_kwargs: None
-    app.report_calls = []
-    app._autosave_job_id = None
-    app._autosave_dirty = False
-
-    def _report(self, label, ids):
-        self.report_calls.append((label, list(ids)))
-
-    app._report_missing_detail_ids = types.MethodType(_report, app)
-
-    app.save_auto_called = False
-    app.save_auto = lambda: setattr(app, 'save_auto_called', True)
-    app.request_autosave = lambda: app.save_auto()
-
-    def _notify(self, summary_sections=None):
-        self.request_autosave()
-        self._schedule_summary_refresh(sections=summary_sections)
-
-    app._notify_dataset_changed = types.MethodType(_notify, app)
-    app.sync_calls = []
-    app.sync_main_form_after_import = lambda section, **kwargs: app.sync_calls.append(section)
-
-    app._obtain_client_slot_for_import = types.MethodType(
-        build_slot_factory(
-            app.client_frames,
-            ClientFrameStub,
-            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_client_id_change),
-        ),
-        app,
-    )
-    app._obtain_team_slot_for_import = types.MethodType(
-        build_slot_factory(
-            app.team_frames,
-            TeamFrameStub,
-            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_team_id_change),
-        ),
-        app,
-    )
-    app._obtain_product_slot_for_import = types.MethodType(
-        build_slot_factory(
-            app.product_frames,
-            ProductFrameStub,
-            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_product_id_change),
-        ),
-        app,
-    )
-    app._obtain_involvement_slot = types.MethodType(build_involvement_slot(), app)
-    app._populate_client_frame_from_row = types.MethodType(
-        build_populate_method('id_cliente'),
-        app,
-    )
-    app._populate_team_frame_from_row = types.MethodType(
-        build_populate_method('id_colaborador'),
-        app,
-    )
-    app._populate_product_frame_from_row = types.MethodType(
-        build_populate_method('id_producto'),
-        app,
-    )
-    app.risk_frames = []
-    app.norm_frames = []
-
-    def _add_risk(self):
-        frame = RiskFrameStub()
-        self.risk_frames.append(frame)
-        return frame
-
-    def _add_norm(self):
-        frame = NormFrameStub()
-        self.norm_frames.append(frame)
-        return frame
-
-    app.add_risk = types.MethodType(_add_risk, app)
-    app.add_norm = types.MethodType(_add_norm, app)
-    return app
+from tests.app_factory import build_import_app
+from tests.stubs import ClientFrameStub, ProductFrameStub, TeamFrameStub
 
 
 def test_import_combined_creates_entities_and_prevents_duplicates(monkeypatch, messagebox_spy):
-    app = _prepare_import_app(monkeypatch, messagebox_spy)
+    app = build_import_app(monkeypatch)
     valid_rows = [
         {
             'id_cliente': '12345678',
@@ -208,7 +79,7 @@ def test_import_combined_creates_entities_and_prevents_duplicates(monkeypatch, m
 
 
 def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebox_spy):
-    app = _prepare_import_app(monkeypatch, messagebox_spy)
+    app = build_import_app(monkeypatch)
     app.detail_catalogs = {
         'id_cliente': {
             'CLI-001': {
@@ -289,7 +160,7 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
 
 
 def test_import_risks_and_norms_hydrate_from_catalogs(monkeypatch, messagebox_spy):
-    app = _prepare_import_app(monkeypatch, messagebox_spy)
+    app = build_import_app(monkeypatch)
     app.detail_catalogs.update(
         {
             'id_riesgo': {
@@ -352,7 +223,7 @@ def test_import_risks_and_norms_hydrate_from_catalogs(monkeypatch, messagebox_sp
 
 
 def test_import_claims_uses_catalogs_and_reports_missing_products(monkeypatch, messagebox_spy):
-    app = _prepare_import_app(monkeypatch, messagebox_spy)
+    app = build_import_app(monkeypatch)
     existing_product = ProductFrameStub()
     existing_product.id_var.set('PRD-EXIST')
     existing_product.id_change_callback = app._handle_product_id_change
@@ -430,7 +301,7 @@ def test_import_claims_uses_catalogs_and_reports_missing_products(monkeypatch, m
     ],
 )
 def test_frame_lookups_scale_constant_time(monkeypatch, messagebox_spy, index_attr, finder_name, frames_attr, frame_factory, identifier):
-    app = _prepare_import_app(monkeypatch, messagebox_spy)
+    app = build_import_app(monkeypatch)
 
     class ExplodingVar:
         def get(self):
