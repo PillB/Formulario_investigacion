@@ -172,7 +172,7 @@ TIPO_SANCION_LIST = [
 TIPO_MONEDA_LIST = ["Soles", "Dólares", "No aplica"]
 CRITICIDAD_LIST = ["Bajo", "Moderado", "Relevante", "Alto", "Crítico"]
 
-BASE_DIR = os.path.dirname(__file__)
+BASE_DIR = os.path.dirname(os.getcdw())
 TEAM_DETAILS_FILE = os.path.join(BASE_DIR, "team_details.csv")
 CLIENT_DETAILS_FILE = os.path.join(BASE_DIR, "client_details.csv")
 PRODUCT_DETAILS_FILE = os.path.join(BASE_DIR, "productos_masivos.csv")

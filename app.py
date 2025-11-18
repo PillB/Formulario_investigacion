@@ -3337,7 +3337,7 @@ class FraudCaseApp:
         case_id = data.get('caso', {}).get('id_caso', '') or 'caso'
         filename = f"{case_id}_temp_{timestamp}.json"
         try:
-            path = os.path.join(os.path.dirname(__file__), filename)
+            path = os.path.join(os.path.dirname(os.getcdw()), filename)
             with open(path, 'w', encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as ex:
