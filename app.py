@@ -1507,7 +1507,15 @@ class FraudCaseApp:
         except ValueError as exc:
             messagebox.showerror("Pegado no válido", str(exc))
             return "break"
-        ingestible_sections = {"clientes", "colaboradores", "productos", "reclamos", "riesgos", "normas"}
+        ingestible_sections = {
+            "clientes",
+            "colaboradores",
+            "involucramientos",
+            "productos",
+            "reclamos",
+            "riesgos",
+            "normas",
+        }
         if key in ingestible_sections:
             try:
                 self.ingest_summary_rows(key, sanitized_rows, stay_on_summary=True)
@@ -1545,6 +1553,7 @@ class FraudCaseApp:
         handlers = {
             "clientes": self._transform_clipboard_clients,
             "colaboradores": self._transform_clipboard_colaboradores,
+            "involucramientos": self._transform_clipboard_involucramientos,
             "productos": self._transform_clipboard_productos,
             "reclamos": self._transform_clipboard_reclamos,
             "riesgos": self._transform_clipboard_riesgos,
@@ -1625,6 +1634,28 @@ class FraudCaseApp:
                     collaborator["tipo_sancion"],
                 )
             )
+        return sanitized
+
+    def _transform_clipboard_involucramientos(self, rows):
+        sanitized = []
+        for idx, values in enumerate(rows, start=1):
+            product_id = values[0].strip()
+            collaborator_id = values[1].strip()
+            amount_text = values[2].strip()
+            product_message = validate_required_text(product_id, "el ID del producto involucrado")
+            if product_message:
+                raise ValueError(f"Involucramiento fila {idx}: {product_message}")
+            collaborator_message = validate_team_member_id(collaborator_id)
+            if collaborator_message:
+                raise ValueError(f"Involucramiento fila {idx}: {collaborator_message}")
+            amount_message, _decimal_value, normalized_amount = validate_money_bounds(
+                amount_text,
+                "el monto asignado",
+                allow_blank=False,
+            )
+            if amount_message:
+                raise ValueError(f"Involucramiento fila {idx}: {amount_message}")
+            sanitized.append((product_id, collaborator_id, normalized_amount))
         return sanitized
 
     def _transform_clipboard_productos(self, rows):
@@ -1850,6 +1881,85 @@ class FraudCaseApp:
             if processed:
                 self.save_auto()
                 self.sync_main_form_after_import("colaboradores", stay_on_summary=stay_on_summary)
+            return processed
+        if section_key == "involucramientos":
+            missing_products = []
+            missing_team = []
+            unhydrated_products = []
+            for values in rows:
+                product_id = (values[0] or "").strip()
+                collaborator_id = (values[1] or "").strip()
+                amount_text = (values[2] or "").strip()
+                if not product_id or not collaborator_id:
+                    continue
+                product_payload, product_found = self._hydrate_row_from_details(
+                    {"id_producto": product_id},
+                    'id_producto',
+                    PRODUCT_ID_ALIASES,
+                )
+                collaborator_payload, collaborator_found = self._hydrate_row_from_details(
+                    {"id_colaborador": collaborator_id},
+                    'id_colaborador',
+                    TEAM_ID_ALIASES,
+                )
+                product_frame = self._find_product_frame(product_id)
+                new_product = False
+                if not product_frame:
+                    product_frame = self._obtain_product_slot_for_import()
+                    new_product = True
+                if new_product:
+                    if product_found:
+                        self._populate_product_frame_from_row(product_frame, product_payload)
+                    else:
+                        product_frame.id_var.set(product_id)
+                        unhydrated_products.append(product_id)
+                self._trigger_import_id_refresh(
+                    product_frame,
+                    product_id,
+                    notify_on_missing=True,
+                    preserve_existing=True,
+                )
+                team_frame = self._find_team_frame(collaborator_id)
+                if not team_frame:
+                    team_frame = self._obtain_team_slot_for_import()
+                    if collaborator_found:
+                        self._populate_team_frame_from_row(team_frame, collaborator_payload)
+                    else:
+                        team_frame.id_var.set(collaborator_id)
+                self._trigger_import_id_refresh(
+                    team_frame,
+                    collaborator_id,
+                    notify_on_missing=True,
+                    preserve_existing=True,
+                )
+                existing_row = next(
+                    (inv for inv in getattr(product_frame, 'involvements', []) if inv.team_var.get().strip() == collaborator_id),
+                    None,
+                )
+                if not existing_row:
+                    existing_row = self._obtain_involvement_slot(product_frame)
+                existing_row.team_var.set(collaborator_id)
+                team_widget = getattr(existing_row, 'team_cb', None)
+                if team_widget is not None:
+                    try:
+                        team_widget.set(collaborator_id)
+                    except tk.TclError:
+                        pass
+                existing_row.monto_var.set(amount_text)
+                processed += 1
+                if not product_found and 'id_producto' in self.detail_catalogs:
+                    missing_products.append(product_id)
+                if not collaborator_found and 'id_colaborador' in self.detail_catalogs:
+                    missing_team.append(collaborator_id)
+            if missing_products:
+                self._report_missing_detail_ids("productos", missing_products)
+            if missing_team:
+                self._report_missing_detail_ids("colaboradores", missing_team)
+            if unhydrated_products:
+                self._notify_products_created_without_details(unhydrated_products)
+            if processed:
+                self.save_auto()
+                self.sync_main_form_after_import("involucramientos", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "productos":
             for values in rows:
