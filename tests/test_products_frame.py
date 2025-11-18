@@ -105,6 +105,14 @@ def _build_product_frame():
     )
 
 
+class _ClaimRowProductStub:
+    def __init__(self):
+        self.idx = 0
+
+    def _register_lookup_sync(self, _widget):
+        return None
+
+
 def _find_validator(label):
     for validator in RecordingValidator.instances:
         if label in validator.field_name:
@@ -132,3 +140,23 @@ def test_loss_fields_have_inline_validation():
     assert "falla" in error.lower()
     assert "no puede ser negativo" in error.lower()
     assert falla_validator.variables and falla_validator.variables[0] is product.monto_falla_var
+
+
+def test_claim_row_requires_name_even_before_save():
+    claim_row = products.ClaimRow(
+        parent=DummyWidget(),
+        product_frame=_ClaimRowProductStub(),
+        idx=0,
+        remove_callback=lambda _row: None,
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    name_validator = _find_validator("Nombre analítica")
+    assert name_validator is not None
+
+    claim_row.name_var.set("")
+    error = name_validator.validate_callback()
+    assert error is not None
+    assert "nombre" in error.lower()
+    assert name_validator.variables and name_validator.variables[0] is claim_row.name_var

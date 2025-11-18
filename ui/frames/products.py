@@ -198,6 +198,18 @@ class ClaimRow:
         )
         self.validators.append(
             FieldValidator(
+                name_entry,
+                lambda: validate_required_text(
+                    self.name_var.get(), "el nombre de la analítica"
+                ),
+                self.logs,
+                f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Nombre analítica",
+                variables=[self.name_var],
+            )
+        )
+
+        self.validators.append(
+            FieldValidator(
                 code_entry,
                 lambda: validate_codigo_analitica(self.code_var.get()),
                 self.logs,
