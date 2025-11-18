@@ -450,15 +450,16 @@ class ProductFrame:
             self.monto_rec_var,
             self.monto_pago_var,
         ]
-        self.validators.append(
-            FieldValidator(
-                self.frame,
-                self._validate_montos_consistentes,
-                self.logs,
-                f"Producto {self.idx+1} - Consistencia de montos",
-                variables=amount_vars,
-            )
+        amount_consistency_validator = FieldValidator(
+            inv_entry,
+            self._validate_montos_consistentes,
+            self.logs,
+            f"Producto {self.idx+1} - Consistencia de montos",
+            variables=amount_vars,
         )
+        for entry in [perdida_entry, falla_entry, cont_entry, rec_entry, pago_entry]:
+            amount_consistency_validator.add_widget(entry)
+        self.validators.append(amount_consistency_validator)
 
     def on_cat1_change(self):
         cat1 = self.cat1_var.get()

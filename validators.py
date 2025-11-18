@@ -259,10 +259,18 @@ class FieldValidator:
         self._validation_armed = False
         for var in self.variables:
             self._traces.append(var.trace_add("write", self._on_change))
+        self._bind_widget_events(widget)
+
+    def _bind_widget_events(self, widget) -> None:
         widget.bind("<FocusOut>", self._on_change)
         widget.bind("<KeyRelease>", self._on_change)
         if isinstance(widget, ttk.Combobox):
             widget.bind("<<ComboboxSelected>>", self._on_change)
+
+    def add_widget(self, widget) -> None:
+        """Incluye widgets adicionales cuyos eventos deben disparar la validación."""
+
+        self._bind_widget_events(widget)
 
     def _on_change(self, *_args):
         if self._suspend_count > 0:
