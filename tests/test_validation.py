@@ -278,6 +278,66 @@ def test_validate_data_rejects_short_generic_ids():
 
 
 @pytest.mark.parametrize(
+    "field,label",
+    [
+        ("canal", "el canal del producto"),
+        ("proceso", "el proceso del producto"),
+        ("tipo_moneda", "la moneda del producto"),
+    ],
+)
+def test_validate_data_requires_product_catalog_fields(field, label):
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            field: "",
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    errors, _ = app.validate_data()
+
+    expected_fragment = f"Debe ingresar {label}."
+    assert any(expected_fragment in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "field,value,catalog_label",
+    [
+        ("canal", "Canal inválido", "El canal"),
+        ("proceso", "Proceso inválido", "El proceso"),
+        ("tipo_moneda", "Moneda desconocida", "El tipo de moneda"),
+    ],
+)
+def test_validate_data_rejects_unknown_product_catalog_values(field, value, catalog_label):
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            field: value,
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    errors, _ = app.validate_data()
+
+    expected_fragment = f"{catalog_label} '{value}' no está en el catálogo CM"
+    assert any(expected_fragment in error for error in errors)
+
+
+def test_validate_data_accepts_valid_product_catalog_selections():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            "canal": CANAL_LIST[-1],
+            "proceso": PROCESO_LIST[-1],
+            "tipo_moneda": TIPO_MONEDA_LIST[-1],
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    errors, warnings = app.validate_data()
+
+    assert errors == []
+    assert warnings == []
+
+
+@pytest.mark.parametrize(
     "producto_overrides,expected_error",
     [
         (
