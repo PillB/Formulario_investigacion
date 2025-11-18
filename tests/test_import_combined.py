@@ -7,9 +7,8 @@ from app import FraudCaseApp
 from settings import (CRITICIDAD_LIST, FLAG_CLIENTE_LIST, TIPO_ID_LIST,
                       TIPO_SANCION_LIST)
 from tests.stubs import (ClientFrameStub, NormFrameStub, ProductFrameStub,
-                         RiskFrameStub, TeamFrameStub, build_frame_finder,
-                         build_involvement_slot, build_populate_method,
-                         build_slot_factory)
+                         RiskFrameStub, TeamFrameStub, build_involvement_slot,
+                         build_populate_method, build_slot_factory)
 
 
 class MessageboxSpy:
@@ -44,6 +43,9 @@ def _prepare_import_app(monkeypatch, messagebox_spy):
     app.client_frames = []
     app.team_frames = []
     app.product_frames = []
+    app._client_frames_by_id = {}
+    app._team_frames_by_id = {}
+    app._product_frames_by_id = {}
     app.detail_catalogs = {
         'id_cliente': {},
         'id_colaborador': {},
@@ -80,15 +82,27 @@ def _prepare_import_app(monkeypatch, messagebox_spy):
     app.sync_main_form_after_import = lambda section, **kwargs: app.sync_calls.append(section)
 
     app._obtain_client_slot_for_import = types.MethodType(
-        build_slot_factory(app.client_frames, ClientFrameStub),
+        build_slot_factory(
+            app.client_frames,
+            ClientFrameStub,
+            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_client_id_change),
+        ),
         app,
     )
     app._obtain_team_slot_for_import = types.MethodType(
-        build_slot_factory(app.team_frames, TeamFrameStub),
+        build_slot_factory(
+            app.team_frames,
+            TeamFrameStub,
+            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_team_id_change),
+        ),
         app,
     )
     app._obtain_product_slot_for_import = types.MethodType(
-        build_slot_factory(app.product_frames, ProductFrameStub),
+        build_slot_factory(
+            app.product_frames,
+            ProductFrameStub,
+            on_create=lambda self, frame: setattr(frame, 'id_change_callback', self._handle_product_id_change),
+        ),
         app,
     )
     app._obtain_involvement_slot = types.MethodType(build_involvement_slot(), app)
@@ -119,9 +133,6 @@ def _prepare_import_app(monkeypatch, messagebox_spy):
 
     app.add_risk = types.MethodType(_add_risk, app)
     app.add_norm = types.MethodType(_add_norm, app)
-    app._find_client_frame = types.MethodType(build_frame_finder('client_frames'), app)
-    app._find_team_frame = types.MethodType(build_frame_finder('team_frames'), app)
-    app._find_product_frame = types.MethodType(build_frame_finder('product_frames'), app)
     return app
 
 
@@ -344,6 +355,8 @@ def test_import_claims_uses_catalogs_and_reports_missing_products(monkeypatch, m
     app = _prepare_import_app(monkeypatch, messagebox_spy)
     existing_product = ProductFrameStub()
     existing_product.id_var.set('PRD-EXIST')
+    existing_product.id_change_callback = app._handle_product_id_change
+    app._handle_product_id_change(existing_product, None, 'PRD-EXIST')
     app.product_frames.append(existing_product)
     app.detail_catalogs = {
         'id_cliente': {
@@ -406,3 +419,37 @@ def test_import_claims_uses_catalogs_and_reports_missing_products(monkeypatch, m
     reported = {label: ids for label, ids in app.report_calls}
     assert 'productos' in reported and 'PRD-MISSING' in reported['productos']
     assert 'reclamos' in app.sync_calls
+
+
+@pytest.mark.parametrize(
+    "index_attr,finder_name,frames_attr,frame_factory,identifier",
+    [
+        ("_client_frames_by_id", "_find_client_frame", "client_frames", ClientFrameStub, "CLI-999"),
+        ("_team_frames_by_id", "_find_team_frame", "team_frames", TeamFrameStub, "T55555"),
+        ("_product_frames_by_id", "_find_product_frame", "product_frames", ProductFrameStub, "PRD-555"),
+    ],
+)
+def test_frame_lookups_scale_constant_time(monkeypatch, messagebox_spy, index_attr, finder_name, frames_attr, frame_factory, identifier):
+    app = _prepare_import_app(monkeypatch, messagebox_spy)
+
+    class ExplodingVar:
+        def get(self):
+            raise AssertionError("Lookup should not scan frame list")
+
+        def set(self, _value):
+            raise AssertionError("Lookup should not mutate exploding frames")
+
+    class ExplodingFrame:
+        def __init__(self):
+            self.id_var = ExplodingVar()
+
+    exploding_frames = [ExplodingFrame() for _ in range(2000)]
+    getattr(app, frames_attr).extend(exploding_frames)
+
+    target = frame_factory()
+    target.id_var.set(identifier)
+    getattr(app, frames_attr).append(target)
+    getattr(app, index_attr)[identifier] = target
+
+    finder = getattr(app, finder_name)
+    assert finder(f"  {identifier}  ") is target
