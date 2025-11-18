@@ -9,6 +9,7 @@ from typing import Dict, Iterable, Iterator, List, Tuple
 from settings import (
     BASE_DIR,
     DETAIL_LOOKUP_ALIASES,
+    PRODUCT_DETAILS_FILE,
 )
 
 
@@ -19,21 +20,26 @@ def normalize_detail_catalog_key(key: str) -> str:
 
 
 def load_detail_catalogs() -> Dict[str, Dict[str, Dict[str, str]]]:
-    """Lee todos los archivos ``*_details.csv`` disponibles en la carpeta base."""
+    """Lee los catálogos de detalle disponibles en disco."""
 
     catalogs: Dict[str, Dict[str, Dict[str, str]]] = {}
+    sources: List[Tuple[str, str]] = []
     try:
-        filenames = [
-            name
-            for name in os.listdir(BASE_DIR)
-            if name.lower().endswith("details.csv")
-        ]
+        for name in os.listdir(BASE_DIR):
+            if not name.lower().endswith("details.csv"):
+                continue
+            entity_name = name[:-len("_details.csv")].lower()
+            if not entity_name:
+                continue
+            sources.append((entity_name, os.path.join(BASE_DIR, name)))
     except OSError:
-        return catalogs
+        # Ignorar errores al enumerar catálogos automáticos: aún podemos cargar explícitos
+        pass
 
-    for filename in filenames:
-        path = os.path.join(BASE_DIR, filename)
-        entity_name = filename[:-len("_details.csv")].lower()
+    if PRODUCT_DETAILS_FILE:
+        sources.append(("productos", PRODUCT_DETAILS_FILE))
+
+    for entity_name, path in sources:
         try:
             with open(path, newline='', encoding="utf-8-sig") as file_handle:
                 reader = csv.DictReader(line for line in file_handle if line.strip())
