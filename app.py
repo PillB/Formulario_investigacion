@@ -63,7 +63,7 @@ from decimal import Decimal
 from typing import Optional
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from models import (
     build_detail_catalog_id_index,
