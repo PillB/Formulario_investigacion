@@ -6,7 +6,7 @@ import re
 import unicodedata
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_UP
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from settings import TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
@@ -159,6 +159,8 @@ def normalize_without_accents(value: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 
+ProductFamilyRule = Tuple[re.Pattern[str], str]
+
 CLIENT_ID_PATTERNS = {
     "dni": (re.compile(r"^\d{8}$"), "El DNI debe tener exactamente 8 dígitos."),
     "ruc": (re.compile(r"^\d{11}$"), "El RUC debe tener exactamente 11 dígitos."),
@@ -174,6 +176,30 @@ CLIENT_ID_PATTERNS = {
 TEAM_MEMBER_ID_PATTERN = re.compile(r"^[A-Za-z][0-9]{5}$")
 AGENCY_CODE_PATTERN = re.compile(r"^\d{6}$")
 PRODUCT_CREDIT_LENGTHS = {13, 14, 16, 20}
+ACCOUNT_PRODUCT_RULE: ProductFamilyRule = (
+    re.compile(r"^\d{10,18}$"),
+    "Los productos de ahorro, cuentas y depósitos deben usar IDs numéricos de 10 a 18 dígitos (formato CM BCP).",
+)
+RAW_PRODUCT_FAMILY_RULES: Dict[str, ProductFamilyRule] = {
+    "cuenta de ahorro": ACCOUNT_PRODUCT_RULE,
+    "cuenta corriente": ACCOUNT_PRODUCT_RULE,
+    "cuenta a plazo": ACCOUNT_PRODUCT_RULE,
+    "deposito a plazo": ACCOUNT_PRODUCT_RULE,
+    "cts": ACCOUNT_PRODUCT_RULE,
+}
+ALPHANUMERIC_PRODUCT_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{4,30}$")
+PRODUCT_FAMILY_VALIDATORS: Dict[str, ProductFamilyRule] = {
+    normalize_without_accents(key).lower(): rule
+    for key, rule in RAW_PRODUCT_FAMILY_RULES.items()
+}
+
+
+def _match_product_family_rule(tipo_normalized: str) -> Optional[ProductFamilyRule]:
+    for keyword, rule in PRODUCT_FAMILY_VALIDATORS.items():
+        if keyword and keyword in tipo_normalized:
+            return rule
+    return None
+
 TIPO_PRODUCTO_CATALOG = {
     normalize_without_accents(item).lower(): item
     for item in TIPO_PRODUCTO_LIST
@@ -232,8 +258,16 @@ def validate_product_id(tipo_producto: str, value: str) -> Optional[str]:
         if not (text.isdigit() and len(text) in PRODUCT_CREDIT_LENGTHS):
             return "Para créditos el ID debe ser numérico de 13, 14, 16 o 20 dígitos."
         return None
-    if len(text) not in PRODUCT_CREDIT_LENGTHS and len(text) <= 100:
-        return "El ID del producto debe tener 13, 14, 16, 20 o más de 100 caracteres."
+    family_rule = _match_product_family_rule(tipo_normalized)
+    if family_rule:
+        pattern, message = family_rule
+        if not pattern.fullmatch(text):
+            return message
+        return None
+    if not ALPHANUMERIC_PRODUCT_ID_PATTERN.fullmatch(text):
+        return (
+            "El ID del producto debe ser alfanumérico y tener entre 4 y 30 caracteres para productos no crediticios."
+        )
     return None
 
 
