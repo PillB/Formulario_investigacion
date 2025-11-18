@@ -64,27 +64,28 @@ def validate_product_dates(producto_id: str, fecha_ocurrencia: str, fecha_descub
 def validate_money_bounds(value: str, label: str, allow_blank: bool = True):
     text = (value or "").strip()
     if not text:
-        return (None, None) if allow_blank else (f"Debe ingresar {label}.", None)
+        return (None, None, "") if allow_blank else (f"Debe ingresar {label}.", None, "")
     try:
         with localcontext() as ctx:
             ctx.prec = 20
             amount = Decimal(text)
     except InvalidOperation:
-        return (f"{label} debe ser un número válido.", None)
+        return (f"{label} debe ser un número válido.", None, "")
     exponent = amount.as_tuple().exponent
     if exponent < -2:
-        return (f"{label} solo puede tener dos decimales como máximo.", None)
+        return (f"{label} solo puede tener dos decimales como máximo.", None, "")
     quantized = amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     if quantized < 0:
-        return (f"{label} no puede ser negativo.", None)
+        return (f"{label} no puede ser negativo.", None, "")
     quantized_tuple = quantized.as_tuple()
     digits = len(quantized_tuple.digits)
     exponent = quantized_tuple.exponent
     integer_digits = digits if exponent >= 0 else digits + exponent
     integer_digits = max(integer_digits, 0)
     if integer_digits > 12:
-        return (f"{label} no puede tener más de 12 dígitos en la parte entera.", None)
-    return (None, quantized)
+        return (f"{label} no puede tener más de 12 dígitos en la parte entera.", None, "")
+    normalized_text = f"{quantized:.2f}"
+    return (None, quantized, normalized_text)
 
 
 def validate_amount_text(value: str, label: str, allow_blank: bool = True) -> Optional[str]:
@@ -345,7 +346,7 @@ class FieldValidator:
 
 
 def parse_decimal_amount(amount_string: str | Decimal | None) -> Optional[Decimal]:
-    message, value = validate_money_bounds(amount_string or "", "monto", allow_blank=True)
+    message, value, _ = validate_money_bounds(amount_string or "", "monto", allow_blank=True)
     if message:
         return None
     return value or Decimal('0')

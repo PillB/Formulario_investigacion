@@ -19,6 +19,12 @@ class DummyVar:
     def set(self, value):
         self.value = value
 
+    def trace_add(self, _mode, _callback):
+        return f"trace_{id(self)}"
+
+    def trace_remove(self, *_args, **_kwargs):
+        return None
+
 
 class DummyClient:
     def __init__(self, client_id):
@@ -71,6 +77,121 @@ class DummyTeam:
         self.flag_var = DummyVar(flag)
         self.tipo_falta_var = DummyVar(tipo_falta)
         self.tipo_sancion_var = DummyVar(tipo_sancion)
+
+
+class _UIStubWidget:
+    def __init__(self, *args, **kwargs):
+        self.textvariable = kwargs.get("textvariable")
+        self._config = {}
+        self._bindings = []
+        self.command = kwargs.get("command")
+        if "values" in kwargs:
+            self._config['values'] = kwargs["values"]
+
+    def pack(self, *args, **kwargs):
+        return None
+
+    def bind(self, sequence, callback, add=None):
+        self._bindings.append((sequence, callback, add))
+        return f"bind_{len(self._bindings)}"
+
+    def set(self, value):
+        if self.textvariable is not None:
+            self.textvariable.set(value)
+        self._config['current_value'] = value
+
+    def get(self):
+        if self.textvariable is not None:
+            return self.textvariable.get()
+        return self._config.get('current_value', "")
+
+    def destroy(self):
+        return None
+
+    def configure(self, **kwargs):
+        self._config.update(kwargs)
+
+    def __setitem__(self, key, value):
+        self._config[key] = value
+
+    def __getitem__(self, key):
+        return self._config.get(key)
+
+
+def _make_recording_validator():
+    class RecordingValidator:
+        instances = []
+
+        def __init__(self, widget, validate_callback, logs, field_name, variables=None):
+            self.widget = widget
+            self.validate_callback = validate_callback
+            self.logs = logs
+            self.field_name = field_name
+            self.variables = list(variables or [])
+            RecordingValidator.instances.append(self)
+
+        def add_widget(self, _widget):
+            return None
+
+        def suppress_during(self, callback):
+            return callback()
+
+        def show_custom_error(self, _message):
+            return None
+
+    RecordingValidator.instances = []
+    return RecordingValidator
+
+
+def _patch_products_module(monkeypatch):
+    from ui.frames import products
+
+    RecordingValidator = _make_recording_validator()
+
+    class _TkStub:
+        StringVar = DummyVar
+
+    class _TtkStub:
+        LabelFrame = _UIStubWidget
+        Frame = _UIStubWidget
+        Label = _UIStubWidget
+        Entry = _UIStubWidget
+        Combobox = _UIStubWidget
+        Button = _UIStubWidget
+
+    monkeypatch.setattr(products, "tk", _TkStub())
+    monkeypatch.setattr(products, "ttk", _TtkStub())
+    monkeypatch.setattr(products, "FieldValidator", RecordingValidator)
+    return products, RecordingValidator
+
+
+def _patch_risk_module(monkeypatch):
+    from ui.frames import risk
+
+    RecordingValidator = _make_recording_validator()
+
+    class _TkStub:
+        StringVar = DummyVar
+
+    class _TtkStub:
+        LabelFrame = _UIStubWidget
+        Frame = _UIStubWidget
+        Label = _UIStubWidget
+        Entry = _UIStubWidget
+        Combobox = _UIStubWidget
+        Button = _UIStubWidget
+
+    monkeypatch.setattr(risk, "tk", _TkStub())
+    monkeypatch.setattr(risk, "ttk", _TtkStub())
+    monkeypatch.setattr(risk, "FieldValidator", RecordingValidator)
+    return risk, RecordingValidator
+
+
+def _find_validator_instance(instances, fragment):
+    for validator in instances:
+        if fragment in validator.field_name:
+            return validator
+    return None
 
 
 class DummyProductFrame:
@@ -740,6 +861,89 @@ def test_validate_data_enforces_amount_rules(product_config, expected_error):
     app = build_headless_app("Crédito personal", product_configs=[product_config])
     errors, _ = app.validate_data()
     assert expected_error in errors
+
+
+def test_product_frame_amount_fields_format_text(monkeypatch):
+    products, validator_cls = _patch_products_module(monkeypatch)
+    product = products.ProductFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        get_client_options=lambda: ["CLI1"],
+        get_team_options=lambda: ["T12345"],
+        logs=[],
+        product_lookup={},
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    product.monto_inv_var.set("100")
+    product.monto_rec_var.set("100.5")
+
+    inv_validator = _find_validator_instance(validator_cls.instances, "Monto investigado")
+    rec_validator = _find_validator_instance(validator_cls.instances, "Monto recuperado")
+
+    assert inv_validator is not None
+    assert rec_validator is not None
+
+    assert inv_validator.validate_callback() is None
+    assert product.monto_inv_var.get() == "100.00"
+
+    assert rec_validator.validate_callback() is None
+    assert product.monto_rec_var.get() == "100.50"
+
+
+def test_involvement_row_formats_amount_text(monkeypatch):
+    products, validator_cls = _patch_products_module(monkeypatch)
+
+    class _ProductFrameStub:
+        def __init__(self):
+            self.idx = 0
+            self.logs = []
+
+        def log_change(self, *_args, **_kwargs):
+            return None
+
+        def schedule_summary_refresh(self, _section=None):
+            return None
+
+    row = products.InvolvementRow(
+        parent=_UIStubWidget(),
+        product_frame=_ProductFrameStub(),
+        idx=0,
+        team_getter=lambda: ["T12345"],
+        remove_callback=lambda _row: None,
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    row.monto_var.set("100.5")
+    amount_validator = _find_validator_instance(validator_cls.instances, "Asignación 1")
+
+    assert amount_validator is not None
+    assert amount_validator.validate_callback() is None
+    assert row.monto_var.get() == "100.50"
+
+
+def test_risk_frame_formats_exposure_text(monkeypatch):
+    risk_module, validator_cls = _patch_risk_module(monkeypatch)
+    risk_frame = risk_module.RiskFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    risk_frame.exposicion_var.set("100")
+    exposure_validator = _find_validator_instance(validator_cls.instances, "Exposición")
+
+    assert exposure_validator is not None
+    assert exposure_validator.validate_callback() is None
+    assert risk_frame.exposicion_var.get() == "100.00"
+
+    risk_frame.exposicion_var.set("100.5")
+    assert exposure_validator.validate_callback() is None
+    assert risk_frame.exposicion_var.get() == "100.50"
 
 
 def test_validate_data_requires_risk_criticidad():

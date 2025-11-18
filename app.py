@@ -84,15 +84,14 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         normalize_without_accents, parse_decimal_amount,
                         resolve_catalog_product_type, should_autofill_field,
                         sum_investigation_components, TIPO_PRODUCTO_NORMALIZED,
-                        validate_agency_code, validate_amount_text,
-                        validate_case_id, validate_client_id,
-                        validate_codigo_analitica, validate_date_text,
-                        validate_email_list, validate_money_bounds,
-                        validate_multi_selection, validate_norm_id,
-                        validate_phone_list, validate_product_dates,
-                        validate_product_id, validate_reclamo_id,
-                        validate_required_text, validate_risk_id,
-                        validate_team_member_id)
+                        validate_agency_code, validate_case_id,
+                        validate_client_id, validate_codigo_analitica,
+                        validate_date_text, validate_email_list,
+                        validate_money_bounds, validate_multi_selection,
+                        validate_norm_id, validate_phone_list,
+                        validate_product_dates, validate_product_id,
+                        validate_reclamo_id, validate_required_text,
+                        validate_risk_id, validate_team_member_id)
 
 
 class FraudCaseApp:
@@ -1650,7 +1649,7 @@ class FraudCaseApp:
             message = validate_product_id(product["tipo_producto"], product["id_producto"])
             if message:
                 raise ValueError(f"Producto fila {idx}: {message}")
-            amount_message, decimal_value = validate_money_bounds(
+            amount_message, decimal_value, _ = validate_money_bounds(
                 product["monto_investigado"],
                 "el monto investigado",
                 allow_blank=False,
@@ -1719,7 +1718,7 @@ class FraudCaseApp:
                 raise ValueError(
                     f"Riesgo fila {idx}: la criticidad debe ser una de {valid_criticidades_text}."
                 )
-            exposure_message, exposure_decimal = validate_money_bounds(
+            exposure_message, exposure_decimal, _ = validate_money_bounds(
                 risk["exposicion"],
                 "la exposición residual",
                 allow_blank=True,
@@ -3600,7 +3599,7 @@ class FraudCaseApp:
             money_values = {}
             money_error = False
             for field, _, label, allow_blank, _ in PRODUCT_MONEY_SPECS:
-                message, decimal_value = validate_money_bounds(
+                message, decimal_value, normalized_text = validate_money_bounds(
                     producto.get(field, ''),
                     f"{label} del producto {producto['id_producto']}",
                     allow_blank=allow_blank,
@@ -3608,6 +3607,8 @@ class FraudCaseApp:
                 if message:
                     errors.append(message)
                     money_error = True
+                if not message and normalized_text is not None:
+                    producto[field] = normalized_text if normalized_text else ''
                 money_values[field] = decimal_value if decimal_value is not None else Decimal('0')
             if money_error:
                 continue
@@ -3735,7 +3736,7 @@ class FraudCaseApp:
                     f"Riesgo {idx}: La criticidad '{criticidad_value}' no está en el catálogo CM."
                 )
             # Exposición
-            message, exposure_decimal = validate_money_bounds(
+            message, exposure_decimal, _ = validate_money_bounds(
                 rd['exposicion_residual'],
                 f"Exposición residual del riesgo {rid}",
                 allow_blank=True,

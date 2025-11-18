@@ -11,8 +11,8 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
-                        validate_amount_text, validate_codigo_analitica,
-                        validate_date_text, validate_money_bounds,
+                        validate_codigo_analitica, validate_date_text,
+                        validate_money_bounds,
                         validate_product_dates, validate_product_id,
                         validate_reclamo_id, validate_required_text)
 
@@ -62,7 +62,7 @@ class InvolvementRow:
 
         amount_validator = FieldValidator(
             monto_entry,
-            lambda: validate_amount_text(self.monto_var.get(), "el monto asignado", allow_blank=True),
+            self._validate_assignment_amount,
             self.logs,
             f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1}",
             variables=[self.monto_var],
@@ -157,6 +157,16 @@ class InvolvementRow:
         if team_value not in self._get_known_team_ids():
             return "Debe seleccionar un colaborador válido."
         return None
+
+    def _validate_assignment_amount(self):
+        message, _decimal_value, normalized_text = validate_money_bounds(
+            self.monto_var.get(),
+            "el monto asignado",
+            allow_blank=True,
+        )
+        if not message and normalized_text != (self.monto_var.get() or "").strip():
+            self.monto_var.set(normalized_text)
+        return message
 
 
 class ClaimRow:
@@ -520,50 +530,42 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     inv_entry,
-                    lambda: validate_amount_text(self.monto_inv_var.get(), "el monto investigado", allow_blank=False),
+                    self._build_amount_validator(self.monto_inv_var, "el monto investigado", False),
                     self.logs,
                     f"Producto {self.idx+1} - Monto investigado",
                     variables=[self.monto_inv_var],
                 ),
                 FieldValidator(
                     perdida_entry,
-                    lambda: validate_amount_text(
-                        self.monto_perdida_var.get(), "el monto pérdida de fraude", allow_blank=True
-                    ),
+                    self._build_amount_validator(self.monto_perdida_var, "el monto pérdida de fraude", True),
                     self.logs,
                     f"Producto {self.idx+1} - Monto pérdida fraude",
                     variables=[self.monto_perdida_var],
                 ),
                 FieldValidator(
                     falla_entry,
-                    lambda: validate_amount_text(
-                        self.monto_falla_var.get(), "el monto falla de procesos", allow_blank=True
-                    ),
+                    self._build_amount_validator(self.monto_falla_var, "el monto falla de procesos", True),
                     self.logs,
                     f"Producto {self.idx+1} - Monto falla procesos",
                     variables=[self.monto_falla_var],
                 ),
                 FieldValidator(
                     cont_entry,
-                    lambda: validate_amount_text(
-                        self.monto_cont_var.get(), "el monto contingencia", allow_blank=True
-                    ),
+                    self._build_amount_validator(self.monto_cont_var, "el monto contingencia", True),
                     self.logs,
                     f"Producto {self.idx+1} - Monto contingencia",
                     variables=[self.monto_cont_var],
                 ),
                 FieldValidator(
                     rec_entry,
-                    lambda: validate_amount_text(
-                        self.monto_rec_var.get(), "el monto recuperado", allow_blank=True
-                    ),
+                    self._build_amount_validator(self.monto_rec_var, "el monto recuperado", True),
                     self.logs,
                     f"Producto {self.idx+1} - Monto recuperado",
                     variables=[self.monto_rec_var],
                 ),
                 FieldValidator(
                     pago_entry,
-                    lambda: validate_amount_text(self.monto_pago_var.get(), "el monto pago de deuda", allow_blank=True),
+                    self._build_amount_validator(self.monto_pago_var, "el monto pago de deuda", True),
                     self.logs,
                     f"Producto {self.idx+1} - Pago de deuda",
                     variables=[self.monto_pago_var],
@@ -915,11 +917,29 @@ class ProductFrame:
             self.fecha_desc_var.get(),
         )
 
+    def _validate_amount_field(self, var, label, allow_blank):
+        raw_value = var.get()
+        message, decimal_value, normalized_text = validate_money_bounds(
+            raw_value,
+            label,
+            allow_blank=allow_blank,
+        )
+        if not message and normalized_text != (raw_value or "").strip():
+            var.set(normalized_text)
+        return message, decimal_value
+
+    def _build_amount_validator(self, var, label, allow_blank):
+        def _validate():
+            message, _ = self._validate_amount_field(var, label, allow_blank)
+            return message
+
+        return _validate
+
     def _collect_amount_values(self):
         values = {}
         for _, var_attr, label, allow_blank, key in PRODUCT_MONEY_SPECS:
-            raw_value = getattr(self, var_attr).get()
-            message, decimal_value = validate_money_bounds(raw_value, label, allow_blank=allow_blank)
+            var = getattr(self, var_attr)
+            message, decimal_value = self._validate_amount_field(var, label, allow_blank)
             if message:
                 return None
             values[key] = decimal_value if decimal_value is not None else Decimal('0')
