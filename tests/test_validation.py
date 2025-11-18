@@ -401,16 +401,16 @@ def test_validate_data_requires_product_catalog_fields(field, label):
     app = build_headless_app("Crédito personal", product_configs=[product_config])
     errors, _ = app.validate_data()
 
-    expected_fragment = f"Debe ingresar {label}."
-    assert any(expected_fragment in error for error in errors)
+    expected_message = f"Producto {DEFAULT_PRODUCT_ID}: Debe ingresar {label}."
+    assert expected_message in errors
 
 
 @pytest.mark.parametrize(
     "field,value,catalog_label",
     [
-        ("canal", "Canal inválido", "El canal"),
-        ("proceso", "Proceso inválido", "El proceso"),
-        ("tipo_moneda", "Moneda desconocida", "El tipo de moneda"),
+        ("canal", "Canal inválido", "canal"),
+        ("proceso", "Proceso inválido", "proceso"),
+        ("tipo_moneda", "Moneda desconocida", "tipo de moneda"),
     ],
 )
 def test_validate_data_rejects_unknown_product_catalog_values(field, value, catalog_label):
@@ -423,8 +423,10 @@ def test_validate_data_rejects_unknown_product_catalog_values(field, value, cata
     app = build_headless_app("Crédito personal", product_configs=[product_config])
     errors, _ = app.validate_data()
 
-    expected_fragment = f"{catalog_label} '{value}' no está en el catálogo CM"
-    assert any(expected_fragment in error for error in errors)
+    expected_message = (
+        f"Producto {DEFAULT_PRODUCT_ID}: El {catalog_label} '{value}' no está en el catálogo CM."
+    )
+    assert expected_message in errors
 
 
 def test_validate_data_accepts_valid_product_catalog_selections():
