@@ -42,9 +42,9 @@ class ClientFrame:
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda: None)
 
-        self.tipo_id_var = tk.StringVar(value=TIPO_ID_LIST[0])
+        self.tipo_id_var = tk.StringVar()
         self.id_var = tk.StringVar()
-        self.flag_var = tk.StringVar(value=FLAG_CLIENTE_LIST[0])
+        self.flag_var = tk.StringVar()
         self.telefonos_var = tk.StringVar()
         self.correos_var = tk.StringVar()
         self.direcciones_var = tk.StringVar()
@@ -58,6 +58,7 @@ class ClientFrame:
         ttk.Label(row1, text="Tipo de ID:").pack(side="left")
         tipo_id_cb = ttk.Combobox(row1, textvariable=self.tipo_id_var, values=TIPO_ID_LIST, state="readonly", width=20)
         tipo_id_cb.pack(side="left", padx=5)
+        tipo_id_cb.set('')
         self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
         ttk.Label(row1, text="ID del cliente:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
@@ -71,6 +72,7 @@ class ClientFrame:
         ttk.Label(row2, text="Flag:").pack(side="left")
         flag_cb = ttk.Combobox(row2, textvariable=self.flag_var, values=FLAG_CLIENTE_LIST, state="readonly", width=20)
         flag_cb.pack(side="left", padx=5)
+        flag_cb.set('')
         self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
 
         accionado_frame = ttk.Frame(self.frame)

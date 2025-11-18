@@ -951,7 +951,6 @@ class FraudCaseApp:
             self.register_tooltip,
             summary_refresh_callback=self._schedule_summary_refresh,
         )
-        self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
         # Renombrar
         for i, p in enumerate(self.product_frames):

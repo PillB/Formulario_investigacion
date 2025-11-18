@@ -24,7 +24,7 @@ class RiskFrame:
         self.id_var = tk.StringVar(value=f"RSK-{idx+1:06d}")
         self.lider_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
-        self.criticidad_var = tk.StringVar(value=CRITICIDAD_LIST[0])
+        self.criticidad_var = tk.StringVar()
         self.exposicion_var = tk.StringVar()
         self.planes_var = tk.StringVar()
 
@@ -44,6 +44,7 @@ class RiskFrame:
         ttk.Label(row1, text="Criticidad:").pack(side="left")
         crit_cb = ttk.Combobox(row1, textvariable=self.criticidad_var, values=CRITICIDAD_LIST, state="readonly", width=12)
         crit_cb.pack(side="left", padx=5)
+        crit_cb.set('')
         self.tooltip_register(crit_cb, "Nivel de severidad del riesgo.")
 
         row2 = ttk.Frame(self.frame)
