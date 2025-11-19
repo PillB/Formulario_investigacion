@@ -2,6 +2,7 @@ Manual de Uso y Pruebas – Aplicación de Gestión de Casos de Fraude (Tkinter)
 Este documento explica cómo utilizar y probar la versión de escritorio de la aplicación de gestión de casos de fraude implementada en Python usando Tkinter. Está orientado a usuarios y evaluadores no técnicos que necesiten comprobar que todas las funcionalidades del sistema se comportan como se espera.
 1. Requisitos previos
 Python 3.7 o superior instalado en el equipo.
+Dependencia adicional: instala `python-docx` para habilitar la generación del informe en Word (`pip install python-docx`).
 Archivos CSV de referencia ubicados en la misma carpeta que el script fraud_case_gui.py:
 client_details.csv: datos maestros de clientes para autopoblar.
 team_details.csv: datos maestros de colaboradores para autopoblar.
@@ -48,7 +49,7 @@ En la pestaña Normas, use Añadir norma para crear registros. Introduzca el nú
 En la pestaña Análisis, escriba las narrativas de Antecedentes, Modus operandi, Hallazgos principales, Descargos del colaborador, Conclusiones y Recomendaciones y mejoras. Estos campos aceptan texto libre.
 9. Acciones y gestión de versiones
 En la pestaña Acciones encontrará los botones:
-Guardar y enviar: Valida todos los datos. Si no hay errores, crea (si es necesario) la carpeta `exports/` ubicada junto al script y escribe allí los archivos CSV (casos, clientes, colaboradores, productos, reclamos, asignaciones, riesgos, normas, análisis, logs), el JSON completo del caso y el informe en Markdown usando el ID del caso como prefijo. Luego intenta copiar esos mismos archivos a `external drive/<id_caso>/` para mantener un respaldo local.
+Guardar y enviar: Valida todos los datos. Si no hay errores, crea (si es necesario) la carpeta `exports/` ubicada junto al script y escribe allí los archivos CSV (casos, clientes, colaboradores, productos, reclamos, asignaciones, riesgos, normas, análisis, logs), el JSON completo del caso, el informe en Markdown y el informe en Word (`<id_caso>_informe.docx`) usando el ID del caso como prefijo. Luego intenta copiar esos mismos archivos a `external drive/<id_caso>/` para mantener un respaldo local.
 Cargar versión: Permite elegir un archivo JSON generado previamente para restaurar el formulario al estado guardado.
 Borrar todos los datos: Elimina el contenido del formulario y el autosave tras confirmación.
 Importar CSV: Botones para cargar clientes, colaboradores, productos, combinados, riesgos, normas y reclamos. Seleccione el archivo adecuado y revise que los datos aparezcan en sus pestañas correspondientes. Se omitirán registros duplicados.
@@ -83,3 +84,7 @@ pytest --cov=app --cov=ui --cov-report=term-missing
 ```
 
 Este comando imprime un resumen de cobertura en la terminal destacando qué porciones de `app.py` y los módulos de `ui/` están cubiertos por las pruebas relacionadas a `save_and_send`, respaldos en la “unidad externa” y el flujo de logs.
+
+13. Instrucciones para CI y automatizaciones
+- Asegúrate de instalar `python-docx` antes de ejecutar `pytest` para que la exportación de Word funcione también en los entornos de integración continua.
+- Conserva como artefactos tanto `*_informe.md` como `*_informe.docx`, ya que las pruebas verifican que ambos se generen y se copien a la carpeta espejo.
