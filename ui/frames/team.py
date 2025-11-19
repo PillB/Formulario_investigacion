@@ -107,7 +107,7 @@ class TeamMemberFrame:
         nombre_ag_entry = ttk.Entry(row3, textvariable=self.nombre_agencia_var, width=25)
         nombre_ag_entry.pack(side="left", padx=5)
         self.tooltip_register(nombre_ag_entry, "Especifica la agencia u oficina de trabajo.")
-        ttk.Label(row3, text="Cdigo agencia:").pack(side="left")
+        ttk.Label(row3, text="Código agencia:").pack(side="left")
         cod_ag_entry = ttk.Entry(row3, textvariable=self.codigo_agencia_var, width=10)
         cod_ag_entry.pack(side="left", padx=5)
         self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
