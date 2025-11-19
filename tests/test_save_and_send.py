@@ -5,6 +5,7 @@ from __future__ import annotations
 import types
 
 import app as app_module
+import settings
 from app import FraudCaseApp
 from tests.test_validation import build_headless_app
 from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
@@ -244,6 +245,7 @@ def test_flush_log_queue_writes_external_when_local_blocked(
     tmp_path,
     monkeypatch,
     external_drive_dir,
+    messagebox_spy,
 ):
     blocked_parent = tmp_path / 'blocked'
     blocked_parent.write_text('file-instead-of-dir', encoding='utf-8')
@@ -272,6 +274,46 @@ def test_flush_log_queue_writes_external_when_local_blocked(
     contents = external_log_path.read_text(encoding='utf-8')
     assert 'solo externo' in contents
     assert not local_log_path.exists()
+    assert messagebox_spy.warnings
+    warning_title, warning_message = messagebox_spy.warnings[-1]
+    assert warning_title == 'Registro no guardado'
+    assert str(local_log_path) in warning_message
+
+
+def test_flush_log_queue_skips_local_when_disabled(
+    tmp_path,
+    monkeypatch,
+    external_drive_dir,
+    messagebox_spy,
+):
+    local_log_path = tmp_path / 'logs.csv'
+    external_log_path = external_drive_dir / 'logs.csv'
+    monkeypatch.setattr(app_module, 'LOGS_FILE', str(local_log_path))
+    monkeypatch.setattr(app_module, 'EXTERNAL_LOGS_FILE', str(external_log_path))
+    monkeypatch.setattr(app_module, 'STORE_LOGS_LOCALLY', False)
+    monkeypatch.setattr(settings, 'STORE_LOGS_LOCALLY', False, raising=False)
+
+    rows = [
+        {
+            'timestamp': '2024-06-02 11:00:00',
+            'tipo': 'navegacion',
+            'mensaje': 'solo externo configurable',
+        }
+    ]
+
+    def fake_drain():
+        nonlocal rows
+        payload, rows = rows, []
+        return payload
+
+    monkeypatch.setattr(app_module, 'drain_log_queue', fake_drain)
+    app = _make_minimal_app()
+    app._flush_log_queue_to_disk()
+    assert external_log_path.is_file()
+    contents = external_log_path.read_text(encoding='utf-8')
+    assert 'solo externo configurable' in contents
+    assert not local_log_path.exists()
+    assert messagebox_spy.warnings == []
 
 
 def test_save_temp_version_writes_external_when_primary_unwritable(

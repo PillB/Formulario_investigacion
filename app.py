@@ -74,7 +74,7 @@ from models import (build_detail_catalog_id_index, iter_massive_csv_rows,
 from settings import (AUTOSAVE_FILE, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       EXPORTS_DIR, EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
-                      FLAG_COLABORADOR_LIST, LOGS_FILE,
+                      FLAG_COLABORADOR_LIST, LOGS_FILE, STORE_LOGS_LOCALLY,
                       MASSIVE_SAMPLE_FILES, NORM_ID_ALIASES, PROCESO_LIST,
                       PRODUCT_ID_ALIASES, RISK_ID_ALIASES, TAXONOMIA,
                       TEAM_ID_ALIASES, TIPO_FALTA_LIST, TIPO_ID_LIST,
@@ -117,7 +117,8 @@ class FraudCaseApp:
         self.validators = []
         self._last_validated_risk_exposure_total = Decimal('0')
         self._log_flush_job_id: Optional[str] = None
-        self._log_file_initialized = bool(LOGS_FILE and os.path.exists(LOGS_FILE))
+        local_log_path = LOGS_FILE if STORE_LOGS_LOCALLY else None
+        self._log_file_initialized = bool(local_log_path and os.path.exists(local_log_path))
         self._external_drive_path = self._prepare_external_drive()
         self._external_log_file_initialized = bool(
             EXTERNAL_LOGS_FILE and os.path.exists(EXTERNAL_LOGS_FILE)
@@ -215,6 +216,16 @@ class FraudCaseApp:
         if self._external_drive_path:
             return Path(self._external_drive_path)
         return None
+
+    def _resolve_external_log_target(self) -> Optional[str]:
+        if not EXTERNAL_LOGS_FILE:
+            return None
+        return EXTERNAL_LOGS_FILE if self._get_external_drive_path() else None
+
+    def _has_log_targets(self) -> bool:
+        if STORE_LOGS_LOCALLY and LOGS_FILE:
+            return True
+        return self._resolve_external_log_target() is not None
 
     def _get_exports_folder(self) -> Optional[Path]:
         base_path = getattr(self, "_export_base_path", None) or EXPORTS_DIR
@@ -3397,7 +3408,7 @@ class FraudCaseApp:
         self.root.destroy()
 
     def _schedule_log_flush(self) -> None:
-        if not LOGS_FILE:
+        if not self._has_log_targets():
             return
         if self._log_flush_job_id is not None:
             return
@@ -3431,30 +3442,37 @@ class FraudCaseApp:
             self._schedule_log_flush()
 
     def _flush_log_queue_to_disk(self) -> None:
+        if not self._has_log_targets():
+            return
         rows = drain_log_queue()
-        if not rows or not LOGS_FILE:
+        if not rows:
             return
         errors = []
-        try:
-            self._append_log_rows(LOGS_FILE, rows, track_attr="_log_file_initialized")
-        except OSError as exc:
-            errors.append((LOGS_FILE, exc))
-        external_path = EXTERNAL_LOGS_FILE if self._get_external_drive_path() else None
+        if STORE_LOGS_LOCALLY and LOGS_FILE:
+            try:
+                self._append_log_rows(
+                    LOGS_FILE,
+                    rows,
+                    track_attr="_log_file_initialized",
+                )
+            except OSError as exc:
+                errors.append((LOGS_FILE, exc))
+        external_path = self._resolve_external_log_target()
         if external_path:
             try:
                 self._append_log_rows(
-                    EXTERNAL_LOGS_FILE,
+                    external_path,
                     rows,
                     track_attr="_external_log_file_initialized",
                 )
             except OSError as exc:
-                errors.append((EXTERNAL_LOGS_FILE, exc))
-        for file_path, exc in errors:
-            log_event(
-                "validacion",
-                f"No se pudo escribir el log en {file_path}: {exc}",
-                self.logs,
-            )
+                errors.append((external_path, exc))
+        if errors:
+            messages = [f"No se pudo escribir el log en {path}: {exc}" for path, exc in errors]
+            for message in messages:
+                log_event("validacion", message, self.logs)
+            if not getattr(self, '_suppress_messagebox', False):
+                messagebox.showwarning("Registro no guardado", "\n".join(messages))
 
     def _append_log_rows(self, file_path: str, rows, *, track_attr: Optional[str] = None) -> None:
         target = Path(file_path)

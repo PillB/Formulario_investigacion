@@ -136,3 +136,8 @@ erDiagram
   PRODUCTS ||--o{ INVOLVEMENT : "asigna colaboradores"
   PRODUCTS ||--o{ PRODUCT_CLAIMS : "origina reclamos"
   PRODUCTS ||--o{ ACCIONADO : "accionado por"
+
+%% Notas de almacenamiento de logs:
+%% - Los eventos del formulario se escriben en `logs.csv` (carpeta local) y se espejan a `external drive/logs.csv`.
+%% - Si `STORE_LOGS_LOCALLY` es `False`, la bitácora sólo se persistirá en la unidad externa y se reportarán advertencias si alg
+%%   uno de los destinos falla.
