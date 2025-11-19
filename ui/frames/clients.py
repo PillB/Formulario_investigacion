@@ -272,14 +272,29 @@ class ClientFrame:
         self.accionado_var.set("; ".join(selections))
 
     def set_accionado_from_text(self, value):
-        self.accionado_var.set(value.strip())
+        raw_value = (value or "").strip()
+        tokens = [item.strip() for item in raw_value.split(';') if item.strip()]
+        valid_tokens = []
+        invalid_tokens = []
+
+        for token in tokens:
+            (valid_tokens if token in ACCIONADO_OPTIONS else invalid_tokens).append(token)
+
         self.accionado_listbox.selection_clear(0, tk.END)
-        if not value:
-            return
-        targets = [item.strip() for item in value.split(';') if item.strip()]
-        for idx, name in enumerate(ACCIONADO_OPTIONS):
-            if name in targets:
-                self.accionado_listbox.selection_set(idx)
+        if valid_tokens:
+            valid_set = set(valid_tokens)
+            for idx, name in enumerate(ACCIONADO_OPTIONS):
+                if name in valid_set:
+                    self.accionado_listbox.selection_set(idx)
+        self.update_accionado_var()
+
+        if invalid_tokens:
+            message = (
+                "Los siguientes valores de 'Accionado' no están en el catálogo y fueron ignorados: "
+                + "; ".join(invalid_tokens)
+            )
+            log_event("validacion", message, self.logs)
+            messagebox.showerror("Valores de Accionado no reconocidos", message)
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el cliente {self.idx+1}?"):
