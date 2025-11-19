@@ -1,5 +1,7 @@
 """UI-level tests for ProductFrame validators."""
 
+from decimal import Decimal
+
 import pytest
 
 from ui.frames import products
@@ -182,3 +184,18 @@ def test_claim_row_requires_name_even_before_save():
     assert error is not None
     assert "nombre" in error.lower()
     assert name_validator.variables and name_validator.variables[0] is claim_row.name_var
+
+
+def test_optional_amount_field_normalizes_blank_value():
+    product = _build_product_frame()
+    product.monto_perdida_var.set("")
+
+    message, decimal_value = product._validate_amount_field(
+        product.monto_perdida_var,
+        "Monto pérdida de fraude",
+        True,
+    )
+
+    assert message is None
+    assert decimal_value == Decimal("0.00")
+    assert product.monto_perdida_var.get() == "0.00"

@@ -933,12 +933,16 @@ class ProductFrame:
 
     def _validate_amount_field(self, var, label, allow_blank):
         raw_value = var.get()
+        stripped = (raw_value or "").strip()
+        if allow_blank and not stripped:
+            var.set("0.00")
+            return None, Decimal("0.00")
         message, decimal_value, normalized_text = validate_money_bounds(
             raw_value,
             label,
             allow_blank=allow_blank,
         )
-        if not message and normalized_text != (raw_value or "").strip():
+        if not message and normalized_text != stripped:
             var.set(normalized_text)
         return message, decimal_value
 
@@ -998,27 +1002,29 @@ class ProductFrame:
         return None
 
     def get_data(self):
+        producto_data = {
+            "id_producto": self.id_var.get().strip(),
+            "id_caso": "",
+            "id_cliente": self.client_var.get().strip(),
+            "categoria1": self.cat1_var.get(),
+            "categoria2": self.cat2_var.get(),
+            "modalidad": self.mod_var.get(),
+            "canal": self.canal_var.get(),
+            "proceso": self.proceso_var.get(),
+            "fecha_ocurrencia": self.fecha_oc_var.get().strip(),
+            "fecha_descubrimiento": self.fecha_desc_var.get().strip(),
+            "monto_investigado": self.monto_inv_var.get().strip(),
+            "tipo_moneda": self.moneda_var.get(),
+            "monto_perdida_fraude": self.monto_perdida_var.get().strip(),
+            "monto_falla_procesos": self.monto_falla_var.get().strip(),
+            "monto_contingencia": self.monto_cont_var.get().strip(),
+            "monto_recuperado": self.monto_rec_var.get().strip(),
+            "monto_pago_deuda": self.monto_pago_var.get().strip(),
+            "tipo_producto": self.tipo_prod_var.get(),
+        }
+        self._normalize_optional_amount_strings(producto_data)
         return {
-            "producto": {
-                "id_producto": self.id_var.get().strip(),
-                "id_caso": "",
-                "id_cliente": self.client_var.get().strip(),
-                "categoria1": self.cat1_var.get(),
-                "categoria2": self.cat2_var.get(),
-                "modalidad": self.mod_var.get(),
-                "canal": self.canal_var.get(),
-                "proceso": self.proceso_var.get(),
-                "fecha_ocurrencia": self.fecha_oc_var.get().strip(),
-                "fecha_descubrimiento": self.fecha_desc_var.get().strip(),
-                "monto_investigado": self.monto_inv_var.get().strip(),
-                "tipo_moneda": self.moneda_var.get(),
-                "monto_perdida_fraude": self.monto_perdida_var.get().strip(),
-                "monto_falla_procesos": self.monto_falla_var.get().strip(),
-                "monto_contingencia": self.monto_cont_var.get().strip(),
-                "monto_recuperado": self.monto_rec_var.get().strip(),
-                "monto_pago_deuda": self.monto_pago_var.get().strip(),
-                "tipo_producto": self.tipo_prod_var.get(),
-            },
+            "producto": producto_data,
             "reclamos": [claim.get_data() for claim in self.claims],
             "asignaciones": [
                 data
@@ -1026,6 +1032,16 @@ class ProductFrame:
                 if any(data.values())
             ],
         }
+
+    def _normalize_optional_amount_strings(self, producto_data):
+        for field_name, var_attr, _label, allow_blank, _ in PRODUCT_MONEY_SPECS:
+            if not allow_blank:
+                continue
+            current_value = (producto_data.get(field_name) or "").strip()
+            if current_value:
+                continue
+            producto_data[field_name] = "0.00"
+            getattr(self, var_attr).set("0.00")
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el producto {self.idx+1}?"):
