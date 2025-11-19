@@ -2568,17 +2568,42 @@ class FraudCaseApp:
     def _normalize_identifier(identifier):
         return (identifier or '').strip()
 
+    @staticmethod
+    def _frame_entity_label(frame):
+        label = getattr(frame, 'ENTITY_LABEL', '')
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+        return 'registro'
+
     def _update_frame_id_index(self, index, frame, previous_id, new_id):
         if index is None:
             return
         previous = self._normalize_identifier(previous_id)
         new = self._normalize_identifier(new_id)
-        if previous and index.get(previous) is frame:
-            index.pop(previous, None)
-        else:
-            for key, value in list(index.items()):
-                if value is frame and key != new:
-                    index.pop(key, None)
+        existing = index.get(new)
+        if new and existing is not None and existing is not frame:
+            restore_value = previous_id if isinstance(previous_id, str) else (previous_id or '')
+            if not isinstance(restore_value, str):
+                restore_value = str(restore_value)
+            if hasattr(frame, 'id_var') and hasattr(frame.id_var, 'set'):
+                frame.id_var.set(restore_value)
+            if hasattr(frame, '_last_tracked_id'):
+                frame._last_tracked_id = previous
+            entity_label = self._frame_entity_label(frame)
+            message = (
+                f"El ID '{new}' ya está asignado a otro {entity_label}. "
+                f"Cada {entity_label} debe tener un ID único."
+            )
+            log_event('validacion', message, self.logs)
+            if not getattr(self, '_suppress_messagebox', False):
+                try:
+                    messagebox.showerror('ID duplicado', message)
+                except tk.TclError:
+                    pass
+            return
+        for key, value in list(index.items()):
+            if value is frame and key != new:
+                index.pop(key, None)
         if hasattr(frame, '_last_tracked_id'):
             frame._last_tracked_id = new
         if not new:
@@ -3877,7 +3902,7 @@ class FraudCaseApp:
                 f"El proceso del caso '{proceso_value}' no está en el catálogo CM."
             )
         # Validar IDs de clientes
-        seen_client_ids = set()
+        client_id_occurrences = {}
         for idx, cframe in enumerate(self.client_frames, start=1):
             tipo_id_value = (cframe.tipo_id_var.get() or "").strip()
             tipo_message = validate_required_text(tipo_id_value, "el tipo de ID del cliente")
@@ -3893,11 +3918,8 @@ class FraudCaseApp:
                     message = validate_client_id(tipo_id_value, client_id_value)
                     if message:
                         errors.append(f"Cliente {idx}: {message}")
-                    elif client_id_value:
-                        if client_id_value in seen_client_ids:
-                            errors.append(f"Cliente duplicado: {client_id_value}")
-                            continue
-                        seen_client_ids.add(client_id_value)
+                    if client_id_value:
+                        client_id_occurrences.setdefault(client_id_value, []).append(idx)
 
             flag_var = getattr(cframe, "flag_var", None)
             if flag_var is not None:
@@ -3941,23 +3963,29 @@ class FraudCaseApp:
                 )
                 if accionado_message:
                     errors.append(f"Cliente {idx}: {accionado_message}")
+        for client_id_value, positions in client_id_occurrences.items():
+            if len(positions) > 1:
+                formatted_positions = ", ".join(str(pos) for pos in positions)
+                errors.append(
+                    (
+                        f"El ID de cliente {client_id_value} está duplicado en los clientes {formatted_positions}. "
+                        "Cada cliente debe tener un ID único."
+                    )
+                )
         # Validar duplicidad del key técnico (caso, producto, cliente, colaborador, fecha ocurrencia, reclamo)
         key_set = set()
         product_client_map = {}
         total_investigado = Decimal('0')
         total_componentes = Decimal('0')
         normalized_amounts = []
-        seen_team_ids = set()
+        team_id_occurrences = {}
         for idx, tm in enumerate(self.team_frames, start=1):
             team_id_value = (tm.id_var.get() or "").strip()
             tm_id_message = validate_team_member_id(team_id_value)
             if tm_id_message:
                 errors.append(f"Colaborador {idx}: {tm_id_message}")
-            elif team_id_value:
-                if team_id_value in seen_team_ids:
-                    errors.append(f"Colaborador duplicado: {team_id_value}")
-                    continue
-                seen_team_ids.add(team_id_value)
+            if team_id_value:
+                team_id_occurrences.setdefault(team_id_value, []).append(idx)
             agency_message = validate_agency_code(tm.codigo_agencia_var.get(), allow_blank=True)
             if agency_message:
                 errors.append(f"Colaborador {idx}: {agency_message}")
@@ -3983,6 +4011,15 @@ class FraudCaseApp:
                 TIPO_SANCION_LIST,
                 idx,
             )
+        for collaborator_id, positions in team_id_occurrences.items():
+            if len(positions) > 1:
+                formatted_positions = ", ".join(str(pos) for pos in positions)
+                errors.append(
+                    (
+                        f"El ID de colaborador {collaborator_id} está duplicado en los colaboradores {formatted_positions}. "
+                        "Cada colaborador debe tener un ID único."
+                    )
+                )
             division = tm.division_var.get().strip().lower()
             area = tm.area_var.get().strip().lower()
             division_norm = division.replace('á', 'a').replace('é', 'e').replace('ó', 'o')

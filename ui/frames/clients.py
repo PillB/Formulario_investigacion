@@ -15,6 +15,8 @@ from validators import (FieldValidator, log_event, should_autofill_field,
 class ClientFrame:
     """Representa un cliente y su interfaz dentro de la sección de clientes."""
 
+    ENTITY_LABEL = "cliente"
+
     def __init__(
         self,
         parent,
