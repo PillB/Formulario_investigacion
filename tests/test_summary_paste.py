@@ -4,7 +4,7 @@ from settings import (ACCIONADO_OPTIONS, CRITICIDAD_LIST, FLAG_CLIENTE_LIST,
                       TIPO_ID_LIST, TIPO_SANCION_LIST)
 from tests.app_factory import SummaryTableStub, build_summary_app
 from tests.stubs import NormFrameStub, RiskFrameStub
-from tests.summary_cases import SUMMARY_CASES
+from tests.summary_cases import SUMMARY_CASES, build_columns
 
 
 @pytest.mark.parametrize("case", SUMMARY_CASES, ids=lambda case: case.key)
@@ -37,6 +37,32 @@ def test_handle_summary_paste_rejects_invalid_rows(monkeypatch, messagebox_spy, 
         for _title, message in messagebox_spy.errors
     )
     assert case.state_getter(app) == []
+
+
+def test_handle_summary_paste_requires_client_contact_info(monkeypatch, messagebox_spy):
+    app = build_summary_app(monkeypatch)
+    app.summary_tables["clientes"] = SummaryTableStub()
+    app.summary_config["clientes"] = build_columns(7)
+    empty_contact_row = [
+        "12345678",
+        TIPO_ID_LIST[0],
+        FLAG_CLIENTE_LIST[0],
+        "",
+        "",
+        "Av. Principal 123",
+        ACCIONADO_OPTIONS[0],
+    ]
+    app.clipboard_get = lambda row=empty_contact_row: "\t".join(row)
+
+    result = app._handle_summary_paste("clientes")
+
+    assert result == "break"
+    assert not app.client_frames
+    assert messagebox_spy.errors
+    assert any(
+        "Debe ingresar los teléfonos del cliente." in (message or "")
+        for _title, message in messagebox_spy.errors
+    )
 
 
 def test_ingest_summary_rows_create_frames_with_normalized_values(monkeypatch, messagebox_spy):
