@@ -65,6 +65,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
+try:  # pragma: no cover - la dependencia puede no estar disponible en tiempo de pruebas
+    from docx import Document  # type: ignore
+except ImportError:  # pragma: no cover - manejado durante la ejecución
+    Document = None
+
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -4396,24 +4401,195 @@ class FraudCaseApp:
     # ---------------------------------------------------------------------
     # Exportación de datos
 
-    def build_markdown_report(self, data):
-        """Genera el informe solicitado en formato Markdown."""
-
+    def _prepare_report_context(self, data):
         case = data['caso']
-        analysis = data['analisis']
-        clients = data['clientes']
-        team = data['colaboradores']
-        products = data['productos']
-        riesgos = data['riesgos']
-        normas = data['normas']
+        analysis = data.get('analisis', {})
+        clients = data.get('clientes', [])
+        team = data.get('colaboradores', [])
+        products = data.get('productos', [])
+        riesgos = data.get('riesgos', [])
+        normas = data.get('normas', [])
+        reclamos = data.get('reclamos', [])
         total_inv = sum((parse_decimal_amount(p.get('monto_investigado')) or Decimal('0')) for p in products)
         destinatarios = sorted({
-            " - ".join(filter(None, [col.get('division', '').strip(), col.get('area', '').strip(), col.get('servicio', '').strip()]))
+            " - ".join(
+                filter(
+                    None,
+                    [
+                        col.get('division', '').strip(),
+                        col.get('area', '').strip(),
+                        col.get('servicio', '').strip(),
+                    ],
+                )
+            )
             for col in team
             if any([col.get('division'), col.get('area'), col.get('servicio')])
         })
         destinatarios = [d for d in destinatarios if d]
         destinatarios_text = ", ".join(destinatarios) if destinatarios else "Sin divisiones registradas"
+
+        reclamos_por_producto = {}
+        for record in reclamos:
+            pid = record.get('id_producto')
+            if not pid:
+                continue
+            reclamos_por_producto.setdefault(pid, []).append(record)
+
+        client_headers = [
+            "Cliente",
+            "Tipo ID",
+            "ID",
+            "Flag",
+            "Teléfonos",
+            "Correos",
+            "Direcciones",
+            "Accionado",
+        ]
+        client_rows = [
+            [
+                f"Cliente {idx}",
+                client.get('tipo_id', ''),
+                client.get('id_cliente', ''),
+                client.get('flag', ''),
+                client.get('telefonos', ''),
+                client.get('correos', ''),
+                client.get('direcciones', ''),
+                client.get('accionado', ''),
+            ]
+            for idx, client in enumerate(clients, start=1)
+        ]
+
+        team_headers = [
+            "Colaborador",
+            "ID",
+            "Flag",
+            "División",
+            "Área",
+            "Servicio",
+            "Puesto",
+            "Agencia",
+            "Código",
+            "Falta",
+            "Sanción",
+        ]
+        team_rows = [
+            [
+                f"Colaborador {idx}",
+                col.get('id_colaborador', ''),
+                col.get('flag', ''),
+                col.get('division', ''),
+                col.get('area', ''),
+                col.get('servicio', ''),
+                col.get('puesto', ''),
+                col.get('nombre_agencia', ''),
+                col.get('codigo_agencia', ''),
+                col.get('tipo_falta', ''),
+                col.get('tipo_sancion', ''),
+            ]
+            for idx, col in enumerate(team, start=1)
+        ]
+
+        product_headers = [
+            "Registro",
+            "ID",
+            "Cliente",
+            "Tipo",
+            "Canal",
+            "Proceso",
+            "Cat.1",
+            "Cat.2",
+            "Modalidad",
+            "Montos",
+            "Reclamo/Analítica",
+        ]
+        product_rows = []
+        for idx, prod in enumerate(products, start=1):
+            claim_values = reclamos_por_producto.get(prod.get('id_producto'), [])
+            claims_text = "; ".join(
+                f"{rec.get('id_reclamo', '')} / {rec.get('codigo_analitica', '')}" for rec in claim_values
+            )
+            product_rows.append(
+                [
+                    f"Producto {idx}",
+                    prod.get('id_producto', ''),
+                    prod.get('id_cliente', ''),
+                    prod.get('tipo_producto', ''),
+                    prod.get('canal', ''),
+                    prod.get('proceso', ''),
+                    prod.get('categoria1', ''),
+                    prod.get('categoria2', ''),
+                    prod.get('modalidad', ''),
+                    (
+                        f"INV:{prod.get('monto_investigado', '')} | PER:{prod.get('monto_perdida_fraude', '')} | "
+                        f"FALLA:{prod.get('monto_falla_procesos', '')} | CONT:{prod.get('monto_contingencia', '')} | "
+                        f"REC:{prod.get('monto_recuperado', '')} | PAGO:{prod.get('monto_pago_deuda', '')}"
+                    ),
+                    claims_text,
+                ]
+            )
+
+        risk_headers = ["ID Riesgo", "Líder", "Criticidad", "Exposición US$", "Planes"]
+        risk_rows = [
+            [
+                risk.get('id_riesgo', ''),
+                risk.get('lider', ''),
+                risk.get('criticidad', ''),
+                risk.get('exposicion_residual', ''),
+                risk.get('planes_accion', ''),
+            ]
+            for risk in riesgos
+        ]
+
+        norm_headers = ["N° de norma", "Descripción", "Fecha de vigencia"]
+        norm_rows = [
+            [
+                norm.get('id_norma', ''),
+                norm.get('descripcion', ''),
+                norm.get('fecha_vigencia', ''),
+            ]
+            for norm in normas
+        ]
+
+        summary_text = (
+            f"Se documentaron {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos. "
+            f"El caso está tipificado como {case.get('categoria1', '')} / {case.get('categoria2', '')} "
+            f"en modalidad {case.get('modalidad', '')}."
+        )
+
+        return {
+            'case': case,
+            'analysis': analysis,
+            'clients': clients,
+            'team': team,
+            'products': products,
+            'riesgos': riesgos,
+            'normas': normas,
+            'total_inv': total_inv,
+            'destinatarios_text': destinatarios_text,
+            'client_headers': client_headers,
+            'client_rows': client_rows,
+            'team_headers': team_headers,
+            'team_rows': team_rows,
+            'product_headers': product_headers,
+            'product_rows': product_rows,
+            'risk_headers': risk_headers,
+            'risk_rows': risk_rows,
+            'norm_headers': norm_headers,
+            'norm_rows': norm_rows,
+            'summary_text': summary_text,
+        }
+
+    def build_markdown_report(self, data):
+        """Genera el informe solicitado en formato Markdown."""
+
+        context = self._prepare_report_context(data)
+        case = context['case']
+        analysis = context['analysis']
+        clients = context['clients']
+        team = context['team']
+        products = context['products']
+        total_inv = context['total_inv']
+        destinatarios_text = context['destinatarios_text']
 
         def md_table(headers, rows):
             if not rows:
@@ -4423,13 +4599,6 @@ class FraudCaseApp:
             for row in rows:
                 lines.append("| " + " | ".join(safe(col) for col in row) + " |")
             return lines
-
-        reclamos_por_producto = {}
-        for record in data['reclamos']:
-            pid = record.get('id_producto')
-            if not pid:
-                continue
-            reclamos_por_producto.setdefault(pid, []).append(record)
 
         lines = [
             "Banco de Crédito - BCP",
@@ -4448,79 +4617,21 @@ class FraudCaseApp:
             "",
             "## 2. Tabla de clientes",
         ]
-        client_rows = [
-            [
-                f"Cliente {idx}",
-                client.get('tipo_id', ''),
-                client.get('id_cliente', ''),
-                client.get('flag', ''),
-                client.get('telefonos', ''),
-                client.get('correos', ''),
-                client.get('direcciones', ''),
-                client.get('accionado', ''),
-            ]
-            for idx, client in enumerate(clients, start=1)
-        ]
-        lines.extend(md_table([
-            "Cliente", "Tipo ID", "ID", "Flag", "Teléfonos", "Correos", "Direcciones", "Accionado"
-        ], client_rows))
+        lines.extend(md_table(context['client_headers'], context['client_rows']))
         lines.extend([
             "",
             "## 3. Tabla de team members involucrados",
         ])
-        team_rows = [
-            [
-                f"Colaborador {idx}",
-                col.get('id_colaborador', ''),
-                col.get('flag', ''),
-                col.get('division', ''),
-                col.get('area', ''),
-                col.get('servicio', ''),
-                col.get('puesto', ''),
-                col.get('nombre_agencia', ''),
-                col.get('codigo_agencia', ''),
-                col.get('tipo_falta', ''),
-                col.get('tipo_sancion', ''),
-            ]
-            for idx, col in enumerate(team, start=1)
-        ]
-        lines.extend(md_table([
-            "Colaborador", "ID", "Flag", "División", "Área", "Servicio", "Puesto", "Agencia", "Código", "Falta", "Sanción"
-        ], team_rows))
+        lines.extend(md_table(context['team_headers'], context['team_rows']))
         lines.extend([
             "",
             "## 4. Tabla de productos combinado",
         ])
-        product_rows = []
-        for idx, prod in enumerate(products, start=1):
-            claim_values = reclamos_por_producto.get(prod['id_producto'], [])
-            claims_text = "; ".join(
-                f"{rec.get('id_reclamo', '')} / {rec.get('codigo_analitica', '')}"
-                for rec in claim_values
-            )
-            product_rows.append([
-                f"Producto {idx}",
-                prod.get('id_producto', ''),
-                prod.get('id_cliente', ''),
-                prod.get('tipo_producto', ''),
-                prod.get('canal', ''),
-                prod.get('proceso', ''),
-                prod.get('categoria1', ''),
-                prod.get('categoria2', ''),
-                prod.get('modalidad', ''),
-                f"INV:{prod.get('monto_investigado', '')} | PER:{prod.get('monto_perdida_fraude', '')} | FALLA:{prod.get('monto_falla_procesos', '')} | CONT:{prod.get('monto_contingencia', '')} | REC:{prod.get('monto_recuperado', '')} | PAGO:{prod.get('monto_pago_deuda', '')}",
-                claims_text,
-            ])
-        lines.extend(md_table([
-            "Registro", "ID", "Cliente", "Tipo", "Canal", "Proceso", "Cat.1", "Cat.2", "Modalidad", "Montos", "Reclamo/Analítica"
-        ], product_rows))
+        lines.extend(md_table(context['product_headers'], context['product_rows']))
         lines.extend([
             "",
             "## 5. Resumen automatizado",
-            (
-                f"Se documentaron {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos. "
-                f"El caso está tipificado como {case['categoria1']} / {case['categoria2']} en modalidad {case['modalidad']}."
-            ),
+            context['summary_text'],
             "",
             "## 6. Modus Operandi",
             analysis.get('modus_operandi') or "Pendiente",
@@ -4533,34 +4644,12 @@ class FraudCaseApp:
             "",
             "## 9. Tabla de riesgos identificados",
         ])
-        risk_rows = [
-            [
-                risk.get('id_riesgo', ''),
-                risk.get('lider', ''),
-                risk.get('criticidad', ''),
-                risk.get('exposicion_residual', ''),
-                risk.get('planes_accion', ''),
-            ]
-            for risk in riesgos
-        ]
-        lines.extend(md_table([
-            "ID Riesgo", "Líder", "Criticidad", "Exposición US$", "Planes"
-        ], risk_rows))
+        lines.extend(md_table(context['risk_headers'], context['risk_rows']))
         lines.extend([
             "",
             "## 10. Tabla de normas transgredidas",
         ])
-        norm_rows = [
-            [
-                norm.get('id_norma', ''),
-                norm.get('descripcion', ''),
-                norm.get('fecha_vigencia', ''),
-            ]
-            for norm in normas
-        ]
-        lines.extend(md_table([
-            "N° de norma", "Descripción", "Fecha de vigencia"
-        ], norm_rows))
+        lines.extend(md_table(context['norm_headers'], context['norm_rows']))
         lines.extend([
             "",
             "## 11. Conclusiones",
@@ -4571,6 +4660,80 @@ class FraudCaseApp:
             "",
         ])
         return "\n".join(lines)
+
+    def build_word_report(self, data, output_path: str) -> str:
+        """Genera el informe en formato Word utilizando ``python-docx``."""
+
+        if Document is None:
+            raise ModuleNotFoundError(
+                "python-docx no está disponible para generar documentos Word"
+            )
+
+        context = self._prepare_report_context(data)
+        case = context['case']
+        analysis = context['analysis']
+
+        doc = Document()
+        doc.add_paragraph("Banco de Crédito - BCP")
+        doc.add_paragraph("SEGURIDAD CORPORATIVA, INVESTIGACIONES & CRIMEN CIBERNÉTICO")
+        doc.add_paragraph("INVESTIGACIONES & CIBERCRIMINOLOGÍA")
+        doc.add_paragraph(f"Informe {case.get('tipo_informe', '')} N.{case.get('id_caso', '')}")
+        doc.add_paragraph(f"Dirigido a: {context['destinatarios_text']}")
+        doc.add_paragraph(
+            (
+                f"Referencia: {len(context['team'])} colaboradores investigados, "
+                f"{len(context['products'])} productos afectados, monto investigado total {context['total_inv']:.2f} "
+                f"y modalidad {case.get('modalidad', '')}."
+            )
+        )
+        doc.add_paragraph("")
+
+        def add_section(title, body_text):
+            doc.add_heading(title, level=1)
+            doc.add_paragraph(body_text or "Pendiente")
+            doc.add_paragraph("")
+
+        def add_table_section(title, headers, rows):
+            doc.add_heading(title, level=1)
+            if not rows:
+                doc.add_paragraph("Sin registros.")
+            else:
+                doc.add_paragraph(" | ".join(headers))
+                for row in rows:
+                    doc.add_paragraph(" | ".join(str(col or '') for col in row))
+            doc.add_paragraph("")
+
+        add_section("1. Antecedentes", analysis.get('antecedentes'))
+        add_table_section("2. Tabla de clientes", context['client_headers'], context['client_rows'])
+        add_table_section(
+            "3. Tabla de team members involucrados",
+            context['team_headers'],
+            context['team_rows'],
+        )
+        add_table_section(
+            "4. Tabla de productos combinado",
+            context['product_headers'],
+            context['product_rows'],
+        )
+        add_section("5. Resumen automatizado", context['summary_text'])
+        add_section("6. Modus Operandi", analysis.get('modus_operandi'))
+        add_section("7. Hallazgos Principales", analysis.get('hallazgos'))
+        add_section("8. Descargo de colaboradores", analysis.get('descargos'))
+        add_table_section(
+            "9. Tabla de riesgos identificados",
+            context['risk_headers'],
+            context['risk_rows'],
+        )
+        add_table_section(
+            "10. Tabla de normas transgredidas",
+            context['norm_headers'],
+            context['norm_rows'],
+        )
+        add_section("11. Conclusiones", analysis.get('conclusiones'))
+        add_section("12. Recomendaciones y mejoras de procesos", analysis.get('recomendaciones'))
+
+        doc.save(output_path)
+        return output_path
 
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta elegida."""
@@ -4649,10 +4812,36 @@ class FraudCaseApp:
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(self.build_markdown_report(data))
         created_files.append(report_path)
+        docx_created = False
+        docx_path = os.path.join(folder, f"{case_id}_informe.docx")
+        try:
+            self.build_word_report(data, docx_path)
+        except ModuleNotFoundError:
+            message = (
+                "No se pudo generar el informe Word porque falta la librería python-docx."
+            )
+            log_event("validacion", message, self.logs)
+            if not getattr(self, '_suppress_messagebox', False):
+                messagebox.showerror("Generación de Word", message)
+        except Exception as exc:  # pragma: no cover - errores inesperados
+            message = f"No se pudo generar el informe Word: {exc}"
+            log_event("validacion", message, self.logs)
+            if not getattr(self, '_suppress_messagebox', False):
+                messagebox.showerror("Generación de Word", message)
+        else:
+            created_files.append(docx_path)
+            docx_created = True
         self._mirror_exports_to_external_drive(created_files, case_id)
+        report_formats = [f"{case_id}_informe.md"]
+        if docx_created:
+            report_formats.append(f"{case_id}_informe.docx")
         messagebox.showinfo(
             "Datos guardados",
-            f"Los archivos se han guardado como {case_id}_*.csv, {case_id}_version.json y {case_id}_informe.md.",
+            (
+                f"Los archivos se han guardado como {case_id}_*.csv, {case_id}_version.json y "
+                + " y ".join(report_formats)
+                + "."
+            ),
         )
         log_event("navegacion", "Datos guardados y enviados", self.logs)
         self.flush_logs_now()

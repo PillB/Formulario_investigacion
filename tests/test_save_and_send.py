@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import types
+import zipfile
+from xml.sax.saxutils import escape
 
 import app as app_module
 from app import FraudCaseApp
@@ -23,6 +25,70 @@ class SimpleVar:
 
 def _build_dummy_frame():
     return types.SimpleNamespace(frame=types.SimpleNamespace(destroy=lambda: None))
+
+
+class _SimpleDocxDocument:
+    """Implementación mínima de ``Document`` para entornos sin python-docx."""
+
+    _CONTENT_TYPES = (
+        "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>"
+        "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'>"
+        "<Default Extension='rels' ContentType='application/vnd.openxmlformats-package.relationships+xml'/>"
+        "<Default Extension='xml' ContentType='application/xml'/>"
+        "<Override PartName='/word/document.xml' "
+        "ContentType='application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml'/>"
+        "</Types>"
+    )
+    _RELS = (
+        "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>"
+        "<Relationships xmlns='http://schemas.openxmlformats.org/package/2006/relationships'>"
+        "<Relationship Id='rId1' "
+        "Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument' "
+        "Target='word/document.xml'/>"
+        "</Relationships>"
+    )
+
+    def __init__(self):
+        self.blocks: list[tuple[str, str]] = []
+
+    def add_paragraph(self, text: str = ""):
+        self.blocks.append(('p', text or ''))
+        return types.SimpleNamespace(text=text)
+
+    def add_heading(self, text: str = "", level: int = 1):
+        self.blocks.append((f'h{level}', text or ''))
+        return types.SimpleNamespace(text=text)
+
+    def save(self, path):
+        xml_blocks = []
+        for kind, text in self.blocks:
+            if not text:
+                xml_blocks.append("<w:p/>")
+                continue
+            escaped = escape(text)
+            if kind.startswith('h'):
+                level = kind[1:]
+                xml_blocks.append(
+                    "<w:p><w:pPr><w:pStyle w:val='Heading{}'/></w:pPr><w:r><w:t>{}</w:t></w:r></w:p>".format(
+                        level, escaped
+                    )
+                )
+            else:
+                xml_blocks.append(f"<w:p><w:r><w:t>{escaped}</w:t></w:r></w:p>")
+        body = ''.join(xml_blocks) + '<w:sectPr/>'
+        document_xml = (
+            "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>"
+            "<w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>"
+            f"<w:body>{body}</w:body></w:document>"
+        )
+        with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('[Content_Types].xml', self._CONTENT_TYPES)
+            zf.writestr('_rels/.rels', self._RELS)
+            zf.writestr('word/document.xml', document_xml)
+
+
+def _enable_fake_docx(monkeypatch):
+    monkeypatch.setattr(app_module, 'Document', _SimpleDocxDocument)
 
 
 def _build_case_data(case_id: str) -> dict:
@@ -105,6 +171,7 @@ def _make_minimal_app():
 
 
 def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy):
+    _enable_fake_docx(monkeypatch)
     export_dir = tmp_path / 'exports'
     export_dir.mkdir()
     monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
@@ -172,6 +239,7 @@ def test_save_and_send_reports_catalog_errors_once(monkeypatch, messagebox_spy):
 
 
 def test_save_and_send_mirrors_exports_to_external_drive(tmp_path, monkeypatch, messagebox_spy):
+    _enable_fake_docx(monkeypatch)
     export_dir = tmp_path / 'exports'
     export_dir.mkdir()
     mirror_dir = tmp_path / 'external drive'
@@ -192,6 +260,7 @@ def test_save_and_send_mirrors_exports_to_external_drive(tmp_path, monkeypatch, 
 
 
 def test_save_and_send_warns_when_external_copy_fails(tmp_path, monkeypatch, messagebox_spy):
+    _enable_fake_docx(monkeypatch)
     export_dir = tmp_path / 'exports'
     export_dir.mkdir()
     mirror_dir = tmp_path / 'external drive'
@@ -233,3 +302,50 @@ def test_save_temp_version_mirrors_to_external_drive(tmp_path, monkeypatch):
     assert len(after_files) == 1
     mirrored = mirror_dir / after_files[0].name
     assert mirrored.is_file()
+
+
+def _read_document_xml(path):
+    with zipfile.ZipFile(path) as zf:
+        return zf.read('word/document.xml').decode('utf-8')
+
+
+def test_save_and_send_generates_docx_and_mirrors_when_library_available(
+    tmp_path, monkeypatch, messagebox_spy
+):
+    _enable_fake_docx(monkeypatch)
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+    mirror_dir = tmp_path / 'external drive'
+
+    def fake_ensure():
+        mirror_dir.mkdir(parents=True, exist_ok=True)
+        return mirror_dir
+
+    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', fake_ensure)
+    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
+    app = _make_minimal_app()
+    app._current_case_data = _build_case_data('2024-7777')
+    app.save_and_send()
+
+    doc_path = export_dir / '2024-7777_informe.docx'
+    assert doc_path.is_file()
+    xml = _read_document_xml(doc_path)
+    assert 'Informe' in xml
+    assert 'Tabla de clientes' in xml
+
+    case_folder = mirror_dir / '2024-7777'
+    assert (case_folder / '2024-7777_informe.docx').is_file()
+    assert any('Datos guardados' in title for title, _ in messagebox_spy.infos)
+
+
+def test_save_and_send_reports_missing_docx_dependency(tmp_path, monkeypatch, messagebox_spy):
+    monkeypatch.setattr(app_module, 'Document', None)
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
+    app = _make_minimal_app()
+    app._current_case_data = _build_case_data('2024-0003')
+    app.save_and_send()
+    assert messagebox_spy.errors
+    assert any('python-docx' in message for _, message in messagebox_spy.errors)
+    assert any('python-docx' in log['mensaje'] for log in app.logs)
