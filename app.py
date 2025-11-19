@@ -3475,16 +3475,9 @@ class FraudCaseApp:
         warnings = []
 
         def _report_catalog_error(message):
+            """Acumula los errores de catálogo para notificarlos en bloque."""
+
             errors.append(message)
-            if getattr(self, "_suppress_messagebox", False):
-                return
-            target_root = getattr(self, "root", None) or tk._default_root
-            if not target_root:
-                return
-            try:
-                messagebox.showerror("Valor fuera de catálogo", message)
-            except Exception:
-                pass
 
         def _validate_product_catalog_field(value, label, catalog, catalog_label, product_label):
             text = (value or '').strip()
