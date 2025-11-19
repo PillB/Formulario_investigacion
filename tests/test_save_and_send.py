@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import types
+import zipfile
 
 import app as app_module
 import settings
@@ -197,11 +198,30 @@ def test_save_and_send_mirrors_exports_to_external_drive(
         f'{case_id}_casos.csv',
         f'{case_id}_version.json',
         f'{case_id}_informe.md',
+        f'{case_id}_informe.docx',
         f'{case_id}_logs.csv',
     }
     mirrored_files = {path.name for path in case_folder.iterdir() if path.is_file()}
     assert expected_suffixes.issubset(mirrored_files)
     assert messagebox_spy.warnings == []
+
+
+def test_save_and_send_generates_word_report(tmp_path, messagebox_spy):
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+
+    app = _make_minimal_app()
+    app._export_base_path = export_dir
+    app._current_case_data = _build_case_data('2024-9100')
+    app.save_and_send()
+
+    docx_path = export_dir / '2024-9100_informe.docx'
+    assert docx_path.is_file()
+    with zipfile.ZipFile(docx_path) as bundle:
+        xml_data = bundle.read('word/document.xml').decode('utf-8')
+    assert '1. Antecedentes' in xml_data
+    assert 'Tabla de clientes' in xml_data
+    assert 'Tabla de productos combinado' in xml_data
 
 
 def test_save_and_send_warns_when_external_copy_fails(tmp_path, monkeypatch, messagebox_spy):
