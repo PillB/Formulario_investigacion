@@ -1,4 +1,99 @@
-Manual de Uso y Pruebas – Aplicación de Gestión de Casos de Fraude (Tkinter)
+# Gestión de Casos de Fraude (Aplicación de Escritorio Tkinter)
+
+Una aplicación de escritorio para gestionar casos de investigación de fraude. Permite crear un caso con sus clientes, productos, colaboradores, riesgos identificados, normas violadas y narrativas de análisis. Soporta ingreso dinámico de datos, validación de campos, importación masiva desde CSV, guardado automático, y exportación de datos a formatos CSV/JSON/Word/Markdown.
+
+## Características
+
+- **Datos del Caso:** Número de caso, tipo de informe, categorías de fraude, canal, proceso afectado.
+- **Clientes y Colaboradores:** Agregar múltiples participantes, con autocompletado si el ID existe en CSV de referencia (`client_details.csv`, `team_details.csv`).
+- **Productos:** Asociar productos a clientes, con fechas, montos investigados, distribución de pérdida, e información de reclamos.
+- **Riesgos y Normas:** Ingresar múltiples riesgos y normas violadas con validación de formatos de ID.
+- **Análisis Narrativo:** Secciones de texto libre para antecedentes, modus operandi, hallazgos, descargos, conclusiones y recomendaciones.
+- **Importaciones:** Cargar desde CSV múltiples registros de clientes, colaboradores, productos, riesgos, normas y reclamos.
+- **Validación y Bitácora:** Validación en tiempo real. Registro de acciones en `logs.csv`.
+- **Autoguardado y Versiones:** Guardado automático en `autosave.json`. Cargar versiones desde la pestaña *Acciones*.
+- **Exportación y Backup:** Botón *Guardar y enviar* exporta CSV, JSON, Markdown y Word en `exports/` y `external drive/<id_caso>/`.
+
+## Instalación
+
+1. **Requisitos:** Python 3.7 o superior.
+2. **Instalar `python-docx`:**
+   ```bash
+   pip install python-docx
+   ```
+3. **Estructura del Proyecto:** Asegúrese de incluir CSVs de muestra (`client_details.csv`, `*_masivos.csv`, etc.).
+4. **Carpeta de respaldo:** Se creará automáticamente `external drive/` para respaldos.
+
+## Ejecución Rápida
+
+```bash
+python -m main
+```
+
+Para comenzar un nuevo caso, use **Acciones → Borrar todos los datos**.
+
+## Guía de Usuario
+
+### 1. Caso y Participantes
+- Completar los datos generales del caso.
+- Agregar clientes y colaboradores.
+- Agregar productos asociados a los clientes, con montos, fechas y reclamos.
+
+### 2. Riesgos
+- Añadir riesgos (ID tipo `RSK-XXXXXX`), criticidad, exposición y planes de acción.
+
+### 3. Normas
+- Añadir normas violadas (ID tipo `XXXX.XXX.XX.XX` o autogenerado), descripción y vigencia.
+
+### 4. Análisis Narrativo
+- Ingresar texto libre en seis secciones clave del análisis.
+
+### 5. Acciones
+- Cargar catálogos, importar CSVs, guardar y enviar, cargar versión, borrar datos.
+
+### 6. Resumen
+- Visualizar tablas de resumen. Admite pegar datos desde portapapeles (Ctrl+V).
+
+## Exportación y Backup
+
+El botón **Guardar y enviar** genera:
+- Archivos CSV (uno por entidad)
+- Captura JSON del estado
+- Reporte Word y Markdown
+- Copia de seguridad en `external drive/<id_caso>/`
+
+## Diagrama de Arquitectura
+
+```mermaid
+graph TD
+    A[main.py] -->|Lanza| B[App (Tk)]
+    B --> C[ttk.Notebook - Pestañas]
+    C --> D1[Tab: Caso y Participantes]
+    C --> D2[Tab: Riesgos]
+    C --> D3[Tab: Normas]
+    C --> D4[Tab: Análisis]
+    C --> D5[Tab: Acciones]
+    C --> D6[Tab: Resumen]
+    B --> E[Autosave Manager]
+    B --> F[Export Manager]
+    F --> G[Genera CSVs, JSON, DOCX]
+    B --> H[Importadores CSV]
+    B --> I[Validador]
+```
+
+## Resolución de Problemas
+
+- **Errores de validación:** Aparecen mensajes en rojo bajo campos inválidos.
+- **Permisos de escritura:** Verifique acceso a carpetas `exports/` y `external drive/`.
+- **CSV inválidos:** Asegúrese que los encabezados coincidan con el formato esperado.
+
+## Contribución y Licencia
+
+Contribuciones son bienvenidas. No hay una licencia especificada, úsese bajo su propio riesgo.
+
+
+#Manual de Uso y Pruebas – Aplicación de Gestión de Casos de Fraude (Tkinter)
+
 Este documento explica cómo utilizar y probar la versión de escritorio de la aplicación de gestión de casos de fraude implementada en Python usando Tkinter. Está orientado a usuarios y evaluadores no técnicos que necesiten comprobar que todas las funcionalidades del sistema se comportan como se espera.
 1. Requisitos previos
 Python 3.7 o superior instalado en el equipo.
