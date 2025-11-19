@@ -69,7 +69,7 @@ from typing import Optional
 from xml.sax.saxutils import escape
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 try:  # python-docx es una dependencia opcional en tiempo de pruebas
     from docx import Document as DocxDocument
@@ -344,13 +344,13 @@ class FraudCaseApp:
         self.canal_caso_var = tk.StringVar(value=CANAL_LIST[0])
         self.proceso_caso_var = tk.StringVar(value=PROCESO_LIST[0])
 
-        # Variables de análisis
-        self.antecedentes_var = tk.StringVar()
-        self.modus_var = tk.StringVar()
-        self.hallazgos_var = tk.StringVar()
-        self.descargos_var = tk.StringVar()
-        self.conclusiones_var = tk.StringVar()
-        self.recomendaciones_var = tk.StringVar()
+        # Referencias a cuadros de texto de análisis
+        self.antecedentes_text = None
+        self.modus_text = None
+        self.hallazgos_text = None
+        self.descargos_text = None
+        self.conclusiones_text = None
+        self.recomendaciones_text = None
 
         # Construir interfaz
         self.build_ui()
@@ -383,6 +383,28 @@ class FraudCaseApp:
         if STORE_LOGS_LOCALLY and LOGS_FILE:
             return True
         return self._resolve_external_log_target() is not None
+
+    def _get_text_content(self, widget: tk.Text) -> str:
+        if widget is None:
+            return ""
+        return widget.get("1.0", "end-1c").strip()
+
+    def _set_text_content(self, widget: tk.Text, value: str) -> None:
+        if widget is None:
+            return
+        widget.delete("1.0", "end")
+        if value:
+            widget.insert("1.0", value)
+
+    def _analysis_text_widgets(self):
+        return {
+            "antecedentes": getattr(self, "antecedentes_text", None),
+            "modus_operandi": getattr(self, "modus_text", None),
+            "hallazgos": getattr(self, "hallazgos_text", None),
+            "descargos": getattr(self, "descargos_text", None),
+            "conclusiones": getattr(self, "conclusiones_text", None),
+            "recomendaciones": getattr(self, "recomendaciones_text", None),
+        }
 
     def _get_exports_folder(self) -> Optional[Path]:
         base_path = getattr(self, "_export_base_path", None) or EXPORTS_DIR
@@ -1121,45 +1143,45 @@ class FraudCaseApp:
         row1 = ttk.Frame(frame)
         row1.pack(fill="x", pady=1)
         ttk.Label(row1, text="Antecedentes:").pack(side="left")
-        antecedentes_entry = ttk.Entry(row1, textvariable=self.antecedentes_var, width=80)
-        antecedentes_entry.pack(side="left", padx=5)
-        antecedentes_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó antecedentes"))
-        self.register_tooltip(antecedentes_entry, "Resume los hechos previos y contexto del caso.")
+        self.antecedentes_text = scrolledtext.ScrolledText(row1, width=80, height=4, wrap="word")
+        self.antecedentes_text.pack(side="left", padx=5)
+        self.antecedentes_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó antecedentes"))
+        self.register_tooltip(self.antecedentes_text, "Resume los hechos previos y contexto del caso.")
         row2 = ttk.Frame(frame)
         row2.pack(fill="x", pady=1)
         ttk.Label(row2, text="Modus operandi:").pack(side="left")
-        modus_entry = ttk.Entry(row2, textvariable=self.modus_var, width=80)
-        modus_entry.pack(side="left", padx=5)
-        modus_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó modus operandi"))
-        self.register_tooltip(modus_entry, "Describe la forma en que se ejecutó el fraude.")
+        self.modus_text = scrolledtext.ScrolledText(row2, width=80, height=4, wrap="word")
+        self.modus_text.pack(side="left", padx=5)
+        self.modus_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó modus operandi"))
+        self.register_tooltip(self.modus_text, "Describe la forma en que se ejecutó el fraude.")
         row3 = ttk.Frame(frame)
         row3.pack(fill="x", pady=1)
         ttk.Label(row3, text="Hallazgos principales:").pack(side="left")
-        hall_entry = ttk.Entry(row3, textvariable=self.hallazgos_var, width=80)
-        hall_entry.pack(side="left", padx=5)
-        hall_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó hallazgos"))
-        self.register_tooltip(hall_entry, "Menciona los hallazgos clave de la investigación.")
+        self.hallazgos_text = scrolledtext.ScrolledText(row3, width=80, height=4, wrap="word")
+        self.hallazgos_text.pack(side="left", padx=5)
+        self.hallazgos_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó hallazgos"))
+        self.register_tooltip(self.hallazgos_text, "Menciona los hallazgos clave de la investigación.")
         row4 = ttk.Frame(frame)
         row4.pack(fill="x", pady=1)
         ttk.Label(row4, text="Descargos del colaborador:").pack(side="left")
-        desc_entry = ttk.Entry(row4, textvariable=self.descargos_var, width=80)
-        desc_entry.pack(side="left", padx=5)
-        desc_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó descargos"))
-        self.register_tooltip(desc_entry, "Registra los descargos formales del colaborador.")
+        self.descargos_text = scrolledtext.ScrolledText(row4, width=80, height=4, wrap="word")
+        self.descargos_text.pack(side="left", padx=5)
+        self.descargos_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó descargos"))
+        self.register_tooltip(self.descargos_text, "Registra los descargos formales del colaborador.")
         row5 = ttk.Frame(frame)
         row5.pack(fill="x", pady=1)
         ttk.Label(row5, text="Conclusiones:").pack(side="left")
-        concl_entry = ttk.Entry(row5, textvariable=self.conclusiones_var, width=80)
-        concl_entry.pack(side="left", padx=5)
-        concl_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó conclusiones"))
-        self.register_tooltip(concl_entry, "Escribe las conclusiones generales del informe.")
+        self.conclusiones_text = scrolledtext.ScrolledText(row5, width=80, height=4, wrap="word")
+        self.conclusiones_text.pack(side="left", padx=5)
+        self.conclusiones_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó conclusiones"))
+        self.register_tooltip(self.conclusiones_text, "Escribe las conclusiones generales del informe.")
         row6 = ttk.Frame(frame)
         row6.pack(fill="x", pady=1)
         ttk.Label(row6, text="Recomendaciones y mejoras:").pack(side="left")
-        reco_entry = ttk.Entry(row6, textvariable=self.recomendaciones_var, width=80)
-        reco_entry.pack(side="left", padx=5)
-        reco_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó recomendaciones"))
-        self.register_tooltip(reco_entry, "Propón acciones correctivas y preventivas.")
+        self.recomendaciones_text = scrolledtext.ScrolledText(row6, width=80, height=4, wrap="word")
+        self.recomendaciones_text.pack(side="left", padx=5)
+        self.recomendaciones_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó recomendaciones"))
+        self.register_tooltip(self.recomendaciones_text, "Propón acciones correctivas y preventivas.")
 
     def build_actions_tab(self, parent):
         frame = ttk.Frame(parent)
@@ -3763,12 +3785,8 @@ class FraudCaseApp:
         self.add_team()
         self.add_risk()
         # Limpiar análisis
-        self.antecedentes_var.set("")
-        self.modus_var.set("")
-        self.hallazgos_var.set("")
-        self.descargos_var.set("")
-        self.conclusiones_var.set("")
-        self.recomendaciones_var.set("")
+        for widget in self._analysis_text_widgets().values():
+            self._set_text_content(widget, "")
         if save_autosave:
             self.save_auto()
 
@@ -3858,13 +3876,14 @@ class FraudCaseApp:
                 continue
             normas.append(norm_data)
         data['normas'] = normas
+        analysis_widgets = self._analysis_text_widgets()
         data['analisis'] = {
-            "antecedentes": self.antecedentes_var.get().strip(),
-            "modus_operandi": self.modus_var.get().strip(),
-            "hallazgos": self.hallazgos_var.get().strip(),
-            "descargos": self.descargos_var.get().strip(),
-            "conclusiones": self.conclusiones_var.get().strip(),
-            "recomendaciones": self.recomendaciones_var.get().strip(),
+            "antecedentes": self._get_text_content(analysis_widgets["antecedentes"]),
+            "modus_operandi": self._get_text_content(analysis_widgets["modus_operandi"]),
+            "hallazgos": self._get_text_content(analysis_widgets["hallazgos"]),
+            "descargos": self._get_text_content(analysis_widgets["descargos"]),
+            "conclusiones": self._get_text_content(analysis_widgets["conclusiones"]),
+            "recomendaciones": self._get_text_content(analysis_widgets["recomendaciones"]),
         }
         return data
 
@@ -4021,12 +4040,13 @@ class FraudCaseApp:
             nf.fecha_var.set(norm.get('fecha_vigencia', ''))
         # Analisis
         analisis = data.get('analisis', {})
-        self.antecedentes_var.set(analisis.get('antecedentes', ''))
-        self.modus_var.set(analisis.get('modus_operandi', ''))
-        self.hallazgos_var.set(analisis.get('hallazgos', ''))
-        self.descargos_var.set(analisis.get('descargos', ''))
-        self.conclusiones_var.set(analisis.get('conclusiones', ''))
-        self.recomendaciones_var.set(analisis.get('recomendaciones', ''))
+        analysis_widgets = self._analysis_text_widgets()
+        self._set_text_content(analysis_widgets['antecedentes'], analisis.get('antecedentes', ''))
+        self._set_text_content(analysis_widgets['modus_operandi'], analisis.get('modus_operandi', ''))
+        self._set_text_content(analysis_widgets['hallazgos'], analisis.get('hallazgos', ''))
+        self._set_text_content(analysis_widgets['descargos'], analisis.get('descargos', ''))
+        self._set_text_content(analysis_widgets['conclusiones'], analisis.get('conclusiones', ''))
+        self._set_text_content(analysis_widgets['recomendaciones'], analisis.get('recomendaciones', ''))
         self._rebuild_frame_id_indexes()
         self._schedule_summary_refresh(data=data)
 
