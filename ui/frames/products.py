@@ -342,6 +342,12 @@ class ProductFrame:
         self.frame = ttk.LabelFrame(parent, text=f"Producto {self.idx+1}")
         self.frame.pack(fill="x", padx=5, pady=2)
 
+        btn_frame = ttk.Frame(self.frame)
+        btn_frame.pack(fill="x", pady=2)
+        remove_btn = ttk.Button(btn_frame, text="Eliminar producto", command=self.remove)
+        remove_btn.pack(side="right")
+        self.tooltip_register(remove_btn, "Quita por completo el producto de la lista.")
+
         row1 = ttk.Frame(self.frame)
         row1.pack(fill="x", pady=1)
         ttk.Label(row1, text="ID del producto:").pack(side="left")
