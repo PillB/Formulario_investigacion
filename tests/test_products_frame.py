@@ -104,6 +104,7 @@ def _build_product_frame():
         logs=[],
         product_lookup={},
         tooltip_register=lambda *_args, **_kwargs: None,
+        initialize_rows=False,
     )
 
 
