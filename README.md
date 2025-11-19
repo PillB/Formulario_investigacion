@@ -3,7 +3,8 @@ Este documento explica cómo utilizar y probar la versión de escritorio de la a
 1. Requisitos previos
 Python 3.7 o superior instalado en el equipo.
 Dependencia adicional: instala `python-docx` para habilitar la generación del informe en Word (`pip install python-docx`).
-Archivos CSV de referencia ubicados en la misma carpeta que el script fraud_case_gui.py:
+Carpeta `external drive/` ubicada junto a este repositorio. La aplicación intenta crearla si no existe, pero conviene verificar los permisos porque allí se escriben los respaldos automáticos.
+Archivos CSV de referencia ubicados en la misma carpeta que el paquete (BASE_DIR):
 client_details.csv: datos maestros de clientes para autopoblar.
 team_details.csv: datos maestros de colaboradores para autopoblar.
 clientes_masivos.csv, colaboradores_masivos.csv, productos_masivos.csv, datos_combinados_masivos.csv – ejemplos para importación masiva.
@@ -11,7 +12,7 @@ riesgos_masivos.csv, normas_masivas.csv, reclamos_masivos.csv – ejemplos para 
 2. Ejecución de la aplicación
 Abrir una terminal y navegar hasta la carpeta donde se encuentran los archivos.
 Ejecutar el comando:
-python3 fraud_case_gui.py
+python -m main
 La ventana principal mostrará varias pestañas: Caso, Clientes, Colaboradores, Productos, Riesgos, Normas, Análisis y Acciones.
 La aplicación cargará automáticamente el autosave más reciente (si existe) y mostrará los datos guardados. Para empezar un caso nuevo, utilice el botón Borrar todos los datos en la pestaña de acciones.
 3. Completar un caso
@@ -49,13 +50,17 @@ En la pestaña Normas, use Añadir norma para crear registros. Introduzca el nú
 En la pestaña Análisis, escriba las narrativas de Antecedentes, Modus operandi, Hallazgos principales, Descargos del colaborador, Conclusiones y Recomendaciones y mejoras. Estos campos aceptan texto libre.
 9. Acciones y gestión de versiones
 En la pestaña Acciones encontrará los botones:
-Guardar y enviar: Valida todos los datos. Si no hay errores, crea (si es necesario) la carpeta `exports/` ubicada junto al script y escribe allí los archivos CSV (casos, clientes, colaboradores, productos, reclamos, asignaciones, riesgos, normas, análisis, logs), el JSON completo del caso, el informe en Markdown y el informe en Word (`<id_caso>_informe.docx`) usando el ID del caso como prefijo. Luego intenta copiar esos mismos archivos a `external drive/<id_caso>/` para mantener un respaldo local.
+Guardar y enviar: Valida todos los datos. Si no hay errores, la aplicación coloca automáticamente los archivos CSV (casos, clientes, colaboradores, productos, reclamos, asignaciones, riesgos, normas, análisis, logs), el JSON completo del caso, el informe en Markdown y el informe en Word (`<id_caso>_informe.docx`) bajo `BASE_DIR/exports/` usando el ID del caso como prefijo y sin pedirte que elijas una carpeta. Después se espejan esos mismos archivos dentro de `external drive/<id_caso>/` para mantener un respaldo local, mostrando una advertencia sólo si la copia secundaria falla.
 Cargar versión: Permite elegir un archivo JSON generado previamente para restaurar el formulario al estado guardado.
 Borrar todos los datos: Elimina el contenido del formulario y el autosave tras confirmación.
 Importar CSV: Botones para cargar clientes, colaboradores, productos, combinados, riesgos, normas y reclamos. Seleccione el archivo adecuado y revise que los datos aparezcan en sus pestañas correspondientes. Se omitirán registros duplicados.
 Además, la aplicación guarda versiones temporales (<id_caso>_temp_<timestamp>.json) cada vez que se edita un campo. Estos archivos se crean en la misma carpeta del script para tener un historial de cambios.
 Los eventos (navegación, validación, advertencias) se registran en un log interno. Al usar Guardar y enviar, se exportan en logs.csv para su análisis.
-10. Pruebas de validación de negocio
+10. Persistencia y respaldos
+`BASE_DIR` corresponde a la carpeta raíz del proyecto (donde viven `app.py`, `main.py` y los CSV base). Allí se almacenan el autosave principal (`autosave.json`), el JSON canónico del caso (`<id_caso>_version.json`), los reportes Markdown/Word (`<id_caso>_informe.md` y `.docx`) y los CSV exportados que describen cada entidad.
+
+Cada vez que se dispara un guardado o un autosave temporal, la aplicación duplica la información en la carpeta `external drive/<id_caso>/`. Ese espejo contiene los logs (`logs.csv`), los JSON temporales y los mismos archivos exportados que quedan en `BASE_DIR/exports/`. Gracias a este esquema, siempre hay una copia lista para mover a un medio externo real; si alguna escritura falla, el sistema lo registra y muestra la alerta correspondiente.
+11. Pruebas de validación de negocio
 Para garantizar que las reglas se apliquen correctamente, pruebe los siguientes escenarios:
 Clave técnica duplicada: Cree dos productos con el mismo ID, cliente, colaborador, fecha de ocurrencia e ID de reclamo. El sistema debe advertir de la duplicidad.
 Fechas fuera de orden: Ponga la fecha de descubrimiento antes de la de ocurrencia. Debe aparecer un error.
@@ -67,7 +72,7 @@ Validación de IDs: Escriba IDs de cliente, colaborador o riesgo con formatos in
 Autopoblado: Introduzca un ID de cliente o colaborador que figure en los archivos client_details.csv o team_details.csv. Sus datos se rellenan automáticamente. Escriba uno inexistente y compruebe que aparece una advertencia en el log.
 Advertencia de Fraude Externo: Seleccione “Fraude Externo” en la categoría Nivel 2 y verifique que se muestre el mensaje de advertencia sobre reclamos externos.
 Guardar y cargar: Llene el formulario con un caso de ejemplo y utilice “Guardar y enviar”. Examine los archivos CSV generados para comprobar que las relaciones se representan correctamente. Luego borre los datos, pulse “Cargar versión” y elija el archivo JSON recién guardado; el formulario debe reconstruirse exactamente como antes.
-11. Análisis de logs
+12. Análisis de logs
 Los eventos registrados en logs.csv incluyen:
 timestamp: Fecha y hora en que ocurrió el evento.
 tipo: "navegacion" para cambios de campos, "validacion" para errores y advertencias.
@@ -78,15 +83,15 @@ Por defecto la aplicación escribe los eventos tanto en `logs.csv` (junto al có
 
 Con esta guía y el script proporcionado, podrá recrear la gestión de casos de fraude en un entorno de escritorio, probar todas las reglas de negocio, importar datos masivamente y analizar los registros para mejorar la experiencia del usuario.
 
-12. Cobertura enfocada en guardado/exportación/logs
+13. Cobertura enfocada en guardado/exportación/logs
 Para verificar automáticamente las rutas críticas de guardado, exportación y bitácoras sin ejecutar toda la batería de pruebas, puedes lanzar:
 
 ```
 pytest --cov=app --cov=ui --cov-report=term-missing
 ```
 
-Este comando imprime un resumen de cobertura en la terminal destacando qué porciones de `app.py` y los módulos de `ui/` están cubiertos por las pruebas relacionadas a `save_and_send`, respaldos en la “unidad externa” y el flujo de logs.
+Este comando imprime un resumen de cobertura en la terminal destacando qué porciones de `app.py` y los módulos de `ui/` están cubiertos por las pruebas relacionadas a `save_and_send`, respaldos en la “unidad externa” y el flujo de logs. A raíz de los cambios de almacenamiento se añadieron casos como `tests/test_save_and_send.py::test_save_temp_version_mirrors_to_external_drive` y `tests/test_save_and_send.py::test_flush_log_queue_writes_external_when_local_blocked`, por lo que asegúrate de contar con la carpeta `external drive/` y con las dependencias `pytest`, `pytest-cov` y `python-docx` antes de ejecutar la cobertura.
 
-13. Instrucciones para CI y automatizaciones
+14. Instrucciones para CI y automatizaciones
 - Asegúrate de instalar `python-docx` antes de ejecutar `pytest` para que la exportación de Word funcione también en los entornos de integración continua.
 - Conserva como artefactos tanto `*_informe.md` como `*_informe.docx`, ya que las pruebas verifican que ambos se generen y se copien a la carpeta espejo.
