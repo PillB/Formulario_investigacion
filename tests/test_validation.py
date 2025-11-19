@@ -34,6 +34,12 @@ class DummyClient:
         self.tipo_id_var = DummyVar(TIPO_ID_LIST[0])
         self.id_var = DummyVar(client_id)
 
+    def get_data(self):
+        return {
+            "tipo_id": self.tipo_id_var.get(),
+            "id_cliente": self.id_var.get(),
+        }
+
 
 class DummyClientWithContacts(DummyClient):
     def __init__(
@@ -80,6 +86,18 @@ class DummyTeam:
         self.flag_var = DummyVar(flag)
         self.tipo_falta_var = DummyVar(tipo_falta)
         self.tipo_sancion_var = DummyVar(tipo_sancion)
+
+    def get_data(self):
+        return {
+            "id_colaborador": self.id_var.get(),
+            "division": self.division_var.get(),
+            "area": self.area_var.get(),
+            "nombre_agencia": self.nombre_agencia_var.get(),
+            "codigo_agencia": self.codigo_agencia_var.get(),
+            "flag": self.flag_var.get(),
+            "tipo_falta": self.tipo_falta_var.get(),
+            "tipo_sancion": self.tipo_sancion_var.get(),
+        }
 
 
 class _UIStubWidget:
@@ -359,6 +377,15 @@ def build_headless_app(
     app.mod_caso_var = DummyVar(case_modalidad)
     app.canal_caso_var = DummyVar(CANAL_LIST[0])
     app.proceso_caso_var = DummyVar(PROCESO_LIST[0])
+    for attr in (
+        'antecedentes_var',
+        'modus_var',
+        'hallazgos_var',
+        'descargos_var',
+        'conclusiones_var',
+        'recomendaciones_var',
+    ):
+        setattr(app, attr, DummyVar(""))
     client_id = "12345678"
     app.client_frames = [DummyClient(client_id)]
     team_definitions = team_configs or [{"team_id": "T12345"}]
@@ -838,6 +865,18 @@ def test_validate_data_errors_when_involvement_missing_collaborator():
     assert any("monto sin colaborador" in error for error in errors)
 
 
+def test_validate_data_errors_when_involvement_missing_amount():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [
+            {"id_colaborador": "T12345", "monto_asignado": ""},
+        ],
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    errors, _ = app.validate_data()
+    assert any("colaborador sin monto" in error for error in errors)
+
+
 def test_validate_data_flags_deleted_collaborator_reference():
     product_config = {
         "tipo_producto": "Crédito personal",
@@ -901,6 +940,30 @@ def test_validate_data_normalizes_valid_involvement_amounts():
     asignaciones = app.product_frames[0].get_data()['asignaciones']
     assert asignaciones[0]['monto_asignado'] == '10.50'
     assert asignaciones[1]['monto_asignado'] == '75.00'
+
+
+def test_get_form_data_exports_normalized_involucramientos():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [
+            {"id_colaborador": "T12345", "monto_asignado": "0010.50"},
+            {"id_colaborador": "T54321", "monto_asignado": "75"},
+        ],
+    }
+    team_configs = [{"team_id": "T12345"}, {"team_id": "T54321"}]
+    app = build_headless_app(
+        "Crédito personal",
+        product_configs=[product_config],
+        team_configs=team_configs,
+    )
+
+    errors, _ = app.validate_data()
+    assert errors == []
+
+    form_data = app.gather_data()
+    exported_amounts = [row['monto_asignado'] for row in form_data['involucramientos']]
+    assert exported_amounts == ['10.50', '75.00']
+    assert all(amount.strip() and '.' in amount for amount in exported_amounts)
 
 
 @pytest.mark.parametrize(

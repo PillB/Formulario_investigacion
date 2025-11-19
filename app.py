@@ -4422,6 +4422,10 @@ class FraudCaseApp:
                     errors.append(
                         f"Producto {pid}: la asignación {inv_idx} tiene un monto sin colaborador."
                     )
+                if collaborator_id and not amount_value:
+                    errors.append(
+                        f"Producto {pid}: la asignación {inv_idx} tiene un colaborador sin monto."
+                    )
                 if collaborator_id and collaborator_norm not in collaborator_ids:
                     errors.append(
                         f"Producto {pid}: la asignación {inv_idx} referencia un colaborador eliminado (ID {collaborator_id})."

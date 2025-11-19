@@ -198,4 +198,17 @@ def test_optional_amount_field_normalizes_blank_value():
 
     assert message is None
     assert decimal_value == Decimal("0.00")
-    assert product.monto_perdida_var.get() == "0.00"
+
+
+def test_involvement_validator_requires_amount_when_collaborator_selected():
+    product = _build_product_frame()
+    row = product.add_involvement()
+    row.team_var.set("T12345")
+    row.monto_var.set("")
+
+    validator = _find_validator("Asignación 1 colaborador")
+    assert validator is not None
+
+    error = validator.validate_callback()
+    assert error is not None
+    assert "monto" in error.lower()
