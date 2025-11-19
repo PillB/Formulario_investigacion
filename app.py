@@ -998,7 +998,7 @@ class FraudCaseApp:
         finally:
             product_frame._suppress_change_notifications = previous_suppression
 
-    def add_product(self):
+    def add_product(self, initialize_rows=True):
         idx = len(self.product_frames)
         prod = ProductFrame(
             self.product_container,
@@ -1012,6 +1012,7 @@ class FraudCaseApp:
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
             id_change_callback=self._handle_product_id_change,
+            initialize_rows=initialize_rows,
         )
         self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
@@ -2945,7 +2946,7 @@ class FraudCaseApp:
         for frame in self.product_frames:
             if not frame.id_var.get().strip():
                 return frame
-        self.add_product()
+        self.add_product(initialize_rows=False)
         new_frame = self.product_frames[-1]
         return new_frame
 
@@ -3979,7 +3980,7 @@ class FraudCaseApp:
             )
         for i, prod in enumerate(data.get('productos', [])):
             if i >= len(self.product_frames):
-                self.add_product()
+                self.add_product(initialize_rows=False)
             pframe = self.product_frames[i]
             pframe.id_var.set(prod.get('id_producto', ''))
             pframe.client_var.set(prod.get('id_cliente', ''))
@@ -4010,15 +4011,22 @@ class FraudCaseApp:
                 pframe.tipo_prod_var.set(tipo_producto)
             pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
         # Involucramientos
-        invols = data.get('involucramientos', [])
-        for inv in invols:
-            for pframe in self.product_frames:
-                if pframe.id_var.get().strip() == inv.get('id_producto'):
-                    # agregar asignación a pframe
-                    assign = InvolvementRow(pframe.invol_frame, pframe, len(pframe.involvements), pframe.get_team_options, pframe.remove_involvement, self.logs, pframe.tooltip_register)
-                    pframe.involvements.append(assign)
-                    assign.team_var.set(inv.get('id_colaborador', ''))
-                    assign.monto_var.set(inv.get('monto_asignado', ''))
+        involvement_map = {}
+        for inv in data.get('involucramientos', []):
+            pid = (inv.get('id_producto') or '').strip()
+            if not pid:
+                continue
+            involvement_map.setdefault(pid, []).append(inv)
+
+        for pframe in self.product_frames:
+            pid = pframe.id_var.get().strip()
+            if pid not in involvement_map:
+                continue
+            pframe.clear_involvements()
+            for inv in involvement_map[pid]:
+                assign = pframe.add_involvement()
+                assign.team_var.set(inv.get('id_colaborador', ''))
+                assign.monto_var.set(inv.get('monto_asignado', ''))
         # Riesgos
         for i, risk in enumerate(data.get('riesgos', [])):
             if i >= len(self.risk_frames):

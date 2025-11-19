@@ -297,6 +297,7 @@ class ProductFrame:
         summary_refresh_callback=None,
         change_notifier=None,
         id_change_callback=None,
+        initialize_rows=True,
     ):
         self.parent = parent
         self.idx = idx
@@ -606,6 +607,10 @@ class ProductFrame:
             },
         )
 
+        if initialize_rows:
+            self.add_claim()
+            self.add_involvement()
+
     def on_cat1_change(self):
         cat1 = self.cat1_var.get()
         subcats = list(TAXONOMIA.get(cat1, {}).keys()) or [""]
@@ -652,6 +657,11 @@ class ProductFrame:
         for claim in self.claims:
             claim.frame.destroy()
         self.claims.clear()
+
+    def clear_involvements(self):
+        for inv in self.involvements:
+            inv.frame.destroy()
+        self.involvements.clear()
 
     def set_claims_from_data(self, claims):
         self.clear_claims()
