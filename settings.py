@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 # Taxonomía de fraude: nivel 1 -> nivel 2 -> modalidades
 TAXONOMIA = {
@@ -173,6 +174,16 @@ TIPO_MONEDA_LIST = ["Soles", "Dólares", "No aplica"]
 CRITICIDAD_LIST = ["Bajo", "Moderado", "Relevante", "Alto", "Crítico"]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EXTERNAL_DRIVE_DIR = os.path.join(BASE_DIR, "external drive")
+EXTERNAL_LOGS_FILE = os.path.join(EXTERNAL_DRIVE_DIR, "logs.csv")
+
+
+def ensure_external_drive_dir() -> Path:
+    """Crea (si no existe) la carpeta local usada como unidad externa."""
+
+    path = Path(EXTERNAL_DRIVE_DIR)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 TEAM_DETAILS_FILE = os.path.join(BASE_DIR, "team_details.csv")
 CLIENT_DETAILS_FILE = os.path.join(BASE_DIR, "client_details.csv")
 PRODUCT_DETAILS_FILE = os.path.join(BASE_DIR, "productos_masivos.csv")
@@ -221,6 +232,8 @@ __all__ = [
     "CLIENT_ID_ALIASES",
     "CRITICIDAD_LIST",
     "DETAIL_LOOKUP_ALIASES",
+    "EXTERNAL_DRIVE_DIR",
+    "EXTERNAL_LOGS_FILE",
     "FLAG_CLIENTE_LIST",
     "FLAG_COLABORADOR_LIST",
     "LOGS_FILE",
@@ -238,4 +251,5 @@ __all__ = [
     "TIPO_INFORME_LIST",
     "TIPO_MONEDA_LIST",
     "TIPO_PRODUCTO_LIST",
+    "ensure_external_drive_dir",
 ]

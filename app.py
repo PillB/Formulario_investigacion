@@ -58,9 +58,11 @@ correos, direcciones y planes de acción).
 import csv
 import json
 import os
+import shutil
 import threading
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Optional
 
 import tkinter as tk
@@ -71,12 +73,14 @@ from models import (build_detail_catalog_id_index, iter_massive_csv_rows,
                     parse_involvement_entries)
 from settings import (AUTOSAVE_FILE, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
-                      FLAG_CLIENTE_LIST, FLAG_COLABORADOR_LIST, LOGS_FILE,
+                      EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
+                      FLAG_COLABORADOR_LIST, LOGS_FILE,
                       MASSIVE_SAMPLE_FILES, NORM_ID_ALIASES, PROCESO_LIST,
                       PRODUCT_ID_ALIASES, RISK_ID_ALIASES, TAXONOMIA,
                       TEAM_ID_ALIASES, TIPO_FALTA_LIST, TIPO_ID_LIST,
                       TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
-                      TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST)
+                      TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
+                      ensure_external_drive_dir)
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
@@ -98,6 +102,8 @@ class FraudCaseApp:
     AUTOSAVE_DELAY_MS = 4000
     SUMMARY_REFRESH_DELAY_MS = 250
     LOG_FLUSH_INTERVAL_MS = 5000
+    _external_drive_path: Optional[Path] = None
+    _external_log_file_initialized: bool = False
 
     """Clase que encapsula la aplicación de gestión de casos de fraude."""
 
@@ -112,6 +118,10 @@ class FraudCaseApp:
         self._last_validated_risk_exposure_total = Decimal('0')
         self._log_flush_job_id: Optional[str] = None
         self._log_file_initialized = bool(LOGS_FILE and os.path.exists(LOGS_FILE))
+        self._external_drive_path = self._prepare_external_drive()
+        self._external_log_file_initialized = bool(
+            EXTERNAL_LOGS_FILE and os.path.exists(EXTERNAL_LOGS_FILE)
+        )
         self.catalog_status_var = tk.StringVar(
             value="Catálogos de detalle pendientes. Usa 'Cargar catálogos' para habilitar el autopoblado."
         )
@@ -188,6 +198,22 @@ class FraudCaseApp:
         # Cargar autosave si existe
         self.load_autosave()
         self.root.after(250, self._prompt_initial_catalog_loading)
+
+    def _prepare_external_drive(self) -> Optional[Path]:
+        try:
+            return ensure_external_drive_dir()
+        except OSError as exc:
+            log_event("validacion", f"No se pudo preparar la carpeta externa: {exc}", self.logs)
+            return None
+
+    def _get_external_drive_path(self) -> Optional[Path]:
+        path = getattr(self, "_external_drive_path", None)
+        if path:
+            return Path(path)
+        self._external_drive_path = self._prepare_external_drive()
+        if self._external_drive_path:
+            return Path(self._external_drive_path)
+        return None
 
     def import_combined(self, filename=None):
         """Importa datos combinados de productos, clientes y colaboradores."""
@@ -3394,19 +3420,42 @@ class FraudCaseApp:
         rows = drain_log_queue()
         if not rows or not LOGS_FILE:
             return
-        folder = os.path.dirname(LOGS_FILE)
-        if folder and not os.path.exists(folder):
-            os.makedirs(folder, exist_ok=True)
-        file_exists = self._log_file_initialized or os.path.exists(LOGS_FILE)
+        errors = []
         try:
-            with open(LOGS_FILE, 'a', newline='', encoding='utf-8') as file_handle:
-                writer = csv.DictWriter(file_handle, fieldnames=['timestamp', 'tipo', 'mensaje'])
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerows(rows)
-            self._log_file_initialized = True
-        except OSError:
-            pass
+            self._append_log_rows(LOGS_FILE, rows, track_attr="_log_file_initialized")
+        except OSError as exc:
+            errors.append((LOGS_FILE, exc))
+        external_path = EXTERNAL_LOGS_FILE if self._get_external_drive_path() else None
+        if external_path:
+            try:
+                self._append_log_rows(
+                    EXTERNAL_LOGS_FILE,
+                    rows,
+                    track_attr="_external_log_file_initialized",
+                )
+            except OSError as exc:
+                errors.append((EXTERNAL_LOGS_FILE, exc))
+        for file_path, exc in errors:
+            log_event(
+                "validacion",
+                f"No se pudo escribir el log en {file_path}: {exc}",
+                self.logs,
+            )
+
+    def _append_log_rows(self, file_path: str, rows, *, track_attr: Optional[str] = None) -> None:
+        target = Path(file_path)
+        if target.parent:
+            target.parent.mkdir(parents=True, exist_ok=True)
+        file_exists = target.exists()
+        if track_attr:
+            file_exists = getattr(self, track_attr, False) or file_exists
+        with target.open('a', newline='', encoding='utf-8') as file_handle:
+            writer = csv.DictWriter(file_handle, fieldnames=['timestamp', 'tipo', 'mensaje'])
+            if not file_exists:
+                writer.writeheader()
+            writer.writerows(rows)
+        if track_attr:
+            setattr(self, track_attr, True)
 
     def _log_navigation(self, message: str, autosave: bool = False) -> None:
         log_event("navegacion", message, self.logs)
@@ -4559,12 +4608,16 @@ class FraudCaseApp:
             norm['id_caso'] = data['caso']['id_caso']
         # Guardar CSVs
         case_id = data['caso']['id_caso'] or 'caso'
+        created_files = []
+
         def write_csv(file_name, rows, header):
-            with open(os.path.join(folder, f"{case_id}_{file_name}"), 'w', newline='', encoding="utf-8") as f:
+            path = os.path.join(folder, f"{case_id}_{file_name}")
+            with open(path, 'w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=header)
                 writer.writeheader()
                 for row in rows:
                     writer.writerow(row)
+            created_files.append(path)
         # CASOS
         write_csv('casos.csv', [data['caso']], ['id_caso', 'tipo_informe', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso'])
         # CLIENTES
@@ -4587,18 +4640,69 @@ class FraudCaseApp:
         if self.logs:
             write_csv('logs.csv', self.logs, ['timestamp', 'tipo', 'mensaje'])
         # Guardar JSON
-        with open(os.path.join(folder, f"{case_id}_version.json"), 'w', encoding="utf-8") as f:
+        json_path = os.path.join(folder, f"{case_id}_version.json")
+        with open(json_path, 'w', encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        created_files.append(json_path)
         # Guardar informe Markdown
         report_path = os.path.join(folder, f"{case_id}_informe.md")
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(self.build_markdown_report(data))
+        created_files.append(report_path)
+        self._mirror_exports_to_external_drive(created_files, case_id)
         messagebox.showinfo(
             "Datos guardados",
             f"Los archivos se han guardado como {case_id}_*.csv, {case_id}_version.json y {case_id}_informe.md.",
         )
         log_event("navegacion", "Datos guardados y enviados", self.logs)
         self.flush_logs_now()
+
+    def _mirror_exports_to_external_drive(self, file_paths, case_id: str) -> None:
+        if not file_paths:
+            return
+        external_base = self._get_external_drive_path()
+        case_label = case_id or 'caso'
+        if not external_base:
+            message = (
+                "Los archivos se guardaron, pero no se pudo preparar la carpeta externa para copiarlos."
+            )
+            log_event("validacion", message, self.logs)
+            if not getattr(self, '_suppress_messagebox', False):
+                messagebox.showwarning("Copia pendiente", message)
+            return
+        case_folder = external_base / case_label
+        try:
+            case_folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            message = f"No se pudo crear la carpeta de respaldo {case_folder}: {exc}"
+            log_event("validacion", message, self.logs)
+            if not getattr(self, '_suppress_messagebox', False):
+                messagebox.showwarning("Copia pendiente", message)
+            return
+        autosave_abs = os.path.abspath(AUTOSAVE_FILE)
+        failures = []
+        for source in file_paths:
+            if not source:
+                continue
+            if os.path.abspath(source) == autosave_abs:
+                continue
+            destination = case_folder / os.path.basename(source)
+            try:
+                shutil.copy2(source, destination)
+            except OSError as exc:
+                failures.append((source, exc))
+                log_event(
+                    "validacion",
+                    f"No se pudo copiar {source} a {destination}: {exc}",
+                    self.logs,
+                )
+        if failures and not getattr(self, '_suppress_messagebox', False):
+            lines = [
+                "Se exportaron los archivos, pero algunos no se copiaron al respaldo externo:",
+            ]
+            for source, exc in failures:
+                lines.append(f"- {os.path.basename(source)}: {exc}")
+            messagebox.showwarning("Copia incompleta", "\n".join(lines))
 
     def save_temp_version(self, data=None):
         """Guarda una versión temporal del estado actual del formulario.
@@ -4627,6 +4731,18 @@ class FraudCaseApp:
         except Exception as ex:
             # Registrar en el log pero no interrumpir
             log_event("validacion", f"Error guardando versión temporal: {ex}", self.logs)
+            return
+        external_base = self._get_external_drive_path()
+        if not external_base:
+            return
+        try:
+            shutil.copy2(path, external_base / filename)
+        except OSError as exc:
+            log_event(
+                "validacion",
+                f"No se pudo copiar la versión temporal a la carpeta externa: {exc}",
+                self.logs,
+            )
 
 
 # ---------------------------------------------------------------------------
