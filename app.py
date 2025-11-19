@@ -4043,22 +4043,23 @@ class FraudCaseApp:
         normalized_amounts = []
         team_id_occurrences = {}
         for idx, tm in enumerate(self.team_frames, start=1):
+            current_idx = idx
             team_id_value = (tm.id_var.get() or "").strip()
             tm_id_message = validate_team_member_id(team_id_value)
             if tm_id_message:
-                errors.append(f"Colaborador {idx}: {tm_id_message}")
+                errors.append(f"Colaborador {current_idx}: {tm_id_message}")
             if team_id_value:
-                team_id_occurrences.setdefault(team_id_value, []).append(idx)
+                team_id_occurrences.setdefault(team_id_value, []).append(current_idx)
             agency_message = validate_agency_code(tm.codigo_agencia_var.get(), allow_blank=True)
             if agency_message:
-                errors.append(f"Colaborador {idx}: {agency_message}")
+                errors.append(f"Colaborador {current_idx}: {agency_message}")
             flag_value = (tm.flag_var.get() if hasattr(tm, 'flag_var') else '').strip()
             flag_message = validate_required_text(flag_value, "el flag del colaborador")
             if flag_message:
-                errors.append(f"Colaborador {idx}: {flag_message}")
+                errors.append(f"Colaborador {current_idx}: {flag_message}")
             elif flag_value not in FLAG_COLABORADOR_LIST:
                 errors.append(
-                    f"Colaborador {idx}: El flag del colaborador '{flag_value}' no está en el catálogo CM."
+                    f"Colaborador {current_idx}: El flag del colaborador '{flag_value}' no está en el catálogo CM."
                 )
             falta_value = tm.tipo_falta_var.get() if hasattr(tm, 'tipo_falta_var') else ''
             sancion_value = tm.tipo_sancion_var.get() if hasattr(tm, 'tipo_sancion_var') else ''
@@ -4066,14 +4067,38 @@ class FraudCaseApp:
                 falta_value,
                 "el tipo de falta del colaborador",
                 TIPO_FALTA_LIST,
-                idx,
+                current_idx,
             )
             _validate_team_catalog_value(
                 sancion_value,
                 "el tipo de sanción del colaborador",
                 TIPO_SANCION_LIST,
-                idx,
+                current_idx,
             )
+            division_value = (tm.division_var.get() if hasattr(tm, 'division_var') else '').strip()
+            area_value = (tm.area_var.get() if hasattr(tm, 'area_var') else '').strip()
+            division_norm = division_value.lower().replace('á', 'a').replace('é', 'e').replace('ó', 'o')
+            area_norm = area_value.lower().replace('á', 'a').replace('é', 'e').replace('ó', 'o')
+            needs_agency = (
+                'dca' in division_norm or 'canales de atencion' in division_norm
+            ) and ('area comercial' in area_norm)
+            if needs_agency:
+                nombre_agencia = (
+                    tm.nombre_agencia_var.get().strip()
+                    if hasattr(tm, 'nombre_agencia_var')
+                    else ''
+                )
+                codigo_agencia = (
+                    tm.codigo_agencia_var.get().strip()
+                    if hasattr(tm, 'codigo_agencia_var')
+                    else ''
+                )
+                if not nombre_agencia or not codigo_agencia:
+                    errors.append(
+                        "El colaborador {idx} debe registrar nombre y código de agencia por pertenecer a canales comerciales.".format(
+                            idx=current_idx
+                        )
+                    )
         for collaborator_id, positions in team_id_occurrences.items():
             if len(positions) > 1:
                 formatted_positions = ", ".join(str(pos) for pos in positions)
@@ -4083,18 +4108,6 @@ class FraudCaseApp:
                         "Cada colaborador debe tener un ID único."
                     )
                 )
-            division = tm.division_var.get().strip().lower()
-            area = tm.area_var.get().strip().lower()
-            division_norm = division.replace('á', 'a').replace('é', 'e').replace('ó', 'o')
-            area_norm = area.replace('á', 'a').replace('é', 'e').replace('ó', 'o')
-            needs_agency = (
-                'dca' in division_norm or 'canales de atencion' in division_norm
-            ) and ('area comercial' in area_norm)
-            if needs_agency:
-                if not tm.nombre_agencia_var.get().strip() or not tm.codigo_agencia_var.get().strip():
-                    errors.append(
-                        f"El colaborador {idx} debe registrar nombre y código de agencia por pertenecer a canales comerciales."
-                    )
         collaborator_ids = {
             tm.id_var.get().strip()
             for tm in self.team_frames
