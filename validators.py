@@ -226,8 +226,14 @@ def validate_client_id(tipo_id: str, value: str) -> Optional[str]:
     return None
 
 
+def normalize_team_member_identifier(value: str) -> str:
+    """Devuelve el ID del colaborador sin espacios y en mayúsculas."""
+
+    return (value or "").strip().upper()
+
+
 def validate_team_member_id(value: str) -> Optional[str]:
-    text = (value or "").strip()
+    text = normalize_team_member_identifier(value)
     if not text:
         return "Debe ingresar el ID del colaborador."
     if not TEAM_MEMBER_ID_PATTERN.fullmatch(text):
@@ -384,6 +390,7 @@ __all__ = [
     'drain_log_queue',
     'log_event',
     'normalize_without_accents',
+    'normalize_team_member_identifier',
     'parse_decimal_amount',
     'resolve_catalog_product_type',
     'should_autofill_field',

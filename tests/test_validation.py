@@ -553,6 +553,21 @@ def test_validate_data_flags_duplicate_clients():
     assert any(expected_fragment in error for error in errors)
 
 
+def test_validate_data_detects_case_insensitive_client_duplicates():
+    app = build_headless_app("Crédito personal")
+    mixed_case_id = "ABCDEF123"
+    app.client_frames[0].tipo_id_var.set("Pasaporte")
+    app.client_frames[0].id_var.set(mixed_case_id)
+    second_client = DummyClient(mixed_case_id.lower())
+    second_client.tipo_id_var.set("Pasaporte")
+    app.client_frames.append(second_client)
+
+    errors, _ = app.validate_data()
+
+    expected_fragment = f"El ID de cliente {mixed_case_id} está duplicado"
+    assert any(expected_fragment in error for error in errors)
+
+
 def test_update_frame_id_index_reverts_duplicate_ids(monkeypatch):
     app_instance = FraudCaseApp.__new__(FraudCaseApp)
     app_instance.logs = []
@@ -1279,6 +1294,34 @@ def test_validate_data_detects_duplicate_technical_keys():
     )
 
 
+def test_validate_data_detects_case_insensitive_technical_keys():
+    duplicate_assignments = [
+        {"id_colaborador": "T12345", "monto_asignado": "10.00"},
+        {"id_colaborador": "t12345", "monto_asignado": "5.00"},
+    ]
+    app = build_headless_app(
+        "Crédito personal",
+        product_configs=[{"tipo_producto": "Crédito personal", "asignaciones": duplicate_assignments}],
+    )
+    errors, _ = app.validate_data()
+    assert (
+        f"Registro duplicado de clave técnica (producto {DEFAULT_PRODUCT_ID}, colaborador T12345)"
+        in errors
+    )
+
+
+def test_validate_data_detects_case_insensitive_product_duplicates():
+    product_configs = [
+        {"tipo_producto": "Fondos mutuos", "producto_overrides": {"id_producto": "ABCD1234"}},
+        {"tipo_producto": "Fondos mutuos", "producto_overrides": {"id_producto": "abcd1234"}},
+    ]
+    app = build_headless_app("Fondos mutuos", product_configs=product_configs)
+
+    errors, _ = app.validate_data()
+
+    assert any("El producto ABCD1234 está duplicado en el formulario." in err for err in errors)
+
+
 def test_validate_data_requires_claim_when_losses_exist():
     product_config = {
         "tipo_producto": "Crédito personal",
@@ -1310,6 +1353,17 @@ def test_validate_data_rejects_collaborator_with_blank_flag():
 def test_validate_data_flags_duplicate_collaborators():
     duplicate_id = "T54321"
     team_configs = [{"team_id": duplicate_id}, {"team_id": duplicate_id}]
+    app = build_headless_app("Crédito personal", team_configs=team_configs)
+
+    errors, _ = app.validate_data()
+
+    expected_fragment = f"El ID de colaborador {duplicate_id} está duplicado"
+    assert any(expected_fragment in error for error in errors)
+
+
+def test_validate_data_detects_case_insensitive_collaborator_duplicates():
+    duplicate_id = "T54321"
+    team_configs = [{"team_id": duplicate_id}, {"team_id": duplicate_id.lower()}]
     app = build_headless_app("Crédito personal", team_configs=team_configs)
 
     errors, _ = app.validate_data()

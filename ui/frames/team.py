@@ -6,9 +6,10 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
-from validators import (FieldValidator, log_event, normalize_without_accents,
-                        should_autofill_field, validate_agency_code,
-                        validate_required_text, validate_team_member_id)
+from validators import (FieldValidator, log_event, normalize_team_member_identifier,
+                        normalize_without_accents, should_autofill_field,
+                        validate_agency_code, validate_required_text,
+                        validate_team_member_id)
 
 
 class TeamMemberFrame:
@@ -33,7 +34,7 @@ class TeamMemberFrame:
         self.idx = idx
         self.remove_callback = remove_callback
         self.update_team_options = update_team_options
-        self.team_lookup = team_lookup
+        self.team_lookup = self._normalize_lookup(team_lookup)
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
@@ -210,8 +211,16 @@ class TeamMemberFrame:
             )
 
     def set_lookup(self, lookup):
-        self.team_lookup = lookup or {}
+        self.team_lookup = self._normalize_lookup(lookup)
         self._last_missing_lookup_id = None
+
+    def _normalize_lookup(self, lookup):
+        normalized = {}
+        for key, value in (lookup or {}).items():
+            normalized_key = normalize_team_member_identifier(key)
+            if normalized_key:
+                normalized[normalized_key] = value
+        return normalized
 
     def _requires_agency_details(self) -> bool:
         division_norm = normalize_without_accents(self.division_var.get()).lower()
@@ -244,7 +253,10 @@ class TeamMemberFrame:
             validator.show_custom_error(validator.validate_callback())
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
-        cid = self.id_var.get().strip()
+        normalized_id = normalize_team_member_identifier(self.id_var.get())
+        if normalized_id != self.id_var.get():
+            self.id_var.set(normalized_id)
+        cid = normalized_id
         self._notify_id_change(cid)
         if cid:
             data = self.team_lookup.get(cid)
@@ -287,8 +299,11 @@ class TeamMemberFrame:
             self.id_change_callback(self, previous, new_id)
 
     def get_data(self):
+        normalized_id = normalize_team_member_identifier(self.id_var.get())
+        if normalized_id != self.id_var.get():
+            self.id_var.set(normalized_id)
         return {
-            "id_colaborador": self.id_var.get().strip(),
+            "id_colaborador": normalized_id,
             "id_caso": "",
             "flag": self.flag_var.get(),
             "division": self.division_var.get().strip(),

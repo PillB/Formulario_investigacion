@@ -1579,7 +1579,12 @@ class FraudCaseApp:
         self.detail_catalogs = detail_catalogs or {}
         self.detail_lookup_by_id = detail_lookup_by_id or {}
         self.client_lookup = self._extract_lookup_or_empty("id_cliente")
-        self.team_lookup = self._extract_lookup_or_empty("id_colaborador")
+        raw_team_lookup = self._extract_lookup_or_empty("id_colaborador")
+        self.team_lookup = {
+            normalized: value
+            for key, value in raw_team_lookup.items()
+            if (normalized := self._normalize_identifier(key))
+        }
         self.product_lookup = self._extract_lookup_or_empty("id_producto")
         for frame in self.client_frames:
             if hasattr(frame, 'set_lookup'):
@@ -2774,7 +2779,7 @@ class FraudCaseApp:
 
     @staticmethod
     def _normalize_identifier(identifier):
-        return (identifier or '').strip()
+        return (identifier or '').strip().upper()
 
     @staticmethod
     def _frame_entity_label(frame):
@@ -3028,7 +3033,8 @@ class FraudCaseApp:
             or row.get('id_col')
             or ''
         ).strip()
-        frame.id_var.set(id_col)
+        normalized_id = self._normalize_identifier(id_col)
+        frame.id_var.set(normalized_id or id_col)
         flag_val = (
             row.get('flag_colaborador')
             or row.get('flag')
@@ -3044,14 +3050,16 @@ class FraudCaseApp:
         frame.codigo_agencia_var.set((row.get('codigo_agencia') or '').strip())
         frame.tipo_falta_var.set((row.get('tipo_falta') or '').strip() or 'No aplica')
         frame.tipo_sancion_var.set((row.get('tipo_sancion') or '').strip() or 'No aplica')
-        self.team_lookup[id_col] = {
-            'division': frame.division_var.get(),
-            'area': frame.area_var.get(),
-            'servicio': frame.servicio_var.get(),
-            'puesto': frame.puesto_var.get(),
-            'nombre_agencia': frame.nombre_agencia_var.get(),
-            'codigo_agencia': frame.codigo_agencia_var.get(),
-        }
+        lookup_key = normalized_id or id_col
+        if lookup_key:
+            self.team_lookup[lookup_key] = {
+                'division': frame.division_var.get(),
+                'area': frame.area_var.get(),
+                'servicio': frame.servicio_var.get(),
+                'puesto': frame.puesto_var.get(),
+                'nombre_agencia': frame.nombre_agencia_var.get(),
+                'codigo_agencia': frame.codigo_agencia_var.get(),
+            }
 
     def _populate_product_frame_from_row(self, frame, row):
         product_id = (row.get('id_producto') or row.get('IdProducto') or '').strip()
@@ -4078,6 +4086,7 @@ class FraudCaseApp:
                 )
         # Validar número de caso
         id_caso = self.id_caso_var.get().strip()
+        normalized_case_id = self._normalize_identifier(id_caso)
         case_message = validate_case_id(id_caso)
         if case_message:
             errors.append(case_message)
@@ -4156,8 +4165,10 @@ class FraudCaseApp:
                     message = validate_client_id(tipo_id_value, client_id_value)
                     if message:
                         errors.append(f"Cliente {idx}: {message}")
-                    if client_id_value:
-                        client_id_occurrences.setdefault(client_id_value, []).append(idx)
+                    normalized_client_id = self._normalize_identifier(client_id_value)
+                    if normalized_client_id:
+                        occurrences = client_id_occurrences.setdefault(normalized_client_id, [])
+                        occurrences.append((idx, client_id_value or normalized_client_id))
 
             flag_var = getattr(cframe, "flag_var", None)
             if flag_var is not None:
@@ -4201,12 +4212,13 @@ class FraudCaseApp:
                 )
                 if accionado_message:
                     errors.append(f"Cliente {idx}: {accionado_message}")
-        for client_id_value, positions in client_id_occurrences.items():
-            if len(positions) > 1:
-                formatted_positions = ", ".join(str(pos) for pos in positions)
+        for normalized_client_id, occurrences in client_id_occurrences.items():
+            if len(occurrences) > 1:
+                formatted_positions = ", ".join(str(pos) for pos, _ in occurrences)
+                display_value = occurrences[0][1] or normalized_client_id
                 errors.append(
                     (
-                        f"El ID de cliente {client_id_value} está duplicado en los clientes {formatted_positions}. "
+                        f"El ID de cliente {display_value} está duplicado en los clientes {formatted_positions}. "
                         "Cada cliente debe tener un ID único."
                     )
                 )
@@ -4223,8 +4235,9 @@ class FraudCaseApp:
             tm_id_message = validate_team_member_id(team_id_value)
             if tm_id_message:
                 errors.append(f"Colaborador {current_idx}: {tm_id_message}")
-            if team_id_value:
-                team_id_occurrences.setdefault(team_id_value, []).append(current_idx)
+            normalized_team_id = self._normalize_identifier(team_id_value)
+            if normalized_team_id:
+                team_id_occurrences.setdefault(normalized_team_id, []).append(current_idx)
             agency_message = validate_agency_code(tm.codigo_agencia_var.get(), allow_blank=True)
             if agency_message:
                 errors.append(f"Colaborador {current_idx}: {agency_message}")
@@ -4283,34 +4296,42 @@ class FraudCaseApp:
                         "Cada colaborador debe tener un ID único."
                     )
                 )
-        collaborator_ids = {
-            tm.id_var.get().strip()
-            for tm in self.team_frames
-            if tm.id_var.get().strip()
-        }
+        collaborator_ids = set()
+        for tm in self.team_frames:
+            normalized_team_id = self._normalize_identifier(tm.id_var.get())
+            if normalized_team_id:
+                collaborator_ids.add(normalized_team_id)
         for idx, p in enumerate(self.product_frames, start=1):
             prod_data = p.get_data()
             producto = prod_data['producto']
-            producto_label = producto.get('id_producto') or f"Producto {idx}"
-            pid = producto['id_producto']
+            pid = producto.get('id_producto', '')
+            pid_norm = self._normalize_identifier(pid)
+            pid_key = pid_norm or pid or ''
+            producto_label = pid_norm or pid or f"Producto {idx}"
             pid_message = validate_product_id(p.tipo_prod_var.get(), p.id_var.get())
             if pid_message:
                 errors.append(f"Producto {idx}: {pid_message}")
             cid = producto['id_cliente']
+            cid_norm = self._normalize_identifier(cid)
             if not cid:
                 errors.append(
                     f"Producto {idx}: el cliente vinculado fue eliminado. Selecciona un nuevo titular antes de exportar."
                 )
-            if pid in product_client_map:
-                prev_client = product_client_map[pid]
-                if prev_client != cid:
+            if pid_key in product_client_map:
+                prev_entry = product_client_map[pid_key]
+                if prev_entry['client_norm'] != cid_norm:
+                    prev_client_display = prev_entry['client_display'] or prev_entry['client_norm'] or 'sin ID'
+                    current_client_display = cid or cid_norm or 'sin ID'
                     errors.append(
-                        f"El producto {pid} está asociado a dos clientes distintos ({prev_client} y {cid})."
+                        f"El producto {producto_label} está asociado a dos clientes distintos ({prev_client_display} y {current_client_display})."
                     )
                 else:
-                    errors.append(f"El producto {pid} está duplicado en el formulario.")
+                    errors.append(f"El producto {producto_label} está duplicado en el formulario.")
             else:
-                product_client_map[pid] = cid
+                product_client_map[pid_key] = {
+                    'client_norm': cid_norm,
+                    'client_display': cid,
+                }
             for taxonomy_error in _validate_product_taxonomy(producto, producto_label):
                 errors.append(taxonomy_error)
             catalog_validations = [
@@ -4345,19 +4366,29 @@ class FraudCaseApp:
                     errors.append(catalog_error)
             # For each involvement; if no assignments, use empty string for id_colaborador
             claim_rows = prod_data['reclamos'] or [{'id_reclamo': ''}]
+            product_occurrence_date = prod_data['producto'].get('fecha_ocurrencia')
             if not prod_data['asignaciones']:
                 for claim in claim_rows:
                     claim_id = (claim.get('id_reclamo') or '').strip()
-                    key = (id_caso, pid, cid, '', prod_data['producto']['fecha_ocurrencia'], claim_id)
+                    claim_id_norm = self._normalize_identifier(claim_id)
+                    key = (
+                        normalized_case_id,
+                        pid_norm,
+                        cid_norm,
+                        '',
+                        product_occurrence_date,
+                        claim_id_norm,
+                    )
                     if key in key_set:
-                        errors.append(f"Registro duplicado de clave técnica (producto {pid})")
+                        errors.append(f"Registro duplicado de clave técnica (producto {producto_label})")
                     key_set.add(key)
             for inv_idx, inv in enumerate(prod_data['asignaciones'], start=1):
                 collaborator_id = (inv.get('id_colaborador') or '').strip()
+                collaborator_norm = self._normalize_identifier(collaborator_id)
                 amount_value = (inv.get('monto_asignado') or '').strip()
                 amount_label = (
                     f"Monto asignado del colaborador {collaborator_id or f'sin ID ({inv_idx})'} "
-                    f"en el producto {pid}"
+                    f"en el producto {producto_label}"
                 )
                 amount_error, _amount, normalized_amount = validate_money_bounds(
                     amount_value,
@@ -4371,23 +4402,24 @@ class FraudCaseApp:
                     errors.append(
                         f"Producto {pid}: la asignación {inv_idx} tiene un monto sin colaborador."
                     )
-                if collaborator_id and collaborator_id not in collaborator_ids:
+                if collaborator_id and collaborator_norm not in collaborator_ids:
                     errors.append(
                         f"Producto {pid}: la asignación {inv_idx} referencia un colaborador eliminado (ID {collaborator_id})."
                     )
                 for claim in claim_rows:
                     claim_id = (claim.get('id_reclamo') or '').strip()
                     key = (
-                        id_caso,
-                        pid,
-                        cid,
-                        collaborator_id,
-                        prod_data['producto']['fecha_ocurrencia'],
-                        claim_id,
+                        normalized_case_id,
+                        pid_norm,
+                        cid_norm,
+                        collaborator_norm,
+                        product_occurrence_date,
+                        self._normalize_identifier(claim_id),
                     )
                     if key in key_set:
+                        collaborator_label = collaborator_norm or collaborator_id or 'sin ID'
                         errors.append(
-                            f"Registro duplicado de clave técnica (producto {pid}, colaborador {collaborator_id})"
+                            f"Registro duplicado de clave técnica (producto {producto_label}, colaborador {collaborator_label})"
                         )
                     key_set.add(key)
         # Validar fechas y montos por producto
@@ -4463,15 +4495,16 @@ class FraudCaseApp:
             seen_claim_ids = set()
             for claim in data['reclamos'] or []:
                 claim_id = (claim.get('id_reclamo') or '').strip()
+                normalized_claim_id = self._normalize_identifier(claim_id)
                 claim_name = (claim.get('nombre_analitica') or '').strip()
                 claim_code = (claim.get('codigo_analitica') or '').strip()
                 has_any_value = any([claim_id, claim_name, claim_code])
                 if claim_id:
-                    if claim_id in seen_claim_ids:
+                    if normalized_claim_id in seen_claim_ids:
                         errors.append(
                             f"Producto {producto['id_producto']}: El ID de reclamo {claim_id} está duplicado."
                         )
-                    seen_claim_ids.add(claim_id)
+                    seen_claim_ids.add(normalized_claim_id)
                     reclamo_message = validate_reclamo_id(claim_id)
                     if reclamo_message:
                         errors.append(f"Producto {producto['id_producto']}: {reclamo_message}")
