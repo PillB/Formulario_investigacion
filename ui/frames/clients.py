@@ -141,6 +141,24 @@ class ClientFrame:
                 variables=[self.tipo_id_var],
             )
         )
+        def _validate_flag():
+            required_message = validate_required_text(self.flag_var.get(), "el flag del cliente")
+            if required_message:
+                return required_message
+            value = (self.flag_var.get() or "").strip()
+            if value and value not in FLAG_CLIENTE_LIST:
+                return f"El flag de cliente '{value}' no está en el catálogo CM."
+            return None
+
+        self.validators.append(
+            FieldValidator(
+                flag_cb,
+                _validate_flag,
+                self.logs,
+                f"Cliente {self.idx+1} - Flag",
+                variables=[self.flag_var],
+            )
+        )
         def _validate_required_phones():
             value = self.telefonos_var.get()
             error = validate_required_text(value, "al menos un teléfono del cliente")
