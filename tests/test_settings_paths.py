@@ -16,3 +16,18 @@ def test_team_details_file_exists_from_repo_root(monkeypatch):
     reloaded_settings = reload(settings)
     team_details_path = Path(reloaded_settings.TEAM_DETAILS_FILE)
     assert team_details_path.is_file(), team_details_path
+
+
+def test_ensure_external_drive_dir_creates_custom_target(tmp_path, monkeypatch):
+    """La función debe crear la carpeta configurada dinámicamente."""
+
+    external_dir = tmp_path / 'external drive'
+    monkeypatch.setattr(settings, 'EXTERNAL_DRIVE_DIR', str(external_dir))
+    monkeypatch.setattr(
+        settings,
+        'EXTERNAL_LOGS_FILE',
+        str(external_dir / 'logs.csv'),
+    )
+    created_path = settings.ensure_external_drive_dir()
+    assert created_path == external_dir
+    assert external_dir.is_dir()

@@ -169,3 +169,67 @@ def test_save_and_send_reports_catalog_errors_once(monkeypatch, messagebox_spy):
     assert title == 'Errores de validación'
     assert 'Tipo inventado' in message
     assert 'Canal inventado' in message
+
+
+def test_save_and_send_mirrors_exports_to_external_drive(tmp_path, monkeypatch, messagebox_spy):
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+    mirror_dir = tmp_path / 'external drive'
+
+    def fake_ensure():
+        mirror_dir.mkdir(parents=True, exist_ok=True)
+        return mirror_dir
+
+    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', fake_ensure)
+    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
+    app = _make_minimal_app()
+    app._current_case_data = _build_case_data('2024-9001')
+    app.save_and_send()
+    case_folder = mirror_dir / '2024-9001'
+    assert (case_folder / '2024-9001_casos.csv').is_file()
+    assert (case_folder / '2024-9001_informe.md').is_file()
+    assert messagebox_spy.warnings == []
+
+
+def test_save_and_send_warns_when_external_copy_fails(tmp_path, monkeypatch, messagebox_spy):
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+    mirror_dir = tmp_path / 'external drive'
+
+    def fake_ensure():
+        mirror_dir.mkdir(parents=True, exist_ok=True)
+        return mirror_dir
+
+    def failing_copy(*_args, **_kwargs):
+        raise OSError('disco lleno')
+
+    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', fake_ensure)
+    monkeypatch.setattr(app_module.shutil, 'copy2', failing_copy)
+    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
+    app = _make_minimal_app()
+    app._current_case_data = _build_case_data('2024-9002')
+    app.save_and_send()
+    assert messagebox_spy.warnings
+    title, message = messagebox_spy.warnings[-1]
+    assert title in {'Copia pendiente', 'Copia incompleta'}
+    assert '2024-9002' in message or 'archivos' in message
+
+
+def test_save_temp_version_mirrors_to_external_drive(tmp_path, monkeypatch):
+    mirror_dir = tmp_path / 'external drive'
+
+    def fake_ensure():
+        mirror_dir.mkdir(parents=True, exist_ok=True)
+        return mirror_dir
+
+    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', fake_ensure)
+    app = _make_minimal_app()
+    data = _build_case_data('2024-1234')
+    app.gather_data = types.MethodType(lambda self: data, app)
+    monkeypatch.chdir(tmp_path)
+    before = set(tmp_path.iterdir())
+    app.save_temp_version(data=data)
+    after_files = [path for path in tmp_path.iterdir() if path.is_file() and path not in before]
+    assert len(after_files) == 1
+    mirrored = mirror_dir / after_files[0].name
+    assert mirrored.is_file()
