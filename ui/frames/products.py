@@ -280,6 +280,8 @@ PRODUCT_MONEY_SPECS = (
 class ProductFrame:
     """Representa un producto y su interfaz en la sección de productos."""
 
+    ENTITY_LABEL = "producto"
+
     def __init__(
         self,
         parent,

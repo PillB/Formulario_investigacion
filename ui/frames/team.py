@@ -14,6 +14,8 @@ from validators import (FieldValidator, log_event, should_autofill_field,
 class TeamMemberFrame:
     """Representa un colaborador y su interfaz en la sección de colaboradores."""
 
+    ENTITY_LABEL = "colaborador"
+
     def __init__(
         self,
         parent,

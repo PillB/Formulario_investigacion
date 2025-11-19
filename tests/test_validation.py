@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+import app as app_module
 from app import FraudCaseApp
 from settings import (ACCIONADO_OPTIONS, CANAL_LIST, CRITICIDAD_LIST,
                       FLAG_COLABORADOR_LIST, PROCESO_LIST, TAXONOMIA,
@@ -510,7 +511,38 @@ def test_validate_data_flags_duplicate_clients():
 
     errors, _ = app.validate_data()
 
-    assert f"Cliente duplicado: {duplicate_id}" in errors
+    expected_fragment = f"El ID de cliente {duplicate_id} está duplicado"
+    assert any(expected_fragment in error for error in errors)
+
+
+def test_update_frame_id_index_reverts_duplicate_ids(monkeypatch):
+    app_instance = FraudCaseApp.__new__(FraudCaseApp)
+    app_instance.logs = []
+    app_instance._suppress_messagebox = False
+
+    captured = {}
+
+    def fake_showerror(title, message):
+        captured["title"] = title
+        captured["message"] = message
+
+    monkeypatch.setattr(app_module.messagebox, "showerror", fake_showerror)
+
+    original_frame = DummyClient("C0000001")
+    original_frame._last_tracked_id = ""
+    conflicting_frame = DummyClient("")
+    conflicting_frame._last_tracked_id = ""
+
+    index = {}
+    app_instance._update_frame_id_index(index, original_frame, "", original_frame.id_var.get())
+    conflicting_frame.id_var.set("C0000001")
+    app_instance._update_frame_id_index(index, conflicting_frame, "", conflicting_frame.id_var.get())
+
+    assert conflicting_frame.id_var.get() == ""
+    assert conflicting_frame._last_tracked_id == ""
+    assert index["C0000001"] is original_frame
+    assert captured["title"] == "ID duplicado"
+    assert "único" in captured["message"]
 
 
 def test_validate_data_rejects_imported_clients_with_invalid_phone():
@@ -1250,7 +1282,8 @@ def test_validate_data_flags_duplicate_collaborators():
 
     errors, _ = app.validate_data()
 
-    assert f"Colaborador duplicado: {duplicate_id}" in errors
+    expected_fragment = f"El ID de colaborador {duplicate_id} está duplicado"
+    assert any(expected_fragment in error for error in errors)
 
 
 def test_validate_data_accepts_collaborator_flag_in_catalog():
