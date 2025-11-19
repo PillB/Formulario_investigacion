@@ -148,8 +148,10 @@ class InvolvementRow:
         monto_text = self.monto_var.get().strip()
         team_value = self.team_var.get().strip()
         if not monto_text:
-            if team_value and team_value not in self._get_known_team_ids():
-                return "Debe seleccionar un colaborador válido."
+            if team_value:
+                if team_value not in self._get_known_team_ids():
+                    return "Debe seleccionar un colaborador válido."
+                return "Debe ingresar un monto asignado para este colaborador."
             self._clear_if_completely_blank()
             return None
         if not team_value:
