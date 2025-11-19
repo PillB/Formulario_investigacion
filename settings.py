@@ -177,6 +177,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 EXTERNAL_DRIVE_DIR = os.path.join(BASE_DIR, "external drive")
 EXTERNAL_LOGS_FILE = os.path.join(EXTERNAL_DRIVE_DIR, "logs.csv")
+STORE_LOGS_LOCALLY = True
 
 
 def ensure_external_drive_dir() -> Path:
@@ -238,6 +239,7 @@ __all__ = [
     "FLAG_CLIENTE_LIST",
     "FLAG_COLABORADOR_LIST",
     "LOGS_FILE",
+    "STORE_LOGS_LOCALLY",
     "MASSIVE_SAMPLE_FILES",
     "NORM_ID_ALIASES",
     "PRODUCT_DETAILS_FILE",

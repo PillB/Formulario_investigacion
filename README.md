@@ -73,6 +73,8 @@ tipo: "navegacion" para cambios de campos, "validacion" para errores y advertenc
 mensaje: Descripción del evento (qué campo se modificó, si hubo errores, etc.).
 Utilice esta información para detectar los puntos del formulario donde los usuarios cometen más errores o tardan más tiempo, lo que ayudará a mejorar la usabilidad y las validaciones.
 
+Por defecto la aplicación escribe los eventos tanto en `logs.csv` (junto al código fuente) como en `external drive/logs.csv`. Si necesitas evitar escrituras locales, actualiza la constante `STORE_LOGS_LOCALLY` en `settings.py` a `False`. En ese modo la bitácora sólo se persiste en la unidad externa simulada y la aplicación mostrará una advertencia si alguno de los destinos falla al escribir.
+
 Con esta guía y el script proporcionado, podrá recrear la gestión de casos de fraude en un entorno de escritorio, probar todas las reglas de negocio, importar datos masivamente y analizar los registros para mejorar la experiencia del usuario.
 
 12. Cobertura enfocada en guardado/exportación/logs
