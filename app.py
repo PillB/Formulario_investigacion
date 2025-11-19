@@ -4724,23 +4724,35 @@ class FraudCaseApp:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         case_id = data.get('caso', {}).get('id_caso', '') or 'caso'
         filename = f"{case_id}_temp_{timestamp}.json"
+        json_payload = json.dumps(data, ensure_ascii=False, indent=2)
+        target_path = Path(os.getcwd()) / filename
+        primary_written = False
         try:
-            path = os.path.join(os.getcwd(), filename)
-            with open(path, 'w', encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception as ex:
+            target_path.write_text(json_payload, encoding='utf-8')
+            primary_written = True
+        except OSError as ex:
             # Registrar en el log pero no interrumpir
             log_event("validacion", f"Error guardando versión temporal: {ex}", self.logs)
-            return
         external_base = self._get_external_drive_path()
         if not external_base:
             return
+        mirror_path = Path(external_base) / filename
+        if primary_written:
+            try:
+                shutil.copy2(target_path, mirror_path)
+                return
+            except OSError as exc:
+                log_event(
+                    "validacion",
+                    f"No se pudo copiar la versión temporal a la carpeta externa: {exc}",
+                    self.logs,
+                )
         try:
-            shutil.copy2(path, external_base / filename)
+            mirror_path.write_text(json_payload, encoding='utf-8')
         except OSError as exc:
             log_event(
                 "validacion",
-                f"No se pudo copiar la versión temporal a la carpeta externa: {exc}",
+                f"No se pudo escribir la versión temporal en la carpeta externa: {exc}",
                 self.logs,
             )
 
