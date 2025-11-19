@@ -129,6 +129,10 @@ class FraudCaseApp:
         self.team_lookup = {}
         self.client_lookup = {}
         self.product_lookup = {}
+        self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
+        self.import_progress = None
+        self._import_progress_visible = False
+        self._active_import_jobs = 0
 
         def register_tooltip(widget, text):
             if widget is None or not text:
@@ -192,114 +196,38 @@ class FraudCaseApp:
         if not filename:
             messagebox.showwarning("Sin archivo", "No hay CSV combinado disponible para importar.")
             return
-        created_records = False
-        missing_clients = []
-        missing_team = []
-        missing_products = []
-        try:
+        def worker():
+            prepared_rows = []
             for row in iter_massive_csv_rows(filename):
-                client_row, client_found = self._hydrate_row_from_details(row, 'id_cliente', CLIENT_ID_ALIASES)
-                client_id = (client_row.get('id_cliente') or '').strip()
-                if client_id:
-                    if not client_row.get('flag') and row.get('flag_cliente'):
-                        client_row['flag'] = row.get('flag_cliente')
-                    for key in ('telefonos', 'correos', 'direcciones', 'accionado', 'tipo_id'):
-                        if not client_row.get(key) and row.get(key):
-                            client_row[key] = row.get(key)
-                    client_frame, created_client = self._ensure_client_exists(client_id, client_row)
-                    if created_client:
-                        self._trigger_import_id_refresh(
-                            client_frame,
-                            client_id,
-                            notify_on_missing=False,
-                            preserve_existing=False,
-                        )
-                    created_records = created_records or created_client
-                    if not client_found and 'id_cliente' in self.detail_catalogs:
-                        missing_clients.append(client_id)
-                team_row, team_found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
+                raw_row = dict(row)
+                client_row, client_found = self._hydrate_row_from_details(raw_row, 'id_cliente', CLIENT_ID_ALIASES)
+                team_row, team_found = self._hydrate_row_from_details(raw_row, 'id_colaborador', TEAM_ID_ALIASES)
+                product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
                 collaborator_id = (team_row.get('id_colaborador') or '').strip()
-                if collaborator_id:
-                    team_frame, created_team = self._ensure_team_member_exists(collaborator_id, team_row)
-                    if created_team:
-                        self._trigger_import_id_refresh(
-                            team_frame,
-                            collaborator_id,
-                            notify_on_missing=False,
-                            preserve_existing=False,
-                        )
-                    created_records = created_records or created_team
-                    if not team_found and 'id_colaborador' in self.detail_catalogs:
-                        missing_team.append(collaborator_id)
-                product_row, product_found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
-                product_id = (product_row.get('id_producto') or '').strip()
-                product_frame = None
-                if product_id:
-                    product_frame = self._find_product_frame(product_id)
-                    new_product = False
-                    if not product_frame:
-                        product_frame = self._obtain_product_slot_for_import()
-                        new_product = True
-                    client_for_product = (product_row.get('id_cliente') or '').strip()
-                    if client_for_product:
-                        client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
-                        self._ensure_client_exists(client_for_product, client_details)
-                    self._populate_product_frame_from_row(product_frame, product_row)
-                    self._trigger_import_id_refresh(
-                        product_frame,
-                        product_id,
-                        notify_on_missing=False,
-                        preserve_existing=False,
-                    )
-                    created_records = created_records or new_product
-                    if not product_found and 'id_producto' in self.detail_catalogs:
-                        missing_products.append(product_id)
-                involvement_pairs = parse_involvement_entries(row.get('involucramiento', ''))
-                if not involvement_pairs and collaborator_id and row.get('monto_asignado'):
-                    involvement_pairs = [(collaborator_id, (row.get('monto_asignado') or '').strip())]
-                if product_frame and involvement_pairs:
-                    for collab_id, amount in involvement_pairs:
-                        collab_id = (collab_id or '').strip()
-                        if not collab_id:
-                            continue
-                        collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
-                        _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
-                        created_records = created_records or created_team
-                        if not collab_found and 'id_colaborador' in self.detail_catalogs:
-                            missing_team.append(collab_id)
-                        inv_row = next((inv for inv in product_frame.involvements if inv.team_var.get().strip() == collab_id), None)
-                        if not inv_row:
-                            inv_row = self._obtain_involvement_slot(product_frame)
-                        inv_row.team_var.set(collab_id)
-                        amount_text = (amount or '').strip()
-                        label = (
-                            f"Monto asignado del colaborador {collab_id or 'sin ID'} "
-                            f"en el producto {product_id or 'sin ID'}"
-                        )
-                        error, _amount, normalized_text = validate_money_bounds(
-                            amount_text,
-                            label,
-                        )
-                        if error:
-                            raise ValueError(error)
-                        inv_row.monto_var.set(normalized_text or amount_text)
-                        created_records = True
-            self._notify_dataset_changed()
-            log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
-            if created_records:
-                self.sync_main_form_after_import("datos combinados")
-                messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
-            else:
-                messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
-        except ValueError as ex:
-            messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
-            raise
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
-            return
-        self._report_missing_detail_ids("clientes", missing_clients)
-        self._report_missing_detail_ids("colaboradores", missing_team)
-        self._report_missing_detail_ids("productos", missing_products)
+                involvement_pairs = parse_involvement_entries(raw_row.get('involucramiento', ''))
+                if not involvement_pairs and collaborator_id and raw_row.get('monto_asignado'):
+                    involvement_pairs = [(collaborator_id, (raw_row.get('monto_asignado') or '').strip())]
+                prepared_rows.append(
+                    {
+                        'raw_row': raw_row,
+                        'client_row': client_row,
+                        'client_found': client_found,
+                        'team_row': team_row,
+                        'team_found': team_found,
+                        'product_row': product_row,
+                        'product_found': product_found,
+                        'involvement_pairs': involvement_pairs,
+                    }
+                )
+            return prepared_rows
+
+        self._start_background_import(
+            "datos combinados",
+            getattr(self, 'import_combined_button', None),
+            worker,
+            self._apply_combined_import_payload,
+            "No se pudo importar el CSV combinado",
+        )
 
     def import_risks(self, filename=None):
         """Importa riesgos desde un archivo CSV."""
@@ -308,36 +236,20 @@ class FraudCaseApp:
         if not filename:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de riesgos para importar.")
             return
-        imported = 0
-        try:
+        def worker():
+            payload = []
             for row in iter_massive_csv_rows(filename):
                 hydrated, _ = self._hydrate_row_from_details(row, 'id_riesgo', RISK_ID_ALIASES)
-                rid = (hydrated.get('id_riesgo') or '').strip()
-                if not rid:
-                    continue
-                if any(r.id_var.get().strip() == rid for r in self.risk_frames):
-                    log_event("validacion", f"Riesgo duplicado {rid} en importación", self.logs)
-                    continue
-                self.add_risk()
-                rf = self.risk_frames[-1]
-                rf.id_var.set(rid)
-                rf.lider_var.set((hydrated.get('lider') or '').strip())
-                rf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
-                crit = (hydrated.get('criticidad') or '').strip()
-                if crit in CRITICIDAD_LIST:
-                    rf.criticidad_var.set(crit)
-                rf.exposicion_var.set((hydrated.get('exposicion_residual') or '').strip())
-                rf.planes_var.set((hydrated.get('planes_accion') or '').strip())
-                imported += 1
-            self._notify_dataset_changed(summary_sections="riesgos")
-            log_event("navegacion", "Riesgos importados desde CSV", self.logs)
-            if imported:
-                messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
-            else:
-                messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar riesgos: {ex}")
-            return
+                payload.append(hydrated)
+            return payload
+
+        self._start_background_import(
+            "riesgos",
+            getattr(self, 'import_risks_button', None),
+            worker,
+            self._apply_risk_import_payload,
+            "No se pudo importar riesgos",
+        )
 
     def import_norms(self, filename=None):
         """Importa normas transgredidas desde un archivo CSV."""
@@ -346,31 +258,20 @@ class FraudCaseApp:
         if not filename:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de normas.")
             return
-        imported = 0
-        try:
+        def worker():
+            payload = []
             for row in iter_massive_csv_rows(filename):
                 hydrated, _ = self._hydrate_row_from_details(row, 'id_norma', NORM_ID_ALIASES)
-                nid = (hydrated.get('id_norma') or '').strip()
-                if not nid:
-                    continue
-                if any(n.id_var.get().strip() == nid for n in self.norm_frames):
-                    log_event("validacion", f"Norma duplicada {nid} en importación", self.logs)
-                    continue
-                self.add_norm()
-                nf = self.norm_frames[-1]
-                nf.id_var.set(nid)
-                nf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
-                nf.fecha_var.set((hydrated.get('fecha_vigencia') or '').strip())
-                imported += 1
-            self._notify_dataset_changed(summary_sections="normas")
-            log_event("navegacion", "Normas importadas desde CSV", self.logs)
-            if imported:
-                messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
-            else:
-                messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar normas: {ex}")
-            return
+                payload.append(hydrated)
+            return payload
+
+        self._start_background_import(
+            "normas",
+            getattr(self, 'import_norms_button', None),
+            worker,
+            self._apply_norm_import_payload,
+            "No se pudo importar normas",
+        )
 
     def import_claims(self, filename=None):
         """Importa reclamos desde un archivo CSV."""
@@ -379,58 +280,20 @@ class FraudCaseApp:
         if not filename:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de reclamos.")
             return
-        imported = 0
-        missing_products = []
-        try:
+        def worker():
+            payload = []
             for row in iter_massive_csv_rows(filename):
                 hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
-                product_id = (hydrated.get('id_producto') or '').strip()
-                if not product_id:
-                    continue
-                product_frame = self._find_product_frame(product_id)
-                new_product = False
-                if not product_frame:
-                    product_frame = self._obtain_product_slot_for_import()
-                    new_product = True
-                client_id = (hydrated.get('id_cliente') or '').strip()
-                if client_id:
-                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
-                    self._ensure_client_exists(client_id, client_details)
-                if new_product:
-                    self._populate_product_frame_from_row(product_frame, hydrated)
-                if product_frame:
-                    self._trigger_import_id_refresh(
-                        product_frame,
-                        product_id,
-                        preserve_existing=False,
-                    )
-                claim_payload = {
-                    'id_reclamo': (hydrated.get('id_reclamo') or row.get('id_reclamo') or '').strip(),
-                    'nombre_analitica': (hydrated.get('nombre_analitica') or row.get('nombre_analitica') or '').strip(),
-                    'codigo_analitica': (hydrated.get('codigo_analitica') or row.get('codigo_analitica') or '').strip(),
-                }
-                if not any(claim_payload.values()):
-                    continue
-                target = product_frame.find_claim_by_id(claim_payload['id_reclamo'])
-                if not target:
-                    target = product_frame.obtain_claim_slot()
-                target.set_data(claim_payload)
-                self._sync_product_lookup_claim_fields(product_frame, product_id)
-                product_frame.persist_lookup_snapshot()
-                imported += 1
-                if not found and 'id_producto' in self.detail_catalogs:
-                    missing_products.append(product_id)
-            self._notify_dataset_changed(summary_sections="reclamos")
-            log_event("navegacion", "Reclamos importados desde CSV", self.logs)
-            if imported:
-                self.sync_main_form_after_import("reclamos")
-                messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
-            else:
-                messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar reclamos: {ex}")
-            return
-        self._report_missing_detail_ids("productos", missing_products)
+                payload.append({'row': hydrated, 'found': found})
+            return payload
+
+        self._start_background_import(
+            "reclamos",
+            getattr(self, 'import_claims_button', None),
+            worker,
+            self._apply_claim_import_payload,
+            "No se pudo importar reclamos",
+        )
 
     # ---------------------------------------------------------------------
     # Construcción de la interfaz
@@ -1134,6 +997,13 @@ class FraudCaseApp:
         btn_reclamos = ttk.Button(import_buttons, text="Cargar reclamos", command=self.import_claims)
         btn_reclamos.pack(side="left", padx=2)
         self.register_tooltip(btn_reclamos, "Vincula reclamos con los productos.")
+        self.import_clients_button = btn_clientes
+        self.import_team_button = btn_colabs
+        self.import_products_button = btn_productos
+        self.import_combined_button = btn_combo
+        self.import_risks_button = btn_riesgos
+        self.import_norms_button = btn_normas
+        self.import_claims_button = btn_reclamos
         for widget in (
             btn_clientes,
             btn_colabs,
@@ -1144,6 +1014,14 @@ class FraudCaseApp:
             btn_reclamos,
         ):
             self._register_catalog_dependent_widget(widget)
+        ttk.Label(
+            frame,
+            textvariable=self.import_status_var,
+            wraplength=500,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 0))
+        self.import_progress = ttk.Progressbar(frame, mode="indeterminate", length=260)
+        self._import_progress_visible = False
 
         # Botones de guardado y carga
         ttk.Label(frame, text="Guardar y cargar versiones").pack(anchor="w", pady=(10,2))
@@ -1165,7 +1043,7 @@ class FraudCaseApp:
 
         # Información adicional
         ttk.Label(frame, text="El auto‑guardado se realiza automáticamente en un archivo JSON").pack(anchor="w", pady=(10,2))
-        self._set_catalog_dependent_state(self._catalog_loading)
+        self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
 
     def _register_catalog_dependent_widget(self, widget):
         if widget is None:
@@ -1311,9 +1189,10 @@ class FraudCaseApp:
             pass
 
     def _finalize_catalog_loading_state(self, failed=False):
+        self._ensure_import_runtime_state()
         self._catalog_loading = False
         self._hide_catalog_progress()
-        self._set_catalog_dependent_state(False)
+        self._set_catalog_dependent_state(self._active_import_jobs > 0)
         self._catalog_loading_thread = None
         target_text = "Recargar catálogos" if not failed else "Reintentar carga"
         if self.catalog_load_button is not None:
@@ -1327,6 +1206,138 @@ class FraudCaseApp:
                 self.catalog_skip_button.state(['!disabled'])
             except tk.TclError:
                 pass
+
+    def _ensure_import_runtime_state(self):
+        if not hasattr(self, '_active_import_jobs'):
+            self._active_import_jobs = 0
+        if not hasattr(self, '_import_progress_visible'):
+            self._import_progress_visible = False
+        if not hasattr(self, 'import_progress'):
+            self.import_progress = None
+        if not hasattr(self, 'import_status_var'):
+            self.import_status_var = None
+        if not hasattr(self, '_catalog_loading'):
+            self._catalog_loading = False
+        if not hasattr(self, '_catalog_dependent_widgets'):
+            self._catalog_dependent_widgets = []
+
+    def _show_import_progress(self):
+        self._ensure_import_runtime_state()
+        if not self.import_progress:
+            return
+        if not self._import_progress_visible:
+            self.import_progress.pack(anchor="w", padx=5, pady=(0, 5))
+            self._import_progress_visible = True
+        try:
+            self.import_progress.start(10)
+        except tk.TclError:
+            pass
+
+    def _hide_import_progress(self):
+        self._ensure_import_runtime_state()
+        if not self.import_progress:
+            return
+        try:
+            self.import_progress.stop()
+        except tk.TclError:
+            pass
+        if self._import_progress_visible:
+            self.import_progress.pack_forget()
+            self._import_progress_visible = False
+
+    def _on_import_started(self, task_label):
+        self._ensure_import_runtime_state()
+        self._active_import_jobs += 1
+        if self.import_status_var is not None:
+            self.import_status_var.set(f"Importando {task_label}...")
+        self._show_import_progress()
+        if not self._catalog_loading:
+            self._set_catalog_dependent_state(True)
+
+    def _finalize_import_task(self, message, failed=False):
+        self._ensure_import_runtime_state()
+        self._active_import_jobs = max(0, self._active_import_jobs - 1)
+        if self.import_status_var is not None and message:
+            self.import_status_var.set(message)
+        if self._active_import_jobs == 0:
+            self._hide_import_progress()
+            if not self._catalog_loading:
+                self._set_catalog_dependent_state(False)
+
+    def _start_background_import(self, task_label, button, worker, ui_callback, error_prefix, ui_error_prefix=None):
+        self._ensure_import_runtime_state()
+        if button is not None:
+            try:
+                button.state(['disabled'])
+            except tk.TclError:
+                pass
+        self._on_import_started(task_label)
+        run_async = getattr(self, 'root', None) is not None
+        ui_error_prefix = ui_error_prefix or error_prefix
+
+        def _execute_worker():
+            try:
+                payload = worker()
+            except Exception as exc:  # pragma: no cover - errores inesperados
+                self._handle_import_failure(task_label, button, exc, error_prefix)
+                return
+            self._handle_import_success(task_label, button, ui_callback, payload, ui_error_prefix)
+
+        if not run_async:
+            _execute_worker()
+            return
+
+        def _thread_target():
+            try:
+                payload = worker()
+            except Exception as exc:  # pragma: no cover - errores inesperados
+                self._dispatch_to_ui(self._handle_import_failure, task_label, button, exc, error_prefix)
+                return
+            self._dispatch_to_ui(self._handle_import_success, task_label, button, ui_callback, payload, ui_error_prefix)
+
+        threading.Thread(
+            target=_thread_target,
+            name=f"import-{task_label}",
+            daemon=True,
+        ).start()
+
+    def _handle_import_success(self, task_label, button, ui_callback, payload, error_prefix):
+        message = f"Importación de {task_label} finalizada."
+        failed = False
+        captured_error = None
+        try:
+            ui_callback(payload)
+        except Exception as exc:
+            failed = True
+            message = f"Importación de {task_label} con errores."
+            captured_error = exc
+            try:
+                messagebox.showerror("Error", f"{error_prefix}: {exc}")
+            except tk.TclError:
+                pass
+        finally:
+            if button is not None and not self._catalog_loading:
+                try:
+                    button.state(['!disabled'])
+                except tk.TclError:
+                    pass
+            self._finalize_import_task(message, failed=failed)
+        if captured_error is not None and getattr(self, 'root', None) is None:
+            raise captured_error
+
+    def _handle_import_failure(self, task_label, button, error, error_prefix):
+        if button is not None and not self._catalog_loading:
+            try:
+                button.state(['!disabled'])
+            except tk.TclError:
+                pass
+        self._finalize_import_task(f"Error al importar {task_label}.", failed=True)
+        try:
+            messagebox.showerror("Error", f"{error_prefix}: {error}")
+        except tk.TclError:
+            pass
+        if getattr(self, 'root', None) is None:
+            raise error
 
     def _normalize_detail_catalog_payload(self, raw_catalogs):
         normalized = {
@@ -2918,6 +2929,302 @@ class FraudCaseApp:
             self._populate_team_frame_from_row(frame, payload)
         return frame, created
 
+    def _apply_client_import_payload(self, entries):
+        imported = 0
+        missing_ids = []
+        for entry in entries or []:
+            hydrated = entry.get('row', {})
+            found = entry.get('found', False)
+            id_cliente = (hydrated.get('id_cliente') or '').strip()
+            if not id_cliente:
+                continue
+            frame = self._find_client_frame(id_cliente) or self._obtain_client_slot_for_import()
+            self._populate_client_frame_from_row(frame, hydrated, preserve_existing=True)
+            self._trigger_import_id_refresh(
+                frame,
+                id_cliente,
+                notify_on_missing=True,
+                preserve_existing=False,
+            )
+            imported += 1
+            if not found and 'id_cliente' in self.detail_catalogs:
+                missing_ids.append(id_cliente)
+        self._notify_dataset_changed(summary_sections="clientes")
+        log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
+        if imported:
+            self.sync_main_form_after_import("clientes")
+            messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
+        else:
+            messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
+        self._report_missing_detail_ids("clientes", missing_ids)
+
+    def _apply_team_import_payload(self, entries):
+        imported = 0
+        missing_ids = []
+        for entry in entries or []:
+            hydrated = entry.get('row', {})
+            found = entry.get('found', False)
+            collaborator_id = (hydrated.get('id_colaborador') or '').strip()
+            if not collaborator_id:
+                continue
+            frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
+            self._populate_team_frame_from_row(frame, hydrated)
+            self._trigger_import_id_refresh(
+                frame,
+                collaborator_id,
+                notify_on_missing=True,
+                preserve_existing=False,
+            )
+            imported += 1
+            if not found and 'id_colaborador' in self.detail_catalogs:
+                missing_ids.append(collaborator_id)
+        self._notify_dataset_changed(summary_sections="colaboradores")
+        log_event("navegacion", f"Colaboradores importados desde CSV: {imported}", self.logs)
+        if imported:
+            self.sync_main_form_after_import("colaboradores")
+            messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
+        self._report_missing_detail_ids("colaboradores", missing_ids)
+
+    def _apply_product_import_payload(self, entries):
+        imported = 0
+        missing_ids = []
+        for entry in entries or []:
+            hydrated = entry.get('row', {})
+            found = entry.get('found', False)
+            product_id = (hydrated.get('id_producto') or '').strip()
+            if not product_id:
+                continue
+            frame = self._find_product_frame(product_id) or self._obtain_product_slot_for_import()
+            client_id = (hydrated.get('id_cliente') or '').strip()
+            if client_id:
+                client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                self._ensure_client_exists(client_id, client_details)
+            self._populate_product_frame_from_row(frame, hydrated)
+            self._trigger_import_id_refresh(
+                frame,
+                product_id,
+                notify_on_missing=True,
+                preserve_existing=False,
+            )
+            imported += 1
+            if not found and 'id_producto' in self.detail_catalogs:
+                missing_ids.append(product_id)
+        self._notify_dataset_changed(summary_sections="productos")
+        log_event("navegacion", f"Productos importados desde CSV: {imported}", self.logs)
+        if imported:
+            self.sync_main_form_after_import("productos")
+            messagebox.showinfo("Importación completa", "Productos importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se detectaron productos nuevos en el archivo.")
+        self._report_missing_detail_ids("productos", missing_ids)
+
+    def _apply_combined_import_payload(self, entries):
+        created_records = False
+        missing_clients = []
+        missing_team = []
+        missing_products = []
+        for entry in entries or []:
+            client_row = dict(entry.get('client_row') or {})
+            client_found = entry.get('client_found', False)
+            client_id = (client_row.get('id_cliente') or '').strip()
+            if client_id:
+                if not client_row.get('flag') and client_row.get('flag_cliente'):
+                    client_row['flag'] = client_row.get('flag_cliente')
+                for key in ('telefonos', 'correos', 'direcciones', 'accionado', 'tipo_id'):
+                    value = client_row.get(key)
+                    if not value and entry.get('raw_row', {}).get(key):
+                        client_row[key] = entry['raw_row'][key]
+                client_frame, created_client = self._ensure_client_exists(client_id, client_row)
+                if created_client:
+                    self._trigger_import_id_refresh(
+                        client_frame,
+                        client_id,
+                        notify_on_missing=False,
+                        preserve_existing=False,
+                    )
+                created_records = created_records or created_client
+                if not client_found and 'id_cliente' in self.detail_catalogs:
+                    missing_clients.append(client_id)
+            team_row = dict(entry.get('team_row') or {})
+            team_found = entry.get('team_found', False)
+            collaborator_id = (team_row.get('id_colaborador') or '').strip()
+            if collaborator_id:
+                team_frame, created_team = self._ensure_team_member_exists(collaborator_id, team_row)
+                if created_team:
+                    self._trigger_import_id_refresh(
+                        team_frame,
+                        collaborator_id,
+                        notify_on_missing=False,
+                        preserve_existing=False,
+                    )
+                created_records = created_records or created_team
+                if not team_found and 'id_colaborador' in self.detail_catalogs:
+                    missing_team.append(collaborator_id)
+            product_row = dict(entry.get('product_row') or {})
+            product_found = entry.get('product_found', False)
+            product_id = (product_row.get('id_producto') or '').strip()
+            product_frame = None
+            if product_id:
+                product_frame = self._find_product_frame(product_id)
+                new_product = False
+                if not product_frame:
+                    product_frame = self._obtain_product_slot_for_import()
+                    new_product = True
+                client_for_product = (product_row.get('id_cliente') or '').strip()
+                if client_for_product:
+                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
+                    self._ensure_client_exists(client_for_product, client_details)
+                self._populate_product_frame_from_row(product_frame, product_row)
+                self._trigger_import_id_refresh(
+                    product_frame,
+                    product_id,
+                    notify_on_missing=False,
+                    preserve_existing=False,
+                )
+                created_records = created_records or new_product
+                if not product_found and 'id_producto' in self.detail_catalogs:
+                    missing_products.append(product_id)
+            involvement_pairs = entry.get('involvement_pairs') or []
+            if product_frame and involvement_pairs:
+                for collab_id, amount in involvement_pairs:
+                    collab_id = (collab_id or '').strip()
+                    if not collab_id:
+                        continue
+                    collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
+                    _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
+                    created_records = created_records or created_team
+                    if not collab_found and 'id_colaborador' in self.detail_catalogs:
+                        missing_team.append(collab_id)
+                    inv_row = next((inv for inv in product_frame.involvements if inv.team_var.get().strip() == collab_id), None)
+                    if not inv_row:
+                        inv_row = self._obtain_involvement_slot(product_frame)
+                    inv_row.team_var.set(collab_id)
+                    amount_text = (amount or '').strip()
+                    label = (
+                        f"Monto asignado del colaborador {collab_id or 'sin ID'} "
+                        f"en el producto {product_id or 'sin ID'}"
+                    )
+                    error, _amount, normalized_text = validate_money_bounds(
+                        amount_text,
+                        label,
+                    )
+                    if error:
+                        raise ValueError(error)
+                    inv_row.monto_var.set(normalized_text or amount_text)
+                    created_records = True
+        self._notify_dataset_changed()
+        log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
+        if created_records:
+            self.sync_main_form_after_import("datos combinados")
+            messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
+        self._report_missing_detail_ids("clientes", missing_clients)
+        self._report_missing_detail_ids("colaboradores", missing_team)
+        self._report_missing_detail_ids("productos", missing_products)
+
+    def _apply_risk_import_payload(self, entries):
+        imported = 0
+        for hydrated in entries or []:
+            rid = (hydrated.get('id_riesgo') or '').strip()
+            if not rid:
+                continue
+            if any(r.id_var.get().strip() == rid for r in self.risk_frames):
+                log_event("validacion", f"Riesgo duplicado {rid} en importación", self.logs)
+                continue
+            self.add_risk()
+            rf = self.risk_frames[-1]
+            rf.id_var.set(rid)
+            rf.lider_var.set((hydrated.get('lider') or '').strip())
+            rf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
+            crit = (hydrated.get('criticidad') or '').strip()
+            if crit in CRITICIDAD_LIST:
+                rf.criticidad_var.set(crit)
+            rf.exposicion_var.set((hydrated.get('exposicion_residual') or '').strip())
+            rf.planes_var.set((hydrated.get('planes_accion') or '').strip())
+            imported += 1
+        self._notify_dataset_changed(summary_sections="riesgos")
+        log_event("navegacion", "Riesgos importados desde CSV", self.logs)
+        if imported:
+            messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
+
+    def _apply_norm_import_payload(self, entries):
+        imported = 0
+        for hydrated in entries or []:
+            nid = (hydrated.get('id_norma') or '').strip()
+            if not nid:
+                continue
+            if any(n.id_var.get().strip() == nid for n in self.norm_frames):
+                log_event("validacion", f"Norma duplicada {nid} en importación", self.logs)
+                continue
+            self.add_norm()
+            nf = self.norm_frames[-1]
+            nf.id_var.set(nid)
+            nf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
+            nf.fecha_var.set((hydrated.get('fecha_vigencia') or '').strip())
+            imported += 1
+        self._notify_dataset_changed(summary_sections="normas")
+        log_event("navegacion", "Normas importadas desde CSV", self.logs)
+        if imported:
+            messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
+
+    def _apply_claim_import_payload(self, entries):
+        imported = 0
+        missing_products = []
+        for entry in entries or []:
+            hydrated = entry.get('row', {})
+            found = entry.get('found', False)
+            product_id = (hydrated.get('id_producto') or '').strip()
+            if not product_id:
+                continue
+            product_frame = self._find_product_frame(product_id)
+            new_product = False
+            if not product_frame:
+                product_frame = self._obtain_product_slot_for_import()
+                new_product = True
+            client_id = (hydrated.get('id_cliente') or '').strip()
+            if client_id:
+                client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                self._ensure_client_exists(client_id, client_details)
+            if new_product:
+                self._populate_product_frame_from_row(product_frame, hydrated)
+            if product_frame:
+                self._trigger_import_id_refresh(
+                    product_frame,
+                    product_id,
+                    preserve_existing=False,
+                )
+            claim_payload = {
+                'id_reclamo': (hydrated.get('id_reclamo') or '').strip(),
+                'nombre_analitica': (hydrated.get('nombre_analitica') or '').strip(),
+                'codigo_analitica': (hydrated.get('codigo_analitica') or '').strip(),
+            }
+            if not any(claim_payload.values()):
+                continue
+            target = product_frame.find_claim_by_id(claim_payload['id_reclamo'])
+            if not target:
+                target = product_frame.obtain_claim_slot()
+            target.set_data(claim_payload)
+            self._sync_product_lookup_claim_fields(product_frame, product_id)
+            product_frame.persist_lookup_snapshot()
+            imported += 1
+            if not found and 'id_producto' in self.detail_catalogs:
+                missing_products.append(product_id)
+        self._notify_dataset_changed(summary_sections="reclamos")
+        log_event("navegacion", "Reclamos importados desde CSV", self.logs)
+        if imported:
+            self.sync_main_form_after_import("reclamos")
+            messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
+        else:
+            messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
+        self._report_missing_detail_ids("productos", missing_products)
+
     def import_clients(self, filename=None):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
 
@@ -2925,36 +3232,23 @@ class FraudCaseApp:
         if not filename:
             messagebox.showwarning("Sin archivo", "No se seleccionó un CSV para clientes ni se encontró el ejemplo.")
             return
-        imported = 0
-        missing_ids = []
-        try:
+        def worker():
+            payload = []
             for row in iter_massive_csv_rows(filename):
                 hydrated, found = self._hydrate_row_from_details(row, 'id_cliente', CLIENT_ID_ALIASES)
                 id_cliente = (hydrated.get('id_cliente') or '').strip()
                 if not id_cliente:
                     continue
-                frame = self._find_client_frame(id_cliente) or self._obtain_client_slot_for_import()
-                self._populate_client_frame_from_row(frame, hydrated, preserve_existing=True)
-                self._trigger_import_id_refresh(
-                    frame,
-                    id_cliente,
-                    notify_on_missing=True,
-                    preserve_existing=False,
-                )
-                imported += 1
-                if not found and 'id_cliente' in self.detail_catalogs:
-                    missing_ids.append(id_cliente)
-            self._notify_dataset_changed(summary_sections="clientes")
-            log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
-            if imported:
-                self.sync_main_form_after_import("clientes")
-                messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
-            else:
-                messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar clientes: {ex}")
-            return
-        self._report_missing_detail_ids("clientes", missing_ids)
+                payload.append({'row': hydrated, 'found': found})
+            return payload
+
+        self._start_background_import(
+            "clientes",
+            getattr(self, 'import_clients_button', None),
+            worker,
+            self._apply_client_import_payload,
+            "No se pudo importar clientes",
+        )
 
     def import_team_members(self, filename=None):
         """Importa colaboradores desde un archivo CSV y los añade a la lista."""
@@ -2963,36 +3257,23 @@ class FraudCaseApp:
         if not filename:
             messagebox.showwarning("Sin archivo", "No hay CSV para colaboradores disponible.")
             return
-        imported = 0
-        missing_ids = []
-        try:
+        def worker():
+            payload = []
             for row in iter_massive_csv_rows(filename):
                 hydrated, found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
                 collaborator_id = (hydrated.get('id_colaborador') or '').strip()
                 if not collaborator_id:
                     continue
-                frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
-                self._populate_team_frame_from_row(frame, hydrated)
-                self._trigger_import_id_refresh(
-                    frame,
-                    collaborator_id,
-                    notify_on_missing=True,
-                    preserve_existing=False,
-                )
-                imported += 1
-                if not found and 'id_colaborador' in self.detail_catalogs:
-                    missing_ids.append(collaborator_id)
-            self._notify_dataset_changed(summary_sections="colaboradores")
-            log_event("navegacion", f"Colaboradores importados desde CSV: {imported}", self.logs)
-            if imported:
-                self.sync_main_form_after_import("colaboradores")
-                messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
-            else:
-                messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar colaboradores: {ex}")
-            return
-        self._report_missing_detail_ids("colaboradores", missing_ids)
+                payload.append({'row': hydrated, 'found': found})
+            return payload
+
+        self._start_background_import(
+            "colaboradores",
+            getattr(self, 'import_team_button', None),
+            worker,
+            self._apply_team_import_payload,
+            "No se pudo importar colaboradores",
+        )
 
     def import_products(self, filename=None):
         """Importa productos desde un archivo CSV y los añade a la lista."""
@@ -3001,40 +3282,23 @@ class FraudCaseApp:
         if not filename:
             messagebox.showwarning("Sin archivo", "No se seleccionó CSV de productos ni se encontró el ejemplo.")
             return
-        imported = 0
-        missing_ids = []
-        try:
+        def worker():
+            payload = []
             for row in iter_massive_csv_rows(filename):
                 hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
                 product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
                     continue
-                frame = self._find_product_frame(product_id) or self._obtain_product_slot_for_import()
-                client_id = (hydrated.get('id_cliente') or '').strip()
-                if client_id:
-                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
-                    self._ensure_client_exists(client_id, client_details)
-                self._populate_product_frame_from_row(frame, hydrated)
-                self._trigger_import_id_refresh(
-                    frame,
-                    product_id,
-                    notify_on_missing=True,
-                    preserve_existing=False,
-                )
-                imported += 1
-                if not found and 'id_producto' in self.detail_catalogs:
-                    missing_ids.append(product_id)
-            self._notify_dataset_changed(summary_sections="productos")
-            log_event("navegacion", f"Productos importados desde CSV: {imported}", self.logs)
-            if imported:
-                self.sync_main_form_after_import("productos")
-                messagebox.showinfo("Importación completa", "Productos importados correctamente.")
-            else:
-                messagebox.showwarning("Sin cambios", "No se detectaron productos nuevos en el archivo.")
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo importar productos: {ex}")
-            return
-        self._report_missing_detail_ids("productos", missing_ids)
+                payload.append({'row': hydrated, 'found': found})
+            return payload
+
+        self._start_background_import(
+            "productos",
+            getattr(self, 'import_products_button', None),
+            worker,
+            self._apply_product_import_payload,
+            "No se pudo importar productos",
+        )
 
     # ---------------------------------------------------------------------
     # Autoguardado y carga
