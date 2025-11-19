@@ -34,7 +34,7 @@ class TeamMemberFrame:
         self.idx = idx
         self.remove_callback = remove_callback
         self.update_team_options = update_team_options
-        self.team_lookup = self._normalize_lookup(team_lookup)
+        self.team_lookup = self._normalize_lookup_reference(team_lookup)
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
@@ -211,16 +211,27 @@ class TeamMemberFrame:
             )
 
     def set_lookup(self, lookup):
-        self.team_lookup = self._normalize_lookup(lookup)
+        self.team_lookup = self._normalize_lookup_reference(lookup)
         self._last_missing_lookup_id = None
 
-    def _normalize_lookup(self, lookup):
-        normalized = {}
-        for key, value in (lookup or {}).items():
-            normalized_key = normalize_team_member_identifier(key)
-            if normalized_key:
-                normalized[normalized_key] = value
-        return normalized
+    def _normalize_lookup_reference(self, lookup):
+        if lookup is None:
+            return {}
+
+        original_items = list(lookup.items())
+        for original_key, value in original_items:
+            normalized_key = normalize_team_member_identifier(original_key)
+
+            if not normalized_key:
+                lookup.pop(original_key, None)
+                continue
+
+            if normalized_key != original_key:
+                lookup.pop(original_key, None)
+
+            lookup[normalized_key] = value
+
+        return lookup
 
     def _requires_agency_details(self) -> bool:
         division_norm = normalize_without_accents(self.division_var.get()).lower()
