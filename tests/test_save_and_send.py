@@ -60,6 +60,7 @@ def _build_case_data(case_id: str) -> dict:
 def _make_minimal_app():
     app = FraudCaseApp.__new__(FraudCaseApp)
     app.logs = []
+    app._export_base_path = None
     for attr in [
         'id_caso_var',
         'tipo_informe_var',
@@ -107,8 +108,8 @@ def _make_minimal_app():
 def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy):
     export_dir = tmp_path / 'exports'
     export_dir.mkdir()
-    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
     app = _make_minimal_app()
+    app._export_base_path = export_dir
 
     app._current_case_data = _build_case_data('2024-0001')
     app.logs = [
@@ -140,7 +141,7 @@ def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy)
     assert 'primer caso' not in log_contents
 
 
-def test_save_and_send_reports_catalog_errors_once(monkeypatch, messagebox_spy):
+def test_save_and_send_reports_catalog_errors_once(messagebox_spy):
     app = build_headless_app("Crédito personal")
     app._suppress_messagebox = False
     app.flush_autosave = lambda: None
@@ -160,8 +161,6 @@ def test_save_and_send_reports_catalog_errors_once(monkeypatch, messagebox_spy):
     app.tipo_informe_var.set('Tipo inventado')
     app.canal_caso_var.set('Canal inventado')
 
-    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: '')
-
     app.save_and_send()
 
     assert len(messagebox_spy.errors) == 1
@@ -180,8 +179,8 @@ def test_save_and_send_mirrors_exports_to_external_drive(
     export_dir = tmp_path / 'exports'
     export_dir.mkdir()
 
-    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
     app = _make_minimal_app()
+    app._export_base_path = export_dir
     app._current_case_data = _build_case_data('2024-9001')
     app.logs = [
         {
@@ -218,8 +217,8 @@ def test_save_and_send_warns_when_external_copy_fails(tmp_path, monkeypatch, mes
 
     monkeypatch.setattr(app_module, 'ensure_external_drive_dir', fake_ensure)
     monkeypatch.setattr(app_module.shutil, 'copy2', failing_copy)
-    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
     app = _make_minimal_app()
+    app._export_base_path = export_dir
     app._current_case_data = _build_case_data('2024-9002')
     app.save_and_send()
     assert messagebox_spy.warnings
