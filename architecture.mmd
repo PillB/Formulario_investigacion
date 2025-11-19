@@ -136,3 +136,29 @@ erDiagram
   PRODUCTS ||--o{ INVOLVEMENT : "asigna colaboradores"
   PRODUCTS ||--o{ PRODUCT_CLAIMS : "origina reclamos"
   PRODUCTS ||--o{ ACCIONADO : "accionado por"
+
+%% Diagrama de flujo operativo para autosave, exportación y espejado
+flowchart LR
+  subgraph Local_Workstation ["Local workstation storage"]
+    direction TB
+    FCA["FraudCaseApp\n(runtime local)\nGestiona autosave y export"]
+    BASE[("BASE_DIR\nAutosave drafts\nSolo local")]
+    EXPORT[("Carpeta de exportación elegida por el usuario\nReportes definitivos\nSolo local hasta que se replique")]
+  end
+
+  subgraph External_Drive ["External drive mirror\n(duplicado configurable)"]
+    direction TB
+    EXT_LOGS[("external drive/logs\nCopia duplicada de logs")]
+    EXT_TEMP[("external drive/temp\nSnapshot temporal duplicado")]
+    EXT_REPORT[("external drive/reports\nDuplicado de reportes finales")]
+  end
+
+  FCA -->|"Autosave continuo"| BASE
+  FCA -->|"Exporta bundle final"| EXPORT
+  FCA -->|"Replica logs"| EXT_LOGS
+  FCA -->|"Replica temporales"| EXT_TEMP
+  EXPORT -->|"Sincronización/mirroring"| EXT_REPORT
+
+  note over BASE,EXPORT : "Artefactos locales únicos"
+  note over EXT_LOGS,EXT_TEMP,EXT_REPORT : "Artefactos duplicados en unidad externa; DevOps puede remapear la ruta vía settings.EXTERNAL_DRIVE_ROOT"
+
