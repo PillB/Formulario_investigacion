@@ -6,6 +6,7 @@ import types
 
 import app as app_module
 from app import FraudCaseApp
+from tests.test_validation import build_headless_app
 from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
 
 
@@ -137,3 +138,34 @@ def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy)
     log_contents = second_log.read_text(encoding='utf-8')
     assert 'segundo caso' in log_contents
     assert 'primer caso' not in log_contents
+
+
+def test_save_and_send_reports_catalog_errors_once(monkeypatch, messagebox_spy):
+    app = build_headless_app("Crédito personal")
+    app._suppress_messagebox = False
+    app.flush_autosave = lambda: None
+    app.flush_logs_now = lambda reschedule=True: None
+    app.logs = []
+
+    minimal_data = {
+        'caso': {'id_caso': app.id_caso_var.get()},
+        'clientes': [],
+        'colaboradores': [],
+        'productos': [],
+        'reclamos': [],
+        'involucramientos': [],
+    }
+    app.gather_data = types.MethodType(lambda self: minimal_data, app)
+
+    app.tipo_informe_var.set('Tipo inventado')
+    app.canal_caso_var.set('Canal inventado')
+
+    monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: '')
+
+    app.save_and_send()
+
+    assert len(messagebox_spy.errors) == 1
+    title, message = messagebox_spy.errors[0]
+    assert title == 'Errores de validación'
+    assert 'Tipo inventado' in message
+    assert 'Canal inventado' in message
