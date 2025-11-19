@@ -4618,14 +4618,14 @@ class FraudCaseApp:
             if not descripcion:
                 errors.append(f"Norma {idx}: Debe ingresar la descripción de la norma.")
             # Fecha vigencia
-            fvig = nd['fecha_vigencia']
-            if fvig:
-                try:
-                    fv = datetime.strptime(fvig, "%Y-%m-%d")
-                    if fv > datetime.now():
-                        errors.append(f"Fecha de vigencia futura en norma {nid or 'sin ID'}")
-                except ValueError:
-                    errors.append(f"Fecha de vigencia inválida en norma {nid or 'sin ID'}")
+            fvig = (nd.get('fecha_vigencia') or '').strip()
+            fvig_message = validate_date_text(fvig, "la fecha de vigencia", allow_blank=False)
+            if fvig_message:
+                errors.append(f"Norma {idx}: {fvig_message}")
+            else:
+                fv = datetime.strptime(fvig, "%Y-%m-%d")
+                if fv > datetime.now():
+                    errors.append(f"Fecha de vigencia futura en norma {nid or 'sin ID'}")
         return errors, warnings
 
     # ---------------------------------------------------------------------

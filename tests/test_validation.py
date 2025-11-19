@@ -1278,6 +1278,27 @@ def test_validate_data_accepts_allowed_risk_criticidad():
     assert not any("Riesgo 1: La criticidad" in err for err in errors)
 
 
+def test_validate_data_requires_norm_fecha_vigencia():
+    app = build_headless_app("Crédito personal")
+
+    class _NormFrame:
+        def __init__(self):
+            self._data = {
+                'id_norma': '2024.001.01.01',
+                'descripcion': 'Norma incompleta',
+                'fecha_vigencia': '',
+            }
+
+        def get_data(self):
+            return dict(self._data)
+
+    app.norm_frames = [_NormFrame()]
+
+    errors, _ = app.validate_data()
+
+    assert any("Debe ingresar la fecha de vigencia" in error for error in errors)
+
+
 def test_validate_data_detects_duplicate_technical_keys():
     duplicate_assignments = [
         {"id_colaborador": "T12345", "monto_asignado": "10.00"},
