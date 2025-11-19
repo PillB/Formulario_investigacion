@@ -6,9 +6,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
-from validators import (FieldValidator, log_event, should_autofill_field,
-                        validate_agency_code, validate_required_text,
-                        validate_team_member_id)
+from validators import (FieldValidator, log_event, normalize_without_accents,
+                        should_autofill_field, validate_agency_code,
+                        validate_required_text, validate_team_member_id)
 
 
 class TeamMemberFrame:
@@ -37,6 +37,7 @@ class TeamMemberFrame:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self._agency_validators: list[FieldValidator] = []
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
@@ -84,10 +85,12 @@ class TeamMemberFrame:
         div_entry = ttk.Entry(row2, textvariable=self.division_var, width=20)
         div_entry.pack(side="left", padx=5)
         self.tooltip_register(div_entry, "Ingresa la división o gerencia del colaborador.")
+        div_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
         ttk.Label(row2, text="Área:").pack(side="left")
         area_entry = ttk.Entry(row2, textvariable=self.area_var, width=20)
         area_entry.pack(side="left", padx=5)
         self.tooltip_register(area_entry, "Detalla el área específica.")
+        area_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
         ttk.Label(row2, text="Servicio:").pack(side="left")
         serv_entry = ttk.Entry(row2, textvariable=self.servicio_var, width=20)
         serv_entry.pack(side="left", padx=5)
@@ -107,6 +110,8 @@ class TeamMemberFrame:
         cod_ag_entry = ttk.Entry(row3, textvariable=self.codigo_agencia_var, width=10)
         cod_ag_entry.pack(side="left", padx=5)
         self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
+        self._division_entry = div_entry
+        self._area_entry = area_entry
 
         row4 = ttk.Frame(self.frame)
         row4.pack(fill="x", pady=1)
@@ -157,15 +162,22 @@ class TeamMemberFrame:
                 variables=[self.flag_var],
             )
         )
-        self.validators.append(
-            FieldValidator(
-                cod_ag_entry,
-                lambda: validate_agency_code(self.codigo_agencia_var.get(), allow_blank=True),
-                self.logs,
-                f"Colaborador {self.idx+1} - Código agencia",
-                variables=[self.codigo_agencia_var],
-            )
+        nombre_validator = FieldValidator(
+            nombre_ag_entry,
+            lambda: self._validate_agency_fields("nombre"),
+            self.logs,
+            f"Colaborador {self.idx+1} - Nombre agencia",
+            variables=[self.nombre_agencia_var],
         )
+        codigo_validator = FieldValidator(
+            cod_ag_entry,
+            lambda: self._validate_agency_fields("codigo"),
+            self.logs,
+            f"Colaborador {self.idx+1} - Código agencia",
+            variables=[self.codigo_agencia_var],
+        )
+        self.validators.extend([nombre_validator, codigo_validator])
+        self._agency_validators.extend([nombre_validator, codigo_validator])
         catalog_validations = [
             (
                 flag_cb,
@@ -200,6 +212,36 @@ class TeamMemberFrame:
     def set_lookup(self, lookup):
         self.team_lookup = lookup or {}
         self._last_missing_lookup_id = None
+
+    def _requires_agency_details(self) -> bool:
+        division_norm = normalize_without_accents(self.division_var.get()).lower()
+        area_norm = normalize_without_accents(self.area_var.get()).lower()
+        return (
+            ('dca' in division_norm or 'canales de atencion' in division_norm)
+            and ('area comercial' in area_norm)
+        )
+
+    def _validate_agency_fields(self, field: str) -> str | None:
+        requires_agency = self._requires_agency_details()
+        if field == "nombre":
+            if not requires_agency:
+                return None
+            return validate_required_text(
+                self.nombre_agencia_var.get(),
+                "el nombre de la agencia",
+            )
+        if field == "codigo":
+            return validate_agency_code(
+                self.codigo_agencia_var.get(),
+                allow_blank=not requires_agency,
+            )
+        return None
+
+    def _handle_location_change(self) -> None:
+        if not self._agency_validators:
+            return
+        for validator in self._agency_validators:
+            validator.show_custom_error(validator.validate_callback())
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         cid = self.id_var.get().strip()

@@ -2,6 +2,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from types import SimpleNamespace
+
 import app as app_module
 from app import FraudCaseApp
 from settings import (ACCIONADO_OPTIONS, CANAL_LIST, CRITICIDAD_LIST,
@@ -129,6 +131,7 @@ def _make_recording_validator():
             self.logs = logs
             self.field_name = field_name
             self.variables = list(variables or [])
+            self.last_custom_error = None
             RecordingValidator.instances.append(self)
 
         def add_widget(self, _widget):
@@ -137,7 +140,8 @@ def _make_recording_validator():
         def suppress_during(self, callback):
             return callback()
 
-        def show_custom_error(self, _message):
+        def show_custom_error(self, message):
+            self.last_custom_error = message
             return None
 
     RecordingValidator.instances = []
@@ -188,11 +192,45 @@ def _patch_risk_module(monkeypatch):
     return risk, RecordingValidator
 
 
+def _patch_team_module(monkeypatch):
+    from ui.frames import team
+
+    RecordingValidator = _make_recording_validator()
+
+    class _TkStub:
+        StringVar = DummyVar
+
+    class _TtkStub:
+        LabelFrame = _UIStubWidget
+        Frame = _UIStubWidget
+        Label = _UIStubWidget
+        Entry = _UIStubWidget
+        Combobox = _UIStubWidget
+        Button = _UIStubWidget
+
+    messagebox_stub = SimpleNamespace(
+        showerror=lambda *args, **kwargs: None,
+        askyesno=lambda *args, **kwargs: False,
+    )
+
+    monkeypatch.setattr(team, "tk", _TkStub())
+    monkeypatch.setattr(team, "ttk", _TtkStub())
+    monkeypatch.setattr(team, "messagebox", messagebox_stub)
+    monkeypatch.setattr(team, "FieldValidator", RecordingValidator)
+    return team, RecordingValidator
+
+
 def _find_validator_instance(instances, fragment):
     for validator in instances:
         if fragment in validator.field_name:
             return validator
     return None
+
+
+def _trigger_focus_out(widget):
+    callbacks = [cb for seq, cb, _ in widget._bindings if seq == "<FocusOut>"]
+    assert callbacks, "Expected at least one <FocusOut> binding"
+    callbacks[-1](SimpleNamespace(widget=widget))
 
 
 class DummyProductFrame:
@@ -1334,6 +1372,69 @@ def test_validate_data_only_flags_required_agency_collaborator():
     assert not any(
         "Colaborador 2 debe registrar nombre y código de agencia" in error for error in errors
     )
+
+
+def test_team_frame_inline_agency_validation_triggers_on_location(monkeypatch):
+    team_module, RecordingValidator = _patch_team_module(monkeypatch)
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    nombre_validator = _find_validator_instance(RecordingValidator.instances, "Nombre agencia")
+    codigo_validator = _find_validator_instance(RecordingValidator.instances, "Código agencia")
+
+    assert nombre_validator is not None
+    assert codigo_validator is not None
+    assert nombre_validator.validate_callback() is None
+    assert codigo_validator.validate_callback() is None
+
+    frame.division_var.set("Canales de Atención")
+    frame.area_var.set("Área Comercial Lima")
+
+    _trigger_focus_out(frame._area_entry)
+
+    assert nombre_validator.last_custom_error == "Debe ingresar el nombre de la agencia."
+    assert codigo_validator.last_custom_error == "Debe ingresar el código de agencia."
+
+
+def test_team_frame_inline_agency_validation_clears_when_optional(monkeypatch):
+    team_module, RecordingValidator = _patch_team_module(monkeypatch)
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    nombre_validator = _find_validator_instance(RecordingValidator.instances, "Nombre agencia")
+    codigo_validator = _find_validator_instance(RecordingValidator.instances, "Código agencia")
+
+    frame.division_var.set("DCA")
+    frame.area_var.set("Área Comercial Lima")
+    frame.nombre_agencia_var.set("Agencia Lima")
+    frame.codigo_agencia_var.set("123456")
+    _trigger_focus_out(frame._division_entry)
+
+    assert nombre_validator.last_custom_error is None
+    assert codigo_validator.last_custom_error is None
+
+    frame.division_var.set("Banca Empresas")
+    frame.area_var.set("Área de riesgos")
+    frame.nombre_agencia_var.set("")
+    frame.codigo_agencia_var.set("")
+    _trigger_focus_out(frame._division_entry)
+
+    assert nombre_validator.last_custom_error is None
+    assert codigo_validator.last_custom_error is None
 
 
 def test_preserve_existing_client_contacts_on_partial_import():
