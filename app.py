@@ -79,7 +79,7 @@ except ImportError:  # pragma: no cover - se usa la ruta de respaldo
 from models import (build_detail_catalog_id_index, iter_massive_csv_rows,
                     load_detail_catalogs, normalize_detail_catalog_key,
                     parse_involvement_entries)
-from settings import (AUTOSAVE_FILE, CANAL_LIST, CLIENT_ID_ALIASES,
+from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       EXPORTS_DIR, EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, STORE_LOGS_LOCALLY,
@@ -5037,18 +5037,41 @@ class FraudCaseApp:
         case_id = data.get('caso', {}).get('id_caso', '') or 'caso'
         filename = f"{case_id}_temp_{timestamp}.json"
         json_payload = json.dumps(data, ensure_ascii=False, indent=2)
-        target_path = Path(os.getcwd()) / filename
+        target_path = Path(BASE_DIR) / filename
         primary_written = False
         try:
-            target_path.write_text(json_payload, encoding='utf-8')
-            primary_written = True
-        except OSError as ex:
-            # Registrar en el log pero no interrumpir
-            log_event("validacion", f"Error guardando versión temporal: {ex}", self.logs)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            log_event(
+                "validacion",
+                f"No se pudo preparar la carpeta local para la versión temporal: {exc}",
+                self.logs,
+            )
+        else:
+            try:
+                target_path.write_text(json_payload, encoding='utf-8')
+                primary_written = True
+            except OSError as ex:
+                # Registrar en el log pero no interrumpir
+                log_event(
+                    "validacion",
+                    f"Error guardando versión temporal en la carpeta principal: {ex}",
+                    self.logs,
+                )
         external_base = self._get_external_drive_path()
         if not external_base:
             return
-        mirror_path = Path(external_base) / filename
+        case_folder = Path(external_base) / case_id
+        try:
+            case_folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            log_event(
+                "validacion",
+                f"No se pudo preparar la carpeta externa para {case_id}: {exc}",
+                self.logs,
+            )
+            return
+        mirror_path = case_folder / filename
         if primary_written:
             try:
                 shutil.copy2(target_path, mirror_path)
