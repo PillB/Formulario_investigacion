@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
+from datetime import datetime
+from pathlib import Path
 import types
 import zipfile
 
@@ -250,15 +253,34 @@ def test_save_and_send_warns_when_external_copy_fails(tmp_path, monkeypatch, mes
 
 def test_save_temp_version_mirrors_to_external_drive(tmp_path, monkeypatch, external_drive_dir):
     app = _make_minimal_app()
-    data = _build_case_data('2024-1234')
+    case_id = '2024-1234'
+    data = _build_case_data(case_id)
     app.gather_data = types.MethodType(lambda self: data, app)
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2024, 6, 1, 15, 30, 0)
+
+    monkeypatch.setattr(app_module, 'datetime', FrozenDatetime)
+    timestamp = FrozenDatetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f'{case_id}_temp_{timestamp}.json'
+    base_target = Path(app_module.BASE_DIR) / filename
+    case_folder = external_drive_dir / case_id
+    mirror_target = case_folder / filename
+    for path in (base_target, mirror_target):
+        if path.exists():
+            path.unlink()
     monkeypatch.chdir(tmp_path)
-    before = set(tmp_path.iterdir())
-    app.save_temp_version(data=data)
-    after_files = [path for path in tmp_path.iterdir() if path.is_file() and path not in before]
-    assert len(after_files) == 1
-    mirrored = external_drive_dir / after_files[0].name
-    assert mirrored.is_file()
+    before_entries = set(tmp_path.iterdir())
+    try:
+        app.save_temp_version(data=data)
+        assert base_target.is_file()
+        assert mirror_target.is_file()
+        assert set(tmp_path.iterdir()) == before_entries
+    finally:
+        for path in (base_target, mirror_target):
+            with suppress(FileNotFoundError):
+                path.unlink()
 
 
 def test_flush_log_queue_writes_external_when_local_blocked(
@@ -341,15 +363,35 @@ def test_save_temp_version_writes_external_when_primary_unwritable(
     monkeypatch,
     external_drive_dir,
 ):
-    unwritable_root = tmp_path / 'locked-root'
-    unwritable_root.write_text('no es carpeta', encoding='utf-8')
-    monkeypatch.setattr(app_module.os, 'getcwd', lambda: str(unwritable_root))
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2024, 6, 1, 16, 40, 0)
+
+    monkeypatch.setattr(app_module, 'datetime', FrozenDatetime)
     app = _make_minimal_app()
-    data = _build_case_data('2024-7777')
+    case_id = '2024-7777'
+    data = _build_case_data(case_id)
     app.gather_data = types.MethodType(lambda self: data, app)
-    before = set(external_drive_dir.iterdir())
-    app.save_temp_version(data=data)
-    new_files = [path for path in external_drive_dir.iterdir() if path not in before]
-    assert len(new_files) == 1
-    mirror_contents = new_files[0].read_text(encoding='utf-8')
-    assert '2024-7777' in mirror_contents
+    timestamp = FrozenDatetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f'{case_id}_temp_{timestamp}.json'
+    mirror_target = external_drive_dir / case_id / filename
+    if mirror_target.exists():
+        mirror_target.unlink()
+    locked_root = tmp_path / 'locked-root'
+    locked_root.write_text('no es carpeta', encoding='utf-8')
+    monkeypatch.setattr(app_module, 'BASE_DIR', str(locked_root))
+    base_target = Path(app_module.BASE_DIR) / filename
+    monkeypatch.chdir(tmp_path)
+    before_entries = set(tmp_path.iterdir())
+    try:
+        app.save_temp_version(data=data)
+        assert mirror_target.is_file()
+        assert set(tmp_path.iterdir()) == before_entries
+        assert not base_target.exists()
+        mirror_contents = mirror_target.read_text(encoding='utf-8')
+        assert case_id in mirror_contents
+        assert locked_root.read_text(encoding='utf-8') == 'no es carpeta'
+    finally:
+        with suppress(FileNotFoundError):
+            mirror_target.unlink()
