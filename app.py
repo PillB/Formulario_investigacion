@@ -3620,6 +3620,7 @@ class FraudCaseApp:
                 f"El proceso del caso '{proceso_value}' no está en el catálogo CM."
             )
         # Validar IDs de clientes
+        seen_client_ids = set()
         for idx, cframe in enumerate(self.client_frames, start=1):
             tipo_id_value = (cframe.tipo_id_var.get() or "").strip()
             tipo_message = validate_required_text(tipo_id_value, "el tipo de ID del cliente")
@@ -3631,9 +3632,15 @@ class FraudCaseApp:
                         f"Cliente {idx}: El tipo de ID '{tipo_id_value}' no está en el catálogo CM."
                     )
                 else:
-                    message = validate_client_id(tipo_id_value, cframe.id_var.get())
+                    client_id_value = (cframe.id_var.get() or "").strip()
+                    message = validate_client_id(tipo_id_value, client_id_value)
                     if message:
                         errors.append(f"Cliente {idx}: {message}")
+                    elif client_id_value:
+                        if client_id_value in seen_client_ids:
+                            errors.append(f"Cliente duplicado: {client_id_value}")
+                            continue
+                        seen_client_ids.add(client_id_value)
 
             flag_var = getattr(cframe, "flag_var", None)
             if flag_var is not None:
@@ -3683,10 +3690,17 @@ class FraudCaseApp:
         total_investigado = Decimal('0')
         total_componentes = Decimal('0')
         normalized_amounts = []
+        seen_team_ids = set()
         for idx, tm in enumerate(self.team_frames, start=1):
-            tm_id_message = validate_team_member_id(tm.id_var.get())
+            team_id_value = (tm.id_var.get() or "").strip()
+            tm_id_message = validate_team_member_id(team_id_value)
             if tm_id_message:
                 errors.append(f"Colaborador {idx}: {tm_id_message}")
+            elif team_id_value:
+                if team_id_value in seen_team_ids:
+                    errors.append(f"Colaborador duplicado: {team_id_value}")
+                    continue
+                seen_team_ids.add(team_id_value)
             agency_message = validate_agency_code(tm.codigo_agencia_var.get(), allow_blank=True)
             if agency_message:
                 errors.append(f"Colaborador {idx}: {agency_message}")

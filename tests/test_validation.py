@@ -503,6 +503,16 @@ def test_validate_data_requires_client_tipo_id():
     assert any("Debe ingresar el tipo de ID del cliente" in error for error in errors)
 
 
+def test_validate_data_flags_duplicate_clients():
+    app = build_headless_app("Crédito personal")
+    duplicate_id = app.client_frames[0].id_var.get()
+    app.client_frames.append(DummyClient(duplicate_id))
+
+    errors, _ = app.validate_data()
+
+    assert f"Cliente duplicado: {duplicate_id}" in errors
+
+
 def test_validate_data_rejects_imported_clients_with_invalid_phone():
     app = build_headless_app("Crédito personal")
     invalid_client = DummyClientWithContacts(
@@ -1231,6 +1241,16 @@ def test_validate_data_rejects_collaborator_with_blank_flag():
     errors, _ = app.validate_data()
 
     assert "Colaborador 1: Debe ingresar el flag del colaborador." in errors
+
+
+def test_validate_data_flags_duplicate_collaborators():
+    duplicate_id = "T54321"
+    team_configs = [{"team_id": duplicate_id}, {"team_id": duplicate_id}]
+    app = build_headless_app("Crédito personal", team_configs=team_configs)
+
+    errors, _ = app.validate_data()
+
+    assert f"Colaborador duplicado: {duplicate_id}" in errors
 
 
 def test_validate_data_accepts_collaborator_flag_in_catalog():
