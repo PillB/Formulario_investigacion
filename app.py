@@ -952,21 +952,29 @@ class FraudCaseApp:
     def _apply_case_taxonomy_defaults(self, product_frame):
         """Configura un producto nuevo con la taxonomía seleccionada en el caso."""
 
-        cat1 = self.cat_caso1_var.get()
-        cat2 = self.cat_caso2_var.get()
-        modalidad = self.mod_caso_var.get()
-        if cat1 in TAXONOMIA:
+        cat1 = self.cat_caso1_var.get().strip()
+        cat2 = self.cat_caso2_var.get().strip()
+        modalidad = self.mod_caso_var.get().strip()
+
+        if not cat1 or cat1 not in TAXONOMIA:
+            return
+
+        previous_suppression = getattr(product_frame, '_suppress_change_notifications', False)
+        product_frame._suppress_change_notifications = True
+        try:
             product_frame.cat1_var.set(cat1)
             product_frame.on_cat1_change()
-            if cat2 in TAXONOMIA[cat1]:
+            if cat2 and cat2 in TAXONOMIA[cat1]:
                 product_frame.cat2_var.set(cat2)
                 if hasattr(product_frame, 'cat2_cb'):
                     product_frame.cat2_cb.set(cat2)
                 product_frame.on_cat2_change()
-                if modalidad in TAXONOMIA[cat1][cat2]:
+                if modalidad and modalidad in TAXONOMIA[cat1][cat2]:
                     product_frame.mod_var.set(modalidad)
                     if hasattr(product_frame, 'mod_cb'):
                         product_frame.mod_cb.set(modalidad)
+        finally:
+            product_frame._suppress_change_notifications = previous_suppression
 
     def add_product(self):
         idx = len(self.product_frames)
@@ -983,6 +991,7 @@ class FraudCaseApp:
             change_notifier=self._log_navigation_change,
             id_change_callback=self._handle_product_id_change,
         )
+        self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
         # Renombrar
         for i, p in enumerate(self.product_frames):
