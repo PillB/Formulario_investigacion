@@ -315,6 +315,7 @@ class ProductFrame:
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
         self._last_tracked_id = ''
+        self._suppress_change_notifications = False
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -1052,6 +1053,8 @@ class ProductFrame:
             self.remove_callback(self)
 
     def log_change(self, message: str):
+        if self._suppress_change_notifications:
+            return
         if callable(self.change_notifier):
             self.change_notifier(message)
         else:
