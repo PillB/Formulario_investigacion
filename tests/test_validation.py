@@ -1310,6 +1310,32 @@ def test_validate_data_requires_agency_data_for_commercial_channels():
     )
 
 
+def test_validate_data_only_flags_required_agency_collaborator():
+    team_configs = [
+        {
+            "team_id": "T11111",
+            "division": "Canales de Atención",
+            "area": "Área Comercial Norte",
+        },
+        {
+            "team_id": "T22222",
+            "division": "Banca Empresas",
+            "area": "Área de riesgos",
+        },
+    ]
+    app = build_headless_app("Crédito personal", team_configs=team_configs)
+
+    errors, _ = app.validate_data()
+
+    expected_message = (
+        "El colaborador 1 debe registrar nombre y código de agencia por pertenecer a canales comerciales."
+    )
+    assert expected_message in errors
+    assert not any(
+        "Colaborador 2 debe registrar nombre y código de agencia" in error for error in errors
+    )
+
+
 def test_preserve_existing_client_contacts_on_partial_import():
     app = build_headless_app("Crédito personal")
     app.client_lookup = {}
