@@ -1620,9 +1620,19 @@ class FraudCaseApp:
             message = validate_client_id(client_data["tipo_id"], client_data["id_cliente"])
             if message:
                 raise ValueError(f"Cliente fila {idx}: {message}")
+            phone_required = validate_required_text(
+                client_data["telefonos"], "los teléfonos del cliente"
+            )
+            if phone_required:
+                raise ValueError(f"Cliente fila {idx}: {phone_required}")
             phone_message = validate_phone_list(client_data["telefonos"], "los teléfonos del cliente")
             if phone_message:
                 raise ValueError(f"Cliente fila {idx}: {phone_message}")
+            email_required = validate_required_text(
+                client_data["correos"], "los correos del cliente"
+            )
+            if email_required:
+                raise ValueError(f"Cliente fila {idx}: {email_required}")
             email_message = validate_email_list(client_data["correos"], "los correos del cliente")
             if email_message:
                 raise ValueError(f"Cliente fila {idx}: {email_message}")
