@@ -104,14 +104,7 @@ class RiskFrame:
         )
 
         def _validate_exposure_amount():
-            message, decimal_value, normalized_text = validate_money_bounds(
-                self.exposicion_var.get(),
-                "la exposición residual",
-                allow_blank=True,
-            )
-            if not message and normalized_text != (self.exposicion_var.get() or "").strip():
-                self.exposicion_var.set(normalized_text)
-            self._last_exposicion_decimal = decimal_value
+            message, _normalized_text = self._normalize_exposure_amount()
             return message
 
         self.validators.append(
@@ -135,14 +128,32 @@ class RiskFrame:
         )
 
     def get_data(self):
+        _, normalized_text = self._normalize_exposure_amount()
+        exposure_value = (
+            normalized_text
+            if normalized_text and normalized_text.strip()
+            else self.exposicion_var.get().strip()
+        )
         return {
             "id_riesgo": self.id_var.get().strip(),
             "lider": self.lider_var.get().strip(),
             "descripcion": self.descripcion_var.get().strip(),
             "criticidad": self.criticidad_var.get(),
-            "exposicion_residual": self.exposicion_var.get().strip(),
+            "exposicion_residual": exposure_value,
             "planes_accion": self.planes_var.get().strip(),
         }
+
+    def _normalize_exposure_amount(self):
+        message, decimal_value, normalized_text = validate_money_bounds(
+            self.exposicion_var.get(),
+            "la exposición residual",
+            allow_blank=True,
+        )
+        current_value = (self.exposicion_var.get() or "").strip()
+        if not message and normalized_text and normalized_text != current_value:
+            self.exposicion_var.set(normalized_text)
+        self._last_exposicion_decimal = decimal_value
+        return message, normalized_text
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el riesgo {self.idx+1}?"):

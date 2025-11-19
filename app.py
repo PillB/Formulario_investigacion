@@ -4609,7 +4609,7 @@ class FraudCaseApp:
                     f"Riesgo {idx}: La criticidad '{criticidad_value}' no está en el catálogo CM."
                 )
             # Exposición
-            message, exposure_decimal, _ = validate_money_bounds(
+            message, exposure_decimal, normalized_text = validate_money_bounds(
                 rd['exposicion_residual'],
                 f"Exposición residual del riesgo {rid}",
                 allow_blank=True,
@@ -4618,6 +4618,14 @@ class FraudCaseApp:
                 errors.append(message)
             elif exposure_decimal is not None:
                 risk_exposure_total += exposure_decimal
+            if (
+                not message
+                and normalized_text
+                and normalized_text != (rd.get('exposicion_residual') or '').strip()
+            ):
+                if hasattr(r, 'exposicion_var'):
+                    r.exposicion_var.set(normalized_text)
+                rd['exposicion_residual'] = normalized_text
             # Planes de acción
             for plan in [p.strip() for p in rd['planes_accion'].split(';') if p.strip()]:
                 if plan in plan_ids:

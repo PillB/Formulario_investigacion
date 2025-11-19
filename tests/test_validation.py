@@ -1684,6 +1684,117 @@ def test_populate_from_data_keeps_product_dropdowns_blank_when_missing():
     assert product_frame.moneda_var.get() == ""
 
 
+def test_validate_data_normalizes_risk_exposure_after_populate():
+    class _PopulateRiskFrameStub:
+        def __init__(self):
+            self.id_var = DummyVar("")
+            self.lider_var = DummyVar("")
+            self.descripcion_var = DummyVar("")
+            self.criticidad_var = DummyVar("")
+            self.exposicion_var = DummyVar("")
+            self.planes_var = DummyVar("")
+
+        def get_data(self):
+            return {
+                "id_riesgo": self.id_var.get().strip(),
+                "lider": self.lider_var.get().strip(),
+                "descripcion": self.descripcion_var.get().strip(),
+                "criticidad": self.criticidad_var.get(),
+                "exposicion_residual": self.exposicion_var.get().strip(),
+                "planes_accion": self.planes_var.get().strip(),
+            }
+
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app.logs = []
+    case_cat1 = next(iter(TAXONOMIA))
+    case_cat2 = next(iter(TAXONOMIA[case_cat1]))
+    case_modalidad = TAXONOMIA[case_cat1][case_cat2][0]
+    client_id = "12345678"
+    for attr in [
+        'id_caso_var',
+        'tipo_informe_var',
+        'cat_caso1_var',
+        'cat_caso2_var',
+        'mod_caso_var',
+        'canal_caso_var',
+        'proceso_caso_var',
+        'antecedentes_var',
+        'modus_var',
+        'hallazgos_var',
+        'descargos_var',
+        'conclusiones_var',
+        'recomendaciones_var',
+    ]:
+        setattr(app, attr, DummyVar(""))
+    app.id_caso_var.set("2024-0001")
+    app.tipo_informe_var.set(TIPO_INFORME_LIST[0])
+    app.cat_caso1_var.set(case_cat1)
+    app.cat_caso2_var.set(case_cat2)
+    app.mod_caso_var.set(case_modalidad)
+    app.canal_caso_var.set(CANAL_LIST[0])
+    app.proceso_caso_var.set(PROCESO_LIST[0])
+    app.client_frames = [DummyClientWithContacts(client_id)]
+    app.team_frames = [DummyTeam("T12345")]
+    app.product_frames = [
+        DummyProductFrame(
+            "Crédito personal",
+            client_id,
+            case_cat1,
+            case_cat2,
+            case_modalidad,
+        )
+    ]
+    app.risk_frames = []
+    app.norm_frames = []
+    app._clear_case_state = lambda save_autosave=False: None
+    app._schedule_summary_refresh = lambda data=None: None
+    app.on_case_cat1_change = lambda: None
+    app.on_case_cat2_change = lambda: None
+    app.add_client = lambda: None
+    app.add_team = lambda: None
+    app.add_product = lambda: None
+    app.add_norm = lambda: None
+    app.add_risk = lambda: app.risk_frames.append(_PopulateRiskFrameStub())
+
+    payload = {
+        'caso': {
+            'id_caso': '2024-0001',
+            'tipo_informe': TIPO_INFORME_LIST[0],
+            'categoria1': case_cat1,
+            'categoria2': case_cat2,
+            'modalidad': case_modalidad,
+            'canal': CANAL_LIST[0],
+            'proceso': PROCESO_LIST[0],
+        },
+        'clientes': [],
+        'colaboradores': [],
+        'productos': [],
+        'reclamos': [],
+        'involucramientos': [],
+        'riesgos': [
+            {
+                'id_riesgo': 'RSK-000001',
+                'lider': 'Líder',
+                'descripcion': 'Descripción',
+                'criticidad': CRITICIDAD_LIST[0],
+                'exposicion_residual': '100',
+                'planes_accion': 'Plan-1',
+            }
+        ],
+        'normas': [],
+        'analisis': {},
+    }
+
+    app.populate_from_data(payload)
+
+    errors, warnings = app.validate_data()
+
+    assert errors == []
+    assert warnings == []
+    gathered = app.gather_data()
+    assert gathered['riesgos'][0]['exposicion_residual'] == '100.00'
+
+
 def test_transform_summary_involucramientos_formats_amount():
     app = FraudCaseApp.__new__(FraudCaseApp)
 
