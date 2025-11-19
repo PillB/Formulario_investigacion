@@ -756,6 +756,40 @@ def test_validate_data_flags_deleted_collaborator_reference():
     assert any("referencia un colaborador eliminado" in error for error in errors)
 
 
+def test_validate_data_reports_invalid_involvement_amount():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [
+            {"id_colaborador": "T12345", "monto_asignado": "75"},
+        ],
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+
+    errors, _ = app.validate_data()
+
+    assert any(
+        "Monto asignado del colaborador T12345" in error for error in errors
+    )
+
+
+def test_validate_data_normalizes_valid_involvement_amounts():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [
+            {"id_colaborador": "T12345", "monto_asignado": "0010.50"},
+        ],
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+
+    errors, _ = app.validate_data()
+
+    assert not any(
+        "Monto asignado del colaborador" in error for error in errors
+    )
+    asignacion = app.product_frames[0].get_data()['asignaciones'][0]
+    assert asignacion['monto_asignado'] == '10.50'
+
+
 @pytest.mark.parametrize(
     "config_key,label",
     [
