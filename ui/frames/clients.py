@@ -51,6 +51,7 @@ class ClientFrame:
         self.correos_var = tk.StringVar()
         self.direcciones_var = tk.StringVar()
         self.accionado_var = tk.StringVar()
+        self.accionado_options_var = tk.StringVar(value=ACCIONADO_OPTIONS)
 
         self.frame = ttk.LabelFrame(parent, text=f"Cliente {self.idx+1}")
         self.frame.pack(fill="x", padx=5, pady=2)
@@ -82,7 +83,7 @@ class ClientFrame:
         ttk.Label(accionado_frame, text="Accionado (seleccione uno o varios):").pack(anchor="w")
         self.accionado_listbox = tk.Listbox(
             accionado_frame,
-            listvariable=tk.StringVar(value=ACCIONADO_OPTIONS),
+            listvariable=self.accionado_options_var,
             selectmode="multiple",
             exportselection=False,
             height=4,
