@@ -99,12 +99,18 @@ class ClientFrame:
         tel_entry = ttk.Entry(row3, textvariable=self.telefonos_var, width=30)
         tel_entry.pack(side="left", padx=5)
         tel_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó teléfonos"))
-        self.tooltip_register(tel_entry, "Ingresa números separados por ; sin guiones.")
+        self.tooltip_register(
+            tel_entry,
+            "Campo obligatorio. Ingresa al menos un número telefónico separado por ; sin guiones.",
+        )
         ttk.Label(row3, text="Correos (separados por ;):").pack(side="left")
         cor_entry = ttk.Entry(row3, textvariable=self.correos_var, width=30)
         cor_entry.pack(side="left", padx=5)
         cor_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó correos"))
-        self.tooltip_register(cor_entry, "Coloca correos electrónicos separados por ;.")
+        self.tooltip_register(
+            cor_entry,
+            "Campo obligatorio. Coloca al menos un correo electrónico separado por ;.",
+        )
         ttk.Label(row3, text="Direcciones (separados por ;):").pack(side="left")
         dir_entry = ttk.Entry(row3, textvariable=self.direcciones_var, width=30)
         dir_entry.pack(side="left", padx=5)
@@ -135,10 +141,24 @@ class ClientFrame:
                 variables=[self.tipo_id_var],
             )
         )
+        def _validate_required_phones():
+            value = self.telefonos_var.get()
+            error = validate_required_text(value, "al menos un teléfono del cliente")
+            if error:
+                return error
+            return validate_phone_list(value, "los teléfonos del cliente")
+
+        def _validate_required_emails():
+            value = self.correos_var.get()
+            error = validate_required_text(value, "al menos un correo del cliente")
+            if error:
+                return error
+            return validate_email_list(value, "los correos del cliente")
+
         self.validators.append(
             FieldValidator(
                 tel_entry,
-                lambda: validate_phone_list(self.telefonos_var.get(), "los teléfonos del cliente"),
+                _validate_required_phones,
                 self.logs,
                 f"Cliente {self.idx+1} - Teléfonos",
                 variables=[self.telefonos_var],
@@ -147,7 +167,7 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 cor_entry,
-                lambda: validate_email_list(self.correos_var.get(), "los correos del cliente"),
+                _validate_required_emails,
                 self.logs,
                 f"Cliente {self.idx+1} - Correos",
                 variables=[self.correos_var],
