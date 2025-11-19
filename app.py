@@ -73,7 +73,7 @@ from models import (build_detail_catalog_id_index, iter_massive_csv_rows,
                     parse_involvement_entries)
 from settings import (AUTOSAVE_FILE, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
-                      EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
+                      EXPORTS_DIR, EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE,
                       MASSIVE_SAMPLE_FILES, NORM_ID_ALIASES, PROCESO_LIST,
                       PRODUCT_ID_ALIASES, RISK_ID_ALIASES, TAXONOMIA,
@@ -122,6 +122,7 @@ class FraudCaseApp:
         self._external_log_file_initialized = bool(
             EXTERNAL_LOGS_FILE and os.path.exists(EXTERNAL_LOGS_FILE)
         )
+        self._export_base_path: Optional[Path] = None
         self.catalog_status_var = tk.StringVar(
             value="Catálogos de detalle pendientes. Usa 'Cargar catálogos' para habilitar el autopoblado."
         )
@@ -214,6 +215,19 @@ class FraudCaseApp:
         if self._external_drive_path:
             return Path(self._external_drive_path)
         return None
+
+    def _get_exports_folder(self) -> Optional[Path]:
+        base_path = getattr(self, "_export_base_path", None) or EXPORTS_DIR
+        target = Path(base_path)
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            message = f"No se pudo preparar la carpeta de exportación {target}: {exc}"
+            log_event("validacion", message, self.logs)
+            if not getattr(self, '_suppress_messagebox', False):
+                messagebox.showerror("Error al guardar", message)
+            return None
+        return target
 
     def import_combined(self, filename=None):
         """Importa datos combinados de productos, clientes y colaboradores."""
@@ -4573,7 +4587,7 @@ class FraudCaseApp:
         return "\n".join(lines)
 
     def save_and_send(self):
-        """Valida los datos y guarda CSVs normalizados y JSON en la carpeta elegida."""
+        """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
         self.flush_autosave()
         self.flush_logs_now()
         errors, warnings = self.validate_data()
@@ -4585,10 +4599,10 @@ class FraudCaseApp:
             log_event("validacion", f"Advertencias al guardar: {warnings}", self.logs)
         if errors:
             return
-        # Seleccionar carpeta de destino
-        folder = filedialog.askdirectory(title="Seleccionar carpeta para guardar archivos")
+        folder = self._get_exports_folder()
         if not folder:
             return
+        folder = Path(folder)
         # Reunir datos
         data = self.gather_data()
         # Completar claves foráneas con id_caso
@@ -4611,8 +4625,8 @@ class FraudCaseApp:
         created_files = []
 
         def write_csv(file_name, rows, header):
-            path = os.path.join(folder, f"{case_id}_{file_name}")
-            with open(path, 'w', newline='', encoding="utf-8") as f:
+            path = folder / f"{case_id}_{file_name}"
+            with path.open('w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=header)
                 writer.writeheader()
                 for row in rows:
@@ -4640,13 +4654,13 @@ class FraudCaseApp:
         if self.logs:
             write_csv('logs.csv', self.logs, ['timestamp', 'tipo', 'mensaje'])
         # Guardar JSON
-        json_path = os.path.join(folder, f"{case_id}_version.json")
-        with open(json_path, 'w', encoding="utf-8") as f:
+        json_path = folder / f"{case_id}_version.json"
+        with json_path.open('w', encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         created_files.append(json_path)
         # Guardar informe Markdown
-        report_path = os.path.join(folder, f"{case_id}_informe.md")
-        with open(report_path, 'w', encoding='utf-8') as f:
+        report_path = folder / f"{case_id}_informe.md"
+        with report_path.open('w', encoding='utf-8') as f:
             f.write(self.build_markdown_report(data))
         created_files.append(report_path)
         self._mirror_exports_to_external_drive(created_files, case_id)
@@ -4658,18 +4672,13 @@ class FraudCaseApp:
         self.flush_logs_now()
 
     def _mirror_exports_to_external_drive(self, file_paths, case_id: str) -> None:
-        if not file_paths:
+        normalized_sources = [Path(path) for path in file_paths or [] if path]
+        if not normalized_sources:
             return
         external_base = self._get_external_drive_path()
-        case_label = case_id or 'caso'
         if not external_base:
-            message = (
-                "Los archivos se guardaron, pero no se pudo preparar la carpeta externa para copiarlos."
-            )
-            log_event("validacion", message, self.logs)
-            if not getattr(self, '_suppress_messagebox', False):
-                messagebox.showwarning("Copia pendiente", message)
             return
+        case_label = case_id or 'caso'
         case_folder = external_base / case_label
         try:
             case_folder.mkdir(parents=True, exist_ok=True)
@@ -4679,14 +4688,14 @@ class FraudCaseApp:
             if not getattr(self, '_suppress_messagebox', False):
                 messagebox.showwarning("Copia pendiente", message)
             return
-        autosave_abs = os.path.abspath(AUTOSAVE_FILE)
+        autosave_abs = Path(AUTOSAVE_FILE).resolve()
         failures = []
-        for source in file_paths:
-            if not source:
+        for source in normalized_sources:
+            if not source.exists():
                 continue
-            if os.path.abspath(source) == autosave_abs:
+            if source.resolve() == autosave_abs:
                 continue
-            destination = case_folder / os.path.basename(source)
+            destination = case_folder / source.name
             try:
                 shutil.copy2(source, destination)
             except OSError as exc:
@@ -4701,7 +4710,7 @@ class FraudCaseApp:
                 "Se exportaron los archivos, pero algunos no se copiaron al respaldo externo:",
             ]
             for source, exc in failures:
-                lines.append(f"- {os.path.basename(source)}: {exc}")
+                lines.append(f"- {source.name}: {exc}")
             messagebox.showwarning("Copia incompleta", "\n".join(lines))
 
     def save_temp_version(self, data=None):

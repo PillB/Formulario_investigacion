@@ -174,6 +174,7 @@ TIPO_MONEDA_LIST = ["Soles", "Dólares", "No aplica"]
 CRITICIDAD_LIST = ["Bajo", "Moderado", "Relevante", "Alto", "Crítico"]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 EXTERNAL_DRIVE_DIR = os.path.join(BASE_DIR, "external drive")
 EXTERNAL_LOGS_FILE = os.path.join(EXTERNAL_DRIVE_DIR, "logs.csv")
 

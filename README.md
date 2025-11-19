@@ -48,7 +48,7 @@ En la pestaña Normas, use Añadir norma para crear registros. Introduzca el nú
 En la pestaña Análisis, escriba las narrativas de Antecedentes, Modus operandi, Hallazgos principales, Descargos del colaborador, Conclusiones y Recomendaciones y mejoras. Estos campos aceptan texto libre.
 9. Acciones y gestión de versiones
 En la pestaña Acciones encontrará los botones:
-Guardar y enviar: Valida todos los datos. Si no hay errores, abre un cuadro de diálogo para seleccionar una carpeta de destino. La aplicación genera varios archivos CSV (casos, clientes, colaboradores, productos, reclamos, asignaciones, riesgos, normas, análisis, logs) y un archivo JSON con el estado completo. Los ficheros se nombran con el ID del caso.
+Guardar y enviar: Valida todos los datos. Si no hay errores, crea (si es necesario) la carpeta `exports/` ubicada junto al script y escribe allí los archivos CSV (casos, clientes, colaboradores, productos, reclamos, asignaciones, riesgos, normas, análisis, logs), el JSON completo del caso y el informe en Markdown usando el ID del caso como prefijo. Luego intenta copiar esos mismos archivos a `external drive/<id_caso>/` para mantener un respaldo local.
 Cargar versión: Permite elegir un archivo JSON generado previamente para restaurar el formulario al estado guardado.
 Borrar todos los datos: Elimina el contenido del formulario y el autosave tras confirmación.
 Importar CSV: Botones para cargar clientes, colaboradores, productos, combinados, riesgos, normas y reclamos. Seleccione el archivo adecuado y revise que los datos aparezcan en sus pestañas correspondientes. Se omitirán registros duplicados.
