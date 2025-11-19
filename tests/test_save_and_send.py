@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +13,8 @@ import app as app_module
 import settings
 from app import FraudCaseApp
 from tests.test_validation import build_headless_app
-from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
+from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST,
+                      TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST)
 
 
 class SimpleVar:
@@ -395,3 +397,59 @@ def test_save_temp_version_writes_external_when_primary_unwritable(
     finally:
         with suppress(FileNotFoundError):
             mirror_target.unlink()
+
+
+def test_save_and_send_normalizes_blank_optional_amounts(tmp_path, messagebox_spy):
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+
+    app = _make_minimal_app()
+    app._export_base_path = export_dir
+
+    case_id = '2024-0101'
+    data = _build_case_data(case_id)
+    cat1 = data['caso']['categoria1']
+    cat2 = data['caso']['categoria2']
+    modalidad = data['caso']['modalidad']
+    canal = data['caso']['canal']
+    proceso = data['caso']['proceso']
+    product_row = {
+        'id_producto': 'PROD-001',
+        'id_caso': '',
+        'id_cliente': 'CL1',
+        'categoria1': cat1,
+        'categoria2': cat2,
+        'modalidad': modalidad,
+        'canal': canal,
+        'proceso': proceso,
+        'fecha_ocurrencia': '2024-01-01',
+        'fecha_descubrimiento': '2024-01-02',
+        'monto_investigado': '10.00',
+        'tipo_moneda': TIPO_MONEDA_LIST[0],
+        'monto_perdida_fraude': '',
+        'monto_falla_procesos': '',
+        'monto_contingencia': '',
+        'monto_recuperado': '',
+        'monto_pago_deuda': '',
+        'tipo_producto': TIPO_PRODUCTO_LIST[0],
+    }
+    data['productos'] = [product_row]
+    app._current_case_data = data
+
+    app.save_and_send()
+
+    productos_csv = export_dir / f'{case_id}_productos.csv'
+    with productos_csv.open('r', encoding='utf-8') as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert rows, 'Expected a product row in the export'
+    exported_row = rows[0]
+    optional_fields = [
+        'monto_perdida_fraude',
+        'monto_falla_procesos',
+        'monto_contingencia',
+        'monto_recuperado',
+        'monto_pago_deuda',
+    ]
+    for field in optional_fields:
+        assert exported_row[field] == '0.00'

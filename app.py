@@ -3859,6 +3859,26 @@ class FraudCaseApp:
         }
         return data
 
+    def _normalize_export_amount_strings(self, products):
+        if not products:
+            return
+        for product in products:
+            if not isinstance(product, dict):
+                continue
+            for field_name, _var_attr, _label, allow_blank, _ in PRODUCT_MONEY_SPECS:
+                if not allow_blank:
+                    continue
+                raw_value = product.get(field_name)
+                if isinstance(raw_value, str):
+                    text = raw_value.strip()
+                elif raw_value is None:
+                    text = ""
+                else:
+                    text = str(raw_value).strip()
+                if text:
+                    continue
+                product[field_name] = "0.00"
+
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
         # Limpiar primero sin confirmar ni sobrescribir el autosave
@@ -4933,6 +4953,7 @@ class FraudCaseApp:
         folder = Path(folder)
         # Reunir datos
         data = self.gather_data()
+        self._normalize_export_amount_strings(data.get('productos'))
         # Completar claves foráneas con id_caso
         for c in data['clientes']:
             c['id_caso'] = data['caso']['id_caso']
