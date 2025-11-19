@@ -74,3 +74,12 @@ mensaje: Descripción del evento (qué campo se modificó, si hubo errores, etc.
 Utilice esta información para detectar los puntos del formulario donde los usuarios cometen más errores o tardan más tiempo, lo que ayudará a mejorar la usabilidad y las validaciones.
 
 Con esta guía y el script proporcionado, podrá recrear la gestión de casos de fraude en un entorno de escritorio, probar todas las reglas de negocio, importar datos masivamente y analizar los registros para mejorar la experiencia del usuario.
+
+12. Cobertura enfocada en guardado/exportación/logs
+Para verificar automáticamente las rutas críticas de guardado, exportación y bitácoras sin ejecutar toda la batería de pruebas, puedes lanzar:
+
+```
+pytest --cov=app --cov=ui --cov-report=term-missing
+```
+
+Este comando imprime un resumen de cobertura en la terminal destacando qué porciones de `app.py` y los módulos de `ui/` están cubiertos por las pruebas relacionadas a `save_and_send`, respaldos en la “unidad externa” y el flujo de logs.

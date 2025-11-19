@@ -171,23 +171,36 @@ def test_save_and_send_reports_catalog_errors_once(monkeypatch, messagebox_spy):
     assert 'Canal inventado' in message
 
 
-def test_save_and_send_mirrors_exports_to_external_drive(tmp_path, monkeypatch, messagebox_spy):
+def test_save_and_send_mirrors_exports_to_external_drive(
+    tmp_path,
+    monkeypatch,
+    messagebox_spy,
+    external_drive_dir,
+):
     export_dir = tmp_path / 'exports'
     export_dir.mkdir()
-    mirror_dir = tmp_path / 'external drive'
 
-    def fake_ensure():
-        mirror_dir.mkdir(parents=True, exist_ok=True)
-        return mirror_dir
-
-    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', fake_ensure)
     monkeypatch.setattr(app_module.filedialog, 'askdirectory', lambda **kwargs: str(export_dir))
     app = _make_minimal_app()
     app._current_case_data = _build_case_data('2024-9001')
+    app.logs = [
+        {
+            'timestamp': '2024-05-01 12:00:00',
+            'tipo': 'navegacion',
+            'mensaje': 'mirroring',
+        }
+    ]
     app.save_and_send()
-    case_folder = mirror_dir / '2024-9001'
-    assert (case_folder / '2024-9001_casos.csv').is_file()
-    assert (case_folder / '2024-9001_informe.md').is_file()
+    case_id = '2024-9001'
+    case_folder = external_drive_dir / case_id
+    expected_suffixes = {
+        f'{case_id}_casos.csv',
+        f'{case_id}_version.json',
+        f'{case_id}_informe.md',
+        f'{case_id}_logs.csv',
+    }
+    mirrored_files = {path.name for path in case_folder.iterdir() if path.is_file()}
+    assert expected_suffixes.issubset(mirrored_files)
     assert messagebox_spy.warnings == []
 
 
@@ -215,14 +228,7 @@ def test_save_and_send_warns_when_external_copy_fails(tmp_path, monkeypatch, mes
     assert '2024-9002' in message or 'archivos' in message
 
 
-def test_save_temp_version_mirrors_to_external_drive(tmp_path, monkeypatch):
-    mirror_dir = tmp_path / 'external drive'
-
-    def fake_ensure():
-        mirror_dir.mkdir(parents=True, exist_ok=True)
-        return mirror_dir
-
-    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', fake_ensure)
+def test_save_temp_version_mirrors_to_external_drive(tmp_path, monkeypatch, external_drive_dir):
     app = _make_minimal_app()
     data = _build_case_data('2024-1234')
     app.gather_data = types.MethodType(lambda self: data, app)
@@ -231,5 +237,58 @@ def test_save_temp_version_mirrors_to_external_drive(tmp_path, monkeypatch):
     app.save_temp_version(data=data)
     after_files = [path for path in tmp_path.iterdir() if path.is_file() and path not in before]
     assert len(after_files) == 1
-    mirrored = mirror_dir / after_files[0].name
+    mirrored = external_drive_dir / after_files[0].name
     assert mirrored.is_file()
+
+
+def test_flush_log_queue_writes_external_when_local_blocked(
+    tmp_path,
+    monkeypatch,
+    external_drive_dir,
+):
+    blocked_parent = tmp_path / 'blocked'
+    blocked_parent.write_text('file-instead-of-dir', encoding='utf-8')
+    local_log_path = blocked_parent / 'logs.csv'
+    external_log_path = external_drive_dir / 'logs.csv'
+    monkeypatch.setattr(app_module, 'LOGS_FILE', str(local_log_path))
+    monkeypatch.setattr(app_module, 'EXTERNAL_LOGS_FILE', str(external_log_path))
+
+    rows = [
+        {
+            'timestamp': '2024-06-01 10:00:00',
+            'tipo': 'navegacion',
+            'mensaje': 'solo externo',
+        }
+    ]
+
+    def fake_drain():
+        nonlocal rows
+        payload, rows = rows, []
+        return payload
+
+    monkeypatch.setattr(app_module, 'drain_log_queue', fake_drain)
+    app = _make_minimal_app()
+    app._flush_log_queue_to_disk()
+    assert external_log_path.is_file()
+    contents = external_log_path.read_text(encoding='utf-8')
+    assert 'solo externo' in contents
+    assert not local_log_path.exists()
+
+
+def test_save_temp_version_writes_external_when_primary_unwritable(
+    tmp_path,
+    monkeypatch,
+    external_drive_dir,
+):
+    unwritable_root = tmp_path / 'locked-root'
+    unwritable_root.write_text('no es carpeta', encoding='utf-8')
+    monkeypatch.setattr(app_module.os, 'getcwd', lambda: str(unwritable_root))
+    app = _make_minimal_app()
+    data = _build_case_data('2024-7777')
+    app.gather_data = types.MethodType(lambda self: data, app)
+    before = set(external_drive_dir.iterdir())
+    app.save_temp_version(data=data)
+    new_files = [path for path in external_drive_dir.iterdir() if path not in before]
+    assert len(new_files) == 1
+    mirror_contents = new_files[0].read_text(encoding='utf-8')
+    assert '2024-7777' in mirror_contents

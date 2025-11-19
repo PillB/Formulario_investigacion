@@ -5,6 +5,7 @@ import sys
 import pytest
 
 import app as app_module
+import settings
 
 
 class MessageboxSpy:
@@ -40,3 +41,23 @@ def messagebox_spy(monkeypatch):
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
+
+
+@pytest.fixture
+def external_drive_dir(tmp_path, monkeypatch):
+    """Crea una unidad externa temporal y la inyecta en ``settings`` y ``app``."""
+
+    drive = tmp_path / 'external drive'
+
+    def ensure_drive():
+        drive.mkdir(parents=True, exist_ok=True)
+        return drive
+
+    drive.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, 'EXTERNAL_DRIVE_DIR', str(drive))
+    monkeypatch.setattr(settings, 'EXTERNAL_LOGS_FILE', str(drive / 'logs.csv'))
+    monkeypatch.setattr(settings, 'ensure_external_drive_dir', ensure_drive)
+    monkeypatch.setattr(app_module, 'EXTERNAL_LOGS_FILE', str(drive / 'logs.csv'))
+    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', ensure_drive)
+    monkeypatch.setattr(app_module.FraudCaseApp, '_external_drive_path', None, raising=False)
+    return drive
