@@ -772,6 +772,24 @@ def test_validate_data_reports_invalid_involvement_amount():
     )
 
 
+def test_validate_data_reports_involvement_amount_upper_bound():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [
+            {"id_colaborador": "T12345", "monto_asignado": "1000000000000.00"},
+        ],
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+
+    errors, _ = app.validate_data()
+
+    expected_error = (
+        f"Monto asignado del colaborador T12345 en el producto {DEFAULT_PRODUCT_ID} "
+        "no puede tener más de 12 dígitos en la parte entera."
+    )
+    assert expected_error in errors
+
+
 def test_validate_data_normalizes_valid_involvement_amounts():
     product_config = {
         "tipo_producto": "Crédito personal",

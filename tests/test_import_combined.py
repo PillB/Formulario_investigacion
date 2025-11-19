@@ -160,17 +160,42 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
 
 
 @pytest.mark.parametrize(
-    "row_overrides",
+    "row_overrides,expected_fragment",
     [
-        {'involucramiento': 'T12345:10.123'},
-        {'involucramiento': '', 'monto_asignado': '99'},
+        (
+            {'involucramiento': 'T12345:10.123'},
+            "solo puede tener dos decimales como máximo.",
+        ),
+        (
+            {'involucramiento': 'T12345:abc'},
+            "debe ser un número válido.",
+        ),
+        (
+            {'involucramiento': 'T12345:99'},
+            "debe tener dos decimales exactos.",
+        ),
+        (
+            {'involucramiento': 'T12345:1000000000000.00'},
+            "no puede tener más de 12 dígitos en la parte entera.",
+        ),
+        (
+            {'involucramiento': '', 'monto_asignado': '99'},
+            "debe tener dos decimales exactos.",
+        ),
     ],
-    ids=["parsed_entry", "fallback_amount"],
+    ids=[
+        "parsed_entry_extra_decimals",
+        "parsed_entry_non_numeric",
+        "parsed_entry_missing_decimals",
+        "parsed_entry_oversized",
+        "fallback_amount",
+    ],
 )
 def test_import_combined_invalid_involvement_amount_raises_value_error(
     monkeypatch,
     messagebox_spy,
     row_overrides,
+    expected_fragment,
 ):
     app = build_import_app(monkeypatch)
     base_row = {
@@ -198,8 +223,9 @@ def test_import_combined_invalid_involvement_amount_raises_value_error(
         lambda _filename: iter([invalid_row]),
     )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as excinfo:
         app.import_combined(filename="dummy.csv")
+    assert expected_fragment in str(excinfo.value)
 
     assert messagebox_spy.errors
     title, message = messagebox_spy.errors[-1]
