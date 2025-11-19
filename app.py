@@ -271,7 +271,18 @@ class FraudCaseApp:
                         if not inv_row:
                             inv_row = self._obtain_involvement_slot(product_frame)
                         inv_row.team_var.set(collab_id)
-                        inv_row.monto_var.set(amount)
+                        amount_text = (amount or '').strip()
+                        label = (
+                            f"Monto asignado del colaborador {collab_id or 'sin ID'} "
+                            f"en el producto {product_id or 'sin ID'}"
+                        )
+                        error, _amount, normalized_text = validate_money_bounds(
+                            amount_text,
+                            label,
+                        )
+                        if error:
+                            raise ValueError(error)
+                        inv_row.monto_var.set(normalized_text or amount_text)
                         created_records = True
             self._notify_dataset_changed()
             log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
@@ -280,6 +291,9 @@ class FraudCaseApp:
                 messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
             else:
                 messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
+        except ValueError as ex:
+            messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
+            raise
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo importar el CSV combinado: {ex}")
             return
@@ -3772,6 +3786,18 @@ class FraudCaseApp:
             for inv_idx, inv in enumerate(prod_data['asignaciones'], start=1):
                 collaborator_id = (inv.get('id_colaborador') or '').strip()
                 amount_value = (inv.get('monto_asignado') or '').strip()
+                amount_label = (
+                    f"Monto asignado del colaborador {collaborator_id or f'sin ID ({inv_idx})'} "
+                    f"en el producto {pid}"
+                )
+                amount_error, _amount, normalized_amount = validate_money_bounds(
+                    amount_value,
+                    amount_label,
+                )
+                if amount_error:
+                    errors.append(amount_error)
+                else:
+                    inv['monto_asignado'] = normalized_amount or amount_value
                 if amount_value and not collaborator_id:
                     errors.append(
                         f"Producto {pid}: la asignación {inv_idx} tiene un monto sin colaborador."

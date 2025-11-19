@@ -106,14 +106,14 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
     }
     app.detail_lookup_by_id = dict(app.detail_catalogs)
     combined_rows = [
-        {
-            'id_cliente': ' CLI-001 ',
-            'telefonos': '',
-            'correos': '',
-            'id_colaborador': ' T0001 ',
-            'id_producto': ' PRD-001 ',
-            'involucramiento': ' T0001 : 200.50 ; T9999 : 30 ',
-        },
+            {
+                'id_cliente': ' CLI-001 ',
+                'telefonos': '',
+                'correos': '',
+                'id_colaborador': ' T0001 ',
+                'id_producto': ' PRD-001 ',
+                'involucramiento': ' T0001 : 200.50 ; T9999 : 30.00 ',
+            },
         {
             'id_cliente': 'CLI-002',
             'id_colaborador': 'T1111',
@@ -152,11 +152,58 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
         for inv in product_frame.involvements
         if inv.team_var.get()
     )
-    assert involvement_records == [('T0001', '50.75'), ('T9999', '30')]
+    assert involvement_records == [('T0001', '50.75'), ('T9999', '30.00')]
 
     reported = {label: ids for label, ids in app.report_calls}
     assert set(reported.get('clientes', [])) == {'CLI-002'}
     assert set(reported.get('colaboradores', [])) == {'T1111', 'T9999'}
+
+
+@pytest.mark.parametrize(
+    "row_overrides",
+    [
+        {'involucramiento': 'T12345:10.123'},
+        {'involucramiento': '', 'monto_asignado': '99'},
+    ],
+    ids=["parsed_entry", "fallback_amount"],
+)
+def test_import_combined_invalid_involvement_amount_raises_value_error(
+    monkeypatch,
+    messagebox_spy,
+    row_overrides,
+):
+    app = build_import_app(monkeypatch)
+    base_row = {
+        'id_cliente': '12345678',
+        'tipo_id': TIPO_ID_LIST[0],
+        'flag_cliente': FLAG_CLIENTE_LIST[0],
+        'telefonos': '999888777',
+        'correos': 'demo@example.com',
+        'direcciones': 'Av. Principal 123',
+        'accionado': 'Fiscalía',
+        'id_colaborador': 'T12345',
+        'division': 'Division A',
+        'area': 'Area Comercial',
+        'tipo_sancion': TIPO_SANCION_LIST[0],
+        'id_producto': 'PRD-123',
+        'tipo_producto': 'Crédito personal',
+        'monto_investigado': '1000.00',
+        'involucramiento': 'T12345:120.00',
+    }
+    invalid_row = dict(base_row)
+    invalid_row.update(row_overrides)
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter([invalid_row]),
+    )
+
+    with pytest.raises(ValueError):
+        app.import_combined(filename="dummy.csv")
+
+    assert messagebox_spy.errors
+    title, message = messagebox_spy.errors[-1]
+    assert 'No se pudo importar' in (message or '')
 
 
 def test_import_risks_and_norms_hydrate_from_catalogs(monkeypatch, messagebox_spy):
