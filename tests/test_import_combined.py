@@ -171,24 +171,14 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
             "debe ser un número válido.",
         ),
         (
-            {'involucramiento': 'T12345:99'},
-            "debe tener dos decimales exactos.",
-        ),
-        (
             {'involucramiento': 'T12345:1000000000000.00'},
             "no puede tener más de 12 dígitos en la parte entera.",
-        ),
-        (
-            {'involucramiento': '', 'monto_asignado': '99'},
-            "debe tener dos decimales exactos.",
         ),
     ],
     ids=[
         "parsed_entry_extra_decimals",
         "parsed_entry_non_numeric",
-        "parsed_entry_missing_decimals",
         "parsed_entry_oversized",
-        "fallback_amount",
     ],
 )
 def test_import_combined_invalid_involvement_amount_raises_value_error(
@@ -230,6 +220,68 @@ def test_import_combined_invalid_involvement_amount_raises_value_error(
     assert messagebox_spy.errors
     title, message = messagebox_spy.errors[-1]
     assert 'No se pudo importar' in (message or '')
+
+
+def test_import_combined_normalizes_involvement_amounts_without_two_decimals(
+    monkeypatch,
+    messagebox_spy,
+):
+    app = build_import_app(monkeypatch)
+    normalized_rows = [
+        {
+            'id_cliente': '12345678',
+            'tipo_id': TIPO_ID_LIST[0],
+            'flag_cliente': FLAG_CLIENTE_LIST[0],
+            'telefonos': '999888777',
+            'correos': 'demo@example.com',
+            'direcciones': 'Av. Principal 123',
+            'accionado': 'Fiscalía',
+            'id_colaborador': 'T12345',
+            'division': 'Division A',
+            'area': 'Area Comercial',
+            'tipo_sancion': TIPO_SANCION_LIST[0],
+            'id_producto': 'PRD-123',
+            'tipo_producto': 'Crédito personal',
+            'monto_investigado': '1000.00',
+            'involucramiento': 'T12345:99',
+        },
+        {
+            'id_cliente': '12345678',
+            'tipo_id': TIPO_ID_LIST[0],
+            'flag_cliente': FLAG_CLIENTE_LIST[0],
+            'telefonos': '999888777',
+            'correos': 'demo@example.com',
+            'direcciones': 'Av. Principal 123',
+            'accionado': 'Fiscalía',
+            'id_colaborador': 'T54321',
+            'division': 'Division A',
+            'area': 'Area Comercial',
+            'tipo_sancion': TIPO_SANCION_LIST[0],
+            'id_producto': 'PRD-123',
+            'tipo_producto': 'Crédito personal',
+            'monto_investigado': '1000.00',
+            'involucramiento': '',
+            'monto_asignado': '99',
+        },
+    ]
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter(normalized_rows),
+    )
+
+    app.import_combined(filename="dummy.csv")
+
+    product_frame = app._find_product_frame('PRD-123')
+    amounts = {
+        inv.team_var.get(): inv.monto_var.get()
+        for inv in product_frame.involvements
+        if inv.team_var.get()
+    }
+
+    assert amounts['T12345'] == '99.00'
+    assert amounts['T54321'] == '99.00'
+    assert messagebox_spy.errors == []
 
 
 def test_import_risks_and_norms_hydrate_from_catalogs(monkeypatch, messagebox_spy):

@@ -840,16 +840,14 @@ def test_validate_data_reports_invalid_involvement_amount():
     product_config = {
         "tipo_producto": "Crédito personal",
         "asignaciones": [
-            {"id_colaborador": "T12345", "monto_asignado": "75"},
+            {"id_colaborador": "T12345", "monto_asignado": "75.123"},
         ],
     }
     app = build_headless_app("Crédito personal", product_configs=[product_config])
 
     errors, _ = app.validate_data()
 
-    assert any(
-        "Monto asignado del colaborador T12345" in error for error in errors
-    )
+    assert any("dos decimales" in error for error in errors)
 
 
 def test_validate_data_reports_involvement_amount_upper_bound():
@@ -875,6 +873,7 @@ def test_validate_data_normalizes_valid_involvement_amounts():
         "tipo_producto": "Crédito personal",
         "asignaciones": [
             {"id_colaborador": "T12345", "monto_asignado": "0010.50"},
+            {"id_colaborador": "T54321", "monto_asignado": "75"},
         ],
     }
     app = build_headless_app("Crédito personal", product_configs=[product_config])
@@ -884,8 +883,9 @@ def test_validate_data_normalizes_valid_involvement_amounts():
     assert not any(
         "Monto asignado del colaborador" in error for error in errors
     )
-    asignacion = app.product_frames[0].get_data()['asignaciones'][0]
-    assert asignacion['monto_asignado'] == '10.50'
+    asignaciones = app.product_frames[0].get_data()['asignaciones']
+    assert asignaciones[0]['monto_asignado'] == '10.50'
+    assert asignaciones[1]['monto_asignado'] == '75.00'
 
 
 @pytest.mark.parametrize(
@@ -1005,32 +1005,6 @@ def test_validate_data_rejects_unknown_team_catalog_values(config_key, label):
             {
                 "tipo_producto": "Crédito personal",
                 "producto_overrides": {
-                    "monto_investigado": "100",
-                    "monto_perdida_fraude": "0.00",
-                    "monto_falla_procesos": "0.00",
-                    "monto_contingencia": "0.00",
-                    "monto_recuperado": "0.00",
-                },
-            },
-            f"Monto investigado del producto {DEFAULT_PRODUCT_ID} debe tener dos decimales exactos.",
-        ),
-        (
-            {
-                "tipo_producto": "Crédito personal",
-                "producto_overrides": {
-                    "monto_investigado": "100.5",
-                    "monto_perdida_fraude": "0.00",
-                    "monto_falla_procesos": "0.00",
-                    "monto_contingencia": "0.00",
-                    "monto_recuperado": "0.00",
-                },
-            },
-            f"Monto investigado del producto {DEFAULT_PRODUCT_ID} debe tener dos decimales exactos.",
-        ),
-        (
-            {
-                "tipo_producto": "Crédito personal",
-                "producto_overrides": {
                     "monto_investigado": "100.123",
                     "monto_perdida_fraude": "0.00",
                     "monto_falla_procesos": "0.00",
@@ -1047,6 +1021,31 @@ def test_validate_data_enforces_amount_rules(product_config, expected_error):
     app = build_headless_app("Crédito personal", product_configs=[product_config])
     errors, _ = app.validate_data()
     assert expected_error in errors
+
+
+def test_validate_data_normalizes_product_amounts_without_two_decimals():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            "monto_investigado": "100",
+            "monto_perdida_fraude": "0",
+            "monto_falla_procesos": "0",
+            "monto_contingencia": "100",
+            "monto_recuperado": "0",
+            "monto_pago_deuda": "0",
+        },
+        "reclamos": [_complete_claim()],
+    }
+
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+
+    errors, _ = app.validate_data()
+
+    assert errors == []
+    producto = app.product_frames[0].get_data()['producto']
+    assert producto['monto_investigado'] == '100.00'
+    assert producto['monto_perdida_fraude'] == '0.00'
+    assert producto['monto_contingencia'] == '100.00'
 
 
 def test_validate_data_flags_case_level_one_cent_gap():
@@ -1095,7 +1094,7 @@ def test_validate_data_reports_product_and_case_gap():
     assert case_message in errors
 
 
-def test_product_frame_amount_fields_require_two_decimals(monkeypatch):
+def test_product_frame_amount_fields_normalize_missing_decimals(monkeypatch):
     products, validator_cls = _patch_products_module(monkeypatch)
     product = products.ProductFrame(
         parent=_UIStubWidget(),
@@ -1118,14 +1117,12 @@ def test_product_frame_amount_fields_require_two_decimals(monkeypatch):
     assert rec_validator is not None
 
     inv_error = inv_validator.validate_callback()
-    assert inv_error is not None
-    assert "dos decimales exactos" in inv_error
-    assert product.monto_inv_var.get() == "100"
+    assert inv_error is None
+    assert product.monto_inv_var.get() == "100.00"
 
     rec_error = rec_validator.validate_callback()
-    assert rec_error is not None
-    assert "dos decimales exactos" in rec_error
-    assert product.monto_rec_var.get() == "100.5"
+    assert rec_error is None
+    assert product.monto_rec_var.get() == "100.50"
 
 
 def test_product_frame_detects_one_cent_gap(monkeypatch):
@@ -1175,7 +1172,7 @@ def test_product_frame_requires_exact_contingencia_for_credit(monkeypatch):
     assert product._validate_montos_consistentes('contingencia') is not None
 
 
-def test_involvement_row_requires_two_decimal_places(monkeypatch):
+def test_involvement_row_normalizes_missing_decimals(monkeypatch):
     products, validator_cls = _patch_products_module(monkeypatch)
 
     class _ProductFrameStub:
@@ -1204,12 +1201,11 @@ def test_involvement_row_requires_two_decimal_places(monkeypatch):
 
     assert amount_validator is not None
     error = amount_validator.validate_callback()
-    assert error is not None
-    assert "dos decimales exactos" in error
-    assert row.monto_var.get() == "100.5"
+    assert error is None
+    assert row.monto_var.get() == "100.50"
 
 
-def test_risk_frame_requires_two_decimal_places(monkeypatch):
+def test_risk_frame_normalizes_missing_decimals(monkeypatch):
     risk_module, validator_cls = _patch_risk_module(monkeypatch)
     risk_frame = risk_module.RiskFrame(
         parent=_UIStubWidget(),
@@ -1224,15 +1220,13 @@ def test_risk_frame_requires_two_decimal_places(monkeypatch):
 
     assert exposure_validator is not None
     first_error = exposure_validator.validate_callback()
-    assert first_error is not None
-    assert "dos decimales exactos" in first_error
-    assert risk_frame.exposicion_var.get() == "100"
+    assert first_error is None
+    assert risk_frame.exposicion_var.get() == "100.00"
 
     risk_frame.exposicion_var.set("100.5")
     second_error = exposure_validator.validate_callback()
-    assert second_error is not None
-    assert "dos decimales exactos" in second_error
-    assert risk_frame.exposicion_var.get() == "100.5"
+    assert second_error is None
+    assert risk_frame.exposicion_var.get() == "100.50"
 
 
 def test_validate_data_requires_risk_criticidad():
@@ -1557,10 +1551,13 @@ def test_transform_summary_involucramientos_formats_amount():
 
     sanitized = app._transform_summary_clipboard_rows(
         "involucramientos",
-        [["PRD-001", "T12345", "001.50"]],
+        [["PRD-001", "T12345", "001.50"], ["PRD-002", "T54321", "10.5"]],
     )
 
-    assert sanitized == [("PRD-001", "T12345", "1.50")]
+    assert sanitized == [
+        ("PRD-001", "T12345", "1.50"),
+        ("PRD-002", "T54321", "10.50"),
+    ]
 
 
 def test_transform_summary_involucramientos_rejects_invalid_amount():
@@ -1569,10 +1566,10 @@ def test_transform_summary_involucramientos_rejects_invalid_amount():
     with pytest.raises(ValueError) as excinfo:
         app._transform_summary_clipboard_rows(
             "involucramientos",
-            [["PRD-001", "T12345", "10.5"]],
+            [["PRD-001", "T12345", "10.123"]],
         )
 
-    assert "dos decimales exactos" in str(excinfo.value)
+    assert "dos decimales" in str(excinfo.value)
 
 
 def test_ingest_summary_rows_involucramientos_updates_assignments():
