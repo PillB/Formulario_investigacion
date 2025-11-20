@@ -15,6 +15,7 @@ class AutofillResult:
     found: bool
     used_future_snapshot: bool
     applied: Dict[str, str]
+    meta: Dict[str, object]
 
 
 class AutofillService:
@@ -33,11 +34,12 @@ class AutofillService:
         case_date: str | None,
     ) -> AutofillResult:
         dirty_fields = dirty_fields or {}
-        catalog_entry, used_future_snapshot = self.catalog_service.lookup_team_member(
-            identifier, case_date
-        )
+        catalog_entry, meta = self.catalog_service.lookup_team_member(identifier, case_date)
+        meta = meta or {"selected_date": None, "fallback_used": False, "reason": None}
+        fallback_reason = meta.get("reason")
+        used_future_snapshot = bool(fallback_reason == "no_past_snapshot")
         if not catalog_entry:
-            return AutofillResult(False, False, {})
+            return AutofillResult(False, False, {}, meta)
 
         applied: Dict[str, str] = {}
         for key, current_value in current_values.items():
@@ -47,11 +49,27 @@ class AutofillService:
             if value and should_autofill_field(current_value, preserve_existing):
                 applied[key] = value
 
-        if used_future_snapshot:
-            self.warning_handler(
-                "La fecha de ocurrencia es anterior a la última actualización del colaborador; se usará el registro disponible más reciente."
+        if meta.get("fallback_used"):
+            message = self._build_fallback_warning(fallback_reason)
+            if message:
+                self.warning_handler(message)
+        return AutofillResult(True, used_future_snapshot, applied, meta)
+
+    @staticmethod
+    def _build_fallback_warning(reason: str | None) -> str | None:
+        if reason == "no_past_snapshot":
+            return (
+                "La fecha de ocurrencia es anterior a la última actualización del colaborador; "
+                "se usará el registro disponible más reciente."
             )
-        return AutofillResult(True, used_future_snapshot, applied)
+        if reason == "case_date_missing_or_invalid":
+            return (
+                "No se pudo interpretar la fecha de ocurrencia; se usará el registro más reciente "
+                "disponible del colaborador."
+            )
+        if reason:
+            return f"Se usó un registro alternativo del colaborador ({reason})."
+        return None
 
 
 __all__ = ["AutofillResult", "AutofillService"]

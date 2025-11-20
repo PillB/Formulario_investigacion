@@ -124,27 +124,40 @@ class CatalogService:
 
     def lookup_team_member(
         self, identifier: str, occurrence_date: str | date | None
-    ) -> Tuple[Dict[str, str] | None, bool]:
+    ) -> Tuple[Dict[str, str] | None, Dict[str, object]]:
+        meta: Dict[str, object] = {
+            "selected_date": None,
+            "fallback_used": False,
+            "reason": None,
+        }
         normalized_id = normalize_team_member_identifier(identifier)
         if not normalized_id:
-            return None, False
+            return None, meta
         snapshots = self.team_snapshots.get(normalized_id)
         if not snapshots:
-            return None, False
+            return None, meta
         case_date = self._parse_date(occurrence_date)
         valid = [snap for snap in snapshots if snap.get("fecha") is not None]
         chosen = None
-        future_fallback = False
         if case_date and valid:
             history = [snap for snap in valid if snap["fecha"] <= case_date]
             if history:
                 chosen = max(history, key=lambda snap: snap["fecha"])
             else:
                 chosen = min(valid, key=lambda snap: snap["fecha"])
-                future_fallback = True
+                meta["fallback_used"] = True
+                meta["reason"] = "no_past_snapshot"
+        else:
+            if valid:
+                chosen = max(valid, key=lambda snap: snap["fecha"])
+            else:
+                chosen = snapshots[-1]
+            meta["fallback_used"] = True
+            meta["reason"] = "case_date_missing_or_invalid"
         if chosen is None:
             chosen = max(valid, key=lambda snap: snap["fecha"]) if valid else snapshots[-1]
-        return dict(chosen.get("data", {})), future_fallback
+        meta["selected_date"] = chosen.get("fecha") if chosen else None
+        return dict(chosen.get("data", {})), meta
 
 
 __all__ = ["CatalogService"]

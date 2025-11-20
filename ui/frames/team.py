@@ -50,6 +50,7 @@ class TeamMemberFrame:
         self.autofill_service = autofill_service
         self.case_date_getter = case_date_getter
         self._future_snapshot_warnings: set[str] = set()
+        self._fallback_message_var = tk.StringVar(value="")
 
         self.id_var = tk.StringVar()
         self.flag_var = tk.StringVar()
@@ -84,6 +85,19 @@ class TeamMemberFrame:
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
+
+        self._fallback_label = tk.Label(
+            self.frame,
+            textvariable=self._fallback_message_var,
+            background="#fff3cd",
+            foreground="#664d03",
+            anchor="w",
+            justify="left",
+            wraplength=520,
+            relief="groove",
+            padx=6,
+            pady=3,
+        )
 
         row2 = ttk.Frame(self.frame)
         row2.pack(fill="x", pady=1)
@@ -234,6 +248,7 @@ class TeamMemberFrame:
         widget.bind("<<ComboboxSelected>>", lambda _e: self._mark_dirty(field_key), add="+")
 
     def _mark_dirty(self, field_key: str) -> None:
+        self._clear_fallback_warning()
         if field_key:
             self._dirty_fields[field_key] = True
 
@@ -246,6 +261,41 @@ class TeamMemberFrame:
             "nombre_agencia": self.nombre_agencia_var.get(),
             "codigo_agencia": self.codigo_agencia_var.get(),
         }
+
+    def _clear_fallback_warning(self) -> None:
+        self._fallback_message_var.set("")
+        try:
+            if self._fallback_label.winfo_ismapped():
+                self._fallback_label.pack_forget()
+        except tk.TclError:
+            pass
+
+    def _set_fallback_warning(self, message: str | None) -> None:
+        if not message:
+            self._clear_fallback_warning()
+            return
+        self._fallback_message_var.set(message)
+        try:
+            if not self._fallback_label.winfo_ismapped():
+                self._fallback_label.pack(fill="x", padx=5, pady=(0, 4))
+        except tk.TclError:
+            pass
+
+    @staticmethod
+    def _build_fallback_warning(reason: str | None) -> str | None:
+        if reason == "no_past_snapshot":
+            return (
+                "La fecha de ocurrencia es anterior a la última actualización del colaborador; "
+                "se usará el registro disponible más reciente."
+            )
+        if reason == "case_date_missing_or_invalid":
+            return (
+                "No se pudo interpretar la fecha de ocurrencia; se usará el registro más reciente "
+                "disponible del colaborador."
+            )
+        if reason:
+            return f"Se usó un registro alternativo del colaborador ({reason})."
+        return None
 
     def _apply_autofill_result(self, result) -> None:
         field_map = {
@@ -309,6 +359,7 @@ class TeamMemberFrame:
             self.id_var.set(normalized_id)
         cid = normalized_id
         self._notify_id_change(cid)
+        self._clear_fallback_warning()
         if cid:
             result = None
             if self.autofill_service:
@@ -327,8 +378,15 @@ class TeamMemberFrame:
                             self._log_change(
                                 f"Autopoblado colaborador {self.idx+1} desde team_details.csv"
                             )
-                    if result.used_future_snapshot:
-                        self._warn_future_snapshot(cid)
+                    if getattr(result, "meta", {}).get("fallback_used"):
+                        warning_message = self._build_fallback_warning(
+                            getattr(result, "meta", {}).get("reason")
+                        )
+                        self._set_fallback_warning(warning_message)
+                        if result.used_future_snapshot:
+                            self._warn_future_snapshot(cid, warning_message)
+                    else:
+                        self._clear_fallback_warning()
                     self._last_missing_lookup_id = None
             if not result or not result.found:
                 data = self.team_lookup.get(cid)
@@ -380,15 +438,16 @@ class TeamMemberFrame:
         previous = self._last_tracked_id
         self._last_tracked_id = new_id
         self._dirty_fields.clear()
+        self._clear_fallback_warning()
         if callable(self.id_change_callback):
             self.id_change_callback(self, previous, new_id)
 
-    def _warn_future_snapshot(self, cid: str) -> None:
+    def _warn_future_snapshot(self, cid: str, message: str | None = None) -> None:
         cid = cid or ""
         if cid in self._future_snapshot_warnings:
             return
         self._future_snapshot_warnings.add(cid)
-        message = (
+        message = message or (
             "La fecha de ocurrencia es anterior a la última actualización del colaborador; "
             "se usará el registro disponible más reciente."
         )
