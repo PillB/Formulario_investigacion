@@ -248,6 +248,50 @@ def _create_word_document():
     return DocxDocument()
 
 
+def _build_summary_paragraphs(
+    case: Mapping[str, Any] | Dict[str, Any],
+    clients: List[Dict[str, Any]],
+    team: List[Dict[str, Any]],
+    products: List[Dict[str, Any]],
+    total_inv: Decimal,
+) -> List[str]:
+    formatted_total = total_inv.quantize(Decimal('0.01'))
+    data_available = bool(clients or team or products or any(case.values()))
+    if data_available or total_inv:
+        counts_paragraph = (
+            "Resumen cuantitativo: "
+            f"Se registran {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos vinculados. "
+            f"Monto afectado total {formatted_total}."
+        )
+    else:
+        counts_paragraph = "Resumen cuantitativo: Sin información registrada."
+
+    modalities = []
+    modality = (case.get('modalidad') or '').strip() if case else ''
+    if modality:
+        modalities.append(modality)
+    for prod in products:
+        prod_modalidad = (prod.get('modalidad') or '').strip()
+        if prod_modalidad:
+            modalities.append(prod_modalidad)
+    unique_modalities = sorted(set(modalities))
+
+    category_text = " / ".join(
+        filter(None, [str(case.get('categoria1', '') or '').strip(), str(case.get('categoria2', '') or '').strip()])
+    )
+    if unique_modalities or category_text:
+        modality_parts = []
+        if unique_modalities:
+            modality_parts.append(f"Modalidades destacadas: {', '.join(unique_modalities)}.")
+        if category_text:
+            modality_parts.append(f"Tipificación: {category_text}.")
+        modalities_paragraph = "Modalidades y tipificación: " + " ".join(modality_parts)
+    else:
+        modalities_paragraph = "Modalidades y tipificación: Sin información registrada."
+
+    return [counts_paragraph, modalities_paragraph]
+
+
 def _build_report_context(case_data: CaseData):
     case = case_data.caso
     analysis = case_data.analisis
@@ -256,7 +300,10 @@ def _build_report_context(case_data: CaseData):
     products = case_data.productos
     riesgos = case_data.riesgos
     normas = case_data.normas
-    total_inv = sum((parse_decimal_amount(p.get('monto_investigado')) or Decimal('0')) for p in products)
+    total_inv = sum(
+        [parse_decimal_amount(p.get('monto_investigado')) or Decimal('0') for p in products],
+        start=Decimal('0'),
+    )
     destinatarios = sorted({
         " - ".join(filter(None, [col.get('division', '').strip(), col.get('area', '').strip(), col.get('servicio', '').strip()]))
         for col in team
@@ -341,10 +388,7 @@ def _build_report_context(case_data: CaseData):
         ]
         for norm in normas
     ]
-    summary_sentence = (
-        f"Se documentaron {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos. "
-        f"El caso está tipificado como {case.get('categoria1', '')} / {case.get('categoria2', '')} en modalidad {case.get('modalidad', '')}."
-    )
+    summary_paragraphs = _build_summary_paragraphs(case, clients, team, products, total_inv)
     return {
         'case': case,
         'analysis': analysis,
@@ -355,7 +399,7 @@ def _build_report_context(case_data: CaseData):
         'product_rows': product_rows,
         'risk_rows': risk_rows,
         'norm_rows': norm_rows,
-        'summary_sentence': summary_sentence,
+        'summary_paragraphs': summary_paragraphs,
     }
 
 
@@ -411,8 +455,10 @@ def build_md(case_data: CaseData) -> str:
     lines.extend([
         "",
         "## 5. Resumen automatizado",
-        context['summary_sentence'],
-        "",
+    ])
+    lines.extend(context['summary_paragraphs'])
+    lines.append("")
+    lines.extend([
         "## 6. Modus Operandi",
         analysis.get('modus_operandi') or "Pendiente",
         "",
@@ -508,7 +554,8 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         context['product_rows'],
     )
     document.add_heading("5. Resumen automatizado", level=2)
-    document.add_paragraph(context['summary_sentence'])
+    for paragraph in context['summary_paragraphs']:
+        document.add_paragraph(paragraph)
     document.add_paragraph("")
     add_heading_and_text("6. Modus Operandi", analysis.get('modus_operandi'))
     add_heading_and_text("7. Hallazgos Principales", analysis.get('hallazgos'))
