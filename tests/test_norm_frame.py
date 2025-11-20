@@ -2,6 +2,7 @@ import pytest
 
 from ui.frames import norm
 from tests.test_clients_frame import DummyVar, DummyWidget, RecordingValidator
+from ui.frames import norm
 
 
 @pytest.fixture(autouse=True)
@@ -55,3 +56,41 @@ def test_norm_frame_fecha_validator_requires_value():
 
     frame.fecha_var.set("2023-01-01")
     assert fecha_validator.validate_callback() is None
+
+
+def test_norm_frame_autofills_from_lookup(monkeypatch):
+    frame = _build_norm_frame()
+    frame.set_lookup({"123": {"descripcion": "Desde catálogo", "fecha_vigencia": "2024-03-01"}})
+
+    frame.id_var.set("123")
+    frame.on_id_change(from_focus=True)
+
+    assert frame.descripcion_var.get() == "Desde catálogo"
+    assert frame.fecha_var.get() == "2024-03-01"
+
+
+def test_norm_frame_preserves_manual_fields_with_preserve_flag():
+    frame = _build_norm_frame()
+    frame.set_lookup({"321": {"descripcion": "Catálogo", "fecha_vigencia": "2024-05-05"}})
+    frame.descripcion_var.set("Manual")
+    frame.id_var.set("321")
+
+    frame.on_id_change(preserve_existing=True)
+
+    assert frame.descripcion_var.get() == "Manual"
+    assert frame.fecha_var.get() == "2024-05-05"
+
+
+def test_norm_frame_shows_message_for_missing_lookup(monkeypatch):
+    frame = _build_norm_frame()
+    captured = []
+    monkeypatch.setattr(norm.messagebox, "showerror", lambda *args: captured.append(args))
+
+    frame.id_var.set("999")
+    frame.on_id_change(from_focus=True)
+    assert captured == []
+
+    frame.set_lookup({"111": {"descripcion": "x"}})
+    frame.id_var.set("999")
+    frame.on_id_change(from_focus=True)
+    assert captured and "Norma no encontrada" in captured[0][0]

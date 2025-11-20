@@ -1183,6 +1183,7 @@ def test_product_frame_amount_fields_normalize_missing_decimals(monkeypatch):
         logs=[],
         product_lookup={},
         tooltip_register=lambda *_args, **_kwargs: None,
+        claim_lookup={},
     )
 
     product.monto_inv_var.set("100")
@@ -1214,6 +1215,7 @@ def test_product_frame_detects_one_cent_gap(monkeypatch):
         logs=[],
         product_lookup={},
         tooltip_register=lambda *_args, **_kwargs: None,
+        claim_lookup={},
     )
 
     product.monto_inv_var.set("100.00")
@@ -1237,6 +1239,7 @@ def test_product_frame_requires_exact_contingencia_for_credit(monkeypatch):
         logs=[],
         product_lookup={},
         tooltip_register=lambda *_args, **_kwargs: None,
+        claim_lookup={},
     )
 
     product.tipo_prod_var.set("Tarjeta de crédito")

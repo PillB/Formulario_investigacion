@@ -6,8 +6,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from settings import CRITICIDAD_LIST
-from validators import (FieldValidator, log_event, validate_money_bounds,
-                        validate_risk_id)
+from validators import (FieldValidator, log_event, should_autofill_field,
+                        validate_money_bounds, validate_risk_id)
 
 
 class RiskFrame:
@@ -30,6 +30,8 @@ class RiskFrame:
         self.tooltip_register = tooltip_register
         self.validators = []
         self._last_exposicion_decimal = None
+        self.risk_lookup = {}
+        self._last_missing_lookup_id = None
         self.change_notifier = change_notifier
 
         self.id_var = tk.StringVar()
@@ -53,6 +55,7 @@ class RiskFrame:
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=15)
         id_entry.pack(side="left", padx=5)
         self.tooltip_register(id_entry, "Usa el formato RSK-000000.")
+        id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         ttk.Label(row1, text="Líder:").pack(side="left")
         lider_entry = ttk.Entry(row1, textvariable=self.lider_var, width=20)
         lider_entry.pack(side="left", padx=5)
@@ -142,6 +145,46 @@ class RiskFrame:
             "exposicion_residual": exposure_value,
             "planes_accion": self.planes_var.get().strip(),
         }
+
+    def set_lookup(self, lookup):
+        self.risk_lookup = lookup or {}
+        self._last_missing_lookup_id = None
+        self.on_id_change(preserve_existing=True, silent=True)
+
+    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
+        rid = self.id_var.get().strip()
+        if not rid:
+            self._last_missing_lookup_id = None
+            return
+        data = self.risk_lookup.get(rid)
+        if not data:
+            if from_focus and not silent and self.risk_lookup and self._last_missing_lookup_id != rid:
+                messagebox.showerror(
+                    "Riesgo no encontrado",
+                    (
+                        f"El ID {rid} no existe en los catálogos de detalle. "
+                        "Verifica el código o actualiza risk_details.csv."
+                    ),
+                )
+                self._last_missing_lookup_id = rid
+            return
+
+        def set_if_present(var, key):
+            value = data.get(key)
+            if value in (None, ""):
+                return
+            text_value = str(value).strip()
+            if text_value and should_autofill_field(var.get(), preserve_existing):
+                var.set(text_value)
+
+        set_if_present(self.lider_var, "lider")
+        set_if_present(self.descripcion_var, "descripcion")
+        set_if_present(self.criticidad_var, "criticidad")
+        set_if_present(self.exposicion_var, "exposicion_residual")
+        set_if_present(self.planes_var, "planes_accion")
+        self._last_missing_lookup_id = None
+        if not silent:
+            self._log_change(f"Riesgo {self.idx+1}: autopoblado desde catálogo")
 
     def _normalize_exposure_amount(self):
         message, decimal_value, normalized_text = validate_money_bounds(

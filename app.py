@@ -298,6 +298,9 @@ class FraudCaseApp:
         self.team_lookup = {}
         self.client_lookup = {}
         self.product_lookup = {}
+        self.claim_lookup = {}
+        self.risk_lookup = {}
+        self.norm_lookup = {}
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
         self.import_progress = None
         self._import_progress_visible = False
@@ -1009,6 +1012,7 @@ class FraudCaseApp:
             self.logs,
             self.product_lookup,
             self.register_tooltip,
+            claim_lookup=self.claim_lookup,
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
             id_change_callback=self._handle_product_id_change,
@@ -1618,6 +1622,9 @@ class FraudCaseApp:
             if (normalized := self._normalize_identifier(key))
         }
         self.product_lookup = self._extract_lookup_or_empty("id_producto")
+        self.claim_lookup = self._extract_lookup_or_empty("id_reclamo")
+        self.risk_lookup = self._extract_lookup_or_empty("id_riesgo")
+        self.norm_lookup = self._extract_lookup_or_empty("id_norma")
         for frame in self.client_frames:
             if hasattr(frame, 'set_lookup'):
                 frame.set_lookup(self.client_lookup)
@@ -1629,6 +1636,16 @@ class FraudCaseApp:
         for frame in self.product_frames:
             if hasattr(frame, 'set_product_lookup'):
                 frame.set_product_lookup(self.product_lookup)
+                frame.on_id_change(preserve_existing=True, silent=True)
+            if hasattr(frame, 'set_claim_lookup'):
+                frame.set_claim_lookup(self.claim_lookup)
+        for frame in self.risk_frames:
+            if hasattr(frame, 'set_lookup'):
+                frame.set_lookup(self.risk_lookup)
+                frame.on_id_change(preserve_existing=True, silent=True)
+        for frame in self.norm_frames:
+            if hasattr(frame, 'set_lookup'):
+                frame.set_lookup(self.norm_lookup)
                 frame.on_id_change(preserve_existing=True, silent=True)
 
     def _extract_lookup_or_empty(self, canonical_key):

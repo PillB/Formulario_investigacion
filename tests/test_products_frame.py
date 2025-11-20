@@ -104,6 +104,7 @@ def _build_product_frame():
         logs=[],
         product_lookup={},
         tooltip_register=lambda *_args, **_kwargs: None,
+        claim_lookup={},
         initialize_rows=False,
     )
 
@@ -213,3 +214,60 @@ def test_involvement_validator_requires_amount_when_collaborator_selected():
     error = validator.validate_callback()
     assert error is not None
     assert "monto" in error.lower()
+
+
+def test_claim_row_autofills_from_lookup(monkeypatch):
+    product = _build_product_frame()
+    product.set_claim_lookup(
+        {
+            "C00000001": {
+                "nombre_analitica": "Analítica catálogo",
+                "codigo_analitica": "4300000001",
+            }
+        }
+    )
+    row = product.add_claim()
+    row.id_var.set("C00000001")
+    row.on_id_change(from_focus=True)
+
+    assert row.name_var.get() == "Analítica catálogo"
+    assert row.code_var.get() == "4300000001"
+
+
+def test_claim_row_preserves_manual_fields_when_requested():
+    product = _build_product_frame()
+    product.set_claim_lookup(
+        {
+            "C00000002": {
+                "nombre_analitica": "Del catálogo",
+                "codigo_analitica": "4300000002",
+            }
+        }
+    )
+    row = product.add_claim()
+    row.id_var.set("C00000002")
+    row.name_var.set("Manual")
+    row.code_var.set("")
+
+    row.on_id_change(preserve_existing=True)
+
+    assert row.name_var.get() == "Manual"
+    assert row.code_var.get() == "4300000002"
+
+
+def test_claim_row_shows_message_for_unknown_id(monkeypatch):
+    product = _build_product_frame()
+    product.set_claim_lookup({})
+    row = product.add_claim()
+    row.id_var.set("C00009999")
+
+    captured = []
+    monkeypatch.setattr(products.messagebox, "showerror", lambda *args: captured.append(args))
+
+    row.on_id_change(from_focus=True)
+
+    assert captured == []
+
+    product.set_claim_lookup({"OTHER": {"nombre_analitica": "X"}})
+    row.on_id_change(from_focus=True)
+    assert captured and "Reclamo no encontrado" in captured[0][0]
