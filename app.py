@@ -1170,6 +1170,30 @@ class FraudCaseApp:
         btn_clear.pack(side="left", padx=2)
         self.register_tooltip(btn_clear, "Limpia el formulario completo para iniciar desde cero.")
 
+        report_buttons = ttk.Frame(frame)
+        report_buttons.pack(anchor="w", pady=2)
+        btn_docx = ttk.Button(
+            report_buttons,
+            text="Generar Word (.docx)",
+            command=self.generate_docx_report,
+            default="active",
+        )
+        btn_docx.pack(side="left", padx=2)
+        self.register_tooltip(
+            btn_docx,
+            "Genera el informe principal en Word utilizando los datos validados.",
+        )
+        btn_md = ttk.Button(
+            report_buttons,
+            text="Generar informe (.md)",
+            command=self.generate_md_report,
+        )
+        btn_md.pack(side="left", padx=2)
+        self.register_tooltip(
+            btn_md,
+            "Crea una copia del informe en Markdown como respaldo manual.",
+        )
+
         # Información adicional
         ttk.Label(frame, text="El auto‑guardado se realiza automáticamente en un archivo JSON").pack(anchor="w", pady=(10,2))
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
@@ -4620,8 +4644,24 @@ class FraudCaseApp:
     # ---------------------------------------------------------------------
     # Exportación de datos
 
-    def save_and_send(self):
-        """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
+    def _attach_case_ids(self, data: CaseData) -> None:
+        case_id = data.get("caso", {}).get("id_caso", "")
+        for collection in (
+            "clientes",
+            "colaboradores",
+            "productos",
+            "reclamos",
+            "involucramientos",
+            "riesgos",
+            "normas",
+        ):
+            for row in data.get(collection, []):
+                if isinstance(row, dict):
+                    row["id_caso"] = case_id
+
+    def _prepare_case_data_for_export(self) -> tuple[Optional[CaseData], Optional[Path], Optional[str]]:
+        """Valida y normaliza los datos antes de exportarlos."""
+
         self.flush_autosave()
         self.flush_logs_now()
         errors, warnings = self.validate_data()
@@ -4632,31 +4672,51 @@ class FraudCaseApp:
             messagebox.showwarning("Advertencias de validación", "\n".join(warnings))
             log_event("validacion", f"Advertencias al guardar: {warnings}", self.logs)
         if errors:
-            return
+            return None, None, None
         folder = self._get_exports_folder()
         if not folder:
+            return None, None, None
+        data = self._ensure_case_data(self.gather_data())
+        self._normalize_export_amount_strings(data.get("productos"))
+        self._attach_case_ids(data)
+        case_id = data["caso"].get("id_caso") or "caso"
+        return data, folder, case_id
+
+    def _generate_report_file(self, extension: str, builder, description: str) -> None:
+        data, folder, case_id = self._prepare_case_data_for_export()
+        if not data or not folder or not case_id:
+            return
+        report_path = folder / f"{case_id}_informe.{extension}"
+        try:
+            created_path = builder(data, report_path)
+        except Exception as exc:  # pragma: no cover - protección frente a fallos externos
+            messagebox.showerror(
+                "Error al generar informe",
+                f"No se pudo generar el informe {description.lower()}: {exc}",
+            )
+            log_event("validacion", f"Error al generar informe {extension}: {exc}", self.logs)
+            return
+        self._mirror_exports_to_external_drive([created_path], case_id)
+        messagebox.showinfo(
+            "Informe generado",
+            f"El informe {description} se ha guardado como {created_path.name}.",
+        )
+        log_event("navegacion", f"Informe {extension} generado", self.logs)
+        self.flush_logs_now()
+
+    def generate_docx_report(self):
+        self._generate_report_file("docx", build_docx, "Word (.docx)")
+
+    def generate_md_report(self):
+        self._generate_report_file("md", save_md, "Markdown (.md)")
+
+    def save_and_send(self):
+        """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
+        data, folder, case_id = self._prepare_case_data_for_export()
+        if not data or not folder or not case_id:
             return
         folder = Path(folder)
-        # Reunir datos
-        data = self._ensure_case_data(self.gather_data())
-        self._normalize_export_amount_strings(data.get('productos'))
-        # Completar claves foráneas con id_caso
-        for c in data['clientes']:
-            c['id_caso'] = data['caso']['id_caso']
-        for t in data['colaboradores']:
-            t['id_caso'] = data['caso']['id_caso']
-        for p in data['productos']:
-            p['id_caso'] = data['caso']['id_caso']
-        for r in data['reclamos']:
-            r['id_caso'] = data['caso']['id_caso']
-        for i in data['involucramientos']:
-            i['id_caso'] = data['caso']['id_caso']
-        for risk in data['riesgos']:
-            risk['id_caso'] = data['caso']['id_caso']
-        for norm in data['normas']:
-            norm['id_caso'] = data['caso']['id_caso']
         # Guardar CSVs
-        case_id = data['caso']['id_caso'] or 'caso'
         created_files = []
 
         def write_csv(file_name, rows, header):
