@@ -6,10 +6,11 @@ from types import SimpleNamespace
 
 import app as app_module
 from app import FraudCaseApp
+from models import AutofillService, CatalogService
 from settings import (ACCIONADO_OPTIONS, CANAL_LIST, CRITICIDAD_LIST,
                       FLAG_COLABORADOR_LIST, PROCESO_LIST, TAXONOMIA,
                       TIPO_FALTA_LIST, TIPO_ID_LIST, TIPO_INFORME_LIST,
-                      TIPO_MONEDA_LIST, TIPO_SANCION_LIST)
+                      TIPO_MONEDA_LIST, TIPO_SANCION_LIST, BASE_DIR)
 
 
 class DummyVar:
@@ -530,6 +531,28 @@ def test_validate_data_accepts_catalog_product_type():
     errors, warnings = app.validate_data()
     assert errors == []
     assert warnings == []
+
+
+def test_case_date_validation_aligns_with_product_future_rules():
+    future_occurrence = (datetime.today() + timedelta(days=10)).strftime("%Y-%m-%d")
+    future_discovery = (datetime.today() + timedelta(days=11)).strftime("%Y-%m-%d")
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "producto_overrides": {
+            "fecha_ocurrencia": future_occurrence,
+            "fecha_descubrimiento": future_discovery,
+        },
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    app.fecha_caso_var.set(future_occurrence)
+
+    errors, _ = app.validate_data()
+
+    assert "La fecha de ocurrencia del caso no puede estar en el futuro." in errors
+    assert any(
+        error.startswith("Las fechas del producto")
+        for error in errors
+    )
 
 
 def test_validate_data_rejects_products_without_taxonomy_values():
@@ -1627,6 +1650,36 @@ def test_team_frame_shows_and_clears_fallback_warning(monkeypatch):
     frame._mark_dirty("division")
     assert frame._fallback_message_var.get() == ""
     assert frame._fallback_label.winfo_ismapped() is False
+
+
+def test_team_frame_warns_on_future_snapshot(monkeypatch):
+    team_module, _ = _patch_team_module(monkeypatch)
+    warning_calls: list[tuple] = []
+    team_module.messagebox.showwarning = lambda *args, **kwargs: warning_calls.append((args, kwargs))
+
+    catalog = CatalogService(BASE_DIR)
+    catalog.refresh()
+    autofill = AutofillService(catalog, warning_handler=lambda *_args, **_kwargs: None)
+
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+        autofill_service=autofill,
+        case_date_getter=lambda: "2010-01-01",
+    )
+
+    frame.id_var.set("T12345")
+    frame.on_id_change(from_focus=True)
+
+    assert warning_calls
+    assert frame._fallback_message_var.get().startswith(
+        "La fecha de ocurrencia es anterior a la última actualización del colaborador"
+    )
 
 def test_preserve_existing_client_contacts_on_partial_import():
     app = build_headless_app("Crédito personal")
