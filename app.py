@@ -2477,6 +2477,7 @@ class FraudCaseApp:
                 if criticidad in CRITICIDAD_LIST:
                     frame.criticidad_var.set(criticidad)
                 frame.exposicion_var.set((values[3] or "").strip())
+                self._trigger_import_id_refresh(frame, risk_id, preserve_existing=True)
                 processed += 1
             if duplicate_ids:
                 messagebox.showwarning(

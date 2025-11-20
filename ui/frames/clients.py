@@ -66,8 +66,7 @@ class ClientFrame:
         ttk.Label(row1, text="ID del cliente:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: self.on_id_change(from_focus=True))
-        id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
+        self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
         row2 = ttk.Frame(self.frame)
@@ -225,6 +224,13 @@ class ClientFrame:
     def set_lookup(self, lookup):
         self.client_lookup = lookup or {}
         self._last_missing_lookup_id = None
+
+    def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         if not silent:

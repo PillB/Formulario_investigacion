@@ -1,5 +1,7 @@
 import csv
 
+import csv
+
 from models import AutofillService, CatalogService
 
 
@@ -147,3 +149,71 @@ def test_autofill_warns_when_using_future_snapshot(tmp_path):
     assert result.used_future_snapshot is True
     assert warnings, "Expected a non-blocking warning"
     assert result.applied["division"] == "Division futura"
+
+
+def test_autofill_returns_not_found_for_unknown_identifier(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T5", "Division", "", "", "", "", "", "2024-01-01"),
+        ],
+    )
+    _, autofill, warnings = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "",
+        current_values={"division": ""},
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="2024-01-02",
+    )
+
+    assert result.found is False
+    assert result.applied == {}
+    assert warnings == []
+
+
+def test_autofill_picks_nearest_future_snapshot(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T6", "Futuro lejano", "", "", "", "", "", "2030-01-01"),
+            ("T6", "Futuro cercano", "", "", "", "", "", "2025-05-05"),
+        ],
+    )
+    _, autofill, warnings = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T6",
+        current_values={"division": ""},
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="2024-12-12",
+    )
+
+    assert result.used_future_snapshot is True
+    assert result.applied["division"] == "Futuro cercano"
+    assert warnings, "Future snapshot should trigger warnings"
+
+
+def test_autofill_uses_latest_when_case_date_missing(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T7", "Antiguo", "", "", "", "", "", "2020-02-02"),
+            ("T7", "Reciente", "", "", "", "", "", "2024-04-04"),
+        ],
+    )
+    _, autofill, warnings = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T7",
+        current_values={"division": ""},
+        dirty_fields={},
+        preserve_existing=False,
+        case_date=None,
+    )
+
+    assert result.applied["division"] == "Reciente"
+    assert result.used_future_snapshot is False
+    assert warnings == []

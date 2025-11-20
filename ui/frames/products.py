@@ -194,7 +194,7 @@ class ClaimRow:
         id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=15)
         id_entry.pack(side="left", padx=5)
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
-        id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        self._bind_identifier_triggers(id_entry)
 
         ttk.Label(self.frame, text="Analítica nombre:").pack(side="left")
         name_entry = ttk.Entry(self.frame, textvariable=self.name_var, width=20)
@@ -235,8 +235,6 @@ class ClaimRow:
             )
         )
 
-        self._last_missing_lookup_id = None
-
         self.validators.append(
             FieldValidator(
                 code_entry,
@@ -249,6 +247,13 @@ class ClaimRow:
 
         self._last_missing_lookup_id = None
 
+    def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
+
     def get_data(self):
         return {
             "id_reclamo": self.id_var.get().strip(),
@@ -260,6 +265,7 @@ class ClaimRow:
         self.id_var.set((data.get("id_reclamo") or "").strip())
         self.name_var.set((data.get("nombre_analitica") or "").strip())
         self.code_var.set((data.get("codigo_analitica") or "").strip())
+        self.on_id_change(preserve_existing=True, silent=True)
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         rid = self.id_var.get().strip()
@@ -397,8 +403,7 @@ class ProductFrame:
         ttk.Label(row1, text="ID del producto:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: self.on_id_change(from_focus=True))
-        id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
+        self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Código único del producto investigado.")
         ttk.Label(row1, text="Cliente:").pack(side="left")
         self.client_cb = ttk.Combobox(
@@ -986,6 +991,13 @@ class ProductFrame:
         self._last_tracked_id = new_id
         if callable(self.id_change_callback):
             self.id_change_callback(self, previous, new_id)
+
+    def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def _validate_fecha_descubrimiento(self):
         msg = validate_date_text(self.fecha_desc_var.get(), "la fecha de descubrimiento", allow_blank=False)

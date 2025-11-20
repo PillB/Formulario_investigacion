@@ -42,9 +42,9 @@ class TeamFrameStub(BaseFrameStub):
     pass
 
 
-class RiskFrameStub:
+class RiskFrameStub(BaseFrameStub):
     def __init__(self):
-        self.id_var = DummyVar("")
+        super().__init__()
         self.lider_var = DummyVar("")
         self.descripcion_var = DummyVar("")
         self.criticidad_var = DummyVar("")
