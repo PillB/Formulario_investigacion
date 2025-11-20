@@ -9,9 +9,12 @@ from pathlib import Path
 import types
 import zipfile
 
+import pytest
+
 import app as app_module
 import settings
 from app import FraudCaseApp
+from report_builder import DOCX_AVAILABLE, build_report_filename
 from tests.test_validation import build_headless_app
 from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST,
                       TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST)
@@ -69,6 +72,7 @@ def _make_minimal_app():
     app = FraudCaseApp.__new__(FraudCaseApp)
     app.logs = []
     app._export_base_path = None
+    app._docx_available = DOCX_AVAILABLE
     for attr in [
         'id_caso_var',
         'tipo_informe_var',
@@ -201,18 +205,25 @@ def test_save_and_send_mirrors_exports_to_external_drive(
     app.save_and_send()
     case_id = '2024-9001'
     case_folder = external_drive_dir / case_id
+    md_report = build_report_filename(TIPO_INFORME_LIST[0], case_id, 'md')
+    docx_report = build_report_filename(TIPO_INFORME_LIST[0], case_id, 'docx')
     expected_suffixes = {
         f'{case_id}_casos.csv',
         f'{case_id}_version.json',
-        f'{case_id}_informe.md',
-        f'{case_id}_informe.docx',
         f'{case_id}_logs.csv',
+        md_report,
     }
+    if DOCX_AVAILABLE:
+        expected_suffixes.add(docx_report)
     mirrored_files = {path.name for path in case_folder.iterdir() if path.is_file()}
     assert expected_suffixes.issubset(mirrored_files)
-    assert messagebox_spy.warnings == []
+    if DOCX_AVAILABLE:
+        assert messagebox_spy.warnings == []
+    else:
+        assert messagebox_spy.warnings
 
 
+@pytest.mark.skipif(not DOCX_AVAILABLE, reason="python-docx no está disponible")
 def test_save_and_send_generates_word_report(tmp_path, messagebox_spy):
     export_dir = tmp_path / 'exports'
     export_dir.mkdir()
@@ -222,7 +233,8 @@ def test_save_and_send_generates_word_report(tmp_path, messagebox_spy):
     app._current_case_data = _build_case_data('2024-9100')
     app.save_and_send()
 
-    docx_path = export_dir / '2024-9100_informe.docx'
+    docx_name = build_report_filename(TIPO_INFORME_LIST[0], '2024-9100', 'docx')
+    docx_path = export_dir / docx_name
     assert docx_path.is_file()
     with zipfile.ZipFile(docx_path) as bundle:
         xml_data = bundle.read('word/document.xml').decode('utf-8')
