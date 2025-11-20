@@ -5,8 +5,9 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from validators import (FieldValidator, log_event, validate_date_text,
-                        validate_norm_id, validate_required_text)
+from validators import (FieldValidator, log_event, should_autofill_field,
+                        validate_date_text, validate_norm_id,
+                        validate_required_text)
 
 
 class NormFrame:
@@ -24,6 +25,8 @@ class NormFrame:
         self.id_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
         self.fecha_var = tk.StringVar()
+        self.norm_lookup = {}
+        self._last_missing_lookup_id = None
 
         self.frame = ttk.LabelFrame(parent, text=f"Norma {self.idx+1}")
         self.frame.pack(fill="x", padx=5, pady=2)
@@ -33,6 +36,7 @@ class NormFrame:
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
+        id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         ttk.Label(row1, text="Fecha de vigencia (YYYY-MM-DD):").pack(side="left")
         fecha_entry = ttk.Entry(row1, textvariable=self.fecha_var, width=15)
         fecha_entry.pack(side="left", padx=5)
@@ -92,6 +96,43 @@ class NormFrame:
             "descripcion": descripcion,
             "fecha_vigencia": fecha,
         }
+
+    def set_lookup(self, lookup):
+        self.norm_lookup = lookup or {}
+        self._last_missing_lookup_id = None
+        self.on_id_change(preserve_existing=True, silent=True)
+
+    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
+        norm_id = self.id_var.get().strip()
+        if not norm_id:
+            self._last_missing_lookup_id = None
+            return
+        data = self.norm_lookup.get(norm_id)
+        if not data:
+            if from_focus and not silent and self.norm_lookup and self._last_missing_lookup_id != norm_id:
+                messagebox.showerror(
+                    "Norma no encontrada",
+                    (
+                        f"El ID {norm_id} no existe en los catálogos de detalle. "
+                        "Verifica el código o actualiza norm_details.csv."
+                    ),
+                )
+                self._last_missing_lookup_id = norm_id
+            return
+
+        def set_if_present(var, key):
+            value = data.get(key)
+            if value in (None, ""):
+                return
+            text_value = str(value).strip()
+            if text_value and should_autofill_field(var.get(), preserve_existing):
+                var.set(text_value)
+
+        set_if_present(self.descripcion_var, "descripcion")
+        set_if_present(self.fecha_var, "fecha_vigencia")
+        self._last_missing_lookup_id = None
+        if not silent:
+            self._log_change(f"Norma {self.idx+1}: autopoblada desde catálogo")
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar la norma {self.idx+1}?"):

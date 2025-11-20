@@ -220,6 +220,7 @@ DETAIL_LOOKUP_ALIASES = {
     "id_cliente": ("clientes", "cliente", "clients", "client"),
     "id_colaborador": ("colaboradores", "colaborador", "team", "teams"),
     "id_producto": ("productos", "producto", "product", "products"),
+    "id_reclamo": ("reclamos", "reclamo", "claim", "claims"),
     "id_riesgo": ("riesgos", "riesgo", "risk", "risks"),
     "id_norma": ("normas", "norma", "rule", "rules"),
 }

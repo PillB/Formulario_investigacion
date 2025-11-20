@@ -194,6 +194,7 @@ class ClaimRow:
         id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=15)
         id_entry.pack(side="left", padx=5)
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
+        id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
         ttk.Label(self.frame, text="Analítica nombre:").pack(side="left")
         name_entry = ttk.Entry(self.frame, textvariable=self.name_var, width=20)
@@ -234,6 +235,8 @@ class ClaimRow:
             )
         )
 
+        self._last_missing_lookup_id = None
+
         self.validators.append(
             FieldValidator(
                 code_entry,
@@ -243,6 +246,8 @@ class ClaimRow:
                 variables=[self.code_var],
             )
         )
+
+        self._last_missing_lookup_id = None
 
     def get_data(self):
         return {
@@ -255,6 +260,42 @@ class ClaimRow:
         self.id_var.set((data.get("id_reclamo") or "").strip())
         self.name_var.set((data.get("nombre_analitica") or "").strip())
         self.code_var.set((data.get("codigo_analitica") or "").strip())
+
+    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
+        rid = self.id_var.get().strip()
+        if not rid:
+            self._last_missing_lookup_id = None
+            return
+        lookup = getattr(self.product_frame, "claim_lookup", None) or {}
+        data = lookup.get(rid)
+        if not data:
+            if from_focus and not silent and lookup and self._last_missing_lookup_id != rid:
+                messagebox.showerror(
+                    "Reclamo no encontrado",
+                    (
+                        f"El ID {rid} no existe en los catálogos de detalle. "
+                        "Verifica el código o actualiza claim_details.csv."
+                    ),
+                )
+                self._last_missing_lookup_id = rid
+            return
+
+        def set_if_present(var, key):
+            value = data.get(key)
+            if value in (None, ""):
+                return
+            text_value = str(value).strip()
+            if text_value and should_autofill_field(var.get(), preserve_existing):
+                var.set(text_value)
+
+        set_if_present(self.name_var, "nombre_analitica")
+        set_if_present(self.code_var, "codigo_analitica")
+        self._last_missing_lookup_id = None
+        if not silent:
+            self.product_frame.log_change(
+                f"Producto {self.product_frame.idx+1}: autopobló reclamo {rid} desde catálogo"
+            )
+        self.product_frame.persist_lookup_snapshot()
 
     def is_empty(self):
         snapshot = self.get_data()
@@ -294,6 +335,7 @@ class ProductFrame:
         logs,
         product_lookup,
         tooltip_register,
+        claim_lookup=None,
         summary_refresh_callback=None,
         change_notifier=None,
         id_change_callback=None,
@@ -306,6 +348,7 @@ class ProductFrame:
         self.get_team_options = get_team_options
         self.logs = logs
         self.product_lookup = product_lookup or {}
+        self.claim_lookup = claim_lookup or {}
         self.tooltip_register = tooltip_register
         self.validators = []
         self.client_validator = None
@@ -857,6 +900,11 @@ class ProductFrame:
     def set_product_lookup(self, lookup):
         self.product_lookup = lookup or {}
         self._last_missing_lookup_id = None
+
+    def set_claim_lookup(self, lookup):
+        self.claim_lookup = lookup or {}
+        for claim in self.claims:
+            claim.on_id_change(preserve_existing=True, silent=True)
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         pid = self.id_var.get().strip()
