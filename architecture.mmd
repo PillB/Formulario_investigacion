@@ -1,5 +1,6 @@
-%% Diagrama ER de la arquitectura de datos normalizada para el sistema de casos de fraude
+%% Diagramas de arquitectura y flujos de artefactos
 
+%% Diagrama ER de la arquitectura de datos normalizada para el sistema de casos de fraude
 erDiagram
   CASOS {
     string case_id PK "Identificador único del caso"
@@ -139,15 +140,43 @@ erDiagram
 
 %% Notas de almacenamiento de logs:
 %% - Los eventos del formulario se escriben en `logs.csv` (carpeta local) y se espejan a `external drive/logs.csv`.
-%% - Si `STORE_LOGS_LOCALLY` es `False`, la bitácora sólo se persistirá en la unidad externa y se reportarán advertencias si alg
-%%   uno de los destinos falla.
+%% - Si `STORE_LOGS_LOCALLY` es `False`, la bitácora sólo se persistirá en la unidad externa y se reportarán advertencias si alguno de los destinos falla.
 
 %% Diagrama de flujo del manejo de artefactos entre la app y los destinos locales/externos
 flowchart LR
-  FraudCaseApp[[FraudCaseApp]] -->|Artefactos locales activos| BASE_DIR[BASE_DIR]
-  BASE_DIR -->|Autosaves locales| "Autosave/Exports/Reports"
-  "Autosave/Exports/Reports" -->|Duplicados externos en sincronización| "External drive/<case>"
-  BASE_DIR -->|Diagnósticos locales| "Logs/Temp"
-  "Logs/Temp" -. "DevOps puede remapear carpeta de logs" .-> "External drive/<case>"
-  BASE_DIR -. "DevOps puede remapear raíz del caso" .-> "External drive/<case>"
+  subgraph UI[App Tkinter]
+    U1[Notebook
+    (Caso/Clientes/Colaboradores/Productos)]
+    U2[Riesgos y Normas]
+    U3[Análisis]
+    U4[Acciones & Resumen]
+  end
 
+  subgraph Validaciones
+    V1[Validación por campo
+    (fechas, montos, IDs, condicionales)]
+    V2[Revisión de duplicados
+    case+producto+cliente+team+fecha+reclamo]
+  end
+
+  subgraph Persistencia
+    P1[autosave.json]
+    P2[temp versions]
+    P3[exports/ (CSV, JSON, MD, DOCX)]
+    P4[external drive/<case>/]
+    P5[logs.csv]
+  end
+
+  UI -->|Edición dispara| V1
+  UI -->|Guardar y enviar| V2
+  V1 -->|Errores a usuario| UI
+  V2 -->|Bloquea duplicados| UI
+
+  UI -->|Autosave| P1
+  UI -->|Autosave incremental| P2
+  UI -->|Exportadores| P3
+  UI -->|Espejo| P4
+  UI -->|Bitácora| P5
+
+  P3 -->|Replica| P4
+  P5 -->|Replica| P4
