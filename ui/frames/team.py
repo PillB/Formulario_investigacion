@@ -29,6 +29,8 @@ class TeamMemberFrame:
         summary_refresh_callback=None,
         change_notifier=None,
         id_change_callback=None,
+        autofill_service=None,
+        case_date_getter=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -39,11 +41,14 @@ class TeamMemberFrame:
         self.tooltip_register = tooltip_register
         self.validators = []
         self._agency_validators: list[FieldValidator] = []
+        self._dirty_fields: dict[str, bool] = {}
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
         self._last_tracked_id = ''
+        self.autofill_service = autofill_service
+        self.case_date_getter = case_date_getter
 
         self.id_var = tk.StringVar()
         self.flag_var = tk.StringVar()
@@ -64,8 +69,7 @@ class TeamMemberFrame:
         ttk.Label(row1, text="ID del colaborador:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
         id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: self.on_id_change(from_focus=True))
-        id_entry.bind("<KeyRelease>", lambda e: self.on_id_change())
+        self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
         ttk.Label(row1, text="Flag:").pack(side="left")
         flag_cb = ttk.Combobox(
@@ -85,20 +89,24 @@ class TeamMemberFrame:
         ttk.Label(row2, text="División:").pack(side="left")
         div_entry = ttk.Entry(row2, textvariable=self.division_var, width=20)
         div_entry.pack(side="left", padx=5)
+        self._bind_dirty_tracking(div_entry, "division")
         self.tooltip_register(div_entry, "Ingresa la división o gerencia del colaborador.")
         div_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
         ttk.Label(row2, text="Área:").pack(side="left")
         area_entry = ttk.Entry(row2, textvariable=self.area_var, width=20)
         area_entry.pack(side="left", padx=5)
+        self._bind_dirty_tracking(area_entry, "area")
         self.tooltip_register(area_entry, "Detalla el área específica.")
         area_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
         ttk.Label(row2, text="Servicio:").pack(side="left")
         serv_entry = ttk.Entry(row2, textvariable=self.servicio_var, width=20)
         serv_entry.pack(side="left", padx=5)
+        self._bind_dirty_tracking(serv_entry, "servicio")
         self.tooltip_register(serv_entry, "Describe el servicio o célula.")
         ttk.Label(row2, text="Puesto:").pack(side="left")
         puesto_entry = ttk.Entry(row2, textvariable=self.puesto_var, width=20)
         puesto_entry.pack(side="left", padx=5)
+        self._bind_dirty_tracking(puesto_entry, "puesto")
         self.tooltip_register(puesto_entry, "Define el cargo actual del colaborador.")
 
         row3 = ttk.Frame(self.frame)
@@ -106,10 +114,12 @@ class TeamMemberFrame:
         ttk.Label(row3, text="Nombre agencia:").pack(side="left")
         nombre_ag_entry = ttk.Entry(row3, textvariable=self.nombre_agencia_var, width=25)
         nombre_ag_entry.pack(side="left", padx=5)
+        self._bind_dirty_tracking(nombre_ag_entry, "nombre_agencia")
         self.tooltip_register(nombre_ag_entry, "Especifica la agencia u oficina de trabajo.")
         ttk.Label(row3, text="Código agencia:").pack(side="left")
         cod_ag_entry = ttk.Entry(row3, textvariable=self.codigo_agencia_var, width=10)
         cod_ag_entry.pack(side="left", padx=5)
+        self._bind_dirty_tracking(cod_ag_entry, "codigo_agencia")
         self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
         self._division_entry = div_entry
         self._area_entry = area_entry
@@ -210,6 +220,45 @@ class TeamMemberFrame:
                 )
             )
 
+    def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
+
+    def _bind_dirty_tracking(self, widget, field_key: str) -> None:
+        widget.bind("<KeyRelease>", lambda _e: self._mark_dirty(field_key), add="+")
+        widget.bind("<<Paste>>", lambda _e: self._mark_dirty(field_key), add="+")
+        widget.bind("<<ComboboxSelected>>", lambda _e: self._mark_dirty(field_key), add="+")
+
+    def _mark_dirty(self, field_key: str) -> None:
+        if field_key:
+            self._dirty_fields[field_key] = True
+
+    def _collect_current_values(self) -> dict[str, str]:
+        return {
+            "division": self.division_var.get(),
+            "area": self.area_var.get(),
+            "servicio": self.servicio_var.get(),
+            "puesto": self.puesto_var.get(),
+            "nombre_agencia": self.nombre_agencia_var.get(),
+            "codigo_agencia": self.codigo_agencia_var.get(),
+        }
+
+    def _apply_autofill_result(self, result) -> None:
+        field_map = {
+            "division": self.division_var,
+            "area": self.area_var,
+            "servicio": self.servicio_var,
+            "puesto": self.puesto_var,
+            "nombre_agencia": self.nombre_agencia_var,
+            "codigo_agencia": self.codigo_agencia_var,
+        }
+        for key, value in result.applied.items():
+            var = field_map.get(key)
+            if var is not None:
+                var.set(value)
+
     def set_lookup(self, lookup):
         self.team_lookup = self._normalize_lookup(lookup)
         self._last_missing_lookup_id = None
@@ -259,42 +308,74 @@ class TeamMemberFrame:
         cid = normalized_id
         self._notify_id_change(cid)
         if cid:
-            data = self.team_lookup.get(cid)
-            if data:
-                def set_if_present(var, key):
-                    value = data.get(key, "").strip()
-                    if value and should_autofill_field(var.get(), preserve_existing):
-                        var.set(value)
+            result = None
+            if self.autofill_service:
+                case_date = self.case_date_getter() if callable(self.case_date_getter) else None
+                result = self.autofill_service.lookup_team_autofill(
+                    cid,
+                    current_values=self._collect_current_values(),
+                    dirty_fields=self._dirty_fields,
+                    preserve_existing=preserve_existing,
+                    case_date=case_date,
+                )
+                if result.found:
+                    if result.applied:
+                        self._apply_autofill_result(result)
+                        if not silent:
+                            self._log_change(
+                                f"Autopoblado colaborador {self.idx+1} desde team_details.csv"
+                            )
+                    self._last_missing_lookup_id = None
+            if not result or not result.found:
+                data = self.team_lookup.get(cid)
+                if data:
+                    def set_if_present(var, key):
+                        value = data.get(key, "").strip()
+                        if self._dirty_fields.get(key):
+                            return
+                        if value and should_autofill_field(var.get(), preserve_existing):
+                            var.set(value)
 
-                set_if_present(self.division_var, "division")
-                set_if_present(self.area_var, "area")
-                set_if_present(self.servicio_var, "servicio")
-                set_if_present(self.puesto_var, "puesto")
-                set_if_present(self.nombre_agencia_var, "nombre_agencia")
-                set_if_present(self.codigo_agencia_var, "codigo_agencia")
-                self._last_missing_lookup_id = None
-                self._log_change(f"Autopoblado colaborador {self.idx+1} desde team_details.csv")
-            elif from_focus and not silent and self.team_lookup:
-                log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
-                if self._last_missing_lookup_id != cid:
-                    messagebox.showerror(
-                        "Colaborador no encontrado",
-                        (
-                            f"El ID {cid} no existe en el catálogo team_details.csv. "
-                            "Verifica el código o actualiza el archivo maestro."
-                        ),
-                    )
-                    self._last_missing_lookup_id = cid
+                    set_if_present(self.division_var, "division")
+                    set_if_present(self.area_var, "area")
+                    set_if_present(self.servicio_var, "servicio")
+                    set_if_present(self.puesto_var, "puesto")
+                    set_if_present(self.nombre_agencia_var, "nombre_agencia")
+                    set_if_present(self.codigo_agencia_var, "codigo_agencia")
+                    self._last_missing_lookup_id = None
+                    if not silent:
+                        self._log_change(
+                            f"Autopoblado colaborador {self.idx+1} desde team_details.csv"
+                        )
+                elif from_focus and not silent and (self.team_lookup or self.autofill_service):
+                    self._show_missing_catalog_error(cid)
         else:
             self._last_missing_lookup_id = None
         self.update_team_options()
         self.schedule_summary_refresh('colaboradores')
+
+    def _show_missing_catalog_error(self, cid: str) -> None:
+        log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
+        if self._last_missing_lookup_id == cid:
+            return
+        try:
+            messagebox.showerror(
+                "Colaborador no encontrado",
+                (
+                    f"El ID {cid} no existe en el catálogo team_details.csv. "
+                    "Verifica el código o actualiza el archivo maestro."
+                ),
+            )
+        except tk.TclError:
+            pass
+        self._last_missing_lookup_id = cid
 
     def _notify_id_change(self, new_id):
         if new_id == self._last_tracked_id:
             return
         previous = self._last_tracked_id
         self._last_tracked_id = new_id
+        self._dirty_fields.clear()
         if callable(self.id_change_callback):
             self.id_change_callback(self, previous, new_id)
 

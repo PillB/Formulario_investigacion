@@ -15,21 +15,26 @@ def normalize_detail_catalog_key(key: str) -> str:
     return (key or "").strip().lower()
 
 
-def load_detail_catalogs() -> Dict[str, Dict[str, Dict[str, str]]]:
-    """Lee todos los archivos ``*_details.csv`` disponibles en la carpeta base."""
+def load_detail_catalogs(base_dir: str | os.PathLike = BASE_DIR) -> Dict[str, Dict[str, Dict[str, str]]]:
+    """Lee todos los archivos ``*_details.csv`` disponibles en la carpeta base.
 
+    Los valores se leen como texto para preservar ceros a la izquierda y evitar
+    conversiones implícitas de tipo.
+    """
+
+    base_dir = os.fspath(base_dir)
     catalogs: Dict[str, Dict[str, Dict[str, str]]] = {}
     try:
         filenames = [
             name
-            for name in os.listdir(BASE_DIR)
+            for name in os.listdir(base_dir)
             if name.lower().endswith("details.csv")
         ]
     except OSError:
         return catalogs
 
     for filename in filenames:
-        path = os.path.join(BASE_DIR, filename)
+        path = os.path.join(base_dir, filename)
         entity_name = filename[:-len("_details.csv")].lower()
         try:
             with open(path, newline='', encoding="utf-8-sig") as file_handle:
