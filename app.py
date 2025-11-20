@@ -346,6 +346,7 @@ class FraudCaseApp:
         self.mod_caso_var = tk.StringVar(value=mods[0])
         self.canal_caso_var = tk.StringVar(value=CANAL_LIST[0])
         self.proceso_caso_var = tk.StringVar(value=PROCESO_LIST[0])
+        self.fecha_caso_var = tk.StringVar()
 
         # Referencias a cuadros de texto de análisis
         self.antecedentes_text = None
@@ -767,6 +768,13 @@ class FraudCaseApp:
         proc_cb.pack(side="left", padx=5)
         self.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
 
+        row4 = ttk.Frame(frame)
+        row4.pack(fill="x", pady=2)
+        ttk.Label(row4, text="Fecha de ocurrencia del caso (YYYY-MM-DD):").pack(side="left")
+        fecha_case_entry = ttk.Entry(row4, textvariable=self.fecha_caso_var, width=18)
+        fecha_case_entry.pack(side="left", padx=5)
+        self.register_tooltip(fecha_case_entry, "Fecha en que se originó el caso a nivel general.")
+
         # Validaciones del caso
         self.validators.append(
             FieldValidator(
@@ -831,6 +839,31 @@ class FraudCaseApp:
                 variables=[self.proceso_caso_var],
             )
         )
+        self.validators.append(
+            FieldValidator(
+                fecha_case_entry,
+                self._validate_case_occurrence_date,
+                self.logs,
+                "Caso - Fecha de ocurrencia",
+                variables=[self.fecha_caso_var],
+            )
+        )
+
+    def _validate_case_occurrence_date(self):
+        message = validate_date_text(
+            self.fecha_caso_var.get(),
+            "la fecha de ocurrencia del caso",
+            allow_blank=False,
+        )
+        if message:
+            return message
+        try:
+            occurrence_date = datetime.strptime(self.fecha_caso_var.get().strip(), "%Y-%m-%d")
+        except ValueError:
+            return "La fecha de ocurrencia del caso debe tener el formato YYYY-MM-DD."
+        if occurrence_date > datetime.today():
+            return "La fecha de ocurrencia del caso no puede estar en el futuro."
+        return None
 
     def on_case_cat1_change(self):
         """Actualiza las opciones de categoría 2 y modalidad cuando cambia cat1 del caso."""
@@ -3777,6 +3810,7 @@ class FraudCaseApp:
         self.on_case_cat1_change()
         self.canal_caso_var.set(CANAL_LIST[0])
         self.proceso_caso_var.set(PROCESO_LIST[0])
+        self.fecha_caso_var.set("")
         # Vaciar listas dinámicas
         for cf in self.client_frames:
             cf.frame.destroy()
@@ -3855,6 +3889,7 @@ class FraudCaseApp:
             "modalidad": self.mod_caso_var.get(),
             "canal": self.canal_caso_var.get(),
             "proceso": self.proceso_caso_var.get(),
+            "fecha_de_ocurrencia": self.fecha_caso_var.get().strip(),
         }
         data['clientes'] = [c.get_data() for c in self.client_frames]
         data['colaboradores'] = [t.get_data() for t in self.team_frames]
@@ -3955,6 +3990,7 @@ class FraudCaseApp:
                     self.mod_caso_var.set(caso.get('modalidad'))
         _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
         _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
+        self.fecha_caso_var.set(caso.get('fecha_de_ocurrencia', ''))
         # Clientes
         for i, cliente in enumerate(data.get('clientes', [])):
             if i >= len(self.client_frames):
@@ -4222,6 +4258,9 @@ class FraudCaseApp:
             _report_catalog_error(
                 f"El proceso del caso '{proceso_value}' no está en el catálogo CM."
             )
+        fecha_caso_message = self._validate_case_occurrence_date()
+        if fecha_caso_message:
+            errors.append(fecha_caso_message)
         # Validar IDs de clientes
         client_id_occurrences = {}
         for idx, cframe in enumerate(self.client_frames, start=1):
@@ -5048,7 +5087,20 @@ class FraudCaseApp:
                     writer.writerow(row)
             created_files.append(path)
         # CASOS
-        write_csv('casos.csv', [data['caso']], ['id_caso', 'tipo_informe', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso'])
+        write_csv(
+            'casos.csv',
+            [data['caso']],
+            [
+                'id_caso',
+                'tipo_informe',
+                'categoria1',
+                'categoria2',
+                'modalidad',
+                'canal',
+                'proceso',
+                'fecha_de_ocurrencia',
+            ],
+        )
         # CLIENTES
         write_csv('clientes.csv', data['clientes'], ['id_cliente', 'id_caso', 'tipo_id', 'flag', 'telefonos', 'correos', 'direcciones', 'accionado'])
         # COLABORADORES
