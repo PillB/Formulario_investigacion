@@ -60,6 +60,7 @@ import json
 import os
 import shutil
 import threading
+from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -71,7 +72,14 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from models import (AutofillService, CatalogService, build_detail_catalog_id_index,
                     iter_massive_csv_rows, normalize_detail_catalog_key,
                     parse_involvement_entries)
-from report_builder import CaseData, build_docx, save_md
+from report_builder import (
+    CaseData,
+    DOCX_AVAILABLE,
+    DOCX_MISSING_MESSAGE,
+    build_docx,
+    build_report_filename,
+    save_md,
+)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       EXPORTS_DIR, EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
@@ -120,6 +128,7 @@ class FraudCaseApp:
         self.validators = []
         self._last_validated_risk_exposure_total = Decimal('0')
         self._log_flush_job_id: Optional[str] = None
+        self._docx_available = DOCX_AVAILABLE
         local_log_path = LOGS_FILE if STORE_LOGS_LOCALLY else None
         self._log_file_initialized = bool(local_log_path and os.path.exists(local_log_path))
         self._external_drive_path = self._prepare_external_drive()
@@ -1172,17 +1181,32 @@ class FraudCaseApp:
 
         report_buttons = ttk.Frame(frame)
         report_buttons.pack(anchor="w", pady=2)
-        btn_docx = ttk.Button(
+        self.btn_docx = ttk.Button(
             report_buttons,
             text="Generar Word (.docx)",
             command=self.generate_docx_report,
-            default="active",
+            default="active" if self._docx_available else "normal",
+            state=("disabled" if not self._docx_available else "normal"),
         )
-        btn_docx.pack(side="left", padx=2)
-        self.register_tooltip(
-            btn_docx,
-            "Genera el informe principal en Word utilizando los datos validados.",
+        self.btn_docx.pack(side="left", padx=2)
+        docx_tooltip = (
+            "Genera el informe principal en Word utilizando los datos validados."
+            if self._docx_available
+            else f"{DOCX_MISSING_MESSAGE} Usa el informe Markdown como respaldo."
         )
+        self.register_tooltip(self.btn_docx, docx_tooltip)
+        if not self._docx_available:
+            ttk.Label(
+                report_buttons,
+                text=(
+                    "El botón de Word está deshabilitado porque falta la "
+                    "dependencia opcional. Usa 'pip install python-docx' o "
+                    "genera sólo el informe Markdown."
+                ),
+                foreground="#b26a00",
+                wraplength=520,
+                justify="left",
+            ).pack(side="left", padx=6)
         btn_md = ttk.Button(
             report_buttons,
             text="Generar informe (.md)",
@@ -4682,11 +4706,24 @@ class FraudCaseApp:
         case_id = data["caso"].get("id_caso") or "caso"
         return data, folder, case_id
 
+    @staticmethod
+    def _build_report_path(data: CaseData, folder: Path, extension: str) -> Path:
+        case = data.get("caso", {}) if isinstance(data, Mapping) else {}
+        report_name = build_report_filename(
+            case.get("tipo_informe"), case.get("id_caso"), extension
+        )
+        return Path(folder) / report_name
+
     def _generate_report_file(self, extension: str, builder, description: str) -> None:
         data, folder, case_id = self._prepare_case_data_for_export()
         if not data or not folder or not case_id:
             return
-        report_path = folder / f"{case_id}_informe.{extension}"
+        if extension == "docx" and not self._docx_available:
+            warning = f"No se puede generar Word sin python-docx. {DOCX_MISSING_MESSAGE}"
+            messagebox.showwarning("Informe Word no disponible", warning)
+            log_event("validacion", warning, self.logs)
+            return
+        report_path = self._build_report_path(data, folder, extension)
         try:
             created_path = builder(data, report_path)
         except Exception as exc:  # pragma: no cover - protección frente a fallos externos
@@ -4767,18 +4804,29 @@ class FraudCaseApp:
             json.dump(data.as_dict(), f, ensure_ascii=False, indent=2)
         created_files.append(json_path)
         # Guardar informe Markdown
-        report_path = folder / f"{case_id}_informe.md"
-        created_files.append(save_md(data, report_path))
-        # Guardar informe Word
-        docx_path = folder / f"{case_id}_informe.docx"
-        created_files.append(build_docx(data, docx_path))
+        md_path = self._build_report_path(data, folder, "md")
+        created_files.append(save_md(data, md_path))
+        docx_path: Optional[Path] = None
+        if self._docx_available:
+            docx_path = self._build_report_path(data, folder, "docx")
+            created_files.append(build_docx(data, docx_path))
+        else:
+            warning = (
+                f"El informe Word no se generó para el caso {case_id}: {DOCX_MISSING_MESSAGE}"
+            )
+            log_event("validacion", warning, self.logs)
+            if not getattr(self, '_suppress_messagebox', False):
+                messagebox.showwarning("Informe Word no disponible", warning)
         self._mirror_exports_to_external_drive(created_files, case_id)
+        reports = [md_path.name]
+        if docx_path:
+            reports.append(docx_path.name)
         messagebox.showinfo(
             "Datos guardados",
             (
-                f"Los archivos se han guardado como {case_id}_*.csv, {case_id}_version.json, "
-                f"{case_id}_informe.md y {case_id}_informe.docx."
-            ),
+                f"Los archivos se han guardado como {case_id}_*.csv, {case_id}_version.json y "
+                "{informes}."
+            ).format(informes=" y ".join(reports)),
         )
         log_event("navegacion", "Datos guardados y enviados", self.logs)
         self.flush_logs_now()

@@ -14,6 +14,12 @@ try:  # python-docx es opcional en tiempo de ejecución
 except ImportError:  # pragma: no cover - se usa el respaldo integrado
     DocxDocument = None
 
+DOCX_AVAILABLE = DocxDocument is not None
+DOCX_MISSING_MESSAGE = (
+    "La dependencia opcional 'python-docx' no está instalada. "
+    "Instálala con 'pip install python-docx' para habilitar el informe Word."
+)
+
 from validators import parse_decimal_amount
 
 
@@ -72,6 +78,19 @@ class CaseData(Mapping):
             normas=list(payload.get("normas") or []),
             analisis=dict(payload.get("analisis") or {}),
         )
+
+
+def _normalize_report_segment(value: str | None, placeholder: str) -> str:
+    text = (value or "").strip() or placeholder
+    for ch in '\\/:*?"<>|':
+        text = text.replace(ch, "_")
+    return text.replace(" ", "_")
+
+
+def build_report_filename(tipo_informe: str | None, case_id: str | None, extension: str) -> str:
+    safe_tipo_informe = _normalize_report_segment(tipo_informe, "Generico")
+    safe_case_id = _normalize_report_segment(case_id, "caso")
+    return f"Informe_{safe_tipo_informe}_{safe_case_id}.{extension}"
 
 
 _DOCX_STATIC_PARTS = {
@@ -224,9 +243,9 @@ def _write_docx_package(path, document_xml_bytes):
 
 
 def _create_word_document():
-    if DocxDocument is not None:
-        return DocxDocument()
-    return _FallbackDocxDocument()
+    if not DOCX_AVAILABLE:
+        raise RuntimeError(DOCX_MISSING_MESSAGE)
+    return DocxDocument()
 
 
 def _build_report_context(case_data: CaseData):
@@ -428,6 +447,8 @@ def build_md(case_data: CaseData) -> str:
 
 
 def build_docx(case_data: CaseData, path: Path | str) -> Path:
+    if not DOCX_AVAILABLE:
+        raise RuntimeError(DOCX_MISSING_MESSAGE)
     context = _build_report_context(case_data)
     case = context['case']
     analysis = context['analysis']
