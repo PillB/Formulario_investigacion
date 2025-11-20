@@ -81,15 +81,33 @@ class ClientFrame:
         accionado_frame = ttk.Frame(self.frame)
         accionado_frame.pack(fill="x", pady=1)
         ttk.Label(accionado_frame, text="Accionado (seleccione uno o varios):").pack(anchor="w")
-        self.accionado_listbox = tk.Listbox(
-            accionado_frame,
+        accionado_list_container = ttk.Frame(accionado_frame)
+        accionado_list_container.pack(fill="x", padx=5)
+
+        accionado_scrollbar = None
+        scrollbar_class = getattr(tk, "Scrollbar", None) or getattr(ttk, "Scrollbar", None)
+        if scrollbar_class:
+            accionado_scrollbar = scrollbar_class(
+                accionado_list_container,
+                orient="vertical",
+            )
+            accionado_scrollbar.pack(side="right", fill="y")
+
+        listbox_kwargs = dict(
+            master=accionado_list_container,
             listvariable=self.accionado_options_var,
             selectmode="multiple",
             exportselection=False,
-            height=4,
+            height=8,
             width=40,
         )
-        self.accionado_listbox.pack(fill="x", padx=5)
+        if accionado_scrollbar:
+            listbox_kwargs["yscrollcommand"] = accionado_scrollbar.set
+
+        self.accionado_listbox = tk.Listbox(**listbox_kwargs)
+        self.accionado_listbox.pack(side="left", fill="x", expand=True)
+        if accionado_scrollbar:
+            accionado_scrollbar.configure(command=self.accionado_listbox.yview)
         self.accionado_listbox.bind("<<ListboxSelect>>", self.update_accionado_var)
         self.tooltip_register(
             self.accionado_listbox,
