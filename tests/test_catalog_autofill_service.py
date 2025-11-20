@@ -3,6 +3,7 @@ import csv
 import csv
 
 from models import AutofillService, CatalogService
+from settings import BASE_DIR
 
 
 def _write_team_details(tmp_path, rows):
@@ -31,6 +32,39 @@ def _build_services(tmp_path):
     warnings: list[str] = []
     autofill = AutofillService(service, warning_handler=warnings.append)
     return service, autofill, warnings
+
+
+def test_lookup_team_member_skips_malformed_dates():
+    service = CatalogService(BASE_DIR)
+    service.refresh()
+
+    data, meta = service.lookup_team_member("T12345", "2024-06-01")
+
+    assert data["fecha_actualizacion"] == "2024-05-15"
+    assert meta["fallback_used"] is False
+    assert meta["reason"] is None
+
+
+def test_lookup_team_member_records_future_fallback_reason():
+    service = CatalogService(BASE_DIR)
+    service.refresh()
+
+    data, meta = service.lookup_team_member("T54321", "2010-01-01")
+
+    assert data["fecha_actualizacion"] == "2020-11-20"
+    assert meta["fallback_used"] is True
+    assert meta["reason"] == "no_past_snapshot"
+
+
+def test_lookup_team_member_defaults_to_latest_with_invalid_case_date():
+    service = CatalogService(BASE_DIR)
+    service.refresh()
+
+    data, meta = service.lookup_team_member("Z99999", "not-a-date")
+
+    assert data["fecha_actualizacion"] == "2025-06-18"
+    assert meta["fallback_used"] is True
+    assert meta["reason"] == "case_date_missing_or_invalid"
 
 
 def test_autofill_selects_latest_snapshot_before_case_date(tmp_path):
