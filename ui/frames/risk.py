@@ -55,7 +55,7 @@ class RiskFrame:
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=15)
         id_entry.pack(side="left", padx=5)
         self.tooltip_register(id_entry, "Usa el formato RSK-000000.")
-        id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        self._bind_identifier_triggers(id_entry)
         ttk.Label(row1, text="Líder:").pack(side="left")
         lider_entry = ttk.Entry(row1, textvariable=self.lider_var, width=20)
         lider_entry.pack(side="left", padx=5)
@@ -230,6 +230,13 @@ class RiskFrame:
         current_value = self.id_var.get()
         if current_value != self._auto_id_value:
             self._id_user_modified = True
+
+    def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def assign_new_auto_id(self, value: str):
         """Asigna un identificador automático sin marcarlo como editado."""

@@ -49,6 +49,7 @@ class TeamMemberFrame:
         self._last_tracked_id = ''
         self.autofill_service = autofill_service
         self.case_date_getter = case_date_getter
+        self._future_snapshot_warnings: set[str] = set()
 
         self.id_var = tk.StringVar()
         self.flag_var = tk.StringVar()
@@ -225,6 +226,7 @@ class TeamMemberFrame:
         widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def _bind_dirty_tracking(self, widget, field_key: str) -> None:
         widget.bind("<KeyRelease>", lambda _e: self._mark_dirty(field_key), add="+")
@@ -325,6 +327,8 @@ class TeamMemberFrame:
                             self._log_change(
                                 f"Autopoblado colaborador {self.idx+1} desde team_details.csv"
                             )
+                    if result.used_future_snapshot:
+                        self._warn_future_snapshot(cid)
                     self._last_missing_lookup_id = None
             if not result or not result.found:
                 data = self.team_lookup.get(cid)
@@ -378,6 +382,21 @@ class TeamMemberFrame:
         self._dirty_fields.clear()
         if callable(self.id_change_callback):
             self.id_change_callback(self, previous, new_id)
+
+    def _warn_future_snapshot(self, cid: str) -> None:
+        cid = cid or ""
+        if cid in self._future_snapshot_warnings:
+            return
+        self._future_snapshot_warnings.add(cid)
+        message = (
+            "La fecha de ocurrencia es anterior a la última actualización del colaborador; "
+            "se usará el registro disponible más reciente."
+        )
+        try:
+            messagebox.showwarning("Colaborador con datos futuros", message)
+        except tk.TclError:
+            pass
+        log_event("validacion", message, self.logs)
 
     def get_data(self):
         normalized_id = normalize_team_member_identifier(self.id_var.get())
