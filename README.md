@@ -1,192 +1,152 @@
-# Gestión de Casos de Fraude (Aplicación de Escritorio Tkinter)
+# Gestión de Casos de Fraude (Tkinter)
 
-Una aplicación de escritorio para gestionar casos de investigación de fraude. Permite crear un caso con sus clientes, productos, colaboradores, riesgos identificados, normas violadas y narrativas de análisis. Soporta ingreso dinámico de datos, validación de campos, importación masiva desde CSV, guardado automático, y exportación de datos a formatos CSV/JSON/Word/Markdown.
+Aplicación de escritorio en Python/Tkinter para registrar, validar y exportar expedientes de fraude. Incluye pestañas para caso, clientes, colaboradores, productos, riesgos, normas, análisis y acciones; soporta validación en línea, importaciones masivas desde CSV, autoguardado y exportación a CSV/JSON/Markdown/Word.
 
-## Características
+## Contenido rápido
+- [Prerrequisitos](#prerrequisitos)
+- [Instalación](#instalación)
+- [Ejecución rápida](#ejecución-rápida)
+- [Arquitectura y estructura](#arquitectura-y-estructura)
+- [Flujos principales](#flujos-principales)
+- [Guía por pestaña](#guía-por-pestaña)
+- [Validaciones clave](#validaciones-clave)
+- [Importación y exportación](#importación-y-exportación)
+- [Solución de problemas](#solución-de-problemas)
+- [FAQ](#faq)
+- [Pruebas](#pruebas)
+- [Contribución y licencia](#contribución-y-licencia)
 
-- **Datos del Caso:** Número de caso, tipo de informe, categorías de fraude, canal, proceso afectado.
-- **Clientes y Colaboradores:** Agregar múltiples participantes, con autocompletado si el ID existe en CSV de referencia (`client_details.csv`, `team_details.csv`).
-- **Productos:** Asociar productos a clientes, con fechas, montos investigados, distribución de pérdida, e información de reclamos.
-- **Riesgos y Normas:** Ingresar múltiples riesgos y normas violadas con validación de formatos de ID.
-- **Análisis Narrativo:** Secciones de texto libre para antecedentes, modus operandi, hallazgos, descargos, conclusiones y recomendaciones.
-- **Importaciones:** Cargar desde CSV múltiples registros de clientes, colaboradores, productos, riesgos, normas y reclamos.
-- **Validación y Bitácora:** Validación en tiempo real. Registro de acciones en `logs.csv`.
-- **Autoguardado y Versiones:** Guardado automático en `autosave.json`. Cargar versiones desde la pestaña *Acciones*.
-- **Exportación y Backup:** Botón *Guardar y enviar* exporta CSV, JSON, Markdown y Word en `exports/` y `external drive/<id_caso>/`.
+## Prerrequisitos
+- Python 3.7 o superior.
+- Dependencia opcional: `python-docx` para generar el informe Word.
+- Archivos CSV de referencia en la raíz del proyecto:
+  - `client_details.csv`, `team_details.csv` para autopoblado.
+  - `clientes_masivos.csv`, `colaboradores_masivos.csv`, `productos_masivos.csv`, `datos_combinados_masivos.csv` para importaciones de ejemplo.
+  - `riesgos_masivos.csv`, `normas_masivas.csv`, `reclamos_masivos.csv` para cargas masivas de riesgos/normas/reclamos.
+- Carpeta `external drive/` (se crea automáticamente) con permisos de escritura para respaldos.
 
 ## Instalación
-
-1. **Requisitos:** Python 3.7 o superior.
-2. **Instalar `python-docx`:**
+1. Clona o descarga este repositorio.
+2. (Opcional) habilita la exportación a Word:
    ```bash
    pip install python-docx
    ```
-3. **Estructura del Proyecto:** Asegúrese de incluir CSVs de muestra (`client_details.csv`, `*_masivos.csv`, etc.).
-4. **Carpeta de respaldo:** Se creará automáticamente `external drive/` para respaldos.
 
-## Ejecución Rápida
-
+## Ejecución rápida
+Desde la raíz del proyecto:
 ```bash
 python -m main
 ```
+La aplicación intenta cargar el último `autosave.json`. Para comenzar de cero, usa **Acciones → Borrar todos los datos**.
 
-Para comenzar un nuevo caso, use **Acciones → Borrar todos los datos**.
+## Arquitectura y estructura
+- **`main.py`**: punto de entrada; instancia la aplicación Tk.
+- **`app.py`**: orquesta el `ttk.Notebook`, autoguardado, validaciones y exportaciones.
+- **`ui/`**: widgets y pestañas (caso/participantes, riesgos, normas, análisis, acciones, resumen).
+- **`models/`**: modelos y helpers de persistencia.
+- **`validators.py`**: reglas de formato, montos y fechas.
+- **`exports/`** (generado): CSV, JSON, Markdown y Word creados por **Guardar y enviar**.
+- **`external drive/<id_caso>/`** (generado): espejo automático de los artefactos exportados, autosaves y logs.
 
-## Guía de Usuario
-
-### 1. Caso y Participantes
-- Completar los datos generales del caso.
-- Agregar clientes y colaboradores.
-- Agregar productos asociados a los clientes, con montos, fechas y reclamos.
-
-### 2. Riesgos
-- Añadir riesgos (ID tipo `RSK-XXXXXX`), criticidad, exposición y planes de acción.
-
-### 3. Normas
-- Añadir normas violadas (ID tipo `XXXX.XXX.XX.XX` o autogenerado), descripción y vigencia.
-
-### 4. Análisis Narrativo
-- Ingresar texto libre en seis secciones clave del análisis.
-
-### 5. Acciones
-- Cargar catálogos, importar CSVs, guardar y enviar, cargar versión, borrar datos.
-
-### 6. Resumen
-- Visualizar tablas de resumen. Admite pegar datos desde portapapeles (Ctrl+V).
-
-## Exportación y Backup
-
-El botón **Guardar y enviar** genera:
-- Archivos CSV (uno por entidad)
-- Captura JSON del estado
-- Reporte Word y Markdown
-- Copia de seguridad en `external drive/<id_caso>/`
-
-## Diagrama de Arquitectura
-
+### Diagrama de alto nivel
 ```mermaid
 graph TD
     A[main.py] -->|Lanza| B[App (Tk)]
-    B --> C[ttk.Notebook - Pestañas]
-    C --> D1[Tab: Caso y Participantes]
-    C --> D2[Tab: Riesgos]
-    C --> D3[Tab: Normas]
-    C --> D4[Tab: Análisis]
-    C --> D5[Tab: Acciones]
-    C --> D6[Tab: Resumen]
-    B --> E[Autosave Manager]
-    B --> F[Export Manager]
-    F --> G[Genera CSVs, JSON, DOCX]
-    B --> H[Importadores CSV]
-    B --> I[Validador]
+    B --> C[ttk.Notebook (Pestañas)]
+    C --> C1[Caso y participantes]
+    C --> C2[Riesgos]
+    C --> C3[Normas]
+    C --> C4[Análisis]
+    C --> C5[Acciones]
+    C --> C6[Resumen]
+    B --> D[Autosave + Versionado]
+    B --> E[Validaciones por campo]
+    B --> F[Importadores CSV]
+    B --> G[Exportadores CSV/JSON/MD/DOCX]
+    G --> H[exports/]
+    G --> I[external drive/<id_caso>/]
+    D --> I
+    E -->|Errores| B
 ```
 
-## Resolución de Problemas
+## Flujos principales
+### Crear un nuevo expediente
+1. Abre la app y ve a **Caso y participantes**.
+2. Completa **Datos generales** (número de caso `AAAA-NNNN`, tipo de informe, taxonomía, canal y proceso).
+3. Agrega **clientes** (IDs según tipo, teléfonos/correos/direcciones separados por `;`, rol/flag).
+4. Agrega **colaboradores** (ID letra+5 dígitos; división, área, servicio, puesto, agencia/código si aplica; flag, tipo de falta y sanción).
+5. Agrega **productos** vinculados a un cliente y colaborador: fechas, montos, tipo de producto, reclamo, analítica y accionados.
+6. Completa **Riesgos** y **Normas**.
+7. En **Análisis**, redacta las narrativas.
+8. En **Acciones**, pulsa **Guardar y enviar** para validar y exportar.
 
-- **Errores de validación:** Aparecen mensajes en rojo bajo campos inválidos.
-- **Permisos de escritura:** Verifique acceso a carpetas `exports/` y `external drive/`.
-- **CSV inválidos:** Asegúrese que los encabezados coincidan con el formato esperado.
+### Importación masiva
+1. Abre **Acciones**.
+2. Usa los botones de **Importar** (clientes, colaboradores, productos, combinados, riesgos, normas, reclamos) y selecciona el CSV.
+3. La app hidrata y valida; al terminar, las pestañas muestran los registros listos para revisión.
 
-## Contribución y Licencia
+### Guardar, exportar y respaldar
+- **Guardar y enviar** valida todo, genera CSV por entidad, un JSON completo, Markdown y Word; además espeja los artefactos en `external drive/<id_caso>/`.
+- **Cargar versión** restaura el formulario desde un JSON previo.
+- **Autosave** crea `autosave.json` y versiones temporales `<id_caso>_temp_<timestamp>.json` sin interrumpir el flujo.
 
-Contribuciones son bienvenidas. No hay una licencia especificada, úsese bajo su propio riesgo.
+### Pegado rápido en Resumen
+- En **Resumen**, pega datos tabulares (Ctrl+V). Las tablas sincronizan con las secciones principales.
 
+## Guía por pestaña
+| Pestaña / sección | Propósito | Entradas clave | Validaciones destacadas |
+| --- | --- | --- | --- |
+| Caso (Datos generales) | Identificar el expediente y su taxonomía | Número de caso, tipo de informe, categorías, canal, proceso | Formato `AAAA-NNNN`; selección obligatoria de tipo de informe y taxonomía. |
+| Clientes | Registrar personas/empresas | Tipo/ID, teléfonos, correos, dirección, flag | Formato de ID según tipo; listas separadas por `;`; campos requeridos según catálogos. |
+| Colaboradores | Registrar miembros del equipo | ID letra+5 dígitos, división, área, servicio, puesto, agencia/código, flag, tipo de falta/sanción | Formato de ID; agencia/código obligatorios si división = DCA o Canales de atención y área contiene "area comercial". |
+| Productos | Asociar cuentas/contratos | ID de producto, cliente, fechas, montos, reclamo, analítica, tipo de producto, moneda, accionados | Fechas `YYYY-MM-DD` en orden; montos no negativos con 2 decimales; montos parciales deben sumar al investigado; reclamo/analítica obligatorios si hay pérdida/falla/contingencia > 0; contingencia = investigado para créditos/tarjetas. |
+| Riesgos | Registrar riesgos | ID `RSK-XXXXXX`, líder, descripción, criticidad, exposición, planes | IDs únicos; criticidad de catálogo; planes separados por `;`. |
+| Normas | Registrar normas violadas | Código `XXXX.XXX.XX.XX` (o autogenerado), descripción, fecha de vigencia | Fecha no futura; código deduplicado o autogenerado. |
+| Análisis | Narrativas | Antecedentes, modus operandi, hallazgos, descargos, conclusiones, recomendaciones | Texto libre almacenado y exportado tal cual. |
+| Acciones | Gestión de archivos | Importar CSV, guardar/exportar, cargar versión, borrar datos | Ejecuta validaciones globales y sincroniza vistas tras importar. |
+| Resumen | Tablas consolidadas | Vista rápida y pegado masivo | Mantiene consistencia con las secciones principales. |
 
-#Manual de Uso y Pruebas – Aplicación de Gestión de Casos de Fraude (Tkinter)
+## Validaciones clave
+- **Fechas**: formato `YYYY-MM-DD`; ocurrencia < descubrimiento; ninguna fecha futura.
+- **Montos**:
+  - No negativos, máximo 12 dígitos y 2 decimales.
+  - Investigado = Pérdida + Falla + Contingencia + Recuperado.
+  - Pago de deuda ≤ Investigado.
+  - Si el producto es crédito o tarjeta, Contingencia = Investigado.
+- **IDs y formatos**:
+  - Caso `AAAA-NNNN`.
+  - Cliente según tipo seleccionado.
+  - Colaborador letra + 5 dígitos.
+  - Reclamo `C` + 8 dígitos.
+  - Analítica contable: 10 dígitos iniciando con 43/45/46/56.
+  - Agencia (si aplica): 6 dígitos.
+- **Obligatoriedad condicional**:
+  - Si Pérdida/Falla/Contingencia > 0 ⇒ Reclamo, Nombre analítica y Código analítica son obligatorios.
+  - Si División = DCA o Canales de atención **y** Área contiene "area comercial" ⇒ Nombre y Código de agencia requeridos.
+- **Duplicados**: Se bloquea la combinación repetida de `[Número de caso, Id producto, Id cliente, Id team member, Fecha de ocurrencia, Id de reclamo]`.
 
-Este documento explica cómo utilizar y probar la versión de escritorio de la aplicación de gestión de casos de fraude implementada en Python usando Tkinter. Está orientado a usuarios y evaluadores no técnicos que necesiten comprobar que todas las funcionalidades del sistema se comportan como se espera.
-1. Requisitos previos
-Python 3.7 o superior instalado en el equipo.
-Dependencia adicional: instala `python-docx` para habilitar la generación del informe en Word (`pip install python-docx`).
-Carpeta `external drive/` ubicada junto a este repositorio. La aplicación intenta crearla si no existe, pero conviene verificar los permisos porque allí se escriben los respaldos automáticos.
-Archivos CSV de referencia ubicados en la misma carpeta que el paquete (BASE_DIR):
-client_details.csv: datos maestros de clientes para autopoblar.
-team_details.csv: datos maestros de colaboradores para autopoblar.
-clientes_masivos.csv, colaboradores_masivos.csv, productos_masivos.csv, datos_combinados_masivos.csv – ejemplos para importación masiva.
-riesgos_masivos.csv, normas_masivas.csv, reclamos_masivos.csv – ejemplos para importación de riesgos, normas y reclamos.
-2. Ejecución de la aplicación
-Abrir una terminal y navegar hasta la carpeta donde se encuentran los archivos.
-Ejecutar el comando:
-python -m main
-La ventana principal mostrará varias pestañas: Caso, Clientes, Colaboradores, Productos, Riesgos, Normas, Análisis y Acciones.
-La aplicación cargará automáticamente el autosave más reciente (si existe) y mostrará los datos guardados. Para empezar un caso nuevo, utilice el botón Borrar todos los datos en la pestaña de acciones.
-3. Completar un caso
-En la pestaña Caso, introduzca el número de caso (AAAA-NNNN), seleccione el tipo de informe (Gerencia, Interno o Credicorp) y elija las categorías y modalidad de la taxonomía de fraude. Seleccione también el canal y el proceso impactado. Estas opciones inicializan valores predeterminados para todos los productos.
-Los campos se validan al perder el foco. Si hay un error (formato incorrecto, campo obligatorio vacío, etc.), aparecerá un mensaje en rojo debajo del campo o en la parte inferior de la ventana. Corrija cualquier error antes de continuar.
-4. Añadir clientes
-Vaya a la pestaña Clientes y pulse Añadir cliente para crear un registro.
-Seleccione el tipo de ID (DNI, Pasaporte, RUC, Carné de extranjería, No aplica) e introduzca el número en el campo ID del cliente. Al perder el foco, la aplicación consultará el archivo client_details.csv y autopoblará el tipo de ID, el flag, teléfonos, correos, direcciones y accionado si encuentra el ID. Puede editar estos campos manualmente.
-Escriba teléfonos, correos y direcciones separados por punto y coma ;. Seleccione el Flag de cliente (Involucrado, Afectado o No aplica).
-Use Eliminar cliente para borrar una entrada y confirmar la acción.
-Repita el proceso para cada cliente necesario.
-5. Añadir colaboradores (team members)
-Abra la pestaña Colaboradores y pulse Añadir colaborador para crear un registro.
-Escriba el ID del colaborador (una letra seguida de cinco dígitos). Al perder el foco, la aplicación busca en team_details.csv y autopuebla los campos de división, área, servicio, puesto, nombre de agencia y código de agencia. Si el ID no se encuentra, se registra una advertencia en los logs.
-Seleccione el Flag del colaborador (Involucrado, Relacionado o No aplica), el tipo de falta y el tipo de sanción.
-Elimine un colaborador con Eliminar colaborador y confirme.
-6. Crear productos
-En la pestaña Productos, pulse Añadir producto para cada cuenta o contrato afectado. Para que el botón esté activo debe existir al menos un cliente y un colaborador válidos.
-Introduzca el ID del producto (longitud 13, 14, 16 o 20 caracteres o mayor a 100).
-Seleccione el Cliente asociado. El producto debe pertenecer a un único cliente.
-Ajuste las categorías, canal y proceso si difieren del caso. Seleccione la Fecha de ocurrencia y la Fecha de descubrimiento (orden correcto y no pueden ser futuras).
-Introduzca el Monto investigado y los montos parciales de pérdida, falla, contingencia, recuperado y pago de deuda. La suma de pérdida, falla, contingencia y recuperado debe ser igual al monto investigado. Si el producto es un crédito o tarjeta, el monto de contingencia debe ser igual al investigado.
-Seleccione la Tipo de moneda (Soles, Dólares o No aplica). Seleccione el Tipo de producto según la lista.
-Si hay montos de pérdida, falla o contingencia positivos, introduzca el ID de reclamo (C+8 dígitos), el Nombre analítica y el Código analítica (10 dígitos comenzando con 43, 45, 46 o 56). De lo contrario estos campos son opcionales.
-Seleccione en Cliente accionado una o más tribus/áreas que accionaron el reclamo (Ctrl+clic para seleccionar varios).
-Use Añadir involucrado para crear filas que asignan montos a uno o varios colaboradores. Seleccione el colaborador y escriba el monto asignado. No repita colaboradores en la misma lista.
-Elimine productos con Eliminar producto y confirme.
-7. Riesgos y normas
-Riesgos
-En la pestaña Riesgos, pulse Añadir riesgo para crear registros. Cada riesgo tiene un ID (formato RSK-XXXXXX), un líder, una descripción, una criticidad (Bajo, Moderado, Relevante, Alto, Crítico), una exposición residual en US$ y planes de acción separados por ;. Puede usar Eliminar para borrar un riesgo.
-Valide que los IDs de riesgo sean únicos y que los planes no se repitan entre riesgos.
-Normas
-En la pestaña Normas, use Añadir norma para crear registros. Introduzca el número de norma (XXXX.XXX.XX.XX) o déjelo en blanco para que se genere un correlativo aleatorio. Agregue una descripción y la fecha de vigencia (no puede ser futura). Puede eliminar normas con el botón Eliminar.
-8. Análisis y narrativas
-En la pestaña Análisis, escriba las narrativas de Antecedentes, Modus operandi, Hallazgos principales, Descargos del colaborador, Conclusiones y Recomendaciones y mejoras. Estos campos aceptan texto libre.
-9. Acciones y gestión de versiones
-En la pestaña Acciones encontrará los botones:
-Guardar y enviar: Valida todos los datos. Si no hay errores, la aplicación coloca automáticamente los archivos CSV (casos, clientes, colaboradores, productos, reclamos, asignaciones, riesgos, normas, análisis, logs), el JSON completo del caso, el informe en Markdown y el informe en Word (`<id_caso>_informe.docx`) bajo `BASE_DIR/exports/` usando el ID del caso como prefijo y sin pedirte que elijas una carpeta. Después se espejan esos mismos archivos dentro de `external drive/<id_caso>/` para mantener un respaldo local, mostrando una advertencia sólo si la copia secundaria falla.
-Cargar versión: Permite elegir un archivo JSON generado previamente para restaurar el formulario al estado guardado.
-Borrar todos los datos: Elimina el contenido del formulario y el autosave tras confirmación.
-Importar CSV: Botones para cargar clientes, colaboradores, productos, combinados, riesgos, normas y reclamos. Seleccione el archivo adecuado y revise que los datos aparezcan en sus pestañas correspondientes. Se omitirán registros duplicados.
-Además, la aplicación guarda versiones temporales (<id_caso>_temp_<timestamp>.json) cada vez que se edita un campo. Estos archivos se crean en la misma carpeta del script para tener un historial de cambios.
-Los eventos (navegación, validación, advertencias) se registran en un log interno. Al usar Guardar y enviar, se exportan en logs.csv para su análisis.
-10. Persistencia y respaldos
-`BASE_DIR` corresponde a la carpeta raíz del proyecto (donde viven `app.py`, `main.py` y los CSV base). Allí se almacenan el autosave principal (`autosave.json`), el JSON canónico del caso (`<id_caso>_version.json`), los reportes Markdown/Word (`<id_caso>_informe.md` y `.docx`) y los CSV exportados que describen cada entidad.
+## Importación y exportación
+- **Importar CSV**: desde **Acciones**, selecciona el archivo adecuado; la app valida, omite duplicados y sincroniza combobox/listados.
+- **Exportar**: **Guardar y enviar** genera CSV por entidad, JSON completo, Markdown y Word (`python-docx` necesario) en `exports/`; luego duplica a `external drive/<id_caso>/`. Mensajes claros aparecen si hay problemas de escritura.
 
-Cada vez que se dispara un guardado o un autosave temporal, la aplicación duplica la información en la carpeta `external drive/<id_caso>/`. Ese espejo contiene los logs (`logs.csv`), los JSON temporales y los mismos archivos exportados que quedan en `BASE_DIR/exports/`. Gracias a este esquema, siempre hay una copia lista para mover a un medio externo real; si alguna escritura falla, el sistema lo registra y muestra la alerta correspondiente.
-11. Pruebas de validación de negocio
-Para garantizar que las reglas se apliquen correctamente, pruebe los siguientes escenarios:
-Clave técnica duplicada: Cree dos productos con el mismo ID, cliente, colaborador, fecha de ocurrencia e ID de reclamo. El sistema debe advertir de la duplicidad.
-Fechas fuera de orden: Ponga la fecha de descubrimiento antes de la de ocurrencia. Debe aparecer un error.
-Reclamo obligatorio: Ingrese un monto de pérdida mayor a cero sin rellenar los campos de reclamo; el sistema exigirá completarlos.
-Suma de montos: Introduzca valores que no sumen al monto investigado. Se mostrará un error y deberá corregirlos.
-Contingencia en créditos y tarjetas: Seleccione “Crédito personal” o “Tarjeta de crédito” y asegúrese de que la contingencia sea igual al monto investigado. Si no lo es, se marca error.
-Código analítica: Introduzca un código analítica de menos de 10 dígitos o que no empiece por 43, 45, 46 o 56. Debería mostrar un error.
-Validación de IDs: Escriba IDs de cliente, colaborador o riesgo con formatos incorrectos; los campos deben marcarse en rojo y aparecer un mensaje explicando el formato correcto.
-Autopoblado: Introduzca un ID de cliente o colaborador que figure en los archivos client_details.csv o team_details.csv. Sus datos se rellenan automáticamente. Escriba uno inexistente y compruebe que aparece una advertencia en el log.
-Advertencia de Fraude Externo: Seleccione “Fraude Externo” en la categoría Nivel 2 y verifique que se muestre el mensaje de advertencia sobre reclamos externos.
-Guardar y cargar: Llene el formulario con un caso de ejemplo y utilice “Guardar y enviar”. Examine los archivos CSV generados para comprobar que las relaciones se representan correctamente. Luego borre los datos, pulse “Cargar versión” y elija el archivo JSON recién guardado; el formulario debe reconstruirse exactamente como antes.
-12. Análisis de logs
-Los eventos registrados en logs.csv incluyen:
-timestamp: Fecha y hora en que ocurrió el evento.
-tipo: "navegacion" para cambios de campos, "validacion" para errores y advertencias.
-mensaje: Descripción del evento (qué campo se modificó, si hubo errores, etc.).
-Utilice esta información para detectar los puntos del formulario donde los usuarios cometen más errores o tardan más tiempo, lo que ayudará a mejorar la usabilidad y las validaciones.
+## Solución de problemas
+- **Errores de validación**: se muestran debajo de los campos o mediante diálogos; corrige el formato indicado y repite la acción.
+- **Permisos**: verifica acceso a `exports/` y `external drive/` si fallan los respaldos.
+- **CSV inválidos**: confirma encabezados/separadores; la app indicará filas omitidas.
+- **Autopoblado**: si un ID existe en `client_details.csv` o `team_details.csv`, se rellenan datos; de lo contrario, se registra advertencia.
 
-Por defecto la aplicación escribe los eventos tanto en `logs.csv` (junto al código fuente) como en `external drive/logs.csv`. Si necesitas evitar escrituras locales, actualiza la constante `STORE_LOGS_LOCALLY` en `settings.py` a `False`. En ese modo la bitácora sólo se persiste en la unidad externa simulada y la aplicación mostrará una advertencia si alguno de los destinos falla al escribir.
+## FAQ
+- **¿Cómo reinicio el formulario?** Usa **Acciones → Borrar todos los datos**.
+- **¿Puedo pegar datos desde Excel?** Sí, en la pestaña **Resumen**.
+- **¿Qué pasa si no instalo `python-docx`?** El flujo sigue; sólo se omite el informe Word.
+- **¿Se guardan versiones temporales?** Sí, cada edición genera JSON temporales en la raíz y en `external drive/<id_caso>/`.
 
-Con esta guía y el script proporcionado, podrá recrear la gestión de casos de fraude en un entorno de escritorio, probar todas las reglas de negocio, importar datos masivamente y analizar los registros para mejorar la experiencia del usuario.
-
-13. Cobertura enfocada en guardado/exportación/logs
-Para verificar automáticamente las rutas críticas de guardado, exportación y bitácoras sin ejecutar toda la batería de pruebas, puedes lanzar:
-
-```
+## Pruebas
+Para verificar rutas críticas de guardado/exportación/logs con cobertura focalizada:
+```bash
 pytest --cov=app --cov=ui --cov-report=term-missing
 ```
+Asegúrate de contar con `python-docx`, `pytest` y `pytest-cov`, y con la carpeta `external drive/` accesible.
 
-Este comando imprime un resumen de cobertura en la terminal destacando qué porciones de `app.py` y los módulos de `ui/` están cubiertos por las pruebas relacionadas a `save_and_send`, respaldos en la “unidad externa” y el flujo de logs. A raíz de los cambios de almacenamiento se añadieron casos como `tests/test_save_and_send.py::test_save_temp_version_mirrors_to_external_drive` y `tests/test_save_and_send.py::test_flush_log_queue_writes_external_when_local_blocked`, por lo que asegúrate de contar con la carpeta `external drive/` y con las dependencias `pytest`, `pytest-cov` y `python-docx` antes de ejecutar la cobertura.
-
-14. Instrucciones para CI y automatizaciones
-- Asegúrate de instalar `python-docx` antes de ejecutar `pytest` para que la exportación de Word funcione también en los entornos de integración continua.
-- Conserva como artefactos tanto `*_informe.md` como `*_informe.docx`, ya que las pruebas verifican que ambos se generen y se copien a la carpeta espejo.
+## Contribución y licencia
+Las contribuciones son bienvenidas mediante issues o PRs. No hay licencia declarada; úsese bajo su propio criterio.
