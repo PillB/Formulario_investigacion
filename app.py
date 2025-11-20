@@ -90,6 +90,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
                       ensure_external_drive_dir)
+from ui.config import init_styles
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
@@ -4960,5 +4961,6 @@ __all__ = ["FraudCaseApp", "should_autofill_field"]
 
 def run_app():
     root = tk.Tk()
+    init_styles(root)
     app = FraudCaseApp(root)
     root.mainloop()

@@ -10,6 +10,7 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         normalize_without_accents, should_autofill_field,
                         validate_agency_code, validate_required_text,
                         validate_team_member_id)
+from ui.config import COL_PADX, ROW_PADY
 
 
 class TeamMemberFrame:
@@ -64,13 +65,13 @@ class TeamMemberFrame:
         self.tipo_sancion_var = tk.StringVar()
 
         self.frame = ttk.LabelFrame(parent, text=f"Colaborador {self.idx+1}")
-        self.frame.pack(fill="x", padx=5, pady=2)
+        self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
 
         row1 = ttk.Frame(self.frame)
-        row1.pack(fill="x", pady=1)
+        row1.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row1, text="ID del colaborador:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
-        id_entry.pack(side="left", padx=5)
+        id_entry.pack(side="left", padx=COL_PADX)
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
         ttk.Label(row1, text="Flag:").pack(side="left")
@@ -81,7 +82,7 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        flag_cb.pack(side="left", padx=5)
+        flag_cb.pack(side="left", padx=COL_PADX)
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
@@ -100,47 +101,47 @@ class TeamMemberFrame:
         )
 
         row2 = ttk.Frame(self.frame)
-        row2.pack(fill="x", pady=1)
+        row2.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row2, text="División:").pack(side="left")
         div_entry = ttk.Entry(row2, textvariable=self.division_var, width=20)
-        div_entry.pack(side="left", padx=5)
+        div_entry.pack(side="left", padx=COL_PADX)
         self._bind_dirty_tracking(div_entry, "division")
         self.tooltip_register(div_entry, "Ingresa la división o gerencia del colaborador.")
         div_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
         ttk.Label(row2, text="Área:").pack(side="left")
         area_entry = ttk.Entry(row2, textvariable=self.area_var, width=20)
-        area_entry.pack(side="left", padx=5)
+        area_entry.pack(side="left", padx=COL_PADX)
         self._bind_dirty_tracking(area_entry, "area")
         self.tooltip_register(area_entry, "Detalla el área específica.")
         area_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
         ttk.Label(row2, text="Servicio:").pack(side="left")
         serv_entry = ttk.Entry(row2, textvariable=self.servicio_var, width=20)
-        serv_entry.pack(side="left", padx=5)
+        serv_entry.pack(side="left", padx=COL_PADX)
         self._bind_dirty_tracking(serv_entry, "servicio")
         self.tooltip_register(serv_entry, "Describe el servicio o célula.")
         ttk.Label(row2, text="Puesto:").pack(side="left")
         puesto_entry = ttk.Entry(row2, textvariable=self.puesto_var, width=20)
-        puesto_entry.pack(side="left", padx=5)
+        puesto_entry.pack(side="left", padx=COL_PADX)
         self._bind_dirty_tracking(puesto_entry, "puesto")
         self.tooltip_register(puesto_entry, "Define el cargo actual del colaborador.")
 
         row3 = ttk.Frame(self.frame)
-        row3.pack(fill="x", pady=1)
+        row3.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row3, text="Nombre agencia:").pack(side="left")
         nombre_ag_entry = ttk.Entry(row3, textvariable=self.nombre_agencia_var, width=25)
-        nombre_ag_entry.pack(side="left", padx=5)
+        nombre_ag_entry.pack(side="left", padx=COL_PADX)
         self._bind_dirty_tracking(nombre_ag_entry, "nombre_agencia")
         self.tooltip_register(nombre_ag_entry, "Especifica la agencia u oficina de trabajo.")
         ttk.Label(row3, text="Código agencia:").pack(side="left")
         cod_ag_entry = ttk.Entry(row3, textvariable=self.codigo_agencia_var, width=10)
-        cod_ag_entry.pack(side="left", padx=5)
+        cod_ag_entry.pack(side="left", padx=COL_PADX)
         self._bind_dirty_tracking(cod_ag_entry, "codigo_agencia")
         self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
         self._division_entry = div_entry
         self._area_entry = area_entry
 
         row4 = ttk.Frame(self.frame)
-        row4.pack(fill="x", pady=1)
+        row4.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row4, text="Tipo de falta:").pack(side="left")
         falta_cb = ttk.Combobox(
             row4,
@@ -149,7 +150,7 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        falta_cb.pack(side="left", padx=5)
+        falta_cb.pack(side="left", padx=COL_PADX)
         falta_cb.set('')
         self.tooltip_register(falta_cb, "Selecciona la falta disciplinaria tipificada.")
         ttk.Label(row4, text="Tipo de sanción:").pack(side="left")
@@ -160,12 +161,12 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        sanc_cb.pack(side="left", padx=5)
+        sanc_cb.pack(side="left", padx=COL_PADX)
         sanc_cb.set('')
         self.tooltip_register(sanc_cb, "Describe la sanción propuesta o aplicada.")
 
         btn_frame = ttk.Frame(self.frame)
-        btn_frame.pack(fill="x", pady=2)
+        btn_frame.pack(fill="x", pady=ROW_PADY)
         remove_btn = ttk.Button(btn_frame, text="Eliminar colaborador", command=self.remove)
         remove_btn.pack(side="right")
         self.tooltip_register(remove_btn, "Quita al colaborador y sus datos del caso.")
@@ -277,7 +278,7 @@ class TeamMemberFrame:
         self._fallback_message_var.set(message)
         try:
             if not self._fallback_label.winfo_ismapped():
-                self._fallback_label.pack(fill="x", padx=5, pady=(0, 4))
+                self._fallback_label.pack(fill="x", padx=COL_PADX, pady=(0, ROW_PADY // 2))
         except tk.TclError:
             pass
 

@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_date_text, validate_norm_id,
                         validate_required_text)
+from ui.config import COL_PADX, ROW_PADY
 
 
 class NormFrame:
@@ -29,28 +30,28 @@ class NormFrame:
         self._last_missing_lookup_id = None
 
         self.frame = ttk.LabelFrame(parent, text=f"Norma {self.idx+1}")
-        self.frame.pack(fill="x", padx=5, pady=2)
+        self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         row1 = ttk.Frame(self.frame)
-        row1.pack(fill="x", pady=1)
+        row1.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row1, text="ID de norma:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
-        id_entry.pack(side="left", padx=5)
+        id_entry.pack(side="left", padx=COL_PADX)
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         ttk.Label(row1, text="Fecha de vigencia (YYYY-MM-DD):").pack(side="left")
         fecha_entry = ttk.Entry(row1, textvariable=self.fecha_var, width=15)
-        fecha_entry.pack(side="left", padx=5)
+        fecha_entry.pack(side="left", padx=COL_PADX)
         self.tooltip_register(fecha_entry, "Fecha de publicación o vigencia de la norma.")
 
         row2 = ttk.Frame(self.frame)
-        row2.pack(fill="x", pady=1)
+        row2.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row2, text="Descripción de la norma:").pack(side="left")
         desc_entry = ttk.Entry(row2, textvariable=self.descripcion_var, width=70)
-        desc_entry.pack(side="left", padx=5)
+        desc_entry.pack(side="left", padx=COL_PADX)
         self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
 
         btn_frame = ttk.Frame(self.frame)
-        btn_frame.pack(fill="x", pady=2)
+        btn_frame.pack(fill="x", pady=ROW_PADY)
         remove_btn = ttk.Button(btn_frame, text="Eliminar norma", command=self.remove)
         remove_btn.pack(side="right")
         self.tooltip_register(remove_btn, "Quita esta norma del caso.")
