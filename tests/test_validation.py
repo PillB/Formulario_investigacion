@@ -377,6 +377,7 @@ def build_headless_app(
     app.mod_caso_var = DummyVar(case_modalidad)
     app.canal_caso_var = DummyVar(CANAL_LIST[0])
     app.proceso_caso_var = DummyVar(PROCESO_LIST[0])
+    app.fecha_caso_var = DummyVar("2024-01-01")
     for attr in (
         'antecedentes_var',
         'modus_var',
@@ -1616,6 +1617,7 @@ def test_populate_from_data_keeps_product_dropdowns_blank_when_missing():
         'mod_caso_var',
         'canal_caso_var',
         'proceso_caso_var',
+        'fecha_caso_var',
         'antecedentes_var',
         'modus_var',
         'hallazgos_var',
@@ -1649,6 +1651,7 @@ def test_populate_from_data_keeps_product_dropdowns_blank_when_missing():
             'categoria1': cat1,
             'categoria2': cat2,
             'modalidad': modalidad,
+            'fecha_de_ocurrencia': '2024-01-01',
         },
         'clientes': [],
         'colaboradores': [],
@@ -1721,6 +1724,7 @@ def test_validate_data_normalizes_risk_exposure_after_populate():
         'mod_caso_var',
         'canal_caso_var',
         'proceso_caso_var',
+        'fecha_caso_var',
         'antecedentes_var',
         'modus_var',
         'hallazgos_var',
@@ -1768,6 +1772,7 @@ def test_validate_data_normalizes_risk_exposure_after_populate():
             'modalidad': case_modalidad,
             'canal': CANAL_LIST[0],
             'proceso': PROCESO_LIST[0],
+            'fecha_de_ocurrencia': '2024-01-01',
         },
         'clientes': [],
         'colaboradores': [],
