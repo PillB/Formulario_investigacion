@@ -10,6 +10,7 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_client_id, validate_email_list,
                         validate_multi_selection, validate_phone_list,
                         validate_required_text)
+from ui.config import COL_PADX, ROW_PADY
 
 
 class ClientFrame:
@@ -54,34 +55,34 @@ class ClientFrame:
         self.accionado_options_var = tk.StringVar(value=ACCIONADO_OPTIONS)
 
         self.frame = ttk.LabelFrame(parent, text=f"Cliente {self.idx+1}")
-        self.frame.pack(fill="x", padx=5, pady=2)
+        self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
 
         row1 = ttk.Frame(self.frame)
-        row1.pack(fill="x", pady=1)
+        row1.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row1, text="Tipo de ID:").pack(side="left")
         tipo_id_cb = ttk.Combobox(row1, textvariable=self.tipo_id_var, values=TIPO_ID_LIST, state="readonly", width=20)
-        tipo_id_cb.pack(side="left", padx=5)
+        tipo_id_cb.pack(side="left", padx=COL_PADX)
         tipo_id_cb.set('')
         self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
         ttk.Label(row1, text="ID del cliente:").pack(side="left")
         id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
-        id_entry.pack(side="left", padx=5)
+        id_entry.pack(side="left", padx=COL_PADX)
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
         row2 = ttk.Frame(self.frame)
-        row2.pack(fill="x", pady=1)
+        row2.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row2, text="Flag:").pack(side="left")
         flag_cb = ttk.Combobox(row2, textvariable=self.flag_var, values=FLAG_CLIENTE_LIST, state="readonly", width=20)
-        flag_cb.pack(side="left", padx=5)
+        flag_cb.pack(side="left", padx=COL_PADX)
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
 
         accionado_frame = ttk.Frame(self.frame)
-        accionado_frame.pack(fill="x", pady=1)
+        accionado_frame.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(accionado_frame, text="Accionado (seleccione uno o varios):").pack(anchor="w")
         accionado_list_container = ttk.Frame(accionado_frame)
-        accionado_list_container.pack(fill="x", padx=5)
+        accionado_list_container.pack(fill="x", padx=COL_PADX)
 
         accionado_scrollbar = None
         scrollbar_class = getattr(tk, "Scrollbar", None) or getattr(ttk, "Scrollbar", None)
@@ -114,10 +115,10 @@ class ClientFrame:
         )
 
         row3 = ttk.Frame(self.frame)
-        row3.pack(fill="x", pady=1)
+        row3.pack(fill="x", pady=ROW_PADY // 2)
         ttk.Label(row3, text="Teléfonos (separados por ;):").pack(side="left")
         tel_entry = ttk.Entry(row3, textvariable=self.telefonos_var, width=30)
-        tel_entry.pack(side="left", padx=5)
+        tel_entry.pack(side="left", padx=COL_PADX)
         tel_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó teléfonos"))
         self.tooltip_register(
             tel_entry,
@@ -125,7 +126,7 @@ class ClientFrame:
         )
         ttk.Label(row3, text="Correos (separados por ;):").pack(side="left")
         cor_entry = ttk.Entry(row3, textvariable=self.correos_var, width=30)
-        cor_entry.pack(side="left", padx=5)
+        cor_entry.pack(side="left", padx=COL_PADX)
         cor_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó correos"))
         self.tooltip_register(
             cor_entry,
@@ -133,12 +134,12 @@ class ClientFrame:
         )
         ttk.Label(row3, text="Direcciones (separados por ;):").pack(side="left")
         dir_entry = ttk.Entry(row3, textvariable=self.direcciones_var, width=30)
-        dir_entry.pack(side="left", padx=5)
+        dir_entry.pack(side="left", padx=COL_PADX)
         dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
         self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
 
         btn_frame = ttk.Frame(self.frame)
-        btn_frame.pack(fill="x", pady=2)
+        btn_frame.pack(fill="x", pady=ROW_PADY)
         remove_btn = ttk.Button(btn_frame, text="Eliminar cliente", command=self.remove)
         remove_btn.pack(side="right")
         self.tooltip_register(remove_btn, "Quita por completo al cliente de la lista.")
