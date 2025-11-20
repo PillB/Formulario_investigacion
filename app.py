@@ -76,8 +76,8 @@ try:  # python-docx es una dependencia opcional en tiempo de pruebas
 except ImportError:  # pragma: no cover - se usa la ruta de respaldo
     DocxDocument = None
 
-from models import (build_detail_catalog_id_index, iter_massive_csv_rows,
-                    load_detail_catalogs, normalize_detail_catalog_key,
+from models import (AutofillService, CatalogService, build_detail_catalog_id_index,
+                    iter_massive_csv_rows, normalize_detail_catalog_key,
                     parse_involvement_entries)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
@@ -295,6 +295,10 @@ class FraudCaseApp:
         self.catalog_progress = None
         self.detail_catalogs = {}
         self.detail_lookup_by_id = {}
+        self.catalog_service = CatalogService(BASE_DIR)
+        self.autofill_service = AutofillService(
+            self.catalog_service, warning_handler=self._log_autofill_warning
+        )
         self.team_lookup = {}
         self.client_lookup = {}
         self.product_lookup = {}
@@ -975,6 +979,8 @@ class FraudCaseApp:
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
             id_change_callback=self._handle_team_id_change,
+            autofill_service=self.autofill_service,
+            case_date_getter=lambda: self.fecha_caso_var.get(),
         )
         self.team_frames.append(team)
         self.update_team_options_global()
@@ -1423,8 +1429,7 @@ class FraudCaseApp:
 
     def _load_catalogs_in_background(self):
         try:
-            raw_catalogs = load_detail_catalogs()
-            detail_catalogs, detail_lookup_by_id = self._normalize_detail_catalog_payload(raw_catalogs)
+            detail_catalogs, detail_lookup_by_id = self.catalog_service.refresh()
         except Exception as exc:  # pragma: no cover - errores inusuales de IO
             self._dispatch_to_ui(self._handle_catalog_load_failure, exc)
             return
@@ -3743,6 +3748,11 @@ class FraudCaseApp:
 
     def _log_navigation_change(self, message: str) -> None:
         self._log_navigation(message, autosave=True)
+
+    def _log_autofill_warning(self, message: str) -> None:
+        if not message:
+            return
+        log_event("validacion", message, self.logs)
 
     def request_autosave(self) -> None:
         self._autosave_dirty = True

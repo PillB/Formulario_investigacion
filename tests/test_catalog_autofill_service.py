@@ -1,0 +1,149 @@
+import csv
+
+from models import AutofillService, CatalogService
+
+
+def _write_team_details(tmp_path, rows):
+    path = tmp_path / "team_details.csv"
+    headers = [
+        "id_colaborador",
+        "division",
+        "area",
+        "servicio",
+        "puesto",
+        "nombre_agencia",
+        "codigo_agencia",
+        "fecha_actualizacion",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(headers)
+        for row in rows:
+            writer.writerow(row)
+    return path
+
+
+def _build_services(tmp_path):
+    service = CatalogService(tmp_path)
+    service.refresh()
+    warnings: list[str] = []
+    autofill = AutofillService(service, warning_handler=warnings.append)
+    return service, autofill, warnings
+
+
+def test_autofill_selects_latest_snapshot_before_case_date(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T1", "Division 2023", "", "", "", "", "000111", "2023-02-01"),
+            ("T1", "Division 2024", "", "", "", "", "000222", "2024-06-15"),
+        ],
+    )
+    service, autofill, _ = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T1",
+        current_values={
+            "division": "",
+            "area": "",
+            "servicio": "",
+            "puesto": "",
+            "nombre_agencia": "",
+            "codigo_agencia": "",
+        },
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="2024-06-20",
+    )
+
+    assert result.found is True
+    assert result.applied["division"] == "Division 2024"
+    assert service.team_snapshots["T1"][0]["data"]["codigo_agencia"] == "000111"
+
+
+def test_autofill_respects_dirty_fields(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T2", "Division A", "Area A", "", "", "", "001000", "2023-01-01"),
+        ],
+    )
+    _, autofill, _ = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T2",
+        current_values={
+            "division": "Manual",
+            "area": "Area manual",
+            "servicio": "",
+            "puesto": "",
+            "nombre_agencia": "",
+            "codigo_agencia": "",
+        },
+        dirty_fields={"division": True, "area": True},
+        preserve_existing=False,
+        case_date="2023-02-01",
+    )
+
+    assert "division" not in result.applied
+    assert "area" not in result.applied
+    assert result.applied["codigo_agencia"] == "001000"
+
+
+def test_autofill_handles_invalid_case_date_with_latest_snapshot(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T3", "Division pasada", "", "", "", "", "", "2020-01-01"),
+            ("T3", "Division vigente", "", "", "", "", "", "2024-05-05"),
+        ],
+    )
+    _, autofill, warnings = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T3",
+        current_values={
+            "division": "",
+            "area": "",
+            "servicio": "",
+            "puesto": "",
+            "nombre_agencia": "",
+            "codigo_agencia": "",
+        },
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="not-a-date",
+    )
+
+    assert result.applied["division"] == "Division vigente"
+    assert result.used_future_snapshot is False
+    assert warnings == []
+
+
+def test_autofill_warns_when_using_future_snapshot(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T4", "Division futura", "", "", "", "", "", "2025-01-01"),
+        ],
+    )
+    _, autofill, warnings = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T4",
+        current_values={
+            "division": "",
+            "area": "",
+            "servicio": "",
+            "puesto": "",
+            "nombre_agencia": "",
+            "codigo_agencia": "",
+        },
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="2020-01-01",
+    )
+
+    assert result.used_future_snapshot is True
+    assert warnings, "Expected a non-blocking warning"
+    assert result.applied["division"] == "Division futura"
