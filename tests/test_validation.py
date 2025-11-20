@@ -106,11 +106,20 @@ class _UIStubWidget:
         self._config = {}
         self._bindings = []
         self.command = kwargs.get("command")
+        self._packed = False
         if "values" in kwargs:
             self._config['values'] = kwargs["values"]
 
     def pack(self, *args, **kwargs):
+        self._packed = True
         return None
+
+    def pack_forget(self, *args, **kwargs):
+        self._packed = False
+        return None
+
+    def winfo_ismapped(self):
+        return self._packed
 
     def bind(self, sequence, callback, add=None):
         self._bindings.append((sequence, callback, add))
@@ -217,6 +226,7 @@ def _patch_team_module(monkeypatch):
 
     class _TkStub:
         StringVar = DummyVar
+        Label = _UIStubWidget
 
     class _TtkStub:
         LabelFrame = _UIStubWidget
@@ -228,6 +238,7 @@ def _patch_team_module(monkeypatch):
 
     messagebox_stub = SimpleNamespace(
         showerror=lambda *args, **kwargs: None,
+        showwarning=lambda *args, **kwargs: None,
         askyesno=lambda *args, **kwargs: False,
     )
 
@@ -1572,6 +1583,50 @@ def test_team_frame_inline_agency_validation_clears_when_optional(monkeypatch):
     assert nombre_validator.last_custom_error is None
     assert codigo_validator.last_custom_error is None
 
+
+def test_team_frame_shows_and_clears_fallback_warning(monkeypatch):
+    team_module, _ = _patch_team_module(monkeypatch)
+
+    class DummyAutofillService:
+        def __init__(self):
+            self.calls = 0
+
+        def lookup_team_autofill(self, *_args, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(
+                found=True,
+                used_future_snapshot=False,
+                applied={},
+                meta={
+                    "fallback_used": True,
+                    "reason": "case_date_missing_or_invalid",
+                    "selected_date": None,
+                },
+            )
+
+    autofill = DummyAutofillService()
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+        autofill_service=autofill,
+        case_date_getter=lambda: None,
+    )
+
+    frame.id_var.set("T12345")
+    frame.on_id_change(from_focus=True)
+
+    assert frame._fallback_message_var.get().startswith("No se pudo interpretar la fecha de ocurrencia")
+    assert frame._fallback_label.winfo_ismapped() is True
+    assert autofill.calls == 1
+
+    frame._mark_dirty("division")
+    assert frame._fallback_message_var.get() == ""
+    assert frame._fallback_label.winfo_ismapped() is False
 
 def test_preserve_existing_client_contacts_on_partial_import():
     app = build_headless_app("Crédito personal")

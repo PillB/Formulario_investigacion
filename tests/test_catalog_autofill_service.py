@@ -119,7 +119,11 @@ def test_autofill_handles_invalid_case_date_with_latest_snapshot(tmp_path):
 
     assert result.applied["division"] == "Division vigente"
     assert result.used_future_snapshot is False
-    assert warnings == []
+    assert result.meta["fallback_used"] is True
+    assert result.meta["reason"] == "case_date_missing_or_invalid"
+    assert warnings == [
+        "No se pudo interpretar la fecha de ocurrencia; se usará el registro más reciente disponible del colaborador."
+    ]
 
 
 def test_autofill_warns_when_using_future_snapshot(tmp_path):
@@ -147,6 +151,7 @@ def test_autofill_warns_when_using_future_snapshot(tmp_path):
     )
 
     assert result.used_future_snapshot is True
+    assert result.meta["reason"] == "no_past_snapshot"
     assert warnings, "Expected a non-blocking warning"
     assert result.applied["division"] == "Division futura"
 
@@ -216,4 +221,32 @@ def test_autofill_uses_latest_when_case_date_missing(tmp_path):
 
     assert result.applied["division"] == "Reciente"
     assert result.used_future_snapshot is False
-    assert warnings == []
+    assert result.meta["fallback_used"] is True
+    assert result.meta["reason"] == "case_date_missing_or_invalid"
+    assert warnings == [
+        "No se pudo interpretar la fecha de ocurrencia; se usará el registro más reciente disponible del colaborador."
+    ]
+
+
+def test_autofill_meta_includes_selected_date_and_reason(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T8", "Antiguo", "", "", "", "", "", "2020-02-02"),
+            ("T8", "Reciente", "", "", "", "", "", "2024-04-04"),
+        ],
+    )
+    _, autofill, warnings = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T8",
+        current_values={"division": ""},
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="2019-12-31",
+    )
+
+    assert result.meta["fallback_used"] is True
+    assert result.meta["reason"] == "no_past_snapshot"
+    assert str(result.meta["selected_date"]) == "2020-02-02"
+    assert warnings, "Fallback should log a warning"
