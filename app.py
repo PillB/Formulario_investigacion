@@ -60,25 +60,18 @@ import json
 import os
 import shutil
 import threading
-import zipfile
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from textwrap import dedent
 from typing import Optional
-from xml.sax.saxutils import escape
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-try:  # python-docx es una dependencia opcional en tiempo de pruebas
-    from docx import Document as DocxDocument
-except ImportError:  # pragma: no cover - se usa la ruta de respaldo
-    DocxDocument = None
-
 from models import (AutofillService, CatalogService, build_detail_catalog_id_index,
                     iter_massive_csv_rows, normalize_detail_catalog_key,
                     parse_involvement_entries)
+from report_builder import CaseData, build_docx, save_md
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       EXPORTS_DIR, EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
@@ -101,158 +94,11 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_date_text, validate_email_list,
                         validate_money_bounds, validate_multi_selection,
                         validate_norm_id, validate_phone_list,
-                        validate_product_dates, validate_product_id,
-                        validate_reclamo_id, validate_required_text,
-                        validate_risk_id, validate_team_member_id)
+                      validate_product_dates, validate_product_id,
+                      validate_reclamo_id, validate_required_text,
+                      validate_risk_id, validate_team_member_id)
 
 
-_DOCX_STATIC_PARTS = {
-    '[Content_Types].xml': dedent('''
-        <?xml version="1.0" encoding="UTF-8"?>
-        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-            <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-            <Default Extension="xml" ContentType="application/xml"/>
-            <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-            <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-            <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
-            <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
-        </Types>
-    ''').strip().encode('utf-8'),
-    '_rels/.rels': dedent('''
-        <?xml version="1.0" encoding="UTF-8"?>
-        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-            <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
-            <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
-        </Relationships>
-    ''').strip().encode('utf-8'),
-    'docProps/core.xml': dedent('''
-        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
-            xmlns:dc="http://purl.org/dc/elements/1.1/"
-            xmlns:dcterms="http://purl.org/dc/terms/"
-            xmlns:dcmitype="http://purl.org/dc/dcmitype/"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <dc:title>Informe de caso</dc:title>
-            <cp:revision>1</cp:revision>
-        </cp:coreProperties>
-    ''').strip().encode('utf-8'),
-    'docProps/app.xml': dedent('''
-        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
-            xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-            <Application>Formulario Investigacion</Application>
-        </Properties>
-    ''').strip().encode('utf-8'),
-    'word/styles.xml': dedent('''
-        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-            <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
-                <w:name w:val="Normal"/>
-            </w:style>
-        </w:styles>
-    ''').strip().encode('utf-8'),
-}
-
-
-class _FallbackDocxCell:
-    __slots__ = ('text',)
-
-    def __init__(self):
-        self.text = ''
-
-    def to_xml(self):
-        if not self.text:
-            return '<w:tc><w:p/></w:tc>'
-        safe = escape(self.text)
-        return f'<w:tc><w:p><w:r><w:t xml:space="preserve">{safe}</w:t></w:r></w:p></w:tc>'
-
-
-class _FallbackDocxRow:
-    __slots__ = ('cells',)
-
-    def __init__(self, cols):
-        self.cells = [_FallbackDocxCell() for _ in range(cols)]
-
-    def to_xml(self):
-        return '<w:tr>' + ''.join(cell.to_xml() for cell in self.cells) + '</w:tr>'
-
-
-class _FallbackDocxTable:
-    __slots__ = ('rows', '_cols', 'style')
-
-    def __init__(self, rows, cols):
-        self._cols = cols
-        self.rows = [_FallbackDocxRow(cols) for _ in range(rows)]
-        self.style = None
-
-    def add_row(self):
-        row = _FallbackDocxRow(self._cols)
-        self.rows.append(row)
-        return row
-
-    def to_xml(self):
-        grid = ''.join('<w:gridCol w:w="2400"/>' for _ in range(self._cols))
-        rows_xml = ''.join(row.to_xml() for row in self.rows)
-        return f'<w:tbl><w:tblPr/><w:tblGrid>{grid}</w:tblGrid>{rows_xml}</w:tbl>'
-
-
-class _FallbackDocxDocument:
-    def __init__(self):
-        self._blocks = []
-
-    def add_paragraph(self, text):
-        self._blocks.append(('paragraph', text or ''))
-        return text
-
-    def add_heading(self, text, level=1):  # noqa: ARG002 - nivel ignorado en el respaldo
-        self._blocks.append(('paragraph', text or ''))
-        return text
-
-    def add_table(self, rows, cols):
-        table = _FallbackDocxTable(rows, cols)
-        self._blocks.append(('table', table))
-        return table
-
-    def save(self, path):
-        document_xml = self._render_document_xml()
-        _write_docx_package(path, document_xml)
-
-    def _render_document_xml(self):
-        pieces = [
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
-            '<w:body>',
-        ]
-        for block_type, payload in self._blocks:
-            if block_type == 'paragraph':
-                pieces.append(_fallback_paragraph_xml(payload))
-            elif block_type == 'table':
-                pieces.append(payload.to_xml())
-        pieces.extend([
-            '<w:sectPr>',
-            '<w:pgSz w:w="12240" w:h="15840"/>',
-            '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>',
-            '</w:sectPr>',
-            '</w:body>',
-            '</w:document>',
-        ])
-        return '\n'.join(pieces).encode('utf-8')
-
-
-def _fallback_paragraph_xml(text):
-    safe = escape(text or '')
-    if not safe:
-        return '<w:p/>'
-    return f'<w:p><w:r><w:t xml:space="preserve">{safe}</w:t></w:r></w:p>'
-
-
-def _write_docx_package(path, document_xml_bytes):
-    path = Path(path)
-    with zipfile.ZipFile(path, 'w') as bundle:
-        for name, payload in _DOCX_STATIC_PARTS.items():
-            bundle.writestr(name, payload)
-        bundle.writestr('word/document.xml', document_xml_bytes)
 
 
 class FraudCaseApp:
@@ -3635,10 +3481,10 @@ class FraudCaseApp:
     def save_auto(self, data=None):
         """Guarda automáticamente el estado actual en un archivo JSON."""
 
-        dataset = data or self.gather_data()
+        dataset = self._ensure_case_data(data or self.gather_data())
         try:
             with open(AUTOSAVE_FILE, 'w', encoding="utf-8") as f:
-                json.dump(dataset, f, ensure_ascii=False, indent=2)
+                json.dump(dataset.as_dict(), f, ensure_ascii=False, indent=2)
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
         self._schedule_summary_refresh(data=dataset)
@@ -3949,7 +3795,7 @@ class FraudCaseApp:
             "conclusiones": self._get_text_content(analysis_widgets["conclusiones"]),
             "recomendaciones": self._get_text_content(analysis_widgets["recomendaciones"]),
         }
-        return data
+        return CaseData.from_mapping(data)
 
     def _normalize_export_amount_strings(self, products):
         if not products:
@@ -3971,8 +3817,15 @@ class FraudCaseApp:
                     continue
                 product[field_name] = "0.00"
 
+    def _ensure_case_data(self, data) -> CaseData:
+        if isinstance(data, CaseData):
+            return data
+        return CaseData.from_mapping(data or {})
+
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
+        if isinstance(data, CaseData):
+            data = data.as_dict()
         # Limpiar primero sin confirmar ni sobrescribir el autosave
         self._clear_case_state(save_autosave=False)
         # Datos de caso
@@ -4767,289 +4620,6 @@ class FraudCaseApp:
     # ---------------------------------------------------------------------
     # Exportación de datos
 
-    def _build_report_context(self, data):
-        case = data['caso']
-        analysis = data['analisis']
-        clients = data['clientes']
-        team = data['colaboradores']
-        products = data['productos']
-        riesgos = data['riesgos']
-        normas = data['normas']
-        total_inv = sum((parse_decimal_amount(p.get('monto_investigado')) or Decimal('0')) for p in products)
-        destinatarios = sorted({
-            " - ".join(filter(None, [col.get('division', '').strip(), col.get('area', '').strip(), col.get('servicio', '').strip()]))
-            for col in team
-            if any([col.get('division'), col.get('area'), col.get('servicio')])
-        })
-        destinatarios = [d for d in destinatarios if d]
-        destinatarios_text = ", ".join(destinatarios) if destinatarios else "Sin divisiones registradas"
-        reclamos_por_producto = {}
-        for record in data['reclamos']:
-            pid = record.get('id_producto')
-            if not pid:
-                continue
-            reclamos_por_producto.setdefault(pid, []).append(record)
-        client_rows = [
-            [
-                f"Cliente {idx}",
-                client.get('tipo_id', ''),
-                client.get('id_cliente', ''),
-                client.get('flag', ''),
-                client.get('telefonos', ''),
-                client.get('correos', ''),
-                client.get('direcciones', ''),
-                client.get('accionado', ''),
-            ]
-            for idx, client in enumerate(clients, start=1)
-        ]
-        team_rows = [
-            [
-                f"Colaborador {idx}",
-                col.get('id_colaborador', ''),
-                col.get('flag', ''),
-                col.get('division', ''),
-                col.get('area', ''),
-                col.get('servicio', ''),
-                col.get('puesto', ''),
-                col.get('nombre_agencia', ''),
-                col.get('codigo_agencia', ''),
-                col.get('tipo_falta', ''),
-                col.get('tipo_sancion', ''),
-            ]
-            for idx, col in enumerate(team, start=1)
-        ]
-        product_rows = []
-        for idx, prod in enumerate(products, start=1):
-            claim_values = reclamos_por_producto.get(prod['id_producto'], [])
-            claims_text = "; ".join(
-                f"{rec.get('id_reclamo', '')} / {rec.get('codigo_analitica', '')}"
-                for rec in claim_values
-            )
-            product_rows.append([
-                f"Producto {idx}",
-                prod.get('id_producto', ''),
-                prod.get('id_cliente', ''),
-                prod.get('tipo_producto', ''),
-                prod.get('canal', ''),
-                prod.get('proceso', ''),
-                prod.get('categoria1', ''),
-                prod.get('categoria2', ''),
-                prod.get('modalidad', ''),
-                (
-                    f"INV:{prod.get('monto_investigado', '')} | PER:{prod.get('monto_perdida_fraude', '')} "
-                    f"| FALLA:{prod.get('monto_falla_procesos', '')} | CONT:{prod.get('monto_contingencia', '')} "
-                    f"| REC:{prod.get('monto_recuperado', '')} | PAGO:{prod.get('monto_pago_deuda', '')}"
-                ),
-                claims_text,
-            ])
-        risk_rows = [
-            [
-                risk.get('id_riesgo', ''),
-                risk.get('lider', ''),
-                risk.get('criticidad', ''),
-                risk.get('exposicion_residual', ''),
-                risk.get('planes_accion', ''),
-            ]
-            for risk in riesgos
-        ]
-        norm_rows = [
-            [
-                norm.get('id_norma', ''),
-                norm.get('descripcion', ''),
-                norm.get('fecha_vigencia', ''),
-            ]
-            for norm in normas
-        ]
-        summary_sentence = (
-            f"Se documentaron {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos. "
-            f"El caso está tipificado como {case['categoria1']} / {case['categoria2']} en modalidad {case['modalidad']}."
-        )
-        return {
-            'case': case,
-            'analysis': analysis,
-            'total_investigado': total_inv,
-            'destinatarios_text': destinatarios_text,
-            'client_rows': client_rows,
-            'team_rows': team_rows,
-            'product_rows': product_rows,
-            'risk_rows': risk_rows,
-            'norm_rows': norm_rows,
-            'summary_sentence': summary_sentence,
-        }
-
-    def build_markdown_report(self, data):
-        """Genera el informe solicitado en formato Markdown."""
-
-        context = self._build_report_context(data)
-        case = context['case']
-        analysis = context['analysis']
-
-        def md_table(headers, rows):
-            if not rows:
-                return ["Sin registros."]
-            safe = lambda cell: str(cell or '').replace('|', '\\|')
-            lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(['---'] * len(headers)) + " |"]
-            for row in rows:
-                lines.append("| " + " | ".join(safe(col) for col in row) + " |")
-            return lines
-
-        lines = [
-            "Banco de Crédito - BCP",
-            "SEGURIDAD CORPORATIVA, INVESTIGACIONES & CRIMEN CIBERNÉTICO",
-            "INVESTIGACIONES & CIBERCRIMINOLOGÍA",
-            f"Informe {case['tipo_informe']} N.{case['id_caso']}",
-            f"Dirigido a: {context['destinatarios_text']}",
-            (
-                "Referencia: "
-                f"{len(context['team_rows'])} colaboradores investigados, {len(context['product_rows'])} productos afectados, "
-                f"monto investigado total {context['total_investigado']:.2f} y modalidad {case['modalidad']}."
-            ),
-            "",
-            "## 1. Antecedentes",
-            analysis.get('antecedentes') or "Pendiente",
-            "",
-            "## 2. Tabla de clientes",
-        ]
-        lines.extend(md_table([
-            "Cliente", "Tipo ID", "ID", "Flag", "Teléfonos", "Correos", "Direcciones", "Accionado"
-        ], context['client_rows']))
-        lines.extend([
-            "",
-            "## 3. Tabla de team members involucrados",
-        ])
-        lines.extend(md_table([
-            "Colaborador", "ID", "Flag", "División", "Área", "Servicio", "Puesto", "Agencia", "Código", "Falta", "Sanción"
-        ], context['team_rows']))
-        lines.extend([
-            "",
-            "## 4. Tabla de productos combinado",
-        ])
-        lines.extend(md_table([
-            "Registro", "ID", "Cliente", "Tipo", "Canal", "Proceso", "Cat.1", "Cat.2", "Modalidad", "Montos", "Reclamo/Analítica"
-        ], context['product_rows']))
-        lines.extend([
-            "",
-            "## 5. Resumen automatizado",
-            context['summary_sentence'],
-            "",
-            "## 6. Modus Operandi",
-            analysis.get('modus_operandi') or "Pendiente",
-            "",
-            "## 7. Hallazgos Principales",
-            analysis.get('hallazgos') or "Pendiente",
-            "",
-            "## 8. Descargo de colaboradores",
-            analysis.get('descargos') or "Pendiente",
-            "",
-            "## 9. Tabla de riesgos identificados",
-        ])
-        lines.extend(md_table([
-            "ID Riesgo", "Líder", "Criticidad", "Exposición US$", "Planes"
-        ], context['risk_rows']))
-        lines.extend([
-            "",
-            "## 10. Tabla de normas transgredidas",
-        ])
-        lines.extend(md_table([
-            "N° de norma", "Descripción", "Fecha de vigencia"
-        ], context['norm_rows']))
-        lines.extend([
-            "",
-            "## 11. Conclusiones",
-            analysis.get('conclusiones') or "Pendiente",
-            "",
-            "## 12. Recomendaciones y mejoras de procesos",
-            analysis.get('recomendaciones') or "Pendiente",
-            "",
-        ])
-        return "\n".join(lines)
-
-    def _create_word_document(self):
-        if DocxDocument is not None:
-            return DocxDocument()
-        return _FallbackDocxDocument()
-
-    def build_word_report(self, data):
-        """Genera el informe solicitado en formato Word (.docx)."""
-
-        context = self._build_report_context(data)
-        case = context['case']
-        analysis = context['analysis']
-        document = self._create_word_document()
-
-        header_lines = [
-            "Banco de Crédito - BCP",
-            "SEGURIDAD CORPORATIVA, INVESTIGACIONES & CRIMEN CIBERNÉTICO",
-            "INVESTIGACIONES & CIBERCRIMINOLOGÍA",
-            f"Informe {case['tipo_informe']} N.{case['id_caso']}",
-            f"Dirigido a: {context['destinatarios_text']}",
-            (
-                "Referencia: "
-                f"{len(context['team_rows'])} colaboradores investigados, {len(context['product_rows'])} productos afectados, "
-                f"monto investigado total {context['total_investigado']:.2f} y modalidad {case['modalidad']}."
-            ),
-            "",
-        ]
-        for line in header_lines:
-            document.add_paragraph(line)
-
-        def add_heading_and_text(title, body_text):
-            document.add_heading(title, level=2)
-            document.add_paragraph(body_text or "Pendiente")
-            document.add_paragraph("")
-
-        def append_table_section(title, headers, rows):
-            document.add_heading(title, level=2)
-            if not rows:
-                document.add_paragraph("Sin registros.")
-                document.add_paragraph("")
-                return
-            table = document.add_table(rows=len(rows) + 1, cols=len(headers))
-            header_cells = table.rows[0].cells
-            for idx, header in enumerate(headers):
-                header_cells[idx].text = header
-            for row_values in rows:
-                new_row = table.add_row().cells
-                for idx, value in enumerate(row_values):
-                    new_row[idx].text = str(value or "")
-            document.add_paragraph("")
-
-        add_heading_and_text("1. Antecedentes", analysis.get('antecedentes'))
-        append_table_section(
-            "2. Tabla de clientes",
-            ["Cliente", "Tipo ID", "ID", "Flag", "Teléfonos", "Correos", "Direcciones", "Accionado"],
-            context['client_rows'],
-        )
-        append_table_section(
-            "3. Tabla de team members involucrados",
-            ["Colaborador", "ID", "Flag", "División", "Área", "Servicio", "Puesto", "Agencia", "Código", "Falta", "Sanción"],
-            context['team_rows'],
-        )
-        append_table_section(
-            "4. Tabla de productos combinado",
-            ["Registro", "ID", "Cliente", "Tipo", "Canal", "Proceso", "Cat.1", "Cat.2", "Modalidad", "Montos", "Reclamo/Analítica"],
-            context['product_rows'],
-        )
-        document.add_heading("5. Resumen automatizado", level=2)
-        document.add_paragraph(context['summary_sentence'])
-        document.add_paragraph("")
-        add_heading_and_text("6. Modus Operandi", analysis.get('modus_operandi'))
-        add_heading_and_text("7. Hallazgos Principales", analysis.get('hallazgos'))
-        add_heading_and_text("8. Descargo de colaboradores", analysis.get('descargos'))
-        append_table_section(
-            "9. Tabla de riesgos identificados",
-            ["ID Riesgo", "Líder", "Criticidad", "Exposición US$", "Planes"],
-            context['risk_rows'],
-        )
-        append_table_section(
-            "10. Tabla de normas transgredidas",
-            ["N° de norma", "Descripción", "Fecha de vigencia"],
-            context['norm_rows'],
-        )
-        add_heading_and_text("11. Conclusiones", analysis.get('conclusiones'))
-        add_heading_and_text("12. Recomendaciones y mejoras de procesos", analysis.get('recomendaciones'))
-        return document
-
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
         self.flush_autosave()
@@ -5068,7 +4638,7 @@ class FraudCaseApp:
             return
         folder = Path(folder)
         # Reunir datos
-        data = self.gather_data()
+        data = self._ensure_case_data(self.gather_data())
         self._normalize_export_amount_strings(data.get('productos'))
         # Completar claves foráneas con id_caso
         for c in data['clientes']:
@@ -5134,18 +4704,14 @@ class FraudCaseApp:
         # Guardar JSON
         json_path = folder / f"{case_id}_version.json"
         with json_path.open('w', encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            json.dump(data.as_dict(), f, ensure_ascii=False, indent=2)
         created_files.append(json_path)
         # Guardar informe Markdown
         report_path = folder / f"{case_id}_informe.md"
-        with report_path.open('w', encoding='utf-8') as f:
-            f.write(self.build_markdown_report(data))
-        created_files.append(report_path)
+        created_files.append(save_md(data, report_path))
         # Guardar informe Word
         docx_path = folder / f"{case_id}_informe.docx"
-        word_document = self.build_word_report(data)
-        word_document.save(docx_path)
-        created_files.append(docx_path)
+        created_files.append(build_docx(data, docx_path))
         self._mirror_exports_to_external_drive(created_files, case_id)
         messagebox.showinfo(
             "Datos guardados",
@@ -5215,11 +4781,11 @@ class FraudCaseApp:
             # Crea un archivo como ``2025-0001_temp_20251114_154501.json`` con
             # el contenido completo del formulario.
         """
-        data = data or self.gather_data()
+        data = self._ensure_case_data(data or self.gather_data())
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         case_id = data.get('caso', {}).get('id_caso', '') or 'caso'
         filename = f"{case_id}_temp_{timestamp}.json"
-        json_payload = json.dumps(data, ensure_ascii=False, indent=2)
+        json_payload = json.dumps(data.as_dict(), ensure_ascii=False, indent=2)
         target_path = Path(BASE_DIR) / filename
         primary_written = False
         try:
