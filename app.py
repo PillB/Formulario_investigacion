@@ -1791,18 +1791,24 @@ class FraudCaseApp:
         ).grid(row=0, column=1, padx=(0, 6))
         ttk.Button(
             toolbar,
+            text="Lista",
+            command=lambda w=text_widget: self._apply_text_tag(w, "list"),
+        ).grid(row=0, column=2, padx=(0, 6))
+        ttk.Button(
+            toolbar,
             text="Tabla",
             command=lambda w=text_widget: self._insert_table_template(w),
-        ).grid(row=0, column=2, padx=(0, 6))
+        ).grid(row=0, column=3, padx=(0, 6))
         ttk.Button(
             toolbar,
             text="Imagen",
             command=lambda w=text_widget: self._insert_image(w),
-        ).grid(row=0, column=3, padx=(0, 6))
+        ).grid(row=0, column=4, padx=(0, 6))
 
         tips = [
             "Aplica formato en negrita al texto seleccionado.",
             "Resalta la línea actual como encabezado.",
+            "Agrega viñetas o números a la selección o línea actual.",
             "Inserta una tabla de texto preformateada.",
             "Agrega una imagen junto al cursor actual.",
         ]
