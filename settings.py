@@ -178,6 +178,10 @@ EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 EXTERNAL_DRIVE_DIR = os.path.join(BASE_DIR, "external drive")
 EXTERNAL_LOGS_FILE = os.path.join(EXTERNAL_DRIVE_DIR, "logs.csv")
 STORE_LOGS_LOCALLY = True
+TEMP_AUTOSAVE_DEBOUNCE_SECONDS = 120
+TEMP_AUTOSAVE_MAX_PER_CASE = 30
+TEMP_AUTOSAVE_MAX_AGE_DAYS = 7
+TEMP_AUTOSAVE_COMPRESS_OLD = True
 
 
 def ensure_external_drive_dir() -> Path:
@@ -255,5 +259,9 @@ __all__ = [
     "TIPO_INFORME_LIST",
     "TIPO_MONEDA_LIST",
     "TIPO_PRODUCTO_LIST",
+    "TEMP_AUTOSAVE_COMPRESS_OLD",
+    "TEMP_AUTOSAVE_DEBOUNCE_SECONDS",
+    "TEMP_AUTOSAVE_MAX_AGE_DAYS",
+    "TEMP_AUTOSAVE_MAX_PER_CASE",
     "ensure_external_drive_dir",
 ]

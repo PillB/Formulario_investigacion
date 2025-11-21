@@ -59,11 +59,13 @@ import csv
 import json
 import os
 import shutil
+import zipfile
 import threading
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from contextlib import suppress
 from typing import Optional
 
 import tkinter as tk
@@ -86,9 +88,11 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, STORE_LOGS_LOCALLY,
                       MASSIVE_SAMPLE_FILES, NORM_ID_ALIASES, PROCESO_LIST,
                       PRODUCT_ID_ALIASES, RISK_ID_ALIASES, TAXONOMIA,
-                      TEAM_ID_ALIASES, TIPO_FALTA_LIST, TIPO_ID_LIST,
-                      TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
-                      TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
+                      TEAM_ID_ALIASES, TEMP_AUTOSAVE_COMPRESS_OLD,
+                      TEMP_AUTOSAVE_DEBOUNCE_SECONDS,
+                      TEMP_AUTOSAVE_MAX_AGE_DAYS, TEMP_AUTOSAVE_MAX_PER_CASE,
+                      TIPO_FALTA_LIST, TIPO_ID_LIST, TIPO_INFORME_LIST,
+                      TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
                       ensure_external_drive_dir)
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY, init_styles
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
@@ -195,6 +199,14 @@ class FraudCaseApp:
         self._summary_pending_dataset = None
         self._autosave_job_id = None
         self._autosave_dirty = False
+        self._last_temp_saved_at: Optional[datetime] = None
+        self._last_temp_signature = None
+        self.clients_compact_table = None
+        self.team_compact_table = None
+        self.clients_toggle_btn = None
+        self.team_toggle_btn = None
+        self._clients_detail_visible = True
+        self._team_detail_visible = True
 
         # Variables de caso
         self.id_caso_var = tk.StringVar()
@@ -220,6 +232,7 @@ class FraudCaseApp:
         self.build_ui()
         # Cargar autosave si existe
         self.load_autosave()
+        self._trim_all_temp_versions()
         self.root.after(250, self._prompt_initial_catalog_loading)
 
     def _prepare_external_drive(self) -> Optional[Path]:
@@ -825,15 +838,39 @@ class FraudCaseApp:
         """Construye la pestaña de clientes con lista dinámica."""
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
+        compact_section = ttk.LabelFrame(frame, text="Clientes (vista compacta)")
+        compact_section.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        self.clients_compact_table = self._build_compact_table(
+            compact_section,
+            columns=[
+                ("id", "ID"),
+                ("tipo", "Tipo ID"),
+                ("flag", "Flag"),
+                ("telefonos", "Teléfonos"),
+                ("correos", "Correos"),
+            ],
+            height=6,
+        )
+        self.clients_compact_table.bind("<<TreeviewSelect>>", lambda _e: self._show_clients_detail())
+        self.clients_compact_table.bind("<Double-1>", lambda _e: self._edit_selected_client())
+
         # Contenedor para los clientes
         self.clients_container = ttk.Frame(frame)
         self.clients_container.pack(fill="x", pady=5)
+        action_row = ttk.Frame(frame)
+        action_row.pack(fill="x", pady=ROW_PADY)
+        add_btn = ttk.Button(action_row, text="Agregar cliente", command=self._on_add_client_click)
+        add_btn.pack(side="left", padx=COL_PADX)
+        edit_btn = ttk.Button(action_row, text="Editar seleccionado", command=self._edit_selected_client)
+        edit_btn.pack(side="left")
+        self.clients_toggle_btn = ttk.Button(action_row, text="Ocultar formulario", command=self._toggle_clients_detail)
+        self.clients_toggle_btn.pack(side="right", padx=COL_PADX)
         # Botón añadir cliente
-        add_btn = ttk.Button(frame, text="Agregar cliente", command=self.add_client)
-        add_btn.pack(side="left", padx=5)
         self.register_tooltip(add_btn, "Añade un nuevo cliente implicado en el caso.")
         # Inicialmente un cliente en blanco
         self.add_client()
+        self._hide_clients_detail()
+        self._refresh_compact_views(sections={"clientes"})
 
     def add_client(self):
         """Crea y añade un nuevo marco de cliente a la interfaz.
@@ -843,6 +880,7 @@ class FraudCaseApp:
         ``client_details.csv``. Luego se actualizan las opciones de clientes
         disponibles para los productos.
         """
+        self._show_clients_detail()
         idx = len(self.client_frames)
         client = ClientFrame(
             self.clients_container,
@@ -878,18 +916,89 @@ class FraudCaseApp:
             prod.update_client_options()
         log_event("navegacion", "Actualizó opciones de cliente", self.logs)
 
+    def _toggle_clients_detail(self):
+        if getattr(self, "_clients_detail_visible", False):
+            self._hide_clients_detail()
+        else:
+            self._show_clients_detail()
+
+    def _show_clients_detail(self):
+        if not self.clients_container:
+            return
+        if not getattr(self, "_clients_detail_visible", False):
+            try:
+                self.clients_container.pack(fill="x", pady=5)
+            except tk.TclError:
+                return
+        self._clients_detail_visible = True
+        if self.clients_toggle_btn:
+            self.clients_toggle_btn.config(text="Ocultar formulario")
+
+    def _hide_clients_detail(self):
+        if not self.clients_container:
+            return
+        try:
+            self.clients_container.pack_forget()
+        except tk.TclError:
+            return
+        self._clients_detail_visible = False
+        if self.clients_toggle_btn:
+            self.clients_toggle_btn.config(text="Mostrar formulario")
+
+    def _on_add_client_click(self):
+        self.add_client()
+
+    def _edit_selected_client(self):
+        if not self.clients_compact_table:
+            return
+        selection = self.clients_compact_table.selection()
+        if not selection:
+            return
+        values = self.clients_compact_table.item(selection[0], "values")
+        client_id = values[0] if values else ""
+        frame = self._find_client_frame(client_id)
+        if frame:
+            self._show_clients_detail()
+            try:
+                frame.frame.focus_set()
+            except tk.TclError:
+                pass
+
     def build_team_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
+        compact_section = ttk.LabelFrame(frame, text="Colaboradores (vista compacta)")
+        compact_section.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        self.team_compact_table = self._build_compact_table(
+            compact_section,
+            columns=[
+                ("id", "ID"),
+                ("division", "División"),
+                ("area", "Área"),
+                ("sancion", "Sanción"),
+            ],
+            height=6,
+        )
+        self.team_compact_table.bind("<<TreeviewSelect>>", lambda _e: self._show_team_detail())
+        self.team_compact_table.bind("<Double-1>", lambda _e: self._edit_selected_team_member())
         self.team_container = ttk.Frame(frame)
         self.team_container.pack(fill="x", pady=5)
-        add_btn = ttk.Button(frame, text="Agregar colaborador", command=self.add_team)
-        add_btn.pack(side="left", padx=5)
+        action_row = ttk.Frame(frame)
+        action_row.pack(fill="x", pady=ROW_PADY)
+        add_btn = ttk.Button(action_row, text="Agregar colaborador", command=self._on_add_team_click)
+        add_btn.pack(side="left", padx=COL_PADX)
+        edit_btn = ttk.Button(action_row, text="Editar seleccionado", command=self._edit_selected_team_member)
+        edit_btn.pack(side="left")
+        self.team_toggle_btn = ttk.Button(action_row, text="Ocultar formulario", command=self._toggle_team_detail)
+        self.team_toggle_btn.pack(side="right", padx=COL_PADX)
         self.register_tooltip(add_btn, "Crea un registro para otro colaborador investigado.")
         self.add_team()
+        self._hide_team_detail()
+        self._refresh_compact_views(sections={"colaboradores"})
 
     def add_team(self):
         idx = len(self.team_frames)
+        self._show_team_detail()
         team = TeamMemberFrame(
             self.team_container,
             idx,
@@ -924,6 +1033,54 @@ class FraudCaseApp:
         for prod in self.product_frames:
             prod.update_team_options()
         log_event("navegacion", "Actualizó opciones de colaborador", self.logs)
+
+    def _toggle_team_detail(self):
+        if getattr(self, "_team_detail_visible", False):
+            self._hide_team_detail()
+        else:
+            self._show_team_detail()
+
+    def _show_team_detail(self):
+        if not self.team_container:
+            return
+        if not getattr(self, "_team_detail_visible", False):
+            try:
+                self.team_container.pack(fill="x", pady=5)
+            except tk.TclError:
+                return
+        self._team_detail_visible = True
+        if self.team_toggle_btn:
+            self.team_toggle_btn.config(text="Ocultar formulario")
+
+    def _hide_team_detail(self):
+        if not self.team_container:
+            return
+        try:
+            self.team_container.pack_forget()
+        except tk.TclError:
+            return
+        self._team_detail_visible = False
+        if self.team_toggle_btn:
+            self.team_toggle_btn.config(text="Mostrar formulario")
+
+    def _on_add_team_click(self):
+        self.add_team()
+
+    def _edit_selected_team_member(self):
+        if not self.team_compact_table:
+            return
+        selection = self.team_compact_table.selection()
+        if not selection:
+            return
+        values = self.team_compact_table.item(selection[0], "values")
+        collaborator_id = values[0] if values else ""
+        frame = self._find_team_frame(collaborator_id)
+        if frame:
+            self._show_team_detail()
+            try:
+                frame.frame.focus_set()
+            except tk.TclError:
+                pass
 
     def build_products_tab(self, parent):
         frame = ttk.Frame(parent)
@@ -1650,6 +1807,48 @@ class FraudCaseApp:
             self._hide_import_progress()
             if not self._catalog_loading:
                 self._set_catalog_dependent_state(False)
+
+    def _refresh_compact_views(self, sections=None, data=None):
+        dataset = data if data is not None else None
+        targets = sections or {"clientes", "colaboradores"}
+        if "clientes" in targets and self.clients_compact_table:
+            if dataset is None:
+                dataset = self.gather_data()
+            rows = self._build_summary_rows("clientes", dataset)
+            self._render_compact_rows(self.clients_compact_table, rows)
+        if "colaboradores" in targets and self.team_compact_table:
+            if dataset is None:
+                dataset = self.gather_data()
+            rows = self._build_summary_rows("colaboradores", dataset)
+            self._render_compact_rows(self.team_compact_table, rows)
+
+    @staticmethod
+    def _render_compact_rows(tree, rows):
+        try:
+            tree.delete(*tree.get_children())
+            for row in rows:
+                tree.insert("", "end", values=row)
+        except tk.TclError:
+            return
+
+    def _compact_views_present(self, sections):
+        return (
+            ("clientes" in sections and self.clients_compact_table is not None)
+            or ("colaboradores" in sections and self.team_compact_table is not None)
+        )
+
+    def _build_compact_table(self, parent, columns, height=6):
+        frame = ttk.Frame(parent)
+        frame.pack(fill="both", expand=True)
+        tree = ttk.Treeview(frame, columns=[col for col, _ in columns], show="headings", height=height)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        for col_id, heading in columns:
+            tree.heading(col_id, text=heading)
+            tree.column(col_id, width=140, stretch=True)
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        return tree
 
     def _start_background_import(self, task_label, button, worker, ui_callback, error_prefix, ui_error_prefix=None):
         self._ensure_import_runtime_state()
@@ -2623,13 +2822,24 @@ class FraudCaseApp:
     def _schedule_summary_refresh(self, sections=None, data=None):
         """Marca secciones como sucias y actualiza el resumen cuando proceda."""
 
-        if not self.summary_tables:
-            return
         normalized = self._normalize_summary_sections(sections)
-        if not normalized:
+        requested_sections = set(normalized)
+        if not requested_sections:
+            if sections is None:
+                requested_sections = set(self.summary_tables.keys())
+            elif isinstance(sections, str):
+                requested_sections = {sections}
+            else:
+                requested_sections = set(sections or [])
+        dataset = data
+        if self._compact_views_present(requested_sections):
+            if dataset is None:
+                dataset = self.gather_data()
+            self._refresh_compact_views(sections=requested_sections, data=dataset)
+        if not self.summary_tables or not normalized:
             return
         self._summary_dirty_sections.update(normalized)
-        self._summary_pending_dataset = data
+        self._summary_pending_dataset = dataset
         summary_visible = self._is_summary_tab_visible()
         if not summary_visible:
             self._cancel_summary_refresh_job()
@@ -2643,7 +2853,7 @@ class FraudCaseApp:
             )
         except tk.TclError:
             self._summary_refresh_after_id = None
-            self._flush_summary_refresh(sections=normalized, data=data)
+            self._flush_summary_refresh(sections=normalized, data=dataset)
 
     def _run_scheduled_summary_refresh(self):
         self._summary_refresh_after_id = None
@@ -3860,6 +4070,48 @@ class FraudCaseApp:
             return
         log_event("validacion", message, self.logs)
 
+    def _compute_temp_signature(self, data: CaseData):
+        case = (data.get("caso") or {}) if isinstance(data, Mapping) else {}
+        clients = data.get("clientes", []) if isinstance(data, Mapping) else []
+        team = data.get("colaboradores", []) if isinstance(data, Mapping) else []
+        products = data.get("productos", []) if isinstance(data, Mapping) else []
+        reclamos = data.get("reclamos", []) if isinstance(data, Mapping) else []
+        involucs = data.get("involucramientos", []) if isinstance(data, Mapping) else []
+        total_investigated = self._sum_investigated_amounts(products)
+        return (
+            str(case.get("id_caso", "")).strip(),
+            str(case.get("tipo_informe", "")).strip(),
+            str(case.get("fecha_de_ocurrencia", "")).strip(),
+            len(clients),
+            len(team),
+            len(products),
+            len([r for r in reclamos if r]),
+            len([i for i in involucs if i]),
+            total_investigated,
+        )
+
+    def _sum_investigated_amounts(self, products: list[dict]) -> Decimal:
+        total = Decimal("0")
+        if not products:
+            return total
+        for product in products:
+            if not isinstance(product, Mapping):
+                continue
+            amount = parse_decimal_amount(product.get("monto_investigado"))
+            if amount is not None:
+                total += amount
+        return total
+
+    def _should_persist_temp(self, signature, now: datetime) -> bool:
+        last_signature = getattr(self, "_last_temp_signature", None)
+        last_saved_at = getattr(self, "_last_temp_saved_at", None)
+        if last_signature is None or last_saved_at is None:
+            return True
+        if signature != last_signature:
+            return True
+        elapsed = (now - last_saved_at).total_seconds()
+        return elapsed >= TEMP_AUTOSAVE_DEBOUNCE_SECONDS
+
     def request_autosave(self) -> None:
         self._autosave_dirty = True
         if self._autosave_job_id is not None:
@@ -3892,6 +4144,103 @@ class FraudCaseApp:
             self._autosave_dirty = False
             dataset = self.save_auto()
             self.save_temp_version(dataset)
+
+    def _trim_all_temp_versions(self) -> None:
+        base_dir = Path(BASE_DIR)
+        if not base_dir.exists():
+            return
+        case_ids = set()
+        for temp_file in base_dir.glob("*_temp_*.json"):
+            try:
+                name = temp_file.name
+            except OSError:
+                continue
+            if "_temp_" not in name:
+                continue
+            case_ids.add(name.split("_temp_", 1)[0])
+        for case_id in case_ids:
+            self._trim_temp_versions(case_id)
+
+    def _trim_temp_versions(self, case_id: str, preserve_filenames: Optional[set[str]] = None) -> None:
+        if not case_id:
+            case_id = "caso"
+        base_dir = Path(BASE_DIR)
+        cutoff = datetime.now() - timedelta(days=TEMP_AUTOSAVE_MAX_AGE_DAYS)
+        preserve = preserve_filenames or set()
+        files = sorted(
+            base_dir.glob(f"{case_id}_temp_*.json"),
+            key=lambda p: p.stat().st_mtime if p.exists() else 0,
+            reverse=True,
+        )
+        keep: list[Path] = []
+        prune: list[Path] = []
+        for temp_file in files:
+            try:
+                mtime = datetime.fromtimestamp(temp_file.stat().st_mtime)
+            except OSError:
+                continue
+            if temp_file.name in preserve:
+                keep.append(temp_file)
+                continue
+            if mtime < cutoff:
+                prune.append(temp_file)
+                continue
+            if len(keep) < TEMP_AUTOSAVE_MAX_PER_CASE:
+                keep.append(temp_file)
+            else:
+                prune.append(temp_file)
+        self._archive_and_remove(case_id, prune, base_dir)
+        keep_target = max(len(keep), len(preserve))
+        self._trim_external_temp_versions(case_id, keep_target, cutoff, preserve)
+
+    def _archive_and_remove(self, case_id: str, files: list[Path], base_dir: Path) -> None:
+        if not files:
+            return
+        if TEMP_AUTOSAVE_COMPRESS_OLD:
+            archive_path = base_dir / f"{case_id}_temp_archive.zip"
+            try:
+                archive_path.parent.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(archive_path, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+                    for file_path in files:
+                        try:
+                            archive.write(file_path, arcname=file_path.name)
+                        except OSError:
+                            continue
+            except OSError:
+                pass
+        for file_path in files:
+            with suppress(FileNotFoundError, OSError):
+                file_path.unlink()
+
+    def _trim_external_temp_versions(
+        self, case_id: str, keep_count: int, cutoff: datetime, preserve_filenames: Optional[set[str]] = None
+    ) -> None:
+        external_base = self._get_external_drive_path()
+        if not external_base:
+            return
+        case_folder = Path(external_base) / case_id
+        if not case_folder.exists():
+            return
+        preserve = preserve_filenames or set()
+        files = sorted(
+            case_folder.glob(f"{case_id}_temp_*.json"),
+            key=lambda p: p.stat().st_mtime if p.exists() else 0,
+            reverse=True,
+        )
+        kept = 0
+        for temp_file in files:
+            try:
+                mtime = datetime.fromtimestamp(temp_file.stat().st_mtime)
+            except OSError:
+                continue
+            if temp_file.name in preserve:
+                kept += 1
+                continue
+            if mtime < cutoff or kept >= keep_count:
+                with suppress(FileNotFoundError, OSError):
+                    temp_file.unlink()
+                continue
+            kept += 1
 
     def load_version_dialog(self):
         """Abre un diálogo para cargar una versión previa del formulario.
@@ -5116,12 +5465,25 @@ class FraudCaseApp:
             # el contenido completo del formulario.
         """
         data = self._ensure_case_data(data or self.gather_data())
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        now = datetime.now()
+        if self._last_temp_saved_at and now <= self._last_temp_saved_at:
+            now = self._last_temp_saved_at + timedelta(seconds=1)
+        signature = self._compute_temp_signature(data)
+        if not self._should_persist_temp(signature, now):
+            return
+        timestamp = now.strftime("%Y%m%d_%H%M%S")
         case_id = data.get('caso', {}).get('id_caso', '') or 'caso'
         filename = f"{case_id}_temp_{timestamp}.json"
-        json_payload = json.dumps(data.as_dict(), ensure_ascii=False, indent=2)
         target_path = Path(BASE_DIR) / filename
+        while target_path.exists():
+            now += timedelta(seconds=1)
+            timestamp = now.strftime("%Y%m%d_%H%M%S")
+            filename = f"{case_id}_temp_{timestamp}.json"
+            target_path = Path(BASE_DIR) / filename
+        json_payload = json.dumps(data.as_dict(), ensure_ascii=False, indent=2)
         primary_written = False
+        preserved = set()
+        external_written = False
         try:
             target_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -5134,6 +5496,7 @@ class FraudCaseApp:
             try:
                 target_path.write_text(json_payload, encoding='utf-8')
                 primary_written = True
+                preserved.add(filename)
             except OSError as ex:
                 # Registrar en el log pero no interrumpir
                 log_event(
@@ -5142,37 +5505,44 @@ class FraudCaseApp:
                     self.logs,
                 )
         external_base = self._get_external_drive_path()
-        if not external_base:
-            return
-        case_folder = Path(external_base) / case_id
-        try:
-            case_folder.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            log_event(
-                "validacion",
-                f"No se pudo preparar la carpeta externa para {case_id}: {exc}",
-                self.logs,
-            )
-            return
-        mirror_path = case_folder / filename
-        if primary_written:
+        if external_base:
+            case_folder = Path(external_base) / case_id
             try:
-                shutil.copy2(target_path, mirror_path)
-                return
+                case_folder.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
                 log_event(
                     "validacion",
-                    f"No se pudo copiar la versión temporal a la carpeta externa: {exc}",
+                    f"No se pudo preparar la carpeta externa para {case_id}: {exc}",
                     self.logs,
                 )
-        try:
-            mirror_path.write_text(json_payload, encoding='utf-8')
-        except OSError as exc:
-            log_event(
-                "validacion",
-                f"No se pudo escribir la versión temporal en la carpeta externa: {exc}",
-                self.logs,
-            )
+            else:
+                mirror_path = case_folder / filename
+                if primary_written:
+                    try:
+                        shutil.copy2(target_path, mirror_path)
+                        preserved.add(filename)
+                        external_written = True
+                    except OSError as exc:
+                        log_event(
+                            "validacion",
+                            f"No se pudo copiar la versión temporal a la carpeta externa: {exc}",
+                            self.logs,
+                        )
+                if not primary_written or not external_written:
+                    try:
+                        mirror_path.write_text(json_payload, encoding='utf-8')
+                        preserved.add(filename)
+                        external_written = True
+                    except OSError as exc:
+                        log_event(
+                            "validacion",
+                            f"No se pudo escribir la versión temporal en la carpeta externa: {exc}",
+                            self.logs,
+                        )
+        if primary_written or external_written:
+            self._last_temp_saved_at = now
+            self._last_temp_signature = signature
+            self._trim_temp_versions(case_id, preserved)
 
 
 # ---------------------------------------------------------------------------
