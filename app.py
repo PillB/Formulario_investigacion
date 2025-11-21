@@ -1159,58 +1159,139 @@ class FraudCaseApp:
         ) = text_widgets
 
     def build_actions_tab(self, parent):
+        PRIMARY_PADDING = (12, 6)
         frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True, padx=5, pady=5)
+        frame.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        frame.columnconfigure(0, weight=1)
+
         catalog_group = ttk.LabelFrame(frame, text="Catálogos de detalle")
-        catalog_group.pack(fill="x", expand=False, pady=(0, 10))
+        catalog_group.grid(row=0, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        catalog_group.columnconfigure(0, weight=1)
+        catalog_group.columnconfigure(1, weight=1)
+
         ttk.Label(
             catalog_group,
             textvariable=self.catalog_status_var,
-            wraplength=500,
+            wraplength=520,
             justify="left",
-        ).pack(anchor="w", padx=5, pady=(5, 2))
-        catalog_controls = ttk.Frame(catalog_group)
-        catalog_controls.pack(fill="x", padx=5, pady=(0, 5))
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+
         self.catalog_load_button = ttk.Button(
-            catalog_controls,
+            catalog_group,
             text="Cargar catálogos",
             command=self.request_catalog_loading,
+            padding=PRIMARY_PADDING,
         )
-        self.catalog_load_button.pack(side="left", padx=2)
+        self.catalog_load_button.grid(row=1, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            catalog_group,
+            text="Actualiza los catálogos para validar listas desplegables antes de importar datos.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=1, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        self.register_tooltip(
+            self.catalog_load_button,
+            "Descarga y sincroniza los catálogos requeridos para las validaciones.",
+        )
+
         self.catalog_skip_button = ttk.Button(
-            catalog_controls,
+            catalog_group,
             text="Iniciar sin catálogos",
             command=self._mark_catalogs_skipped,
         )
-        self.catalog_skip_button.pack(side="left", padx=2)
-        self.catalog_progress = ttk.Progressbar(catalog_controls, mode="indeterminate", length=160)
+        self.catalog_skip_button.grid(row=2, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            catalog_group,
+            text="Permite avanzar sin catálogos; usar sólo si ya se cuenta con datos validados.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=2, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+
+        self.catalog_progress = ttk.Progressbar(catalog_group, mode="indeterminate", length=160)
+        self.catalog_progress.grid(row=3, column=0, columnspan=2, sticky="we", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.catalog_progress.grid_remove()
         self._catalog_progress_visible = False
-        # Botones de importación
-        ttk.Label(frame, text="Importar datos masivos (CSV)").pack(anchor="w")
-        import_buttons = ttk.Frame(frame)
-        import_buttons.pack(anchor="w", pady=2)
-        btn_clientes = ttk.Button(import_buttons, text="Cargar clientes", command=self.import_clients)
-        btn_clientes.pack(side="left", padx=2)
+
+        import_group = ttk.LabelFrame(frame, text="Importar datos masivos (CSV)")
+        import_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        import_group.columnconfigure(0, weight=0)
+        import_group.columnconfigure(1, weight=1)
+
+        btn_clientes = ttk.Button(import_group, text="Cargar clientes", command=self.import_clients)
+        btn_clientes.grid(row=0, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            import_group,
+            text="Carga un lote de clientes para acelerar el registro masivo.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=0, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_clientes, "Importa clientes desde un CSV masivo.")
-        btn_colabs = ttk.Button(import_buttons, text="Cargar colaboradores", command=self.import_team_members)
-        btn_colabs.pack(side="left", padx=2)
+
+        btn_colabs = ttk.Button(import_group, text="Cargar colaboradores", command=self.import_team_members)
+        btn_colabs.grid(row=1, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            import_group,
+            text="Incorpora colaboradores y sus datos laborales para vincularlos al caso.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=1, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_colabs, "Importa colaboradores y sus datos laborales.")
-        btn_productos = ttk.Button(import_buttons, text="Cargar productos", command=self.import_products)
-        btn_productos.pack(side="left", padx=2)
+
+        btn_productos = ttk.Button(import_group, text="Cargar productos", command=self.import_products)
+        btn_productos.grid(row=2, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            import_group,
+            text="Agrega productos investigados con sus atributos validados.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=2, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_productos, "Carga productos investigados desde un CSV.")
-        btn_combo = ttk.Button(import_buttons, text="Cargar combinado", command=self.import_combined)
-        btn_combo.pack(side="left", padx=2)
+
+        btn_combo = ttk.Button(
+            import_group,
+            text="Cargar combinado",
+            command=self.import_combined,
+            padding=PRIMARY_PADDING,
+        )
+        btn_combo.grid(row=3, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            import_group,
+            text="Importa en un solo paso clientes, productos y colaboradores para iniciar rápido.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=3, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_combo, "Importa en un solo archivo clientes, productos y colaboradores.")
-        # Nuevos botones para riesgos, normas y reclamos
-        btn_riesgos = ttk.Button(import_buttons, text="Cargar riesgos", command=self.import_risks)
-        btn_riesgos.pack(side="left", padx=2)
+
+        btn_riesgos = ttk.Button(import_group, text="Cargar riesgos", command=self.import_risks)
+        btn_riesgos.grid(row=4, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            import_group,
+            text="Sincroniza la matriz de riesgos para alimentar la evaluación del caso.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=4, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_riesgos, "Carga la matriz de riesgos desde CSV.")
-        btn_normas = ttk.Button(import_buttons, text="Cargar normas", command=self.import_norms)
-        btn_normas.pack(side="left", padx=2)
+
+        btn_normas = ttk.Button(import_group, text="Cargar normas", command=self.import_norms)
+        btn_normas.grid(row=5, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            import_group,
+            text="Añade las normas vulneradas para documentar las transgresiones.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=5, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_normas, "Importa las normas vulneradas.")
-        btn_reclamos = ttk.Button(import_buttons, text="Cargar reclamos", command=self.import_claims)
-        btn_reclamos.pack(side="left", padx=2)
+
+        btn_reclamos = ttk.Button(import_group, text="Cargar reclamos", command=self.import_claims)
+        btn_reclamos.grid(row=6, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            import_group,
+            text="Vincula reclamos de clientes con los productos afectados.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=6, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_reclamos, "Vincula reclamos con los productos.")
+
         self.import_clients_button = btn_clientes
         self.import_team_button = btn_colabs
         self.import_products_button = btn_productos
@@ -1228,52 +1309,89 @@ class FraudCaseApp:
             btn_reclamos,
         ):
             self._register_catalog_dependent_widget(widget)
+
         ttk.Label(
-            frame,
+            import_group,
             textvariable=self.import_status_var,
-            wraplength=500,
+            wraplength=520,
             justify="left",
-        ).pack(anchor="w", pady=(2, 0))
-        self.import_progress = ttk.Progressbar(frame, mode="indeterminate", length=260)
+        ).grid(row=7, column=0, columnspan=2, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
+        self.import_progress = ttk.Progressbar(import_group, mode="indeterminate", length=260)
+        self.import_progress.grid(row=8, column=0, columnspan=2, sticky="we", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.import_progress.grid_remove()
         self._import_progress_visible = False
 
-        # Botones de guardado y carga
-        ttk.Label(frame, text="Guardar y cargar versiones").pack(anchor="w", pady=(10,2))
-        version_buttons = ttk.Frame(frame)
-        version_buttons.pack(anchor="w", pady=2)
-        btn_save = ttk.Button(version_buttons, text="Guardar y enviar", command=self.save_and_send)
-        btn_save.pack(side="left", padx=2)
+        action_group = ttk.LabelFrame(frame, text="Guardar, cargar y reportes")
+        action_group.grid(row=2, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        action_group.columnconfigure(0, weight=0)
+        action_group.columnconfigure(1, weight=1)
+
+        btn_save = ttk.Button(
+            action_group,
+            text="Guardar y enviar",
+            command=self.save_and_send,
+            padding=PRIMARY_PADDING,
+        )
+        btn_save.grid(row=0, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            action_group,
+            text="Valida el formulario, previene duplicados y genera los archivos obligatorios.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=0, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_save, "Valida y exporta todos los archivos requeridos.")
-        btn_load = ttk.Button(version_buttons, text="Cargar versión", command=self.load_version_dialog)
-        btn_load.pack(side="left", padx=2)
+
+        btn_load = ttk.Button(action_group, text="Cargar versión", command=self.load_version_dialog)
+        btn_load.grid(row=1, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            action_group,
+            text="Restaura una versión previa desde JSON para continuar el registro.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=1, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_load, "Restaura una versión previa en formato JSON.")
+
         btn_clear = ttk.Button(
-            version_buttons,
+            action_group,
             text="Borrar todos los datos",
             command=lambda: self.clear_all(notify=True),
         )
-        btn_clear.pack(side="left", padx=2)
+        btn_clear.grid(row=2, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            action_group,
+            text="Limpia el formulario completo cuando se requiera iniciar un caso nuevo.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=2, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_clear, "Limpia el formulario completo para iniciar desde cero.")
 
-        report_buttons = ttk.Frame(frame)
-        report_buttons.pack(anchor="w", pady=2)
         self.btn_docx = ttk.Button(
-            report_buttons,
+            action_group,
             text="Generar Word (.docx)",
             command=self.generate_docx_report,
             default="active" if self._docx_available else "normal",
             state=("disabled" if not self._docx_available else "normal"),
         )
-        self.btn_docx.pack(side="left", padx=2)
+        self.btn_docx.grid(row=3, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         docx_tooltip = (
             "Genera el informe principal en Word utilizando los datos validados."
             if self._docx_available
             else f"{DOCX_MISSING_MESSAGE} Usa el informe Markdown como respaldo."
         )
         self.register_tooltip(self.btn_docx, docx_tooltip)
+        docx_help = ttk.Label(
+            action_group,
+            text=(
+                "Produce el informe formal en Word; usa Markdown si falta la dependencia."
+            ),
+            wraplength=360,
+            justify="left",
+        )
+        docx_help.grid(row=3, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        md_row = 4
         if not self._docx_available:
             ttk.Label(
-                report_buttons,
+                action_group,
                 text=(
                     "El botón de Word está deshabilitado porque falta la "
                     "dependencia opcional. Usa 'pip install python-docx' o "
@@ -1282,20 +1400,32 @@ class FraudCaseApp:
                 foreground="#b26a00",
                 wraplength=520,
                 justify="left",
-            ).pack(side="left", padx=6)
+            ).grid(row=4, column=0, columnspan=2, sticky="w", padx=COL_PADX, pady=(0, ROW_PADY))
+            md_row = 5
+
         btn_md = ttk.Button(
-            report_buttons,
+            action_group,
             text="Generar informe (.md)",
             command=self.generate_md_report,
         )
-        btn_md.pack(side="left", padx=2)
+        btn_md.grid(row=md_row, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        ttk.Label(
+            action_group,
+            text="Genera el respaldo en Markdown para compartir de forma ligera.",
+            wraplength=360,
+            justify="left",
+        ).grid(row=md_row, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(
             btn_md,
             "Crea una copia del informe en Markdown como respaldo manual.",
         )
 
-        # Información adicional
-        ttk.Label(frame, text="El auto‑guardado se realiza automáticamente en un archivo JSON").pack(anchor="w", pady=(10,2))
+        ttk.Label(
+            action_group,
+            text="El auto‑guardado se realiza automáticamente en un archivo JSON",
+            wraplength=520,
+            justify="left",
+        ).grid(row=md_row + 1, column=0, columnspan=2, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
 
     def _register_catalog_dependent_widget(self, widget):
@@ -1324,7 +1454,7 @@ class FraudCaseApp:
         if not self.catalog_progress:
             return
         if not self._catalog_progress_visible:
-            self.catalog_progress.pack(side="left", fill="x", expand=True, padx=5)
+            self.catalog_progress.grid()
             self._catalog_progress_visible = True
         try:
             self.catalog_progress.start(10)
@@ -1339,7 +1469,7 @@ class FraudCaseApp:
         except tk.TclError:
             pass
         if self._catalog_progress_visible:
-            self.catalog_progress.pack_forget()
+            self.catalog_progress.grid_remove()
             self._catalog_progress_visible = False
 
     def _prompt_initial_catalog_loading(self):
@@ -1478,7 +1608,7 @@ class FraudCaseApp:
         if not self.import_progress:
             return
         if not self._import_progress_visible:
-            self.import_progress.pack(anchor="w", padx=5, pady=(0, 5))
+            self.import_progress.grid()
             self._import_progress_visible = True
         try:
             self.import_progress.start(10)
@@ -1494,7 +1624,7 @@ class FraudCaseApp:
         except tk.TclError:
             pass
         if self._import_progress_visible:
-            self.import_progress.pack_forget()
+            self.import_progress.grid_remove()
             self._import_progress_visible = False
 
     def _on_import_started(self, task_label):
