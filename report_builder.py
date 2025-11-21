@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
@@ -20,6 +20,9 @@ DOCX_MISSING_MESSAGE = (
 from validators import parse_decimal_amount
 
 
+PLACEHOLDER = "No aplica / Sin información registrada."
+
+
 @dataclass
 class CaseData(Mapping):
     """Estructura normalizada del caso y sus entidades relacionadas."""
@@ -33,6 +36,11 @@ class CaseData(Mapping):
     riesgos: List[Dict[str, Any]]
     normas: List[Dict[str, Any]]
     analisis: Dict[str, Any]
+    encabezado: Dict[str, Any]
+    operaciones: List[Dict[str, Any]]
+    anexos: List[Dict[str, Any]]
+    firmas: List[Dict[str, Any]]
+    recomendaciones_categorias: Dict[str, Any]
     _dict_cache: Dict[str, Any] = field(default=None, init=False, repr=False)
 
     def as_dict(self) -> Dict[str, Any]:
@@ -47,6 +55,11 @@ class CaseData(Mapping):
                 "riesgos": self.riesgos,
                 "normas": self.normas,
                 "analisis": self.analisis,
+                "encabezado": self.encabezado,
+                "operaciones": self.operaciones,
+                "anexos": self.anexos,
+                "firmas": self.firmas,
+                "recomendaciones_categorias": self.recomendaciones_categorias,
             }
         return self._dict_cache
 
@@ -74,6 +87,11 @@ class CaseData(Mapping):
             riesgos=list(payload.get("riesgos") or []),
             normas=list(payload.get("normas") or []),
             analisis=dict(payload.get("analisis") or {}),
+            encabezado=dict(payload.get("encabezado") or {}),
+            operaciones=list(payload.get("operaciones") or []),
+            anexos=list(payload.get("anexos") or []),
+            firmas=list(payload.get("firmas") or []),
+            recomendaciones_categorias=dict(payload.get("recomendaciones_categorias") or {}),
         )
 
 
@@ -108,6 +126,57 @@ def normalize_analysis_texts(analysis: Mapping[str, Any] | None) -> Dict[str, st
     return normalized
 
 
+def _safe_text(value: Any, *, placeholder: str = PLACEHOLDER) -> str:
+    text = str(value or "").strip()
+    return text or placeholder
+
+
+def _format_decimal_value(value: Optional[Decimal]) -> str:
+    if value is None:
+        return PLACEHOLDER
+    return f"{value.quantize(Decimal('0.01'))}"
+
+
+def _sum_amounts(items: Iterable[Mapping[str, Any]], key: str) -> Decimal:
+    total = Decimal("0")
+    for item in items:
+        amount = parse_decimal_amount(item.get(key)) if isinstance(item, Mapping) else None
+        if amount is not None:
+            total += amount
+    return total
+
+
+def _aggregate_amounts(
+    products: List[Dict[str, Any]],
+    encabezado: Mapping[str, Any],
+) -> Dict[str, Optional[Decimal]]:
+    def get_amount(key: str, fallback_key: Optional[str] = None) -> Optional[Decimal]:
+        raw_value = encabezado.get(key) if isinstance(encabezado, Mapping) else None
+        if raw_value not in (None, ""):
+            parsed = parse_decimal_amount(raw_value)
+            if parsed is not None:
+                return parsed
+        if fallback_key:
+            return _sum_amounts(products, fallback_key)
+        return None
+
+    perdida_total = get_amount("perdida_total")
+    if perdida_total is None:
+        perdida_total = _sum_amounts(products, "monto_perdida_fraude") + _sum_amounts(
+            products, "monto_falla_procesos"
+        )
+
+    return {
+        "investigado": get_amount("importe_investigado", "monto_investigado"),
+        "contingencia": get_amount("contingencia", "monto_contingencia"),
+        "perdida_total": perdida_total if perdida_total != Decimal("0") else perdida_total,
+        "normal": get_amount("normal", "monto_normal"),
+        "vencido": get_amount("vencido", "monto_vencido"),
+        "judicial": get_amount("judicial", "monto_judicial"),
+        "castigo": get_amount("castigo", "monto_castigo"),
+    }
+
+
 def build_report_filename(tipo_informe: str | None, case_id: str | None, extension: str) -> str:
     safe_tipo_informe = _normalize_report_segment(tipo_informe, "Generico")
     safe_case_id = _normalize_report_segment(case_id, "caso")
@@ -120,50 +189,6 @@ def _create_word_document():
     return DocxDocument()
 
 
-def _build_summary_paragraphs(
-    case: Mapping[str, Any] | Dict[str, Any],
-    clients: List[Dict[str, Any]],
-    team: List[Dict[str, Any]],
-    products: List[Dict[str, Any]],
-    total_inv: Decimal,
-) -> List[str]:
-    formatted_total = total_inv.quantize(Decimal('0.01'))
-    data_available = bool(clients or team or products or any(case.values()))
-    if data_available or total_inv:
-        counts_paragraph = (
-            "Resumen cuantitativo: "
-            f"Se registran {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos vinculados. "
-            f"Monto afectado total {formatted_total}."
-        )
-    else:
-        counts_paragraph = "Resumen cuantitativo: Sin información registrada."
-
-    modalities = []
-    modality = (case.get('modalidad') or '').strip() if case else ''
-    if modality:
-        modalities.append(modality)
-    for prod in products:
-        prod_modalidad = (prod.get('modalidad') or '').strip()
-        if prod_modalidad:
-            modalities.append(prod_modalidad)
-    unique_modalities = sorted(set(modalities))
-
-    category_text = " / ".join(
-        filter(None, [str(case.get('categoria1', '') or '').strip(), str(case.get('categoria2', '') or '').strip()])
-    )
-    if unique_modalities or category_text:
-        modality_parts = []
-        if unique_modalities:
-            modality_parts.append(f"Modalidades destacadas: {', '.join(unique_modalities)}.")
-        if category_text:
-            modality_parts.append(f"Tipificación: {category_text}.")
-        modalities_paragraph = "Modalidades y tipificación: " + " ".join(modality_parts)
-    else:
-        modalities_paragraph = "Modalidades y tipificación: Sin información registrada."
-
-    return [counts_paragraph, modalities_paragraph]
-
-
 def _build_report_context(case_data: CaseData):
     case = case_data.caso
     analysis = normalize_analysis_texts(case_data.analisis)
@@ -172,116 +197,236 @@ def _build_report_context(case_data: CaseData):
     products = case_data.productos
     riesgos = case_data.riesgos
     normas = case_data.normas
-    total_inv = sum(
-        [parse_decimal_amount(p.get('monto_investigado')) or Decimal('0') for p in products],
-        start=Decimal('0'),
-    )
-    destinatarios = sorted({
-        " - ".join(filter(None, [col.get('division', '').strip(), col.get('area', '').strip(), col.get('servicio', '').strip()]))
-        for col in team
-        if any([col.get('division'), col.get('area'), col.get('servicio')])
-    })
-    destinatarios = [d for d in destinatarios if d]
-    destinatarios_text = ", ".join(destinatarios) if destinatarios else "Sin divisiones registradas"
-    reclamos_por_producto: Dict[str, List[Dict[str, Any]]] = {}
-    for record in case_data.reclamos:
-        pid = record.get('id_producto')
-        if not pid:
-            continue
-        reclamos_por_producto.setdefault(pid, []).append(record)
-    client_rows = [
-        [
-            f"Cliente {idx}",
-            client.get('tipo_id', ''),
-            client.get('id_cliente', ''),
-            client.get('flag', ''),
-            client.get('telefonos', ''),
-            client.get('correos', ''),
-            client.get('direcciones', ''),
-            client.get('accionado', ''),
-        ]
-        for idx, client in enumerate(clients, start=1)
-    ]
-    team_rows = [
-        [
-            f"Colaborador {idx}",
-            col.get('id_colaborador', ''),
-            col.get('flag', ''),
-            col.get('division', ''),
-            col.get('area', ''),
-            col.get('servicio', ''),
-            col.get('puesto', ''),
-            col.get('nombre_agencia', ''),
-            col.get('codigo_agencia', ''),
-            col.get('tipo_falta', ''),
-            col.get('tipo_sancion', ''),
-        ]
-        for idx, col in enumerate(team, start=1)
-    ]
-    product_rows = []
-    for idx, prod in enumerate(products, start=1):
-        claim_values = reclamos_por_producto.get(prod.get('id_producto'), [])
-        claims_text = "; ".join(
-            f"{rec.get('id_reclamo', '')} / {rec.get('codigo_analitica', '')}"
-            for rec in claim_values
+    encabezado = case_data.encabezado or {}
+    operaciones = case_data.operaciones or []
+    reclamos = case_data.reclamos or []
+    recomendaciones = case_data.recomendaciones_categorias or {}
+
+    destinatarios = encabezado.get("dirigido_a")
+    if not destinatarios:
+        destinatarios_set = sorted(
+            {
+                " - ".join(
+                    filter(
+                        None,
+                        [
+                            str(col.get("division", "")).strip(),
+                            str(col.get("area", "")).strip(),
+                            str(col.get("servicio", "")).strip(),
+                        ],
+                    )
+                )
+                for col in team
+                if any([col.get("division"), col.get("area"), col.get("servicio")])
+            }
         )
-        product_rows.append([
-            f"Producto {idx}",
-            prod.get('id_producto', ''),
-            prod.get('id_cliente', ''),
-            prod.get('tipo_producto', ''),
-            prod.get('canal', ''),
-            prod.get('proceso', ''),
-            prod.get('categoria1', ''),
-            prod.get('categoria2', ''),
-            prod.get('modalidad', ''),
-            (
-                f"INV:{prod.get('monto_investigado', '')} | PER:{prod.get('monto_perdida_fraude', '')} "
-                f"| FALLA:{prod.get('monto_falla_procesos', '')} | CONT:{prod.get('monto_contingencia', '')} "
-                f"| REC:{prod.get('monto_recuperado', '')} | PAGO:{prod.get('monto_pago_deuda', '')}"
+        destinatarios = ", ".join([d for d in destinatarios_set if d])
+    destinatarios_text = destinatarios or PLACEHOLDER
+
+    amounts = _aggregate_amounts(products, encabezado)
+    categoria = " / ".join(
+        filter(None, [str(case.get("categoria1", "")).strip(), str(case.get("categoria2", "")).strip()])
+    )
+    tipologia = _safe_text(encabezado.get("tipologia_evento") or case.get("tipologia_evento") or case.get("modalidad"))
+    procesos = encabezado.get("procesos_impactados") or ", ".join(
+        sorted({str(prod.get("proceso", "")).strip() for prod in products if prod.get("proceso")})
+    )
+    analiticas = encabezado.get("analitica_contable")
+    if not analiticas:
+        codigos_analitica = sorted(
+            {str(rec.get("codigo_analitica", "")).strip() for rec in reclamos if rec.get("codigo_analitica")}
+        )
+        analiticas = ", ".join(filter(None, codigos_analitica))
+
+    productos_texto = encabezado.get("producto") or ", ".join(
+        sorted({str(prod.get("tipo_producto", "")).strip() or str(prod.get("producto", "")).strip() for prod in products})
+    )
+    reclamos_count = encabezado.get("numero_reclamos") or len(reclamos)
+
+    header_headers = [
+        "Dirigido a",
+        "Referencia",
+        "Área de Reporte",
+        "Fecha de reporte",
+        "Categoría del evento",
+        "Tipología de evento",
+        "Importe investigado",
+        "Contingencia",
+        "Pérdida total",
+        "Normal",
+        "Vencido",
+        "Judicial",
+        "Castigo",
+        "Analítica Contable",
+        "Centro de Costos",
+        "Producto",
+        "Procesos impactados",
+        "N° de Reclamos",
+    ]
+
+    referencia = _safe_text(
+        encabezado.get("referencia")
+        or case.get("referencia")
+        or (
+            f"{len(team)} colaboradores investigados, {len(products)} productos afectados, "
+            f"monto investigado total {_format_decimal_value(amounts['investigado'])} y modalidad {case.get('modalidad', '')}."
+        )
+    )
+
+    header_row = [
+        destinatarios_text,
+        referencia,
+        _safe_text(encabezado.get("area_reporte") or case.get("area_reporte")),
+        _safe_text(encabezado.get("fecha_reporte") or case.get("fecha_reporte")),
+        _safe_text(categoria),
+        tipologia,
+        _format_decimal_value(amounts.get("investigado")),
+        _format_decimal_value(amounts.get("contingencia")),
+        _format_decimal_value(amounts.get("perdida_total")),
+        _format_decimal_value(amounts.get("normal")),
+        _format_decimal_value(amounts.get("vencido")),
+        _format_decimal_value(amounts.get("judicial")),
+        _format_decimal_value(amounts.get("castigo")),
+        _safe_text(analiticas),
+        _safe_text(encabezado.get("centro_costos") or case.get("centro_costos")),
+        _safe_text(productos_texto),
+        _safe_text(procesos),
+        _safe_text(reclamos_count),
+    ]
+
+    def _collaborator_name(record: Mapping[str, Any]) -> str:
+        parts = [record.get("nombres"), record.get("apellidos")]
+        joined = " ".join(filter(None, parts)).strip()
+        if joined:
+            return joined
+        return _safe_text(record.get("nombre_completo") or record.get("nombres_apellidos") or record.get("nombre"))
+
+    collaborator_rows = [
+        [
+            _collaborator_name(col),
+            _safe_text(col.get("id_colaborador") or col.get("matricula"), placeholder="-"),
+            _safe_text(col.get("puesto") or col.get("cargo"), placeholder="-"),
+            _safe_text(col.get("tipo_falta") or col.get("falta"), placeholder="-"),
+            _safe_text(col.get("fecha_carta_inmediatez") or col.get("fecha_carta_inmediate"), placeholder="-"),
+            _safe_text(col.get("fecha_carta_renuncia"), placeholder="-"),
+        ]
+        for col in team
+    ]
+
+    def _build_operation_row(idx: int, op: Mapping[str, Any]) -> List[str]:
+        importe_desemb = parse_decimal_amount(op.get("importe_desembolsado") or op.get("monto_investigado"))
+        saldo_deudor = parse_decimal_amount(op.get("saldo_deudor") or op.get("monto_contingencia"))
+        return [
+            str(op.get("numero") or idx),
+            _safe_text(op.get("fecha_aprobacion") or op.get("fecha") or op.get("fecha_aprob"), placeholder="-"),
+            _safe_text(
+                op.get("cliente")
+                or op.get("cliente_dni")
+                or op.get("id_cliente")
+                or op.get("cliente_documento"),
+                placeholder="-",
             ),
-            claims_text,
-        ])
+            _safe_text(op.get("ingreso_bruto_mensual") or op.get("ingresos"), placeholder="-"),
+            _safe_text(op.get("empresa_empleadora"), placeholder="-"),
+            _safe_text(op.get("vendedor_inmueble"), placeholder="-"),
+            _safe_text(op.get("vendedor_credito"), placeholder="-"),
+            _safe_text(op.get("producto") or op.get("tipo_producto"), placeholder="-"),
+            _format_decimal_value(importe_desemb),
+            _format_decimal_value(saldo_deudor),
+            _safe_text(op.get("status") or op.get("estado"), placeholder="-"),
+        ]
+
+    source_operaciones = operaciones or products
+    operation_rows = []
+    total_desembolso = Decimal("0")
+    total_saldo = Decimal("0")
+    for idx, op in enumerate(source_operaciones, start=1):
+        if not isinstance(op, Mapping):
+            continue
+        importe_desemb = parse_decimal_amount(op.get("importe_desembolsado") or op.get("monto_investigado"))
+        saldo_deudor = parse_decimal_amount(op.get("saldo_deudor") or op.get("monto_contingencia"))
+        if importe_desemb is not None:
+            total_desembolso += importe_desemb
+        if saldo_deudor is not None:
+            total_saldo += saldo_deudor
+        operation_rows.append(_build_operation_row(idx, op))
+
+    operation_table_rows = list(operation_rows)
+    if operation_rows:
+        operation_table_rows.append(
+            [
+                "Totales",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                _format_decimal_value(total_desembolso),
+                _format_decimal_value(total_saldo),
+                "",
+            ]
+        )
+
     risk_rows = [
         [
-            risk.get('id_riesgo', ''),
-            risk.get('lider', ''),
-            risk.get('criticidad', ''),
-            risk.get('exposicion_residual', ''),
-            risk.get('planes_accion', ''),
+            _safe_text(risk.get("lider") or risk.get("lider_riesgo"), placeholder="-"),
+            _safe_text(risk.get("id_riesgo") or risk.get("id_riesgo_grc"), placeholder="-"),
+            _safe_text(risk.get("descripcion") or risk.get("descripcion_riesgo"), placeholder="-"),
+            _safe_text(risk.get("criticidad") or risk.get("criticidad_riesgo"), placeholder="-"),
+            _format_decimal_value(parse_decimal_amount(risk.get("exposicion_residual"))),
+            _safe_text(risk.get("planes_accion") or risk.get("id_plan_accion"), placeholder="-"),
         ]
         for risk in riesgos
     ]
+
     norm_rows = [
         [
-            norm.get('id_norma', ''),
-            norm.get('descripcion', ''),
-            norm.get('fecha_vigencia', ''),
+            _safe_text(norm.get("id_norma") or norm.get("norma"), placeholder="-"),
+            _safe_text(norm.get("descripcion") or norm.get("detalle"), placeholder="-"),
         ]
         for norm in normas
     ]
-    summary_paragraphs = _build_summary_paragraphs(case, clients, team, products, total_inv)
-    documented_counts = (
-        f"Se documentaron {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos."
-    )
+
+    def _normalize_recommendation_list(value: Any) -> List[str]:
+        if isinstance(value, str):
+            value = [value] if value.strip() else []
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    rec_operativas = _normalize_recommendation_list(recomendaciones.get("operativo") or recomendaciones.get("operativas"))
+    rec_laborales = _normalize_recommendation_list(recomendaciones.get("laboral") or recomendaciones.get("laborales"))
+    rec_legales = _normalize_recommendation_list(recomendaciones.get("legal") or recomendaciones.get("legales"))
+
+    if not (rec_operativas or rec_laborales or rec_legales):
+        text = analysis.get("recomendaciones", "")
+        if text and text != PLACEHOLDER:
+            rec_operativas = [text]
+
     return {
-        'case': case,
-        'analysis': analysis,
-        'total_investigado': total_inv,
-        'destinatarios_text': destinatarios_text,
-        'client_rows': client_rows,
-        'team_rows': team_rows,
-        'product_rows': product_rows,
-        'risk_rows': risk_rows,
-        'norm_rows': norm_rows,
-        'summary_paragraphs': summary_paragraphs,
-        'documented_counts': documented_counts,
+        "case": case,
+        "analysis": analysis,
+        "header_headers": header_headers,
+        "header_row": header_row,
+        "collaborator_rows": collaborator_rows,
+        "operation_rows": operation_table_rows,
+        "risk_rows": risk_rows,
+        "norm_rows": norm_rows,
+        "recomendaciones": {
+            "laboral": rec_laborales,
+            "operativo": rec_operativas,
+            "legal": rec_legales,
+        },
+        "anexos": case_data.anexos or [],
+        "firmas": case_data.firmas or [],
     }
 
 
-def _md_table(headers: Iterable[str], rows: List[List[Any]]) -> List[str]:
+def _md_table(headers: Iterable[str], rows: List[List[Any]], *, placeholder: str = PLACEHOLDER) -> List[str]:
     if not rows:
-        return ["Sin registros."]
+        return [placeholder]
     safe = lambda cell: str(cell or '').replace('|', '\\|')
     lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(['---'] * len(headers)) + " |"]
     for row in rows:
@@ -289,164 +434,303 @@ def _md_table(headers: Iterable[str], rows: List[List[Any]]) -> List[str]:
     return lines
 
 
+def _md_list(items: List[str]) -> List[str]:
+    if not items:
+        return [PLACEHOLDER]
+    return [f"- {item}" for item in items]
+
+
+def _format_anexos(anexos: List[Dict[str, Any]]) -> List[str]:
+    lines: List[str] = []
+    for idx, anexo in enumerate(anexos, start=1):
+        if isinstance(anexo, Mapping):
+            titulo = anexo.get("titulo") or anexo.get("title") or anexo.get("nombre")
+            descripcion = anexo.get("descripcion") or anexo.get("detalle") or ""
+            label = titulo or f"Anexo {idx}"
+            text = f"{label}" + (f" - {descripcion}" if descripcion else "")
+            if text.strip():
+                lines.append(text.strip())
+        elif str(anexo).strip():
+            lines.append(str(anexo).strip())
+    return lines
+
+
+def _format_firmas(firmas: List[Dict[str, Any]]) -> List[str]:
+    lines: List[str] = []
+    for firma in firmas:
+        if isinstance(firma, Mapping):
+            nombre = firma.get("nombre") or firma.get("responsable") or ""
+            cargo = firma.get("cargo") or firma.get("puesto") or ""
+            if nombre or cargo:
+                parts = [part for part in [nombre, cargo] if part]
+                lines.append(" – ".join(parts))
+        elif str(firma).strip():
+            lines.append(str(firma).strip())
+    return lines
+
+
+def _section_state(has_data: bool) -> str:
+    return "Con información" if has_data else PLACEHOLDER
+
+
+def _build_sections_summary(context: Mapping[str, Any], analysis: Mapping[str, Any]) -> List[List[str]]:
+    recommendations = context["recomendaciones"]
+    return [
+        ["Encabezado Institucional", "Tabla", _section_state(any(val != PLACEHOLDER for val in context["header_row"]))],
+        ["Antecedentes", "Narrativa", _section_state(bool(analysis.get("antecedentes")))],
+        ["Colaboradores", "Tabla", _section_state(bool(context["collaborator_rows"]))],
+        ["Modus operandi", "Narrativa", _section_state(bool(analysis.get("modus_operandi")))],
+        ["Principales Hallazgos", "Tabla + texto", _section_state(bool(context["operation_rows"]))],
+        ["Descargos", "Narrativa", _section_state(bool(analysis.get("descargos")))],
+        ["Riesgos identificados", "Tabla", _section_state(bool(context["risk_rows"]))],
+        ["Normas transgredidas", "Tabla", _section_state(bool(context["norm_rows"]))],
+        ["Conclusiones", "Narrativa", _section_state(bool(analysis.get("conclusiones")))],
+        [
+            "Recomendaciones",
+            "Listas",
+            _section_state(
+                bool(recommendations["laboral"] or recommendations["operativo"] or recommendations["legal"])
+            ),
+        ],
+        ["Anexos", "Lista", _section_state(bool(context["anexos"]))],
+        ["Firma", "Lista", _section_state(bool(context["firmas"]))],
+    ]
+
+
 def build_md(case_data: CaseData) -> str:
     context = _build_report_context(case_data)
-    case = context['case']
-    analysis = context['analysis']
+    case = context["case"]
+    analysis = context["analysis"]
 
-    lines = [
-        "Banco de Crédito - BCP",
-        "SEGURIDAD CORPORATIVA, INVESTIGACIONES & CRIMEN CIBERNÉTICO",
-        "INVESTIGACIONES & CIBERCRIMINOLOGÍA",
-        f"Informe {case.get('tipo_informe', '')} N.{case.get('id_caso', '')}",
-        f"Dirigido a: {context['destinatarios_text']}",
-        (
-            "Referencia: "
-            f"{len(context['team_rows'])} colaboradores investigados, {len(context['product_rows'])} productos afectados, "
-            f"monto investigado total {context['total_investigado']:.2f} y modalidad {case.get('modalidad', '')}."
-        ),
+    header_lines = [
+        "**BANCO DE CRÉDITO – BCP**",
+        "**SEGURIDAD CORPORATIVA, INTELIGENCIA & CRIMEN CIBERNÉTICO**",
+        "**INVESTIGACIONES & CIBERCRIMINOLOGÍA**",
+        f"**Informe de Gerencia** {case.get('tipo_informe', '')} N° {case.get('id_caso', '')}",
+        f"{_safe_text(case.get('lugar'))}, {_safe_text(case.get('fecha_informe'))}",
         "",
-        "## 1. Antecedentes",
-        analysis.get('antecedentes') or "Pendiente",
-        "",
-        "## 2. Tabla de clientes",
+        "## Encabezado Institucional",
     ]
-    lines.extend(_md_table([
-        "Cliente", "Tipo ID", "ID", "Flag", "Teléfonos", "Correos", "Direcciones", "Accionado"
-    ], context['client_rows']))
-    lines.extend([
-        "",
-        "## 3. Tabla de team members involucrados",
-    ])
-    lines.extend(_md_table([
-        "Colaborador", "ID", "Flag", "División", "Área", "Servicio", "Puesto", "Agencia", "Código", "Falta", "Sanción"
-    ], context['team_rows']))
-    lines.extend([
-        "",
-        "## 4. Tabla de productos combinado",
-    ])
-    lines.extend(_md_table([
-        "Registro", "ID", "Cliente", "Tipo", "Canal", "Proceso", "Cat.1", "Cat.2", "Modalidad", "Montos", "Reclamo/Analítica"
-    ], context['product_rows']))
-    lines.extend([
-        "",
-        "## 5. Descripción breve automatizada",
-    ])
-    lines.append(context['documented_counts'])
-    lines.extend(context['summary_paragraphs'])
-    lines.append("")
-    lines.extend([
-        "## 6. Modus Operandi",
-        analysis.get('modus_operandi') or "Pendiente",
-        "",
-        "## 7. Hallazgos Principales",
-        analysis.get('hallazgos') or "Pendiente",
-        "",
-        "## 8. Descargo de colaboradores",
-        analysis.get('descargos') or "Pendiente",
-        "",
-        "## 9. Tabla de riesgos identificados",
-    ])
-    lines.extend(_md_table([
-        "ID Riesgo", "Líder", "Criticidad", "Exposición US$", "Planes"
-    ], context['risk_rows']))
-    lines.extend([
-        "",
-        "## 10. Tabla de normas transgredidas",
-    ])
-    lines.extend(_md_table([
-        "N° de norma", "Descripción", "Fecha de vigencia"
-    ], context['norm_rows']))
-    lines.extend([
-        "",
-        "## 11. Conclusiones",
-        analysis.get('conclusiones') or "Pendiente",
-        "",
-        "## 12. Recomendaciones y mejoras de procesos",
-        analysis.get('recomendaciones') or "Pendiente",
-        "",
-    ])
+
+    lines = list(header_lines)
+    lines.extend(_md_table(context["header_headers"], [context["header_row"]]))
+    lines.extend(
+        [
+            "",
+            "## Antecedentes",
+            analysis.get("antecedentes") or PLACEHOLDER,
+            "",
+            "## Detalle de los Colaboradores Involucrados",
+        ]
+    )
+    lines.extend(
+        _md_table(
+            [
+                "Nombres y Apellidos",
+                "Matrícula",
+                "Cargo",
+                "Falta cometida",
+                "Fecha Carta de Inmediatez",
+                "Fecha Carta de Renuncia",
+            ],
+            context["collaborator_rows"],
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Modus operandi",
+            analysis.get("modus_operandi") or PLACEHOLDER,
+            "",
+            "## Principales Hallazgos",
+        ]
+    )
+    lines.extend(
+        _md_table(
+            [
+                "N°",
+                "Fecha de aprobación",
+                "Cliente/DNI",
+                "Ingreso Bruto Mensual",
+                "Empresa Empleadora",
+                "Vendedor del Inmueble",
+                "Vendedor del Crédito",
+                "Producto",
+                "Importe Desembolsado",
+                "Saldo Deudor",
+                "Status (BCP/SBS)",
+            ],
+            context["operation_rows"],
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "### Narrativa de hallazgos",
+            analysis.get("hallazgos") or PLACEHOLDER,
+            "",
+            "## Descargos",
+            analysis.get("descargos") or PLACEHOLDER,
+            "",
+            "## Riesgos identificados",
+        ]
+    )
+    lines.extend(
+        _md_table(
+            [
+                "Líder del riesgo",
+                "ID Riesgo (GRC)",
+                "Descripción del riesgo de fraude",
+                "Criticidad del riesgo",
+                "Exposición residual (USD)",
+                "ID Plan de Acción",
+            ],
+            context["risk_rows"],
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Normas transgredidas",
+        ]
+    )
+    lines.extend(_md_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"]))
+    lines.extend(
+        [
+            "",
+            "## Conclusiones",
+            analysis.get("conclusiones") or PLACEHOLDER,
+            "",
+            "## Recomendaciones",
+            "### De carácter laboral",
+        ]
+    )
+    lines.extend(_md_list(context["recomendaciones"]["laboral"]))
+    lines.extend(["", "### De carácter operativo"])
+    lines.extend(_md_list(context["recomendaciones"]["operativo"]))
+    lines.extend(["", "### De carácter legal"])
+    lines.extend(_md_list(context["recomendaciones"]["legal"]))
+    lines.extend(["", "## Anexos"])
+    lines.extend(_md_list(_format_anexos(context["anexos"])))
+    lines.extend(["", "## Firma"])
+    lines.extend(_md_list(_format_firmas(context["firmas"])))
+    lines.extend(["", "## Resumen de Secciones y Tablas del Informe"])
+    lines.extend(
+        _md_table(
+            ["Sección", "Tipo", "Estado"],
+            _build_sections_summary(context, analysis),
+        )
+    )
     return "\n".join(lines)
 
 
 def build_docx(case_data: CaseData, path: Path | str) -> Path:
     document = _create_word_document()
     context = _build_report_context(case_data)
-    case = context['case']
-    analysis = context['analysis']
+    case = context["case"]
+    analysis = context["analysis"]
 
-    header_lines = [
-        "Banco de Crédito - BCP",
-        "SEGURIDAD CORPORATIVA, INVESTIGACIONES & CRIMEN CIBERNÉTICO",
-        "INVESTIGACIONES & CIBERCRIMINOLOGÍA",
-        f"Informe {case.get('tipo_informe', '')} N.{case.get('id_caso', '')}",
-        f"Dirigido a: {context['destinatarios_text']}",
-        (
-            "Referencia: "
-            f"{len(context['team_rows'])} colaboradores investigados, {len(context['product_rows'])} productos afectados, "
-            f"monto investigado total {context['total_investigado']:.2f} y modalidad {case.get('modalidad', '')}."
-        ),
-        "",
-    ]
-    for line in header_lines:
-        document.add_paragraph(line)
+    def add_paragraphs(lines: List[str]) -> None:
+        for line in lines:
+            document.add_paragraph(line)
 
-    def add_heading_and_text(title, body_text):
-        document.add_heading(title, level=2)
-        document.add_paragraph(body_text or "Pendiente")
-        document.add_paragraph("")
-
-    def append_table_section(title, headers, rows):
-        document.add_heading(title, level=2)
+    def append_table(headers: List[str], rows: List[List[Any]]) -> None:
         if not rows:
-            document.add_paragraph("Sin registros.")
-            document.add_paragraph("")
+            document.add_paragraph(PLACEHOLDER)
             return
         table = document.add_table(rows=1, cols=len(headers))
-        table.style = 'Table Grid'
+        table.style = "Table Grid"
         for idx, header in enumerate(headers):
             table.rows[0].cells[idx].text = header
         for row in rows:
             docx_row = table.add_row()
             for idx, value in enumerate(row):
-                docx_row.cells[idx].text = str(value or '')
-        document.add_paragraph("")
+                docx_row.cells[idx].text = str(value or "")
 
-    add_heading_and_text("1. Antecedentes", analysis.get('antecedentes'))
-    append_table_section(
-        "2. Tabla de clientes",
-        ["Cliente", "Tipo ID", "ID", "Flag", "Teléfonos", "Correos", "Direcciones", "Accionado"],
-        context['client_rows'],
+    def add_list(items: List[str]) -> None:
+        if not items:
+            document.add_paragraph(PLACEHOLDER)
+            return
+        for item in items:
+            document.add_paragraph(item, style="List Bullet")
+
+    header_lines = [
+        "BANCO DE CRÉDITO – BCP",
+        "SEGURIDAD CORPORATIVA, INTELIGENCIA & CRIMEN CIBERNÉTICO",
+        "INVESTIGACIONES & CIBERCRIMINOLOGÍA",
+        f"Informe de Gerencia {case.get('tipo_informe', '')} N° {case.get('id_caso', '')}",
+        f"{_safe_text(case.get('lugar'))}, {_safe_text(case.get('fecha_informe'))}",
+    ]
+
+    add_paragraphs(header_lines)
+    document.add_heading("Encabezado Institucional", level=2)
+    append_table(context["header_headers"], [context["header_row"]])
+    document.add_heading("Antecedentes", level=2)
+    add_paragraphs([analysis.get("antecedentes") or PLACEHOLDER])
+    document.add_heading("Detalle de los Colaboradores Involucrados", level=2)
+    append_table(
+        [
+            "Nombres y Apellidos",
+            "Matrícula",
+            "Cargo",
+            "Falta cometida",
+            "Fecha Carta de Inmediatez",
+            "Fecha Carta de Renuncia",
+        ],
+        context["collaborator_rows"],
     )
-    append_table_section(
-        "3. Tabla de team members involucrados",
-        ["Colaborador", "ID", "Flag", "División", "Área", "Servicio", "Puesto", "Agencia", "Código", "Falta", "Sanción"],
-        context['team_rows'],
+    document.add_heading("Modus operandi", level=2)
+    add_paragraphs([analysis.get("modus_operandi") or PLACEHOLDER])
+    document.add_heading("Principales Hallazgos", level=2)
+    append_table(
+        [
+            "N°",
+            "Fecha de aprobación",
+            "Cliente/DNI",
+            "Ingreso Bruto Mensual",
+            "Empresa Empleadora",
+            "Vendedor del Inmueble",
+            "Vendedor del Crédito",
+            "Producto",
+            "Importe Desembolsado",
+            "Saldo Deudor",
+            "Status (BCP/SBS)",
+        ],
+        context["operation_rows"],
     )
-    append_table_section(
-        "4. Tabla de productos combinado",
-        ["Registro", "ID", "Cliente", "Tipo", "Canal", "Proceso", "Cat.1", "Cat.2", "Modalidad", "Montos", "Reclamo/Analítica"],
-        context['product_rows'],
+    document.add_heading("Narrativa de hallazgos", level=3)
+    add_paragraphs([analysis.get("hallazgos") or PLACEHOLDER])
+    document.add_heading("Descargos", level=2)
+    add_paragraphs([analysis.get("descargos") or PLACEHOLDER])
+    document.add_heading("Riesgos identificados", level=2)
+    append_table(
+        [
+            "Líder del riesgo",
+            "ID Riesgo (GRC)",
+            "Descripción del riesgo de fraude",
+            "Criticidad del riesgo",
+            "Exposición residual (USD)",
+            "ID Plan de Acción",
+        ],
+        context["risk_rows"],
     )
-    document.add_heading("5. Descripción breve automatizada", level=2)
-    for paragraph in context['summary_paragraphs']:
-        document.add_paragraph(paragraph)
-    document.add_paragraph("")
-    add_heading_and_text("6. Modus Operandi", analysis.get('modus_operandi'))
-    add_heading_and_text("7. Hallazgos Principales", analysis.get('hallazgos'))
-    add_heading_and_text("8. Descargo de colaboradores", analysis.get('descargos'))
-    append_table_section(
-        "9. Tabla de riesgos identificados",
-        ["ID Riesgo", "Líder", "Criticidad", "Exposición US$", "Planes"],
-        context['risk_rows'],
-    )
-    append_table_section(
-        "10. Tabla de normas transgredidas",
-        ["N° de norma", "Descripción", "Fecha de vigencia"],
-        context['norm_rows'],
-    )
-    add_heading_and_text("11. Conclusiones", analysis.get('conclusiones'))
-    add_heading_and_text("12. Recomendaciones y mejoras de procesos", analysis.get('recomendaciones'))
+    document.add_heading("Normas transgredidas", level=2)
+    append_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"])
+    document.add_heading("Conclusiones", level=2)
+    add_paragraphs([analysis.get("conclusiones") or PLACEHOLDER])
+    document.add_heading("Recomendaciones", level=2)
+    document.add_heading("De carácter laboral", level=3)
+    add_list(context["recomendaciones"]["laboral"])
+    document.add_heading("De carácter operativo", level=3)
+    add_list(context["recomendaciones"]["operativo"])
+    document.add_heading("De carácter legal", level=3)
+    add_list(context["recomendaciones"]["legal"])
+    document.add_heading("Anexos", level=2)
+    add_list(_format_anexos(context["anexos"]))
+    document.add_heading("Firma", level=2)
+    add_list(_format_firmas(context["firmas"]))
+    document.add_heading("Resumen de Secciones y Tablas del Informe", level=2)
+    append_table(["Sección", "Tipo", "Estado"], _build_sections_summary(context, analysis))
     document.save(path)
     return Path(path)
 

@@ -1,35 +1,40 @@
 from report_builder import CaseData, _build_report_context
 
 
-def test_summary_paragraphs_include_counts_and_modalities():
+def test_header_table_aggregates_amounts_and_metadata():
     payload = {
-        'caso': {'modalidad': 'Modalidad X', 'categoria1': 'Categoria A', 'categoria2': 'Categoria B'},
-        'clientes': [{'tipo_id': 'DNI', 'id_cliente': '001'}],
-        'colaboradores': [{'id_colaborador': 'T12345'}],
+        'caso': {'categoria1': 'Categoria A', 'categoria2': 'Categoria B'},
+        'encabezado': {},
+        'clientes': [],
+        'colaboradores': [],
         'productos': [
-            {'id_producto': 'P001', 'id_cliente': '001', 'modalidad': 'Modalidad X', 'monto_investigado': '150.25'}
+            {'monto_investigado': '100.00', 'monto_contingencia': '20.50'},
+            {'monto_investigado': '50.25', 'monto_perdida_fraude': '10'},
         ],
-        'reclamos': [],
+        'reclamos': [{'codigo_analitica': '4300000002'}],
         'involucramientos': [],
         'riesgos': [],
         'normas': [],
         'analisis': {},
+        'operaciones': [],
+        'anexos': [],
+        'firmas': [],
+        'recomendaciones_categorias': {},
     }
 
     context = _build_report_context(CaseData.from_mapping(payload))
+    header = dict(zip(context['header_headers'], context['header_row']))
 
-    assert context['summary_paragraphs'][0] == (
-        "Resumen cuantitativo: Se registran 1 clientes, 1 colaboradores y 1 productos vinculados. "
-        "Monto afectado total 150.25."
-    )
-    assert context['summary_paragraphs'][1] == (
-        "Modalidades y tipificación: Modalidades destacadas: Modalidad X. Tipificación: Categoria A / Categoria B."
-    )
+    assert header['Importe investigado'] == '150.25'
+    assert header['Contingencia'] == '20.50'
+    assert header['Pérdida total'] == '10.00'
+    assert header['Analítica Contable'] == '4300000002'
 
 
-def test_summary_paragraphs_handle_empty_data_with_placeholder():
-    empty_payload = {
+def test_operation_rows_include_totals_row():
+    payload = {
         'caso': {},
+        'encabezado': {},
         'clientes': [],
         'colaboradores': [],
         'productos': [],
@@ -38,11 +43,16 @@ def test_summary_paragraphs_handle_empty_data_with_placeholder():
         'riesgos': [],
         'normas': [],
         'analisis': {},
+        'operaciones': [
+            {'importe_desembolsado': '10.00', 'saldo_deudor': '5.00'},
+            {'importe_desembolsado': '2.50', 'saldo_deudor': '1.00'},
+        ],
+        'anexos': [],
+        'firmas': [],
+        'recomendaciones_categorias': {},
     }
 
-    context = _build_report_context(CaseData.from_mapping(empty_payload))
-
-    assert context['summary_paragraphs'] == [
-        "Resumen cuantitativo: Sin información registrada.",
-        "Modalidades y tipificación: Sin información registrada.",
-    ]
+    context = _build_report_context(CaseData.from_mapping(payload))
+    assert context['operation_rows'][-1][0] == 'Totales'
+    assert context['operation_rows'][-1][8] == '12.50'
+    assert context['operation_rows'][-1][9] == '6.00'
