@@ -1105,7 +1105,11 @@ class FraudCaseApp:
     def build_analysis_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        frame.columnconfigure(1, weight=1)
+
+        analysis_group = ttk.LabelFrame(frame, text="Análisis narrativo")
+        analysis_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        analysis_group.columnconfigure(0, weight=0)
+        analysis_group.columnconfigure(1, weight=1)
 
         fields = [
             ("Antecedentes:", "Modificó antecedentes", "Resume los hechos previos y contexto del caso."),
@@ -1118,7 +1122,7 @@ class FraudCaseApp:
 
         text_widgets = []
         for idx, (label_text, log_message, tooltip) in enumerate(fields):
-            ttk.Label(frame, text=label_text).grid(
+            ttk.Label(analysis_group, text=label_text).grid(
                 row=idx,
                 column=0,
                 padx=COL_PADX,
@@ -1126,8 +1130,8 @@ class FraudCaseApp:
                 sticky="e",
             )
             text_widget = scrolledtext.ScrolledText(
-                frame,
-                width=100,
+                analysis_group,
+                width=1,
                 height=6,
                 wrap="word",
             )
@@ -1138,6 +1142,7 @@ class FraudCaseApp:
                 pady=ROW_PADY,
                 sticky="we",
             )
+            text_widget.configure(takefocus=True)
             text_widget.bind(
                 "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
             )
