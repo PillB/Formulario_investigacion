@@ -187,6 +187,7 @@ class FraudCaseApp:
         self._product_frames_by_id = {}
         self.next_risk_number = 1
         self.summary_tables = {}
+        self.inline_summary_trees = {}
         self.summary_config = {}
         self.summary_context_menus = {}
         self.summary_tab = None
@@ -195,6 +196,12 @@ class FraudCaseApp:
         self._summary_pending_dataset = None
         self._autosave_job_id = None
         self._autosave_dirty = False
+        self.clients_detail_wrapper = None
+        self.team_detail_wrapper = None
+        self.clients_summary_tree = None
+        self.team_summary_tree = None
+        self._clients_detail_visible = False
+        self._team_detail_visible = False
 
         # Variables de caso
         self.id_caso_var = tk.StringVar()
@@ -825,15 +832,93 @@ class FraudCaseApp:
         """Construye la pestaña de clientes con lista dinámica."""
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        # Contenedor para los clientes
-        self.clients_container = ttk.Frame(frame)
-        self.clients_container.pack(fill="x", pady=5)
-        # Botón añadir cliente
-        add_btn = ttk.Button(frame, text="Agregar cliente", command=self.add_client)
-        add_btn.pack(side="left", padx=5)
+        frame.columnconfigure(0, weight=1)
+
+        summary_section = ttk.LabelFrame(frame, text="Resumen de clientes")
+        summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        summary_section.columnconfigure(0, weight=1)
+        columns = [
+            ("id", "ID"),
+            ("tipo_id", "Tipo ID"),
+            ("flag", "Flag"),
+            ("telefonos", "Teléfonos"),
+            ("correos", "Correos"),
+            ("direcciones", "Direcciones"),
+            ("accionado", "Accionado"),
+        ]
+        self.clients_summary_tree = ttk.Treeview(
+            summary_section, columns=[col for col, _ in columns], show="headings", height=5
+        )
+        for col_id, heading in columns:
+            self.clients_summary_tree.heading(col_id, text=heading)
+            self.clients_summary_tree.column(col_id, width=120, stretch=True)
+        clients_scroll = ttk.Scrollbar(summary_section, orient="vertical", command=self.clients_summary_tree.yview)
+        self.clients_summary_tree.configure(yscrollcommand=clients_scroll.set)
+        self.clients_summary_tree.grid(row=0, column=0, sticky="nsew")
+        clients_scroll.grid(row=0, column=1, sticky="ns")
+        self.clients_summary_tree.bind("<Double-1>", lambda _e: self.show_clients_detail())
+        self.inline_summary_trees["clientes"] = self.clients_summary_tree
+
+        controls = ttk.Frame(frame)
+        controls.grid(row=1, column=0, sticky="ew", padx=5, pady=2)
+        controls.columnconfigure(0, weight=1)
+        add_btn = ttk.Button(controls, text="Agregar cliente", command=self._on_new_client)
+        add_btn.grid(row=0, column=0, sticky="w", padx=5, pady=ROW_PADY)
         self.register_tooltip(add_btn, "Añade un nuevo cliente implicado en el caso.")
+        self.clients_toggle_btn = ttk.Button(
+            controls,
+            text="Mostrar formulario",
+            command=self.toggle_clients_detail,
+        )
+        self.clients_toggle_btn.grid(row=0, column=1, sticky="e", padx=5, pady=ROW_PADY)
+
+        self.clients_detail_wrapper = ttk.LabelFrame(frame, text="Detalle de clientes")
+        ensure_grid_support(self.clients_detail_wrapper)
+        self.clients_detail_wrapper.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        self.clients_detail_wrapper.columnconfigure(0, weight=1)
+        self.clients_container = ttk.Frame(self.clients_detail_wrapper)
+        self.clients_container.pack(fill="x", pady=5)
         # Inicialmente un cliente en blanco
         self.add_client()
+        self.hide_clients_detail()
+        self._refresh_inline_section_tables("clientes")
+
+    def _on_new_client(self):
+        self.show_clients_detail()
+        self.add_client()
+
+    def toggle_clients_detail(self):
+        if self._clients_detail_visible:
+            self.hide_clients_detail()
+        else:
+            self.show_clients_detail()
+
+    def show_clients_detail(self):
+        if self.clients_detail_wrapper is None:
+            return
+        try:
+            self.clients_detail_wrapper.grid()
+        except Exception:
+            pass
+        self._clients_detail_visible = True
+        if getattr(self, "clients_toggle_btn", None):
+            try:
+                self.clients_toggle_btn.config(text="Ocultar formulario")
+            except Exception:
+                pass
+
+    def hide_clients_detail(self):
+        if self.clients_detail_wrapper is None:
+            return
+        remover = getattr(self.clients_detail_wrapper, "grid_remove", None)
+        if callable(remover):
+            remover()
+        self._clients_detail_visible = False
+        if getattr(self, "clients_toggle_btn", None):
+            try:
+                self.clients_toggle_btn.config(text="Mostrar formulario")
+            except Exception:
+                pass
 
     def add_client(self):
         """Crea y añade un nuevo marco de cliente a la interfaz.
@@ -859,6 +944,8 @@ class FraudCaseApp:
         self.client_frames.append(client)
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
+        if self._clients_detail_visible:
+            self.show_clients_detail()
 
     def remove_client(self, client_frame):
         self._handle_client_id_change(client_frame, client_frame.id_var.get(), None)
@@ -881,12 +968,89 @@ class FraudCaseApp:
     def build_team_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        self.team_container = ttk.Frame(frame)
-        self.team_container.pack(fill="x", pady=5)
-        add_btn = ttk.Button(frame, text="Agregar colaborador", command=self.add_team)
-        add_btn.pack(side="left", padx=5)
+        frame.columnconfigure(0, weight=1)
+
+        summary_section = ttk.LabelFrame(frame, text="Resumen de colaboradores")
+        summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        summary_section.columnconfigure(0, weight=1)
+        team_columns = [
+            ("id", "ID"),
+            ("division", "División"),
+            ("area", "Área"),
+            ("tipo_sancion", "Tipo sanción"),
+        ]
+        self.team_summary_tree = ttk.Treeview(
+            summary_section, columns=[col for col, _ in team_columns], show="headings", height=5
+        )
+        for col_id, heading in team_columns:
+            self.team_summary_tree.heading(col_id, text=heading)
+            self.team_summary_tree.column(col_id, width=140, stretch=True)
+        team_scroll = ttk.Scrollbar(summary_section, orient="vertical", command=self.team_summary_tree.yview)
+        self.team_summary_tree.configure(yscrollcommand=team_scroll.set)
+        self.team_summary_tree.grid(row=0, column=0, sticky="nsew")
+        team_scroll.grid(row=0, column=1, sticky="ns")
+        self.team_summary_tree.bind("<Double-1>", lambda _e: self.show_team_detail())
+        self.inline_summary_trees["colaboradores"] = self.team_summary_tree
+
+        controls = ttk.Frame(frame)
+        controls.grid(row=1, column=0, sticky="ew", padx=5, pady=2)
+        controls.columnconfigure(0, weight=1)
+        add_btn = ttk.Button(controls, text="Agregar colaborador", command=self._on_new_team_member)
+        add_btn.grid(row=0, column=0, sticky="w", padx=5, pady=ROW_PADY)
         self.register_tooltip(add_btn, "Crea un registro para otro colaborador investigado.")
+        self.team_toggle_btn = ttk.Button(
+            controls,
+            text="Mostrar formulario",
+            command=self.toggle_team_detail,
+        )
+        self.team_toggle_btn.grid(row=0, column=1, sticky="e", padx=5, pady=ROW_PADY)
+
+        self.team_detail_wrapper = ttk.LabelFrame(frame, text="Detalle de colaboradores")
+        ensure_grid_support(self.team_detail_wrapper)
+        self.team_detail_wrapper.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        self.team_detail_wrapper.columnconfigure(0, weight=1)
+        self.team_container = ttk.Frame(self.team_detail_wrapper)
+        self.team_container.pack(fill="x", pady=5)
         self.add_team()
+        self.hide_team_detail()
+        self._refresh_inline_section_tables("colaboradores")
+
+    def _on_new_team_member(self):
+        self.show_team_detail()
+        self.add_team()
+
+    def toggle_team_detail(self):
+        if self._team_detail_visible:
+            self.hide_team_detail()
+        else:
+            self.show_team_detail()
+
+    def show_team_detail(self):
+        if self.team_detail_wrapper is None:
+            return
+        try:
+            self.team_detail_wrapper.grid()
+        except Exception:
+            pass
+        self._team_detail_visible = True
+        if getattr(self, "team_toggle_btn", None):
+            try:
+                self.team_toggle_btn.config(text="Ocultar formulario")
+            except Exception:
+                pass
+
+    def hide_team_detail(self):
+        if self.team_detail_wrapper is None:
+            return
+        remover = getattr(self.team_detail_wrapper, "grid_remove", None)
+        if callable(remover):
+            remover()
+        self._team_detail_visible = False
+        if getattr(self, "team_toggle_btn", None):
+            try:
+                self.team_toggle_btn.config(text="Mostrar formulario")
+            except Exception:
+                pass
 
     def add_team(self):
         idx = len(self.team_frames)
@@ -907,6 +1071,8 @@ class FraudCaseApp:
         self.team_frames.append(team)
         self.update_team_options_global()
         self._schedule_summary_refresh('colaboradores')
+        if self._team_detail_visible:
+            self.show_team_detail()
 
     def remove_team(self, team_frame):
         self._handle_team_id_change(team_frame, team_frame.id_var.get(), None)
@@ -2623,6 +2789,7 @@ class FraudCaseApp:
     def _schedule_summary_refresh(self, sections=None, data=None):
         """Marca secciones como sucias y actualiza el resumen cuando proceda."""
 
+        self._refresh_inline_section_tables(sections=sections, data=data)
         if not self.summary_tables:
             return
         normalized = self._normalize_summary_sections(sections)
@@ -2663,6 +2830,37 @@ class FraudCaseApp:
             dataset = self._summary_pending_dataset
         self.refresh_summary_tables(data=dataset, sections=targets)
         self._summary_pending_dataset = None
+
+    def _refresh_inline_section_tables(self, sections=None, data=None):
+        if not self.inline_summary_trees:
+            return
+        if sections is None:
+            targets = set(self.inline_summary_trees.keys())
+        elif isinstance(sections, str):
+            targets = {sections}
+        else:
+            targets = set(sections)
+        dataset = data or self.gather_data()
+        for key in targets:
+            tree = self.inline_summary_trees.get(key)
+            if not tree:
+                continue
+            rows = self._build_summary_rows(key, dataset)
+            self._render_inline_rows(tree, rows)
+
+    def _render_inline_rows(self, tree, rows):
+        try:
+            tree.delete(*tree.get_children())
+        except Exception:
+            try:
+                tree.delete()
+            except Exception:
+                pass
+        for row in rows:
+            try:
+                tree.insert("", "end", values=row)
+            except Exception:
+                continue
 
     def _normalize_summary_sections(self, sections):
         if not self.summary_tables:
