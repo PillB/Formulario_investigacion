@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 from settings import CRITICIDAD_LIST
 from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_money_bounds, validate_risk_id)
+from ui.frames.utils import ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
 
 
@@ -49,53 +50,74 @@ class RiskFrame:
 
         self.frame = ttk.LabelFrame(parent, text=f"Riesgo {self.idx+1}")
         self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        ensure_grid_support(self.frame)
+        if hasattr(self.frame, "columnconfigure"):
+            self.frame.columnconfigure(1, weight=1)
 
-        row1 = ttk.Frame(self.frame)
-        row1.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(row1, text="ID riesgo:").pack(side="left")
-        id_entry = ttk.Entry(row1, textvariable=self.id_var, width=15)
-        id_entry.pack(side="left", padx=COL_PADX)
+        action_row = ttk.Frame(self.frame)
+        ensure_grid_support(action_row)
+        action_row.grid(row=0, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        if hasattr(action_row, "columnconfigure"):
+            action_row.columnconfigure(0, weight=1)
+        remove_btn = ttk.Button(action_row, text="Eliminar riesgo", command=self.remove)
+        remove_btn.grid(row=0, column=1, sticky="e")
+        self.tooltip_register(remove_btn, "Quita este riesgo del caso.")
+
+        ttk.Label(self.frame, text="ID riesgo:").grid(
+            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=15)
+        id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(id_entry, "Usa el formato RSK-000000.")
         self._bind_identifier_triggers(id_entry)
-        ttk.Label(row1, text="Líder:").pack(side="left")
-        lider_entry = ttk.Entry(row1, textvariable=self.lider_var, width=20)
-        lider_entry.pack(side="left", padx=COL_PADX)
+
+        ttk.Label(self.frame, text="Líder:").grid(
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        lider_entry = ttk.Entry(self.frame, textvariable=self.lider_var, width=20)
+        lider_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(lider_entry, "Responsable del seguimiento del riesgo.")
-        ttk.Label(row1, text="Criticidad:").pack(side="left")
+
+        ttk.Label(self.frame, text="Criticidad:").grid(
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
         crit_cb = ttk.Combobox(
-            row1,
+            self.frame,
             textvariable=self.criticidad_var,
             values=CRITICIDAD_LIST,
             state="readonly",
             width=12,
         )
-        crit_cb.pack(side="left", padx=COL_PADX)
+        crit_cb.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=3, column=2, padx=COL_PADX, pady=ROW_PADY)
         crit_cb.set('')
         self.tooltip_register(crit_cb, "Nivel de severidad del riesgo.")
 
-        row2 = ttk.Frame(self.frame)
-        row2.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(row2, text="Descripción del riesgo:").pack(side="left")
-        desc_entry = ttk.Entry(row2, textvariable=self.descripcion_var, width=60)
-        desc_entry.pack(side="left", padx=COL_PADX)
+        ttk.Label(self.frame, text="Descripción del riesgo:").grid(
+            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        desc_entry = ttk.Entry(self.frame, textvariable=self.descripcion_var, width=60)
+        desc_entry.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=4, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(desc_entry, "Describe el riesgo de forma clara.")
 
-        row3 = ttk.Frame(self.frame)
-        row3.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(row3, text="Exposición residual (US$):").pack(side="left")
-        expos_entry = ttk.Entry(row3, textvariable=self.exposicion_var, width=15)
-        expos_entry.pack(side="left", padx=COL_PADX)
+        ttk.Label(self.frame, text="Exposición residual (US$):").grid(
+            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        expos_entry = ttk.Entry(self.frame, textvariable=self.exposicion_var, width=15)
+        expos_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=5, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(expos_entry, "Monto estimado en dólares.")
-        ttk.Label(row3, text="Planes de acción (IDs separados por ;):").pack(side="left")
-        planes_entry = ttk.Entry(row3, textvariable=self.planes_var, width=40)
-        planes_entry.pack(side="left", padx=COL_PADX)
-        self.tooltip_register(planes_entry, "Lista de planes registrados en OTRS o Aranda.")
 
-        btn_frame = ttk.Frame(self.frame)
-        btn_frame.pack(fill="x", pady=ROW_PADY)
-        remove_btn = ttk.Button(btn_frame, text="Eliminar riesgo", command=self.remove)
-        remove_btn.pack(side="right")
-        self.tooltip_register(remove_btn, "Quita este riesgo del caso.")
+        ttk.Label(self.frame, text="Planes de acción (IDs separados por ;):").grid(
+            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        planes_entry = ttk.Entry(self.frame, textvariable=self.planes_var, width=40)
+        planes_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=6, column=2, padx=COL_PADX, pady=ROW_PADY)
+        self.tooltip_register(planes_entry, "Lista de planes registrados en OTRS o Aranda.")
 
         self.validators.append(
             FieldValidator(

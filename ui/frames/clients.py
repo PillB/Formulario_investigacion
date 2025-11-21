@@ -10,6 +10,7 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_client_id, validate_email_list,
                         validate_multi_selection, validate_phone_list,
                         validate_required_text)
+from ui.frames.utils import ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
 
 
@@ -56,34 +57,53 @@ class ClientFrame:
 
         self.frame = ttk.LabelFrame(parent, text=f"Cliente {self.idx+1}")
         self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        ensure_grid_support(self.frame)
+        if hasattr(self.frame, "columnconfigure"):
+            self.frame.columnconfigure(1, weight=1)
 
-        row1 = ttk.Frame(self.frame)
-        row1.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(row1, text="Tipo de ID:").pack(side="left")
-        tipo_id_cb = ttk.Combobox(row1, textvariable=self.tipo_id_var, values=TIPO_ID_LIST, state="readonly", width=20)
-        tipo_id_cb.pack(side="left", padx=COL_PADX)
+        ttk.Label(self.frame, text="Tipo de ID:").grid(
+            row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        tipo_id_cb = ttk.Combobox(
+            self.frame,
+            textvariable=self.tipo_id_var,
+            values=TIPO_ID_LIST,
+            state="readonly",
+            width=20,
+        )
+        tipo_id_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY)
         tipo_id_cb.set('')
         self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
-        ttk.Label(row1, text="ID del cliente:").pack(side="left")
-        id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
-        id_entry.pack(side="left", padx=COL_PADX)
+
+        ttk.Label(self.frame, text="ID del cliente:").grid(
+            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
+        id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
-        row2 = ttk.Frame(self.frame)
-        row2.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(row2, text="Flag:").pack(side="left")
-        flag_cb = ttk.Combobox(row2, textvariable=self.flag_var, values=FLAG_CLIENTE_LIST, state="readonly", width=20)
-        flag_cb.pack(side="left", padx=COL_PADX)
+        ttk.Label(self.frame, text="Flag:").grid(
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        flag_cb = ttk.Combobox(
+            self.frame, textvariable=self.flag_var, values=FLAG_CLIENTE_LIST, state="readonly", width=20
+        )
+        flag_cb.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
 
-        accionado_frame = ttk.Frame(self.frame)
-        accionado_frame.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(accionado_frame, text="Accionado (seleccione uno o varios):").pack(anchor="w")
-        accionado_list_container = ttk.Frame(accionado_frame)
-        accionado_list_container.pack(fill="x", padx=COL_PADX)
-
+        ttk.Label(self.frame, text="Accionado (seleccione uno o varios):").grid(
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        accionado_list_container = ttk.Frame(self.frame)
+        accionado_list_container.grid(
+            row=3, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+        )
+        
         accionado_scrollbar = None
         scrollbar_class = getattr(tk, "Scrollbar", None) or getattr(ttk, "Scrollbar", None)
         if scrollbar_class:
@@ -114,34 +134,46 @@ class ClientFrame:
             "Marca las tribus o equipos accionados por la alerta. Puedes escoger varias opciones.",
         )
 
-        row3 = ttk.Frame(self.frame)
-        row3.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(row3, text="Teléfonos (separados por ;):").pack(side="left")
-        tel_entry = ttk.Entry(row3, textvariable=self.telefonos_var, width=30)
-        tel_entry.pack(side="left", padx=COL_PADX)
+        ttk.Label(self.frame, text="Teléfonos (separados por ;):").grid(
+            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        tel_entry = ttk.Entry(self.frame, textvariable=self.telefonos_var, width=30)
+        tel_entry.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=4, column=2, padx=COL_PADX, pady=ROW_PADY)
         tel_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó teléfonos"))
         self.tooltip_register(
             tel_entry,
             "Campo obligatorio. Ingresa al menos un número telefónico separado por ; sin guiones.",
         )
-        ttk.Label(row3, text="Correos (separados por ;):").pack(side="left")
-        cor_entry = ttk.Entry(row3, textvariable=self.correos_var, width=30)
-        cor_entry.pack(side="left", padx=COL_PADX)
+
+        ttk.Label(self.frame, text="Correos (separados por ;):").grid(
+            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        cor_entry = ttk.Entry(self.frame, textvariable=self.correos_var, width=30)
+        cor_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=5, column=2, padx=COL_PADX, pady=ROW_PADY)
         cor_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó correos"))
         self.tooltip_register(
             cor_entry,
             "Campo obligatorio. Coloca al menos un correo electrónico separado por ;.",
         )
-        ttk.Label(row3, text="Direcciones (separados por ;):").pack(side="left")
-        dir_entry = ttk.Entry(row3, textvariable=self.direcciones_var, width=30)
-        dir_entry.pack(side="left", padx=COL_PADX)
+
+        ttk.Label(self.frame, text="Direcciones (separados por ;):").grid(
+            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        dir_entry = ttk.Entry(self.frame, textvariable=self.direcciones_var, width=30)
+        dir_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=6, column=2, padx=COL_PADX, pady=ROW_PADY)
         dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
         self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
 
-        btn_frame = ttk.Frame(self.frame)
-        btn_frame.pack(fill="x", pady=ROW_PADY)
-        remove_btn = ttk.Button(btn_frame, text="Eliminar cliente", command=self.remove)
-        remove_btn.pack(side="right")
+        action_row = ttk.Frame(self.frame)
+        ensure_grid_support(action_row)
+        action_row.grid(row=7, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        if hasattr(action_row, "columnconfigure"):
+            action_row.columnconfigure(0, weight=1)
+        remove_btn = ttk.Button(action_row, text="Eliminar cliente", command=self.remove)
+        remove_btn.grid(row=0, column=1, sticky="e")
         self.tooltip_register(remove_btn, "Quita por completo al cliente de la lista.")
 
         self.validators.append(

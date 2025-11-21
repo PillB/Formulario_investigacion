@@ -389,6 +389,9 @@ def _build_report_context(case_data: CaseData):
         for norm in normas
     ]
     summary_paragraphs = _build_summary_paragraphs(case, clients, team, products, total_inv)
+    documented_counts = (
+        f"Se documentaron {len(clients)} clientes, {len(team)} colaboradores y {len(products)} productos."
+    )
     return {
         'case': case,
         'analysis': analysis,
@@ -400,6 +403,7 @@ def _build_report_context(case_data: CaseData):
         'risk_rows': risk_rows,
         'norm_rows': norm_rows,
         'summary_paragraphs': summary_paragraphs,
+        'documented_counts': documented_counts,
     }
 
 
@@ -456,6 +460,7 @@ def build_md(case_data: CaseData) -> str:
         "",
         "## 5. Resumen automatizado",
     ])
+    lines.append(context['documented_counts'])
     lines.extend(context['summary_paragraphs'])
     lines.append("")
     lines.extend([
