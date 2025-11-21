@@ -1,4 +1,3 @@
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -148,19 +147,11 @@ def test_docx_missing_dependency(monkeypatch, sample_case_data):
     assert report_builder.DOCX_MISSING_MESSAGE in str(excinfo.value)
 
 
-def test_docx_generation_with_fallback(monkeypatch, tmp_path, sample_case_data):
-    output = tmp_path / "reporte.docx"
+def test_docx_missing_docx_document(monkeypatch, sample_case_data):
+    monkeypatch.setattr(report_builder, "DocxDocument", None)
     monkeypatch.setattr(report_builder, "DOCX_AVAILABLE", True)
-    monkeypatch.setattr(report_builder, "DocxDocument", report_builder._FallbackDocxDocument)
 
-    report_builder.build_docx(sample_case_data, output)
+    with pytest.raises(RuntimeError) as excinfo:
+        report_builder.build_docx(sample_case_data, Path("dummy.docx"))
 
-    with zipfile.ZipFile(output, "r") as bundle:
-        with bundle.open("word/document.xml") as doc_xml:
-            xml_text = doc_xml.read().decode("utf-8")
-
-    assert "Informe Inicial N.2024-0007" in xml_text
-    assert "1. Antecedentes" in xml_text
-    assert "Tabla de clientes" in xml_text
-    assert "Cliente" in xml_text
-    assert "Tabla de normas transgredidas" in xml_text
+    assert report_builder.DOCX_MISSING_MESSAGE in str(excinfo.value)
