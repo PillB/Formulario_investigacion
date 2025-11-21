@@ -110,7 +110,8 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_norm_id, validate_phone_list,
                       validate_product_dates, validate_product_id,
                       validate_reclamo_id, validate_required_text,
-                      validate_risk_id, validate_team_member_id)
+                        validate_risk_id, validate_team_member_id)
+from theme_manager import ThemeManager
 
 
 
@@ -5781,6 +5782,7 @@ __all__ = ["FraudCaseApp", "should_autofill_field"]
 
 def run_app():
     root = tk.Tk()
-    init_styles(root)
+    style = init_styles(root)
+    ThemeManager.apply(ThemeManager.current, root=root, style=style)
     app = FraudCaseApp(root)
     root.mainloop()
