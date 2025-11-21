@@ -214,6 +214,8 @@ def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
             handle,
             fieldnames=[
                 "id_colaborador",
+                "nombres",
+                "apellidos",
                 "division",
                 "area",
                 "servicio",
@@ -227,6 +229,8 @@ def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
         writer.writerow(
             {
                 "id_colaborador": "12345",
+                "nombres": "Nombre",
+                "apellidos": "Apellido",
                 "division": "DCA",
                 "area": "Área Comercial",
                 "servicio": "",

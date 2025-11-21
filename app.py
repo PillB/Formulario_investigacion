@@ -1262,9 +1262,15 @@ class FraudCaseApp:
         summary_section.columnconfigure(0, weight=1)
         team_columns = [
             ("id", "ID"),
+            ("nombres", "Nombres"),
+            ("apellidos", "Apellidos"),
             ("division", "División"),
             ("area", "Área"),
+            ("servicio", "Servicio"),
+            ("puesto", "Puesto"),
             ("tipo_sancion", "Tipo sanción"),
+            ("fecha_carta_inmediatez", "Carta inmediatez"),
+            ("fecha_carta_renuncia", "Carta renuncia"),
         ]
         self.team_summary_tree = ttk.Treeview(
             summary_section, columns=[col for col, _ in team_columns], show="headings", height=5
@@ -4105,9 +4111,15 @@ class FraudCaseApp:
             return [
                 (
                     col.get("id_colaborador", ""),
+                    col.get("nombres", ""),
+                    col.get("apellidos", ""),
                     col.get("division", ""),
                     col.get("area", ""),
+                    col.get("servicio", ""),
+                    col.get("puesto", ""),
                     col.get("tipo_sancion", ""),
+                    col.get("fecha_carta_inmediatez", ""),
+                    col.get("fecha_carta_renuncia", ""),
                 )
                 for col in dataset.get("colaboradores", [])
             ]
@@ -4274,11 +4286,15 @@ class FraudCaseApp:
         return self._merge_payload_with_frame(
             payload,
             {
+                'nombres': frame.nombres_var.get,
+                'apellidos': frame.apellidos_var.get,
                 'flag_colaborador': frame.flag_var.get,
                 'division': frame.division_var.get,
                 'area': frame.area_var.get,
                 'servicio': frame.servicio_var.get,
                 'puesto': frame.puesto_var.get,
+                'fecha_carta_inmediatez': frame.fecha_carta_inmediatez_var.get,
+                'fecha_carta_renuncia': frame.fecha_carta_renuncia_var.get,
                 'nombre_agencia': frame.nombre_agencia_var.get,
                 'codigo_agencia': frame.codigo_agencia_var.get,
                 'tipo_falta': frame.tipo_falta_var.get,
@@ -4599,7 +4615,7 @@ class FraudCaseApp:
             'accionado': accionado_final,
         }
 
-    def _populate_team_frame_from_row(self, frame, row):
+    def _populate_team_frame_from_row(self, frame, row, preserve_existing: bool = False):
         id_col = (
             row.get('id_colaborador')
             or row.get('IdColaborador')
@@ -4609,6 +4625,16 @@ class FraudCaseApp:
         ).strip()
         normalized_id = self._normalize_identifier(id_col)
         frame.id_var.set(normalized_id or id_col)
+        nombres_val = (row.get('nombres') or row.get('nombre') or '').strip()
+        if nombres_val and should_autofill_field(frame.nombres_var.get(), preserve_existing):
+            frame.nombres_var.set(nombres_val)
+        elif not nombres_val and not preserve_existing:
+            frame.nombres_var.set('')
+        apellidos_val = (row.get('apellidos') or row.get('apellido') or '').strip()
+        if apellidos_val and should_autofill_field(frame.apellidos_var.get(), preserve_existing):
+            frame.apellidos_var.set(apellidos_val)
+        elif not apellidos_val and not preserve_existing:
+            frame.apellidos_var.set('')
         flag_val = (
             row.get('flag_colaborador')
             or row.get('flag')
@@ -4616,21 +4642,59 @@ class FraudCaseApp:
             or 'No aplica'
         ).strip()
         frame.flag_var.set(flag_val or 'No aplica')
-        frame.division_var.set((row.get('division') or '').strip())
-        frame.area_var.set((row.get('area') or '').strip())
-        frame.servicio_var.set((row.get('servicio') or '').strip())
-        frame.puesto_var.set((row.get('puesto') or '').strip())
-        frame.nombre_agencia_var.set((row.get('nombre_agencia') or '').strip())
-        frame.codigo_agencia_var.set((row.get('codigo_agencia') or '').strip())
+        division_val = (row.get('division') or '').strip()
+        if division_val and should_autofill_field(frame.division_var.get(), preserve_existing):
+            frame.division_var.set(division_val)
+        elif not division_val and not preserve_existing:
+            frame.division_var.set('')
+        area_val = (row.get('area') or '').strip()
+        if area_val and should_autofill_field(frame.area_var.get(), preserve_existing):
+            frame.area_var.set(area_val)
+        elif not area_val and not preserve_existing:
+            frame.area_var.set('')
+        servicio_val = (row.get('servicio') or '').strip()
+        if servicio_val and should_autofill_field(frame.servicio_var.get(), preserve_existing):
+            frame.servicio_var.set(servicio_val)
+        elif not servicio_val and not preserve_existing:
+            frame.servicio_var.set('')
+        puesto_val = (row.get('puesto') or '').strip()
+        if puesto_val and should_autofill_field(frame.puesto_var.get(), preserve_existing):
+            frame.puesto_var.set(puesto_val)
+        elif not puesto_val and not preserve_existing:
+            frame.puesto_var.set('')
+        fecha_inm_val = (row.get('fecha_carta_inmediatez') or '').strip()
+        if fecha_inm_val and should_autofill_field(frame.fecha_carta_inmediatez_var.get(), preserve_existing):
+            frame.fecha_carta_inmediatez_var.set(fecha_inm_val)
+        elif not fecha_inm_val and not preserve_existing:
+            frame.fecha_carta_inmediatez_var.set('')
+        fecha_ren_val = (row.get('fecha_carta_renuncia') or '').strip()
+        if fecha_ren_val and should_autofill_field(frame.fecha_carta_renuncia_var.get(), preserve_existing):
+            frame.fecha_carta_renuncia_var.set(fecha_ren_val)
+        elif not fecha_ren_val and not preserve_existing:
+            frame.fecha_carta_renuncia_var.set('')
+        nombre_agencia_val = (row.get('nombre_agencia') or '').strip()
+        if nombre_agencia_val and should_autofill_field(frame.nombre_agencia_var.get(), preserve_existing):
+            frame.nombre_agencia_var.set(nombre_agencia_val)
+        elif not nombre_agencia_val and not preserve_existing:
+            frame.nombre_agencia_var.set('')
+        codigo_agencia_val = (row.get('codigo_agencia') or '').strip()
+        if codigo_agencia_val and should_autofill_field(frame.codigo_agencia_var.get(), preserve_existing):
+            frame.codigo_agencia_var.set(codigo_agencia_val)
+        elif not codigo_agencia_val and not preserve_existing:
+            frame.codigo_agencia_var.set('')
         frame.tipo_falta_var.set((row.get('tipo_falta') or '').strip() or 'No aplica')
         frame.tipo_sancion_var.set((row.get('tipo_sancion') or '').strip() or 'No aplica')
         lookup_key = normalized_id or id_col
         if lookup_key:
             self.team_lookup[lookup_key] = {
+                'nombres': frame.nombres_var.get(),
+                'apellidos': frame.apellidos_var.get(),
                 'division': frame.division_var.get(),
                 'area': frame.area_var.get(),
                 'servicio': frame.servicio_var.get(),
                 'puesto': frame.puesto_var.get(),
+                'fecha_carta_inmediatez': frame.fecha_carta_inmediatez_var.get(),
+                'fecha_carta_renuncia': frame.fecha_carta_renuncia_var.get(),
                 'nombre_agencia': frame.nombre_agencia_var.get(),
                 'codigo_agencia': frame.codigo_agencia_var.get(),
             }
@@ -5779,10 +5843,14 @@ class FraudCaseApp:
             tm = self.team_frames[i]
             tm.id_var.set(col.get('id_colaborador', ''))
             tm.flag_var.set(col.get('flag', ''))
+            tm.nombres_var.set(col.get('nombres', ''))
+            tm.apellidos_var.set(col.get('apellidos', ''))
             tm.division_var.set(col.get('division', ''))
             tm.area_var.set(col.get('area', ''))
             tm.servicio_var.set(col.get('servicio', ''))
             tm.puesto_var.set(col.get('puesto', ''))
+            tm.fecha_carta_inmediatez_var.set(col.get('fecha_carta_inmediatez', ''))
+            tm.fecha_carta_renuncia_var.set(col.get('fecha_carta_renuncia', ''))
             tm.nombre_agencia_var.set(col.get('nombre_agencia', ''))
             tm.codigo_agencia_var.set(col.get('codigo_agencia', ''))
             tm.tipo_falta_var.set(col.get('tipo_falta', ''))
@@ -6688,7 +6756,27 @@ class FraudCaseApp:
         # CLIENTES
         write_csv('clientes.csv', data['clientes'], ['id_cliente', 'id_caso', 'tipo_id', 'flag', 'telefonos', 'correos', 'direcciones', 'accionado'])
         # COLABORADORES
-        write_csv('colaboradores.csv', data['colaboradores'], ['id_colaborador', 'id_caso', 'flag', 'division', 'area', 'servicio', 'puesto', 'nombre_agencia', 'codigo_agencia', 'tipo_falta', 'tipo_sancion'])
+        write_csv(
+            'colaboradores.csv',
+            data['colaboradores'],
+            [
+                'id_colaborador',
+                'id_caso',
+                'flag',
+                'nombres',
+                'apellidos',
+                'division',
+                'area',
+                'servicio',
+                'puesto',
+                'fecha_carta_inmediatez',
+                'fecha_carta_renuncia',
+                'nombre_agencia',
+                'codigo_agencia',
+                'tipo_falta',
+                'tipo_sancion',
+            ],
+        )
         # PRODUCTOS
         write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'])
         # PRODUCTO_RECLAMO
