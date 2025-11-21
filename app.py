@@ -90,7 +90,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
                       ensure_external_drive_dir)
-from ui.config import init_styles
+from ui.config import COL_PADX, ROW_PADY, init_styles
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
@@ -1039,49 +1039,53 @@ class FraudCaseApp:
     def build_analysis_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        # Campos de análisis
-        row1 = ttk.Frame(frame)
-        row1.pack(fill="x", pady=1)
-        ttk.Label(row1, text="Antecedentes:").pack(side="left")
-        self.antecedentes_text = scrolledtext.ScrolledText(row1, width=80, height=4, wrap="word")
-        self.antecedentes_text.pack(side="left", padx=5)
-        self.antecedentes_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó antecedentes"))
-        self.register_tooltip(self.antecedentes_text, "Resume los hechos previos y contexto del caso.")
-        row2 = ttk.Frame(frame)
-        row2.pack(fill="x", pady=1)
-        ttk.Label(row2, text="Modus operandi:").pack(side="left")
-        self.modus_text = scrolledtext.ScrolledText(row2, width=80, height=4, wrap="word")
-        self.modus_text.pack(side="left", padx=5)
-        self.modus_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó modus operandi"))
-        self.register_tooltip(self.modus_text, "Describe la forma en que se ejecutó el fraude.")
-        row3 = ttk.Frame(frame)
-        row3.pack(fill="x", pady=1)
-        ttk.Label(row3, text="Hallazgos principales:").pack(side="left")
-        self.hallazgos_text = scrolledtext.ScrolledText(row3, width=80, height=4, wrap="word")
-        self.hallazgos_text.pack(side="left", padx=5)
-        self.hallazgos_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó hallazgos"))
-        self.register_tooltip(self.hallazgos_text, "Menciona los hallazgos clave de la investigación.")
-        row4 = ttk.Frame(frame)
-        row4.pack(fill="x", pady=1)
-        ttk.Label(row4, text="Descargos del colaborador:").pack(side="left")
-        self.descargos_text = scrolledtext.ScrolledText(row4, width=80, height=4, wrap="word")
-        self.descargos_text.pack(side="left", padx=5)
-        self.descargos_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó descargos"))
-        self.register_tooltip(self.descargos_text, "Registra los descargos formales del colaborador.")
-        row5 = ttk.Frame(frame)
-        row5.pack(fill="x", pady=1)
-        ttk.Label(row5, text="Conclusiones:").pack(side="left")
-        self.conclusiones_text = scrolledtext.ScrolledText(row5, width=80, height=4, wrap="word")
-        self.conclusiones_text.pack(side="left", padx=5)
-        self.conclusiones_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó conclusiones"))
-        self.register_tooltip(self.conclusiones_text, "Escribe las conclusiones generales del informe.")
-        row6 = ttk.Frame(frame)
-        row6.pack(fill="x", pady=1)
-        ttk.Label(row6, text="Recomendaciones y mejoras:").pack(side="left")
-        self.recomendaciones_text = scrolledtext.ScrolledText(row6, width=80, height=4, wrap="word")
-        self.recomendaciones_text.pack(side="left", padx=5)
-        self.recomendaciones_text.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó recomendaciones"))
-        self.register_tooltip(self.recomendaciones_text, "Propón acciones correctivas y preventivas.")
+        frame.columnconfigure(1, weight=1)
+
+        fields = [
+            ("Antecedentes:", "Modificó antecedentes", "Resume los hechos previos y contexto del caso."),
+            ("Modus operandi:", "Modificó modus operandi", "Describe la forma en que se ejecutó el fraude."),
+            ("Hallazgos principales:", "Modificó hallazgos", "Menciona los hallazgos clave de la investigación."),
+            ("Descargos del colaborador:", "Modificó descargos", "Registra los descargos formales del colaborador."),
+            ("Conclusiones:", "Modificó conclusiones", "Escribe las conclusiones generales del informe."),
+            ("Recomendaciones y mejoras:", "Modificó recomendaciones", "Propón acciones correctivas y preventivas."),
+        ]
+
+        text_widgets = []
+        for idx, (label_text, log_message, tooltip) in enumerate(fields):
+            ttk.Label(frame, text=label_text).grid(
+                row=idx,
+                column=0,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky="e",
+            )
+            text_widget = scrolledtext.ScrolledText(
+                frame,
+                width=100,
+                height=6,
+                wrap="word",
+            )
+            text_widget.grid(
+                row=idx,
+                column=1,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky="we",
+            )
+            text_widget.bind(
+                "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
+            )
+            self.register_tooltip(text_widget, tooltip)
+            text_widgets.append(text_widget)
+
+        (
+            self.antecedentes_text,
+            self.modus_text,
+            self.hallazgos_text,
+            self.descargos_text,
+            self.conclusiones_text,
+            self.recomendaciones_text,
+        ) = text_widgets
 
     def build_actions_tab(self, parent):
         frame = ttk.Frame(parent)
