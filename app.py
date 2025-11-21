@@ -90,7 +90,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
                       ensure_external_drive_dir)
-from ui.config import COL_PADX, ROW_PADY, init_styles
+from ui.config import COL_PADX, FONT_BASE, ROW_PADY, init_styles
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
@@ -1108,8 +1108,13 @@ class FraudCaseApp:
 
         analysis_group = ttk.LabelFrame(frame, text="Análisis narrativo")
         analysis_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
-        analysis_group.columnconfigure(0, weight=0)
-        analysis_group.columnconfigure(1, weight=1)
+        analysis_group.columnconfigure(0, weight=1)
+        analysis_group.rowconfigure(0, weight=1)
+
+        analysis_container = ttk.Frame(analysis_group)
+        analysis_container.grid(row=0, column=0, sticky="nsew")
+        analysis_container.columnconfigure(0, weight=0)
+        analysis_container.columnconfigure(1, weight=1)
 
         fields = [
             ("Antecedentes:", "Modificó antecedentes", "Resume los hechos previos y contexto del caso."),
@@ -1122,7 +1127,7 @@ class FraudCaseApp:
 
         text_widgets = []
         for idx, (label_text, log_message, tooltip) in enumerate(fields):
-            ttk.Label(analysis_group, text=label_text).grid(
+            ttk.Label(analysis_container, text=label_text).grid(
                 row=idx,
                 column=0,
                 padx=COL_PADX,
@@ -1130,7 +1135,7 @@ class FraudCaseApp:
                 sticky="e",
             )
             text_widget = scrolledtext.ScrolledText(
-                analysis_group,
+                analysis_container,
                 width=1,
                 height=6,
                 wrap="word",
@@ -1142,7 +1147,7 @@ class FraudCaseApp:
                 pady=ROW_PADY,
                 sticky="we",
             )
-            text_widget.configure(takefocus=True)
+            text_widget.configure(takefocus=True, font=FONT_BASE, padx=COL_PADX, pady=ROW_PADY)
             text_widget.bind(
                 "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
             )
