@@ -53,6 +53,14 @@ class ThemeManager:
     current: str = "light"
 
     @classmethod
+    def load_saved_theme(cls) -> str:
+        """Carga la preferencia previa y actualiza el estado interno."""
+
+        saved = cls._load_saved_theme()
+        cls.current = saved
+        return saved
+
+    @classmethod
     def _load_saved_theme(cls) -> str:
         if THEME_CONFIG_FILE.exists():
             try:
@@ -206,5 +214,4 @@ class ThemeManager:
 
         _update(cls._root)
 
-
-ThemeManager.current = ThemeManager._load_saved_theme()
+ThemeManager.current = ThemeManager.load_saved_theme()
