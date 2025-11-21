@@ -1,3 +1,6 @@
+from collections import defaultdict
+
+
 class DummyVar:
     def __init__(self, value=""):
         self._value = value
@@ -13,6 +16,47 @@ class DummyVar:
 
     def trace_remove(self, *_args, **_kwargs):
         return None
+
+
+class RichTextWidgetStub:
+    def __init__(self, text=""):
+        self.text = text
+        self.tags = defaultdict(list)
+        self.images = []
+        self.created_images = []
+
+    def get(self, *_args, **_kwargs):
+        return self.text
+
+    def insert(self, _index, text):
+        self.text = text
+
+    def delete(self, *_args, **_kwargs):
+        self.text = ""
+        self.tags = defaultdict(list)
+        self.images = []
+        self.created_images = []
+
+    def tag_names(self):
+        return list(self.tags.keys())
+
+    def tag_add(self, tag_name, start, end):
+        self.tags[tag_name].append((start, end))
+
+    def tag_ranges(self, tag_name):
+        ranges = []
+        for start, end in self.tags.get(tag_name, []):
+            ranges.extend([start, end])
+        return ranges
+
+    def dump(self, *_args, image=False, **_kwargs):
+        if not image:
+            return []
+        return [("image", name, index) for name, index in self.images]
+
+    def image_create(self, index, image=None):
+        self.created_images.append((index, image))
+
 
 
 class BaseFrameStub:
