@@ -1313,9 +1313,15 @@ class FraudCaseApp:
         summary_section.columnconfigure(0, weight=1)
         team_columns = [
             ("id", "ID"),
+            ("nombres", "Nombres"),
+            ("apellidos", "Apellidos"),
             ("division", "División"),
             ("area", "Área"),
+            ("servicio", "Servicio"),
+            ("puesto", "Puesto"),
             ("tipo_sancion", "Tipo sanción"),
+            ("fecha_carta_inmediatez", "Carta inmediatez"),
+            ("fecha_carta_renuncia", "Carta renuncia"),
         ]
         self.team_summary_tree = ttk.Treeview(
             summary_section, columns=[col for col, _ in team_columns], show="headings", height=5
@@ -4129,9 +4135,15 @@ class FraudCaseApp:
             return [
                 (
                     col.get("id_colaborador", ""),
+                    col.get("nombres", ""),
+                    col.get("apellidos", ""),
                     col.get("division", ""),
                     col.get("area", ""),
+                    col.get("servicio", ""),
+                    col.get("puesto", ""),
                     col.get("tipo_sancion", ""),
+                    col.get("fecha_carta_inmediatez", ""),
+                    col.get("fecha_carta_renuncia", ""),
                 )
                 for col in dataset.get("colaboradores", [])
             ]
