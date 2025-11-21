@@ -5142,7 +5142,8 @@ class FraudCaseApp:
             try:
                 with open(AUTOSAVE_FILE, 'r', encoding="utf-8") as f:
                     data = json.load(f)
-                self.populate_from_data(data)
+                dataset = self._ensure_case_data(data)
+                self.populate_from_data(dataset)
                 log_event("navegacion", "Se cargó el autosave", self.logs)
             except Exception as ex:
                 log_event("validacion", f"Error cargando autosave: {ex}", self.logs)
@@ -5249,12 +5250,22 @@ class FraudCaseApp:
         log_event("validacion", message, self.logs)
 
     def _compute_temp_signature(self, data: CaseData):
-        case = (data.get("caso") or {}) if isinstance(data, Mapping) else {}
-        clients = data.get("clientes", []) if isinstance(data, Mapping) else []
-        team = data.get("colaboradores", []) if isinstance(data, Mapping) else []
-        products = data.get("productos", []) if isinstance(data, Mapping) else []
-        reclamos = data.get("reclamos", []) if isinstance(data, Mapping) else []
-        involucs = data.get("involucramientos", []) if isinstance(data, Mapping) else []
+        dataset = self._ensure_case_data(data)
+        payload = dataset.as_dict()
+        case = payload.get("caso") or {}
+        clients = payload.get("clientes", [])
+        team = payload.get("colaboradores", [])
+        products = payload.get("productos", [])
+        reclamos = payload.get("reclamos", [])
+        involucs = payload.get("involucramientos", [])
+        encabezado = self._normalize_mapping_strings(payload.get("encabezado", {}))
+        operaciones = self._normalize_table_rows(payload.get("operaciones", []))
+        anexos = self._normalize_table_rows(payload.get("anexos", []))
+        firmas = self._normalize_table_rows(payload.get("firmas", []))
+        recomendaciones = self._normalize_recommendation_categories(
+            payload.get("recomendaciones_categorias", {})
+        )
+        analysis = self._normalize_analysis_texts(payload.get("analisis", {}))
         total_investigated = self._sum_investigated_amounts(products)
         return (
             str(case.get("id_caso", "")).strip(),
@@ -5266,6 +5277,12 @@ class FraudCaseApp:
             len([r for r in reclamos if r]),
             len([i for i in involucs if i]),
             total_investigated,
+            tuple(sorted(encabezado.items())),
+            tuple(tuple(sorted(row.items())) for row in operaciones),
+            tuple(tuple(sorted(row.items())) for row in anexos),
+            tuple(tuple(sorted(row.items())) for row in firmas),
+            tuple((key, tuple(values)) for key, values in sorted(recomendaciones.items())),
+            tuple(sorted(analysis.items())),
         )
 
     def _sum_investigated_amounts(self, products: list[dict]) -> Decimal:
@@ -5439,7 +5456,8 @@ class FraudCaseApp:
         try:
             with open(filename, 'r', encoding="utf-8") as f:
                 data = json.load(f)
-            self.populate_from_data(data)
+            dataset = self._ensure_case_data(data)
+            self.populate_from_data(dataset)
             log_event("navegacion", f"Se cargó versión desde {filename}", self.logs)
             messagebox.showinfo("Versión cargada", "La versión se cargó correctamente.")
         except Exception as ex:
@@ -5710,8 +5728,9 @@ class FraudCaseApp:
 
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
-        if isinstance(data, CaseData):
-            data = data.as_dict()
+
+        dataset = self._ensure_case_data(data)
+        data = dataset.as_dict()
         # Limpiar primero sin confirmar ni sobrescribir el autosave
         self._clear_case_state(save_autosave=False)
         # Datos de caso
