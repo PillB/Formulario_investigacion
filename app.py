@@ -100,8 +100,8 @@ from ui.config import COL_PADX, FONT_BASE, ROW_PADY
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
+from log_schema import LOG_FIELDNAMES
 from validators import (
-    LOG_FIELDNAMES,
     FieldValidator,
     TIPO_PRODUCTO_NORMALIZED,
     drain_log_queue,
