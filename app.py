@@ -302,10 +302,12 @@ class FraudCaseApp:
     def import_combined(self, filename=None):
         """Importa datos combinados de productos, clientes y colaboradores."""
 
+        log_event("navegacion", "Usuario pulsó importar datos combinados", self.logs)
         filename = filename or self._select_csv_file("combinado", "Seleccionar CSV combinado")
         if not filename:
             messagebox.showwarning("Sin archivo", "No hay CSV combinado disponible para importar.")
             return
+        log_event("navegacion", "Inició importación de datos combinados", self.logs)
         def worker():
             prepared_rows = []
             for row in iter_massive_csv_rows(filename):
@@ -342,10 +344,12 @@ class FraudCaseApp:
     def import_risks(self, filename=None):
         """Importa riesgos desde un archivo CSV."""
 
+        log_event("navegacion", "Usuario pulsó importar riesgos", self.logs)
         filename = filename or self._select_csv_file("riesgos", "Seleccionar CSV de riesgos")
         if not filename:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de riesgos para importar.")
             return
+        log_event("navegacion", "Inició importación de riesgos", self.logs)
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -364,10 +368,12 @@ class FraudCaseApp:
     def import_norms(self, filename=None):
         """Importa normas transgredidas desde un archivo CSV."""
 
+        log_event("navegacion", "Usuario pulsó importar normas", self.logs)
         filename = filename or self._select_csv_file("normas", "Seleccionar CSV de normas")
         if not filename:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de normas.")
             return
+        log_event("navegacion", "Inició importación de normas", self.logs)
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -386,10 +392,12 @@ class FraudCaseApp:
     def import_claims(self, filename=None):
         """Importa reclamos desde un archivo CSV."""
 
+        log_event("navegacion", "Usuario pulsó importar reclamos", self.logs)
         filename = filename or self._select_csv_file("reclamos", "Seleccionar CSV de reclamos")
         if not filename:
             messagebox.showwarning("Sin archivo", "No se encontró CSV de reclamos.")
             return
+        log_event("navegacion", "Inició importación de reclamos", self.logs)
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -4153,10 +4161,12 @@ class FraudCaseApp:
     def import_clients(self, filename=None):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
 
+        log_event("navegacion", "Usuario pulsó importar clientes", self.logs)
         filename = filename or self._select_csv_file("clientes", "Seleccionar CSV de clientes")
         if not filename:
             messagebox.showwarning("Sin archivo", "No se seleccionó un CSV para clientes ni se encontró el ejemplo.")
             return
+        log_event("navegacion", "Inició importación de clientes", self.logs)
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -4178,10 +4188,12 @@ class FraudCaseApp:
     def import_team_members(self, filename=None):
         """Importa colaboradores desde un archivo CSV y los añade a la lista."""
 
+        log_event("navegacion", "Usuario pulsó importar colaboradores", self.logs)
         filename = filename or self._select_csv_file("colaboradores", "Seleccionar CSV de colaboradores")
         if not filename:
             messagebox.showwarning("Sin archivo", "No hay CSV para colaboradores disponible.")
             return
+        log_event("navegacion", "Inició importación de colaboradores", self.logs)
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -4203,10 +4215,12 @@ class FraudCaseApp:
     def import_products(self, filename=None):
         """Importa productos desde un archivo CSV y los añade a la lista."""
 
+        log_event("navegacion", "Usuario pulsó importar productos", self.logs)
         filename = filename or self._select_csv_file("productos", "Seleccionar CSV de productos")
         if not filename:
             messagebox.showwarning("Sin archivo", "No se seleccionó CSV de productos ni se encontró el ejemplo.")
             return
+        log_event("navegacion", "Inició importación de productos", self.logs)
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -4534,8 +4548,10 @@ class FraudCaseApp:
         se realizan cambios.
 
         """
+        log_event("navegacion", "Usuario pulsó cargar versión", self.logs)
         filename = filedialog.askopenfilename(title="Seleccionar versión JSON", filetypes=[("JSON Files", "*.json")])
         if not filename:
+            log_event("navegacion", "Canceló cargar versión", self.logs)
             return
         try:
             with open(filename, 'r', encoding="utf-8") as f:
@@ -4615,7 +4631,9 @@ class FraudCaseApp:
     def clear_all(self, notify=True):
         """Elimina todos los datos actuales y restablece el formulario."""
 
+        log_event("navegacion", "Usuario pulsó borrar datos", self.logs)
         if not self._reset_form_state(confirm=True, save_autosave=True):
+            log_event("navegacion", "Canceló borrar datos", self.logs)
             return
         log_event("navegacion", "Se borraron todos los datos", self.logs)
         if notify:
@@ -5604,6 +5622,7 @@ class FraudCaseApp:
 
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
+        log_event("navegacion", "Usuario pulsó guardar y enviar", self.logs)
         data, folder, case_id = self._prepare_case_data_for_export()
         if not data or not folder or not case_id:
             return
