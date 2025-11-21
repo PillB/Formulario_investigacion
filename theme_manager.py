@@ -179,12 +179,14 @@ class ThemeManager:
             pass
 
         def _update(widget: tk.Misc) -> None:
-            if isinstance(widget, tk.Text):
+            if isinstance(widget, (tk.Text, tk.Entry, tk.Spinbox, tk.Listbox)):
                 try:
                     widget.configure(
                         background=theme["input_background"],
                         foreground=theme["input_foreground"],
                         insertbackground=theme["accent"],
+                        selectbackground=theme["select_background"],
+                        selectforeground=theme["select_foreground"],
                     )
                 except tk.TclError:
                     pass

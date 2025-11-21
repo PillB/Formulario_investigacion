@@ -171,6 +171,8 @@ class FraudCaseApp:
         self.import_progress = None
         self._import_progress_visible = False
         self._active_import_jobs = 0
+        self.theme_toggle_text = tk.StringVar()
+        self._update_theme_toggle_label()
 
         def register_tooltip(widget, text):
             if widget is None or not text:
@@ -1518,8 +1520,19 @@ class FraudCaseApp:
         frame.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
         frame.columnconfigure(0, weight=1)
 
+        header_frame = ttk.Frame(frame)
+        header_frame.grid(row=0, column=0, sticky="e", padx=COL_PADX, pady=(0, ROW_PADY))
+
+        self.theme_toggle_button = ttk.Button(
+            header_frame,
+            textvariable=self.theme_toggle_text,
+            command=self._toggle_theme,
+            padding=PRIMARY_PADDING,
+        )
+        self.theme_toggle_button.grid(row=0, column=0, sticky="e")
+
         catalog_group = ttk.LabelFrame(frame, text="Catálogos de detalle")
-        catalog_group.grid(row=0, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        catalog_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
         catalog_group.columnconfigure(0, weight=1)
         catalog_group.columnconfigure(1, weight=1)
 
@@ -1567,7 +1580,7 @@ class FraudCaseApp:
         self._catalog_progress_visible = False
 
         import_group = ttk.LabelFrame(frame, text="Importar datos masivos (CSV)")
-        import_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        import_group.grid(row=2, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
         import_group.columnconfigure(0, weight=0)
         import_group.columnconfigure(1, weight=1)
 
@@ -1676,7 +1689,7 @@ class FraudCaseApp:
         self._import_progress_visible = False
 
         action_group = ttk.LabelFrame(frame, text="Guardar, cargar y reportes")
-        action_group.grid(row=2, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        action_group.grid(row=3, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
         action_group.columnconfigure(0, weight=0)
         action_group.columnconfigure(1, weight=1)
 
@@ -1781,6 +1794,18 @@ class FraudCaseApp:
             justify="left",
         ).grid(row=md_row + 1, column=0, columnspan=2, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
+
+    def _toggle_theme(self):
+        ThemeManager.toggle()
+        self._update_theme_toggle_label()
+        self._safe_update_idletasks()
+
+    def _update_theme_toggle_label(self):
+        if ThemeManager.current == "dark":
+            label = "☀️ Light Mode"
+        else:
+            label = "🌙 Dark Mode"
+        self.theme_toggle_text.set(label)
 
     def _register_catalog_dependent_widget(self, widget):
         if widget is None:
