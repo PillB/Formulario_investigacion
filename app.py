@@ -1713,8 +1713,8 @@ class FraudCaseApp:
 
             text_widget = scrolledtext.ScrolledText(
                 section_frame,
-                width=4,
-                height=16,
+                width=80,
+                height=18,
                 wrap="word",
             )
             text_widget.grid(
