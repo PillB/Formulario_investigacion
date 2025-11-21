@@ -700,7 +700,16 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     focc_entry,
-                    lambda: validate_date_text(self.fecha_oc_var.get(), "la fecha de ocurrencia", allow_blank=False),
+                    lambda: validate_date_text(
+                        self.fecha_oc_var.get(),
+                        "la fecha de ocurrencia",
+                        allow_blank=False,
+                        enforce_max_today=True,
+                        must_be_before=(
+                            self.fecha_desc_var.get(),
+                            "la fecha de descubrimiento",
+                        ),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Fecha ocurrencia",
                     variables=[self.fecha_oc_var],
@@ -1121,7 +1130,13 @@ class ProductFrame:
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def _validate_fecha_descubrimiento(self):
-        msg = validate_date_text(self.fecha_desc_var.get(), "la fecha de descubrimiento", allow_blank=False)
+        msg = validate_date_text(
+            self.fecha_desc_var.get(),
+            "la fecha de descubrimiento",
+            allow_blank=False,
+            enforce_max_today=True,
+            must_be_after=(self.fecha_oc_var.get(), "la fecha de ocurrencia"),
+        )
         if msg:
             return msg
         producto_label = self.id_var.get().strip() or f"Producto {self.idx+1}"
