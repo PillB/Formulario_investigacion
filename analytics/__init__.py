@@ -1,15 +1,25 @@
-"""Herramientas analíticas para visualizar y resumir uso de la aplicación."""
+"""Herramientas de diagnóstico y visualización de uso del formulario."""
 
-from .visualizer import (
-    ScreenLayout,
-    VisualizerResult,
-    generate_usage_visuals,
+from .usage_visualizer import (
+    AnalyticsReport,
+    DEFAULT_SCREEN_DIMENSIONS,
+    DEFAULT_SCREEN_HINTS,
+    HeatmapData,
+    MissingDependencyError,
+    infer_screen,
     load_log_rows,
+    parse_timestamp,
+    visualize_usage,
 )
 
 __all__ = [
-    "ScreenLayout",
-    "VisualizerResult",
-    "generate_usage_visuals",
+    "AnalyticsReport",
+    "DEFAULT_SCREEN_DIMENSIONS",
+    "DEFAULT_SCREEN_HINTS",
+    "HeatmapData",
+    "MissingDependencyError",
+    "infer_screen",
     "load_log_rows",
+    "parse_timestamp",
+    "visualize_usage",
 ]

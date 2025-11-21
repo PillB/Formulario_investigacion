@@ -135,6 +135,16 @@ graph TD
 - Para `subtipo`, detalla la acción (`click`, `cambio_tab`, `paste`, etc.).
 - `coords` es opcional; cuando apliquen, registra la posición como `x,y` proveniente del evento Tkinter.
 
+## Analíticas y visualización de uso
+- El módulo `analytics.usage_visualizer` permite cargar `logs.csv` y generar heatmaps por pantalla con insights automáticos. Ejemplo rápido:
+  ```python
+  from analytics.usage_visualizer import visualize_usage
+
+  report = visualize_usage('logs.csv', output_path='heatmaps.png')
+  print(report.interpretations)
+  ```
+- Requiere `matplotlib` (instalar con `pip install matplotlib`). Las interpretaciones resaltan pantallas dominantes, widgets más usados, proporción de validaciones y tiempo aproximado por pestaña.
+
 ## Solución de problemas
 - **Errores de validación**: se muestran debajo de los campos o mediante diálogos; corrige el formato indicado y repite la acción.
 - **Permisos**: verifica acceso a `exports/` y `external drive/` si fallan los respaldos.

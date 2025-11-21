@@ -61,6 +61,7 @@ import os
 import shutil
 import zipfile
 import threading
+from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -137,6 +138,7 @@ class FraudCaseApp:
     AUTOSAVE_DELAY_MS = 4000
     SUMMARY_REFRESH_DELAY_MS = 250
     LOG_FLUSH_INTERVAL_MS = 5000
+    HEATMAP_BUCKET_SIZE = 100
     _external_drive_path: Optional[Path] = None
     _external_log_file_initialized: bool = False
 
@@ -148,6 +150,7 @@ class FraudCaseApp:
         self._suppress_messagebox = False
         # Lista para logs de navegación y validación
         self.logs = []
+        self._reset_navigation_metrics()
         self._hover_tooltips = []
         self.validators = []
         self._last_validated_risk_exposure_total = Decimal('0')
@@ -280,6 +283,98 @@ class FraudCaseApp:
         if STORE_LOGS_LOCALLY and LOGS_FILE:
             return True
         return self._resolve_external_log_target() is not None
+
+    def _reset_navigation_metrics(self) -> None:
+        self._widget_event_counts = defaultdict(int)
+        self._heatmap_counts = defaultdict(int)
+
+    def _ensure_navigation_metrics_initialized(self) -> None:
+        if not hasattr(self, "_widget_event_counts") or not hasattr(
+            self, "_heatmap_counts"
+        ):
+            self._reset_navigation_metrics()
+
+    def _bucket_heatmap_coords(self, coords: Optional[tuple]) -> Optional[tuple]:
+        if not coords or coords[0] is None or coords[1] is None:
+            return None
+        bucket = self.HEATMAP_BUCKET_SIZE
+        x_bucket = int(coords[0] // bucket * bucket)
+        y_bucket = int(coords[1] // bucket * bucket)
+        return (x_bucket, y_bucket)
+
+    def _accumulate_navigation_metrics(
+        self, widget_id: str, coords: Optional[tuple]
+    ) -> None:
+        self._ensure_navigation_metrics_initialized()
+        if widget_id:
+            self._widget_event_counts[widget_id] += 1
+        zone = self._bucket_heatmap_coords(coords)
+        if zone:
+            self._heatmap_counts[zone] += 1
+
+    def _emit_navigation_metrics(self) -> None:
+        self._ensure_navigation_metrics_initialized()
+        if not self._widget_event_counts and not self._heatmap_counts:
+            return
+        for widget_id, count in self._widget_event_counts.items():
+            log_event(
+                "navegacion",
+                f"Interacciones acumuladas en {widget_id}: {count}",
+                self.logs,
+                widget_id=widget_id,
+                event_subtipo="focus_metrics",
+            )
+        for (x_bucket, y_bucket), count in self._heatmap_counts.items():
+            log_event(
+                "navegacion",
+                f"Heatmap zona ({x_bucket},{y_bucket}) acumulada: {count}",
+                self.logs,
+                widget_id="heatmap",
+                coords=(x_bucket, y_bucket),
+                event_subtipo="click_heatmap",
+            )
+        self._reset_navigation_metrics()
+
+    def _handle_global_navigation_event(self, event: tk.Event, subtype: str) -> None:
+        try:
+            if self.root.focus_displayof() is None:
+                return
+        except tk.TclError:
+            return
+        widget = getattr(event, "widget", None)
+        if widget is None:
+            return
+        coords = (
+            getattr(event, "x_root", None),
+            getattr(event, "y_root", None),
+        )
+        log_event(
+            "navegacion",
+            f"Evento {subtype} en {widget.winfo_class()}",
+            self.logs,
+            widget_id=widget.winfo_name(),
+            coords=coords,
+            event_subtipo=subtype,
+        )
+        self._accumulate_navigation_metrics(widget.winfo_name(), coords)
+
+    def _register_navigation_bindings(self) -> None:
+        if getattr(self, "_navigation_bindings_registered", False):
+            return
+        bindings = (
+            ("<FocusIn>", "focus_in"),
+            ("<FocusOut>", "focus_out"),
+            ("<Button-1>", "click"),
+        )
+        for sequence, subtype in bindings:
+            self.root.bind_all(
+                sequence,
+                lambda event, st=subtype: self._handle_global_navigation_event(
+                    event, st
+                ),
+                add="+",
+            )
+        self._navigation_bindings_registered = True
 
     def _get_text_content(self, widget: tk.Text) -> str:
         if widget is None:
@@ -438,6 +533,7 @@ class FraudCaseApp:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True)
         self.notebook.bind("<<NotebookTabChanged>>", self._handle_notebook_tab_change)
+        self._register_navigation_bindings()
 
         # --- Pestaña principal: caso y participantes ---
         self.main_tab = ttk.Frame(self.notebook)
@@ -4324,6 +4420,7 @@ class FraudCaseApp:
     def _flush_log_queue_to_disk(self) -> None:
         if not self._has_log_targets():
             return
+        self._emit_navigation_metrics()
         rows = drain_log_queue()
         if not rows:
             return
@@ -4611,6 +4708,7 @@ class FraudCaseApp:
         # Reiniciar bitácora antes de poblar los frames por defecto
         self.logs.clear()
         drain_log_queue()
+        self._reset_navigation_metrics()
         # Volver a crear uno por cada sección donde corresponde
         self.add_client()
         self.add_team()
