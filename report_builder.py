@@ -4,10 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from textwrap import dedent
 from typing import Any, Dict, Iterable, List
-from xml.sax.saxutils import escape
-import zipfile
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
@@ -93,157 +90,8 @@ def build_report_filename(tipo_informe: str | None, case_id: str | None, extensi
     return f"Informe_{safe_tipo_informe}_{safe_case_id}.{extension}"
 
 
-_DOCX_STATIC_PARTS = {
-    '[Content_Types].xml': dedent('''
-        <?xml version="1.0" encoding="UTF-8"?>
-        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-            <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-            <Default Extension="xml" ContentType="application/xml"/>
-            <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-            <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-            <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
-            <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
-        </Types>
-    ''').strip().encode('utf-8'),
-    '_rels/.rels': dedent('''
-        <?xml version="1.0" encoding="UTF-8"?>
-        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-            <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
-            <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
-        </Relationships>
-    ''').strip().encode('utf-8'),
-    'docProps/core.xml': dedent('''
-        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
-            xmlns:dc="http://purl.org/dc/elements/1.1/"
-            xmlns:dcterms="http://purl.org/dc/terms/"
-            xmlns:dcmitype="http://purl.org/dc/dcmitype/"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <dc:title>Informe de caso</dc:title>
-            <cp:revision>1</cp:revision>
-        </cp:coreProperties>
-    ''').strip().encode('utf-8'),
-    'docProps/app.xml': dedent('''
-        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
-            xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-            <Application>Formulario Investigacion</Application>
-        </Properties>
-    ''').strip().encode('utf-8'),
-    'word/styles.xml': dedent('''
-        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-            <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
-                <w:name w:val="Normal"/>
-            </w:style>
-        </w:styles>
-    ''').strip().encode('utf-8'),
-}
-
-
-class _FallbackDocxCell:
-    __slots__ = ('text',)
-
-    def __init__(self):
-        self.text = ''
-
-    def to_xml(self):
-        if not self.text:
-            return '<w:tc><w:p/></w:tc>'
-        safe = escape(self.text)
-        return f'<w:tc><w:p><w:r><w:t xml:space="preserve">{safe}</w:t></w:r></w:p></w:tc>'
-
-
-class _FallbackDocxRow:
-    __slots__ = ('cells',)
-
-    def __init__(self, cols):
-        self.cells = [_FallbackDocxCell() for _ in range(cols)]
-
-    def to_xml(self):
-        return '<w:tr>' + ''.join(cell.to_xml() for cell in self.cells) + '</w:tr>'
-
-
-class _FallbackDocxTable:
-    __slots__ = ('rows', '_cols', 'style')
-
-    def __init__(self, rows, cols):
-        self._cols = cols
-        self.rows = [_FallbackDocxRow(cols) for _ in range(rows)]
-        self.style = None
-
-    def add_row(self):
-        row = _FallbackDocxRow(self._cols)
-        self.rows.append(row)
-        return row
-
-    def to_xml(self):
-        grid = ''.join('<w:gridCol w:w="2400"/>' for _ in range(self._cols))
-        rows_xml = ''.join(row.to_xml() for row in self.rows)
-        return f'<w:tbl><w:tblPr/><w:tblGrid>{grid}</w:tblGrid>{rows_xml}</w:tbl>'
-
-
-class _FallbackDocxDocument:
-    def __init__(self):
-        self._blocks = []
-
-    def add_paragraph(self, text):
-        self._blocks.append(('paragraph', text or ''))
-        return text
-
-    def add_heading(self, text, level=1):  # noqa: ARG002 - nivel ignorado en el respaldo
-        self._blocks.append(('paragraph', text or ''))
-        return text
-
-    def add_table(self, rows, cols):
-        table = _FallbackDocxTable(rows, cols)
-        self._blocks.append(('table', table))
-        return table
-
-    def save(self, path):
-        document_xml = self._render_document_xml()
-        _write_docx_package(path, document_xml)
-
-    def _render_document_xml(self):
-        pieces = [
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
-            '<w:body>',
-        ]
-        for block_type, payload in self._blocks:
-            if block_type == 'paragraph':
-                pieces.append(_fallback_paragraph_xml(payload))
-            elif block_type == 'table':
-                pieces.append(payload.to_xml())
-        pieces.extend([
-            '<w:sectPr>',
-            '<w:pgSz w:w="12240" w:h="15840"/>',
-            '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>',
-            '</w:sectPr>',
-            '</w:body>',
-            '</w:document>',
-        ])
-        return '\n'.join(pieces).encode('utf-8')
-
-
-def _fallback_paragraph_xml(text):
-    safe = escape(text or '')
-    if not safe:
-        return '<w:p/>'
-    return f'<w:p><w:r><w:t xml:space="preserve">{safe}</w:t></w:r></w:p>'
-
-
-def _write_docx_package(path, document_xml_bytes):
-    path = Path(path)
-    with zipfile.ZipFile(path, 'w') as bundle:
-        for name, payload in _DOCX_STATIC_PARTS.items():
-            bundle.writestr(name, payload)
-        bundle.writestr('word/document.xml', document_xml_bytes)
-
-
 def _create_word_document():
-    if not DOCX_AVAILABLE:
+    if DocxDocument is None:
         raise RuntimeError(DOCX_MISSING_MESSAGE)
     return DocxDocument()
 
@@ -498,12 +346,10 @@ def build_md(case_data: CaseData) -> str:
 
 
 def build_docx(case_data: CaseData, path: Path | str) -> Path:
-    if not DOCX_AVAILABLE:
-        raise RuntimeError(DOCX_MISSING_MESSAGE)
+    document = _create_word_document()
     context = _build_report_context(case_data)
     case = context['case']
     analysis = context['analysis']
-    document = _create_word_document()
 
     header_lines = [
         "Banco de Crédito - BCP",
