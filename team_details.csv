@@ -1,17 +1,10 @@
 id_colaborador,division,area,servicio,puesto,nombre_agencia,codigo_agencia,fecha_actualizacion
-T12345,Finanzas,Área Operativa,Servicio 1,Analista,Agencia Central,123456,2022-03-10
 T12345,Finanzas,Área Operativa,Servicio 1,Analista,Agencia Central,123456,2024-05-15
-T12345,Finanzas,Área Operativa,Servicio 1,Analista,Agencia Central,123456,2030-02-01
-T12345,Finanzas,Área Operativa,Servicio 1,Analista,Agencia Central,123456,2024-13-01
-U00123,Marketing,Área Comercial,Servicio 2,Gerente,Agencia Sur,654321,2021-08-05
+T12345,Finanzas,Área Operativa,Servicio 1,Analista,Agencia Central,123456,2023-07-22
 U00123,Marketing,Área Comercial,Servicio 2,Gerente,Agencia Sur,654321,2023-09-12
-U00123,Marketing,Área Comercial,Servicio 2,Gerente,Agencia Sur,654321,2026-12-01
-U00123,Marketing,Área Comercial,Servicio 2,Gerente,Agencia Sur,654321,2023-02-30
-T54321,DCA,Área Comercial,Servicio 3,Jefe,Agencia Norte,111111,2020-11-20
 T54321,DCA,Área Comercial,Servicio 3,Jefe,Agencia Norte,111111,2024-01-10
-T54321,DCA,Área Comercial,Servicio 3,Jefe,Agencia Norte,111111,2031-04-15
-T54321,DCA,Área Comercial,Servicio 3,Jefe,Agencia Norte,111111,2024/05/40
-Z99999,Canales de atención,Área Comercial,Servicio 4,Analista,Agencia Lima,222222,2019-05-01
+T54321,DCA,Área Comercial,Servicio 3,Jefe,Agencia Norte,111111,2020-11-20
+Z99999,Canales de atención,Área Comercial,Servicio 4,Analista,Agencia Lima,222222,2024-06-18
 Z99999,Canales de atención,Área Comercial,Servicio 4,Analista,Agencia Lima,222222,2022-02-14
-Z99999,Canales de atención,Área Comercial,Servicio 4,Analista,Agencia Lima,222222,2025-06-18
-Z99999,Canales de atención,Área Comercial,Servicio 4,Analista,Agencia Lima,222222,invalid-date
+S50005,Seguridad,Área de Riesgos,Servicio 5,Especialista,,,2023-11-05
+A60006,Operaciones,Área de Tecnología,Servicio 6,Coordinador,Agencia Digital,333333,2024-02-27
