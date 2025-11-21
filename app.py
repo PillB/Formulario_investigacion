@@ -1258,7 +1258,6 @@ class FraudCaseApp:
     def _on_new_team_member(self):
         self.show_team_detail()
         self.add_team()
-        self._hide_team_detail()
         self._refresh_compact_views(sections={"colaboradores"})
 
     def toggle_team_detail(self):
@@ -1296,7 +1295,8 @@ class FraudCaseApp:
 
     def add_team(self):
         idx = len(self.team_frames)
-        self._show_team_detail()
+        was_visible = self._team_detail_visible
+        self.show_team_detail()
         team = TeamMemberFrame(
             self.team_container,
             idx,
@@ -1314,8 +1314,8 @@ class FraudCaseApp:
         self.team_frames.append(team)
         self.update_team_options_global()
         self._schedule_summary_refresh('colaboradores')
-        if self._team_detail_visible:
-            self.show_team_detail()
+        if not was_visible:
+            self.hide_team_detail()
 
     def remove_team(self, team_frame):
         self._handle_team_id_change(team_frame, team_frame.id_var.get(), None)
@@ -1335,33 +1335,13 @@ class FraudCaseApp:
         log_event("navegacion", "Actualizó opciones de colaborador", self.logs)
 
     def _toggle_team_detail(self):
-        if getattr(self, "_team_detail_visible", False):
-            self._hide_team_detail()
-        else:
-            self._show_team_detail()
+        self.toggle_team_detail()
 
     def _show_team_detail(self):
-        if not self.team_container:
-            return
-        if not getattr(self, "_team_detail_visible", False):
-            try:
-                self.team_container.pack(fill="x", pady=5)
-            except tk.TclError:
-                return
-        self._team_detail_visible = True
-        if self.team_toggle_btn:
-            self.team_toggle_btn.config(text="Ocultar formulario")
+        self.show_team_detail()
 
     def _hide_team_detail(self):
-        if not self.team_container:
-            return
-        try:
-            self.team_container.pack_forget()
-        except tk.TclError:
-            return
-        self._team_detail_visible = False
-        if self.team_toggle_btn:
-            self.team_toggle_btn.config(text="Mostrar formulario")
+        self.hide_team_detail()
 
     def _on_add_team_click(self):
         self.add_team()
@@ -1376,7 +1356,7 @@ class FraudCaseApp:
         collaborator_id = values[0] if values else ""
         frame = self._find_team_frame(collaborator_id)
         if frame:
-            self._show_team_detail()
+            self.show_team_detail()
             try:
                 frame.frame.focus_set()
             except tk.TclError:
