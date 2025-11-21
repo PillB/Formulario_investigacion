@@ -431,6 +431,7 @@ class ProductFrame:
         )
         id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
         id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.id_entry = id_entry
         ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Código único del producto investigado.")
@@ -1241,6 +1242,13 @@ class ProductFrame:
                 continue
             producto_data[field_name] = "0.00"
             getattr(self, var_attr).set("0.00")
+
+    def focus_first_field(self):
+        if hasattr(self, "id_entry") and hasattr(self.id_entry, "focus_set"):
+            try:
+                self.id_entry.focus_set()
+            except Exception:
+                return
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el producto {self.idx+1}?"):

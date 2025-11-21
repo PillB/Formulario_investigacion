@@ -51,6 +51,9 @@ class DummyWidget:
     def configure(self, **kwargs):
         self._config.update(kwargs)
 
+    def focus_set(self):
+        self._config['focused'] = True
+
     def __setitem__(self, key, value):
         self._config[key] = value
 
