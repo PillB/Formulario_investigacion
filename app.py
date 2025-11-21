@@ -188,6 +188,13 @@ class FraudCaseApp:
         self.risk_lookup = {}
         self.norm_lookup = {}
         self._reset_extended_sections()
+        self._post_edit_validators = []
+        self._encabezado_vars: dict[str, tk.StringVar] = {}
+        self._operation_vars: dict[str, tk.StringVar] = {}
+        self._anexo_vars: dict[str, tk.StringVar] = {}
+        self._firma_vars: dict[str, tk.StringVar] = {}
+        self._recommendation_widgets: dict[str, scrolledtext.ScrolledText] = {}
+        self._suppress_post_edit_validation = False
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
         self.import_progress = None
         self._import_progress_visible = False
@@ -261,6 +268,45 @@ class FraudCaseApp:
         self.load_autosave()
         self._trim_all_temp_versions()
         self.root.after(250, self._prompt_initial_catalog_loading)
+
+    class _PostEditValidator:
+        def __init__(self, widget, validate_callback, field_label, logs, suppression_flag):
+            self.widget = widget
+            self.validate_callback = validate_callback
+            self.field_label = field_label
+            self.logs = logs
+            self._suppression_flag = suppression_flag
+            self._armed = False
+            self._last_error: Optional[str] = None
+            widget.bind("<KeyRelease>", self._arm, add="+")
+            widget.bind("<<ComboboxSelected>>", self._on_edit, add="+")
+            widget.bind("<FocusOut>", self._on_edit, add="+")
+
+        def _arm(self, *_args):
+            self._armed = True
+
+        def _on_edit(self, *_args):
+            if not self._armed:
+                return
+            error = self.validate_callback()
+            if error and error != self._last_error and not self._suppression_flag():
+                try:
+                    messagebox.showerror("Dato inválido", error)
+                except tk.TclError:
+                    return
+                log_event("validacion", f"{self.field_label}: {error}", self.logs)
+            self._last_error = error
+
+    def _register_post_edit_validation(self, widget, validate_callback, field_label):
+        validator = self._PostEditValidator(
+            widget,
+            validate_callback,
+            field_label,
+            self.logs,
+            lambda: getattr(self, "_suppress_messagebox", False) or self._suppress_post_edit_validation,
+        )
+        self._post_edit_validators.append(validator)
+        return validator
 
     def _prepare_external_drive(self) -> Optional[Path]:
         try:
@@ -1701,6 +1747,552 @@ class FraudCaseApp:
             self.conclusiones_text,
             self.recomendaciones_text,
         ) = text_widgets
+
+        self._build_extended_analysis_sections(frame)
+
+    def _build_extended_analysis_sections(self, parent):
+        extended_group = ttk.LabelFrame(parent, text="Secciones extendidas del informe")
+        extended_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        extended_group.columnconfigure(0, weight=1)
+        extended_group.rowconfigure(0, weight=1)
+
+        notebook = ttk.Notebook(extended_group)
+        notebook.grid(row=0, column=0, sticky="nsew")
+
+        header_tab = ttk.Frame(notebook)
+        tables_tab = ttk.Frame(notebook)
+        notebook.add(header_tab, text="Encabezado y firmas")
+        notebook.add(tables_tab, text="Operaciones y anexos")
+
+        self._build_header_fields(header_tab)
+        self._build_recommendations_fields(header_tab)
+        self._build_signature_fields(header_tab)
+        self._build_operations_section(tables_tab)
+        self._build_anexos_section(tables_tab)
+
+    def _build_header_fields(self, parent):
+        header_group = ttk.LabelFrame(parent, text="Encabezado extendido")
+        header_group.pack(fill="x", expand=False, padx=COL_PADX, pady=ROW_PADY)
+        header_group.columnconfigure(1, weight=1)
+        header_group.columnconfigure(3, weight=1)
+
+        field_specs = [
+            ("Dirigido a:", "dirigido_a", 0),
+            ("Referencia:", "referencia", 1),
+            ("Área de reporte:", "area_reporte", 2),
+            ("Fecha de reporte (YYYY-MM-DD):", "fecha_reporte", 3),
+            ("Tipología de evento:", "tipologia_evento", 4),
+            ("Centro de costos (; separados):", "centro_costos", 5),
+            ("Procesos impactados:", "procesos_impactados", 6),
+            ("N° de reclamos:", "numero_reclamos", 7),
+            ("Analítica contable:", "analitica_contable", 8),
+            ("Producto (texto opcional):", "producto", 9),
+        ]
+
+        for label_text, key, row in field_specs:
+            ttk.Label(header_group, text=label_text).grid(
+                row=row,
+                column=0,
+                padx=COL_PADX,
+                pady=(ROW_PADY // 2),
+                sticky="e",
+            )
+            var = self._encabezado_vars.get(key) or tk.StringVar(
+                value=self._encabezado_data.get(key, "")
+            )
+            self._encabezado_vars[key] = var
+            entry = ttk.Entry(header_group, textvariable=var)
+            entry.grid(row=row, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+            var.trace_add("write", lambda *_args, k=key: self._update_encabezado_value(k))
+            if key == "centro_costos":
+                self._register_post_edit_validation(entry, self._validate_cost_centers, "Centro de costos")
+                self.register_tooltip(
+                    entry,
+                    "Ingresa centros de costos separados por punto y coma. Cada valor debe ser numérico y de al menos 5 dígitos.",
+                )
+            elif key == "fecha_reporte":
+                self._register_post_edit_validation(
+                    entry,
+                    lambda: validate_date_text(
+                        self._encabezado_vars["fecha_reporte"].get(),
+                        "La fecha de reporte",
+                        allow_blank=True,
+                        enforce_max_today=True,
+                    ),
+                    "Fecha de reporte",
+                )
+                self.register_tooltip(entry, "Fecha opcional del informe con formato YYYY-MM-DD.")
+            elif key == "numero_reclamos":
+                self._register_post_edit_validation(entry, self._validate_reclamos_count, "Número de reclamos")
+                self.register_tooltip(entry, "Si se conoce, ingresa la cantidad total de reclamos asociados.")
+            else:
+                self.register_tooltip(entry, "Campo opcional para complementar el encabezado del informe.")
+
+    def _build_recommendations_fields(self, parent):
+        rec_group = ttk.LabelFrame(parent, text="Recomendaciones categorizadas")
+        rec_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        rec_group.columnconfigure(0, weight=1)
+        rec_group.columnconfigure(1, weight=1)
+        rec_group.columnconfigure(2, weight=1)
+
+        text_specs = [
+            ("Laboral", "laboral", 0),
+            ("Operativo", "operativo", 1),
+            ("Legal", "legal", 2),
+        ]
+        for label, key, column in text_specs:
+            container = ttk.Frame(rec_group)
+            container.grid(row=0, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="nsew")
+            container.columnconfigure(0, weight=1)
+            ttk.Label(container, text=label).grid(row=0, column=0, sticky="w", padx=COL_PADX)
+            text_widget = scrolledtext.ScrolledText(container, height=6, wrap=tk.WORD)
+            text_widget.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+            text_widget.insert("1.0", "\n".join(self._recomendaciones_categorias.get(key, [])))
+            text_widget.bind("<KeyRelease>", lambda _e, k=key, w=text_widget: self._update_recommendation_category(k, w))
+            self._recommendation_widgets[key] = text_widget
+            self.register_tooltip(
+                text_widget,
+                "Lista recomendaciones separadas por saltos de línea para agruparlas por ámbito (laboral, operativo o legal).",
+            )
+
+    def _build_signature_fields(self, parent):
+        firmas_group = ttk.LabelFrame(parent, text="Firma del investigador")
+        firmas_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        firmas_group.columnconfigure(1, weight=1)
+        firmas_group.columnconfigure(3, weight=1)
+
+        specs = [
+            ("Matrícula/ID investigador:", "matricula", 0, validate_team_member_id),
+            ("Nombre completo:", "nombre", 1, None),
+            ("Cargo:", "cargo", 2, None),
+        ]
+        for label_text, key, row, validator in specs:
+            ttk.Label(firmas_group, text=label_text).grid(
+                row=row,
+                column=0,
+                padx=COL_PADX,
+                pady=(ROW_PADY // 2),
+                sticky="e",
+            )
+            var = self._firma_vars.get(key) or tk.StringVar()
+            self._firma_vars[key] = var
+            entry = ttk.Entry(firmas_group, textvariable=var)
+            entry.grid(row=row, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+            var.trace_add("write", lambda *_args, k=key: self._on_firma_change(k))
+            if validator:
+                self._register_post_edit_validation(entry, lambda v=var: validator(v.get()), "ID de investigador")
+                self.register_tooltip(entry, "Usa el ID del colaborador con formato estándar (letra + 5 dígitos).")
+            elif key == "nombre":
+                self.register_tooltip(entry, "Nombre completo del firmante del informe.")
+            else:
+                self.register_tooltip(entry, "Cargo o rol del investigador principal.")
+
+        buttons = ttk.Frame(firmas_group)
+        buttons.grid(row=0, column=2, rowspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ns")
+        ttk.Button(buttons, text="Agregar/Actualizar", command=self._save_firma).pack(fill="x", pady=(0, ROW_PADY // 2))
+        ttk.Button(buttons, text="Limpiar selección", command=self._clear_firma_form).pack(fill="x")
+
+        self.firmas_tree = ttk.Treeview(
+            firmas_group,
+            columns=("matricula", "nombre", "cargo"),
+            show="headings",
+            height=4,
+        )
+        self.firmas_tree.heading("matricula", text="Matrícula")
+        self.firmas_tree.heading("nombre", text="Nombre")
+        self.firmas_tree.heading("cargo", text="Cargo")
+        self.firmas_tree.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
+        self.firmas_tree.bind("<<TreeviewSelect>>", lambda _e: self._load_selected_firma())
+        firmas_group.rowconfigure(3, weight=1)
+        self._refresh_firmas_tree()
+
+    def _build_operations_section(self, parent):
+        operations_group = ttk.LabelFrame(parent, text="Tabla de operaciones")
+        operations_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        operations_group.columnconfigure(0, weight=1)
+
+        form = ttk.Frame(operations_group)
+        form.grid(row=0, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        for idx in range(6):
+            form.columnconfigure(idx, weight=1)
+
+        op_specs = [
+            ("N°", "numero", 0, 0),
+            ("Fecha aprobación (YYYY-MM-DD)", "fecha_aprobacion", 1, 0),
+            ("Cliente/DNI", "cliente", 2, 0),
+            ("Ingreso bruto mensual", "ingreso_bruto_mensual", 3, 0),
+            ("Empresa empleadora", "empresa_empleadora", 4, 0),
+            ("Vendedor inmueble", "vendedor_inmueble", 5, 0),
+            ("Vendedor crédito", "vendedor_credito", 0, 1),
+            ("Producto", "producto", 1, 1),
+            ("Importe desembolsado", "importe_desembolsado", 2, 1),
+            ("Saldo deudor", "saldo_deudor", 3, 1),
+            ("Status BCP", "status_bcp", 4, 1),
+            ("Status SBS", "status_sbs", 5, 1),
+        ]
+        for label, key, col, row in op_specs:
+            ttk.Label(form, text=label).grid(
+                row=row * 2,
+                column=col,
+                padx=COL_PADX,
+                pady=(0, ROW_PADY // 2),
+                sticky="w",
+            )
+            var = self._operation_vars.get(key) or tk.StringVar()
+            self._operation_vars[key] = var
+            entry = ttk.Entry(form, textvariable=var)
+            entry.grid(row=row * 2 + 1, column=col, padx=COL_PADX, pady=(0, ROW_PADY), sticky="we")
+            if key == "fecha_aprobacion":
+                self._register_post_edit_validation(
+                    entry,
+                    lambda v=var: validate_date_text(v.get(), "La fecha de aprobación", allow_blank=True, enforce_max_today=True),
+                    "Fecha de aprobación",
+                )
+            if key in {"importe_desembolsado", "saldo_deudor"}:
+                self._register_post_edit_validation(
+                    entry,
+                    lambda v=var, label=label: validate_money_bounds(v.get(), label, allow_blank=True)[0],
+                    label,
+                )
+
+        buttons = ttk.Frame(operations_group)
+        buttons.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=(0, ROW_PADY))
+        ttk.Button(buttons, text="Agregar/Actualizar operación", command=self._save_operation).pack(side="left", padx=(0, COL_PADX))
+        ttk.Button(buttons, text="Eliminar operación", command=self._delete_operation).pack(side="left")
+        ttk.Button(buttons, text="Limpiar formulario", command=self._clear_operation_form).pack(side="left", padx=(COL_PADX, 0))
+
+        columns = [
+            "numero",
+            "fecha_aprobacion",
+            "cliente",
+            "ingreso_bruto_mensual",
+            "empresa_empleadora",
+            "vendedor_inmueble",
+            "vendedor_credito",
+            "producto",
+            "importe_desembolsado",
+            "saldo_deudor",
+            "status_bcp",
+            "status_sbs",
+        ]
+        self.operations_tree = ttk.Treeview(
+            operations_group,
+            columns=columns,
+            show="headings",
+            height=6,
+        )
+        for col in columns:
+            self.operations_tree.heading(col, text=col.replace("_", " ").title())
+            self.operations_tree.column(col, width=110, anchor="center")
+        self.operations_tree.grid(row=2, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        operations_group.rowconfigure(2, weight=1)
+        self.operations_tree.bind("<<TreeviewSelect>>", lambda _e: self._load_selected_operation())
+        self._refresh_operations_tree()
+
+    def _build_anexos_section(self, parent):
+        anexos_group = ttk.LabelFrame(parent, text="Anexos y respaldos")
+        anexos_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        anexos_group.columnconfigure(1, weight=1)
+        anexos_group.columnconfigure(3, weight=1)
+
+        ttk.Label(anexos_group, text="Título:").grid(row=0, column=0, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="e")
+        titulo_var = self._anexo_vars.get("titulo") or tk.StringVar()
+        self._anexo_vars["titulo"] = titulo_var
+        titulo_entry = ttk.Entry(anexos_group, textvariable=titulo_var)
+        titulo_entry.grid(row=0, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+        titulo_var.trace_add("write", lambda *_args: self._notify_dataset_changed())
+
+        ttk.Label(anexos_group, text="Descripción:").grid(row=0, column=2, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="e")
+        desc_var = self._anexo_vars.get("descripcion") or tk.StringVar()
+        self._anexo_vars["descripcion"] = desc_var
+        desc_entry = ttk.Entry(anexos_group, textvariable=desc_var)
+        desc_entry.grid(row=0, column=3, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+        desc_var.trace_add("write", lambda *_args: self._notify_dataset_changed())
+
+        btns = ttk.Frame(anexos_group)
+        btns.grid(row=1, column=0, columnspan=4, sticky="w", padx=COL_PADX, pady=(0, ROW_PADY))
+        ttk.Button(btns, text="Agregar/Actualizar anexo", command=self._save_anexo).pack(side="left", padx=(0, COL_PADX))
+        ttk.Button(btns, text="Eliminar anexo", command=self._delete_anexo).pack(side="left")
+        ttk.Button(btns, text="Limpiar", command=self._clear_anexo_form).pack(side="left", padx=(COL_PADX, 0))
+
+        self.anexos_tree = ttk.Treeview(
+            anexos_group,
+            columns=("titulo", "descripcion"),
+            show="headings",
+            height=5,
+        )
+        self.anexos_tree.heading("titulo", text="Título")
+        self.anexos_tree.heading("descripcion", text="Descripción")
+        self.anexos_tree.grid(row=2, column=0, columnspan=4, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        anexos_group.rowconfigure(2, weight=1)
+        self.anexos_tree.bind("<<TreeviewSelect>>", lambda _e: self._load_selected_anexo())
+        self._refresh_anexos_tree()
+
+    def _update_encabezado_value(self, key: str) -> None:
+        if key not in self._encabezado_vars:
+            return
+        raw_value = self._encabezado_vars[key].get()
+        if key == "centro_costos":
+            value = self._sanitize_cost_centers_text(raw_value)
+        else:
+            value = self._sanitize_text(raw_value)
+        self._encabezado_data[key] = value
+        self._notify_dataset_changed()
+
+    def _sanitize_cost_centers_text(self, raw_value: str) -> str:
+        entries = [item.strip() for item in (raw_value or "").split(";") if item.strip()]
+        return "; ".join(entries)
+
+    def _validate_cost_centers(self) -> Optional[str]:
+        text = self._sanitize_cost_centers_text(self._encabezado_vars.get("centro_costos", tk.StringVar()).get())
+        if not text:
+            return None
+        centers = [item for item in text.split(";") if item.strip()]
+        for center in centers:
+            trimmed = center.strip()
+            if not trimmed.isdigit():
+                return "Cada centro de costos debe ser numérico."
+            if len(trimmed) < 5:
+                return "Cada centro de costos debe tener al menos 5 dígitos."
+        return None
+
+    def _validate_reclamos_count(self) -> Optional[str]:
+        value = (self._encabezado_vars.get("numero_reclamos") or tk.StringVar()).get().strip()
+        if not value:
+            return None
+        if not value.isdigit():
+            return "El número de reclamos debe ser numérico."
+        return None
+
+    def _update_recommendation_category(self, key: str, widget: scrolledtext.ScrolledText) -> None:
+        raw_lines = widget.get("1.0", tk.END).splitlines()
+        clean_lines = [line.strip() for line in raw_lines if line.strip()]
+        self._recomendaciones_categorias[key] = clean_lines
+        self._notify_dataset_changed()
+
+    def _on_firma_change(self, key: str) -> None:
+        if key != "matricula":
+            self._notify_dataset_changed()
+            return
+        matricula = self._normalize_identifier(self._firma_vars.get("matricula", tk.StringVar()).get())
+        if not matricula:
+            return
+        lookup = self.team_lookup.get(matricula)
+        if not lookup:
+            self._notify_dataset_changed()
+            return
+        self._suppress_post_edit_validation = True
+        try:
+            if should_autofill_field(self._firma_vars["nombre"].get(), preserve_existing=True):
+                nombre = lookup.get("nombres") or lookup.get("nombre") or lookup.get("nombres_apellidos")
+                self._firma_vars["nombre"].set(nombre or "")
+            if should_autofill_field(self._firma_vars["cargo"].get(), preserve_existing=True):
+                cargo = lookup.get("puesto") or lookup.get("cargo") or lookup.get("rol")
+                self._firma_vars["cargo"].set(cargo or "")
+        finally:
+            self._suppress_post_edit_validation = False
+        self._notify_dataset_changed()
+
+    def _save_firma(self):
+        matricula = self._sanitize_text(self._firma_vars.get("matricula", tk.StringVar()).get())
+        nombre = self._sanitize_text(self._firma_vars.get("nombre", tk.StringVar()).get())
+        cargo = self._sanitize_text(self._firma_vars.get("cargo", tk.StringVar()).get())
+        if not any([matricula, nombre, cargo]):
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror("Firma incompleta", "Agrega al menos el ID, nombre o cargo para registrar la firma.")
+            return
+        if matricula:
+            validation = validate_team_member_id(matricula)
+            if validation:
+                if not getattr(self, "_suppress_messagebox", False):
+                    messagebox.showerror("ID inválido", validation)
+                return
+        firma_payload = {"matricula": matricula, "nombre": nombre, "cargo": cargo}
+        selection = self.firmas_tree.selection()
+        if selection:
+            index = int(self.firmas_tree.index(selection[0]))
+            self._firmas_data[index] = firma_payload
+        else:
+            self._firmas_data.append(firma_payload)
+        self._refresh_firmas_tree()
+        self._clear_firma_form()
+        self._notify_dataset_changed()
+
+    def _clear_firma_form(self):
+        for var in self._firma_vars.values():
+            var.set("")
+        if hasattr(self, "firmas_tree"):
+            self.firmas_tree.selection_remove(self.firmas_tree.selection())
+
+    def _refresh_firmas_tree(self):
+        if not hasattr(self, "firmas_tree"):
+            return
+        for item in self.firmas_tree.get_children():
+            self.firmas_tree.delete(item)
+        for firma in getattr(self, "_firmas_data", []):
+            self.firmas_tree.insert("", "end", values=(firma.get("matricula"), firma.get("nombre"), firma.get("cargo")))
+
+    def _load_selected_firma(self):
+        selection = self.firmas_tree.selection()
+        if not selection:
+            return
+        index = int(self.firmas_tree.index(selection[0]))
+        firma = self._firmas_data[index]
+        self._suppress_post_edit_validation = True
+        try:
+            self._firma_vars["matricula"].set(firma.get("matricula", ""))
+            self._firma_vars["nombre"].set(firma.get("nombre", ""))
+            self._firma_vars["cargo"].set(firma.get("cargo", ""))
+        finally:
+            self._suppress_post_edit_validation = False
+
+    def _collect_operation_form(self) -> dict[str, str]:
+        return {key: self._sanitize_text(var.get()) for key, var in self._operation_vars.items()}
+
+    def _validate_operation_payload(self, payload: dict[str, str]) -> Optional[str]:
+        if not any(payload.values()):
+            return "Debe ingresar al menos un dato de la operación."
+        date_error = validate_date_text(
+            payload.get("fecha_aprobacion", ""),
+            "La fecha de aprobación",
+            allow_blank=True,
+            enforce_max_today=True,
+        )
+        if date_error:
+            return date_error
+        for field in ("importe_desembolsado", "saldo_deudor"):
+            message, _, normalized = validate_money_bounds(payload.get(field, ""), field.replace("_", " "), allow_blank=True)
+            if message:
+                return message
+            payload[field] = normalized or payload.get(field, "")
+        return None
+
+    def _save_operation(self):
+        payload = self._collect_operation_form()
+        error = self._validate_operation_payload(payload)
+        if error:
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror("Operación inválida", error)
+            return
+        selection = self.operations_tree.selection()
+        if selection:
+            index = int(self.operations_tree.index(selection[0]))
+            self._operaciones_data[index] = payload
+        else:
+            self._operaciones_data.append(payload)
+        self._refresh_operations_tree()
+        self._clear_operation_form()
+        self._notify_dataset_changed()
+
+    def _delete_operation(self):
+        selection = self.operations_tree.selection()
+        if not selection:
+            return
+        index = int(self.operations_tree.index(selection[0]))
+        self._operaciones_data.pop(index)
+        self._refresh_operations_tree()
+        self._clear_operation_form()
+        self._notify_dataset_changed()
+
+    def _clear_operation_form(self):
+        for var in self._operation_vars.values():
+            var.set("")
+        if hasattr(self, "operations_tree"):
+            self.operations_tree.selection_remove(self.operations_tree.selection())
+
+    def _refresh_operations_tree(self):
+        if not hasattr(self, "operations_tree"):
+            return
+        for item in self.operations_tree.get_children():
+            self.operations_tree.delete(item)
+        for op in getattr(self, "_operaciones_data", []):
+            values = [op.get(col, "") for col in self.operations_tree["columns"]]
+            self.operations_tree.insert("", "end", values=values)
+
+    def _load_selected_operation(self):
+        selection = self.operations_tree.selection()
+        if not selection:
+            return
+        index = int(self.operations_tree.index(selection[0]))
+        payload = self._operaciones_data[index]
+        self._suppress_post_edit_validation = True
+        try:
+            for key, var in self._operation_vars.items():
+                var.set(payload.get(key, ""))
+        finally:
+            self._suppress_post_edit_validation = False
+
+    def _save_anexo(self):
+        titulo = self._sanitize_text(self._anexo_vars.get("titulo", tk.StringVar()).get())
+        descripcion = self._sanitize_text(self._anexo_vars.get("descripcion", tk.StringVar()).get())
+        if not any([titulo, descripcion]):
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror("Anexo vacío", "Completa el título o la descripción para guardar el anexo.")
+            return
+        payload = {"titulo": titulo, "descripcion": descripcion}
+        selection = self.anexos_tree.selection()
+        if selection:
+            index = int(self.anexos_tree.index(selection[0]))
+            self._anexos_data[index] = payload
+        else:
+            self._anexos_data.append(payload)
+        self._refresh_anexos_tree()
+        self._clear_anexo_form()
+        self._notify_dataset_changed()
+
+    def _delete_anexo(self):
+        selection = self.anexos_tree.selection()
+        if not selection:
+            return
+        index = int(self.anexos_tree.index(selection[0]))
+        self._anexos_data.pop(index)
+        self._refresh_anexos_tree()
+        self._clear_anexo_form()
+        self._notify_dataset_changed()
+
+    def _clear_anexo_form(self):
+        for var in self._anexo_vars.values():
+            var.set("")
+        if hasattr(self, "anexos_tree"):
+            self.anexos_tree.selection_remove(self.anexos_tree.selection())
+
+    def _refresh_anexos_tree(self):
+        if not hasattr(self, "anexos_tree"):
+            return
+        for item in self.anexos_tree.get_children():
+            self.anexos_tree.delete(item)
+        for row in getattr(self, "_anexos_data", []):
+            self.anexos_tree.insert("", "end", values=(row.get("titulo", ""), row.get("descripcion", "")))
+
+    def _load_selected_anexo(self):
+        selection = self.anexos_tree.selection()
+        if not selection:
+            return
+        index = int(self.anexos_tree.index(selection[0]))
+        payload = self._anexos_data[index]
+        self._suppress_post_edit_validation = True
+        try:
+            self._anexo_vars["titulo"].set(payload.get("titulo", ""))
+            self._anexo_vars["descripcion"].set(payload.get("descripcion", ""))
+        finally:
+            self._suppress_post_edit_validation = False
+
+    def _sync_extended_sections_to_ui(self) -> None:
+        self._suppress_post_edit_validation = True
+        try:
+            for key, var in getattr(self, "_encabezado_vars", {}).items():
+                var.set(self._encabezado_data.get(key, ""))
+            self._refresh_operations_tree()
+            self._refresh_anexos_tree()
+            self._refresh_firmas_tree()
+            for key, widget in getattr(self, "_recommendation_widgets", {}).items():
+                try:
+                    widget.delete("1.0", tk.END)
+                    widget.insert("1.0", "\n".join(self._recomendaciones_categorias.get(key, [])))
+                except tk.TclError:
+                    continue
+        finally:
+            self._suppress_post_edit_validation = False
 
     def _get_rich_text_fonts(self):
         if self._rich_text_fonts:
@@ -4941,6 +5533,19 @@ class FraudCaseApp:
         self._anexos_data: list[dict[str, str]] = []
         self._firmas_data: list[dict[str, str]] = []
         self._recomendaciones_categorias: dict[str, list[str]] = {}
+        for var_dict in (getattr(self, "_encabezado_vars", {}), getattr(self, "_operation_vars", {}), getattr(self, "_anexo_vars", {}), getattr(self, "_firma_vars", {})):
+            for var in var_dict.values():
+                try:
+                    var.set("")
+                except Exception:
+                    continue
+        for refresher in (
+            getattr(self, "_refresh_operations_tree", None),
+            getattr(self, "_refresh_anexos_tree", None),
+            getattr(self, "_refresh_firmas_tree", None),
+        ):
+            if callable(refresher):
+                refresher()
 
     @staticmethod
     def _sanitize_text(value) -> str:
@@ -5273,6 +5878,7 @@ class FraudCaseApp:
         self._recomendaciones_categorias = self._normalize_recommendation_categories(
             data.get('recomendaciones_categorias', {})
         )
+        self._sync_extended_sections_to_ui()
         self._rebuild_frame_id_indexes()
         self._schedule_summary_refresh(data=data)
 
