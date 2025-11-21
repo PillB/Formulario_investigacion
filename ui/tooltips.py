@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from theme_manager import ThemeManager
+
 
 class HoverTooltip:
     """Muestra mensajes contextuales cuando el cursor pasa sobre un widget."""
@@ -40,6 +42,7 @@ class HoverTooltip:
         except tk.TclError:
             return
         self.tipwindow = tk.Toplevel(self.widget)
+        ThemeManager.register_toplevel(self.tipwindow)
         self.tipwindow.wm_overrideredirect(True)
         self.tipwindow.configure(bg="#333333")
         label = tk.Label(
@@ -89,6 +92,7 @@ class ValidationTooltip:
         except tk.TclError:
             return
         self.tipwindow = tk.Toplevel(self.widget)
+        ThemeManager.register_toplevel(self.tipwindow)
         self.tipwindow.wm_overrideredirect(True)
         self.tipwindow.configure(bg="#8B0000")
         label = tk.Label(

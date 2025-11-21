@@ -9,7 +9,7 @@ persistencia simple para recordar la preferencia activa entre sesiones.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, Iterable, Optional, Set
 
 import tkinter as tk
 from tkinter import scrolledtext, ttk
@@ -95,8 +95,7 @@ class ThemeManager:
         cls._current = theme
         cls._configure_palette(ttk_style, theme)
         cls._persist_theme(theme["name"])
-        cls.apply_to_widget_tree(cls._root)
-        cls._refresh_toplevels()
+        cls.refresh_all_widgets()
         return cls._current
 
     @classmethod
@@ -113,47 +112,20 @@ class ThemeManager:
         if root is None:
             return
 
-        theme = cls._current
-        background = theme["background"]
-        foreground = theme["foreground"]
+        cls._apply_widget_tree(root, cls._current)
 
+    @classmethod
+    def refresh_all_widgets(cls) -> None:
+        """Update themed attributes for the root window and tracked ``Toplevel``s."""
+
+        if cls._root is None and not cls._tracked_toplevels:
+            return
         try:
-            root.configure(background=background)
-        except tk.TclError:
-            pass
-
-        def _update(widget: tk.Misc) -> None:
-            if isinstance(widget, (tk.Text, scrolledtext.ScrolledText, tk.Entry, tk.Spinbox, tk.Listbox)):
-                try:
-                    widget.configure(
-                        background=theme["input_background"],
-                        foreground=theme["input_foreground"],
-                        insertbackground=theme["accent"],
-                        selectbackground=theme["select_background"],
-                        selectforeground=theme["select_foreground"],
-                    )
-                except tk.TclError:
-                    pass
-            elif isinstance(widget, (tk.Frame, tk.Toplevel, tk.Canvas, tk.LabelFrame)):
-                try:
-                    widget.configure(background=background)
-                except tk.TclError:
-                    pass
-            elif isinstance(widget, (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton)):
-                try:
-                    widget.configure(background=background, foreground=foreground)
-                except tk.TclError:
-                    pass
-            elif isinstance(widget, ttk.Treeview):
-                try:
-                    widget.tag_configure("", background=background, foreground=foreground)
-                except tk.TclError:
-                    pass
-
-            for child in widget.winfo_children():
-                _update(child)
-
-        _update(root)
+            cls._ensure_style()
+        except RuntimeError:
+            return
+        for window in cls._iter_theme_windows():
+            cls._apply_widget_tree(window, cls._current)
 
     @classmethod
     def register_toplevel(cls, window: Optional[tk.Toplevel]) -> None:
@@ -192,6 +164,81 @@ class ThemeManager:
             cls._configure_base_style(cls._style)
             cls._base_style_configured = True
         return cls._style
+
+    @classmethod
+    def _iter_theme_windows(cls) -> Iterable[tk.Misc]:
+        """Yield the root and active tracked Toplevel instances."""
+
+        if cls._root is not None:
+            yield cls._root
+
+        stale: Set[tk.Toplevel] = set()
+        for window in cls._tracked_toplevels:
+            try:
+                exists = bool(window.winfo_exists())
+            except tk.TclError:
+                exists = False
+            if exists:
+                yield window
+            else:
+                stale.add(window)
+        cls._tracked_toplevels.difference_update(stale)
+
+    @classmethod
+    def _apply_widget_tree(cls, root: tk.Misc, theme: Dict[str, str]) -> None:
+        """Recursively apply ttk style names and tk attributes to a widget tree."""
+
+        def _update(widget: tk.Misc) -> None:
+            cls._apply_widget_attributes(widget, theme)
+            for child in widget.winfo_children():
+                _update(child)
+
+        _update(root)
+
+    @classmethod
+    def _apply_widget_attributes(cls, widget: tk.Misc, theme: Dict[str, str]) -> None:
+        background = theme["background"]
+        foreground = theme["foreground"]
+        input_background = theme["input_background"]
+        input_foreground = theme["input_foreground"]
+
+        try:
+            if isinstance(widget, (tk.Text, scrolledtext.ScrolledText, tk.Entry, tk.Spinbox, tk.Listbox)):
+                widget.configure(
+                    background=input_background,
+                    foreground=input_foreground,
+                    insertbackground=theme["accent"],
+                    selectbackground=theme["select_background"],
+                    selectforeground=theme["select_foreground"],
+                )
+            elif isinstance(widget, tk.LabelFrame):
+                widget.configure(background=background, foreground=foreground)
+            elif isinstance(widget, (tk.Frame, tk.Toplevel, tk.Tk, tk.Canvas)):
+                widget.configure(background=background)
+            elif isinstance(widget, (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton)):
+                widget.configure(
+                    background=background,
+                    foreground=foreground,
+                    activebackground=theme["select_background"],
+                    activeforeground=theme["select_foreground"],
+                )
+            elif isinstance(widget, ttk.Frame):
+                widget.configure(style="TFrame")
+            elif isinstance(widget, ttk.Label):
+                widget.configure(style="TLabel")
+            elif isinstance(widget, ttk.Entry):
+                widget.configure(style="TEntry")
+            elif isinstance(widget, ttk.Combobox):
+                widget.configure(style="TCombobox")
+            elif isinstance(widget, ttk.Button):
+                widget.configure(style="TButton")
+            elif isinstance(widget, ttk.Labelframe):
+                widget.configure(style="TLabelframe")
+            elif isinstance(widget, ttk.Treeview):
+                widget.configure(style="Treeview")
+                widget.tag_configure("", background=background, foreground=foreground)
+        except tk.TclError:
+            return
 
     @classmethod
     def _configure_base_style(cls, ttk_style: ttk.Style) -> None:
@@ -273,15 +320,9 @@ class ThemeManager:
 
     @classmethod
     def _refresh_toplevels(cls) -> None:
-        for window in list(cls._tracked_toplevels):
-            try:
-                exists = bool(window.winfo_exists())
-            except tk.TclError:
-                exists = False
-            if not exists:
-                cls._tracked_toplevels.discard(window)
-                continue
-            cls.apply_to_widget_tree(window)
+        for window in cls._iter_theme_windows():
+            if isinstance(window, tk.Toplevel):
+                cls._apply_widget_tree(window, cls._current)
 
 
 __all__ = ["ThemeManager", "LIGHT_THEME", "DARK_THEME"]
