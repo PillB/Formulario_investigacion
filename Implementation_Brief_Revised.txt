@@ -1,0 +1,136 @@
+Implementation Brief - Revised (Part 1 of 2)
+
+Scope
+------
+Integrate updated report template sections 1-5 into the `Formulario_investigacion` app and ensure all data is pulled from correct sources, or appropriately marked for manual entry or UI updates.
+
+1. Encabezado Institucional
+----------------------------
+| Field                                 | Mapping                                                                                                           |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Dirigido a                            | Derived by concatenating collaborator division/area/service (`destinatarios_text` logic from code)                |
+| Referencia                            | Text summary auto-generated from number of collaborators, products, modality, etc.                                |
+| Área de Reporte                       | User-provided (existing or new field, optional)                                                                   |
+| Fecha de Reporte                      | From `fecha_de_ocurrencia` or add explicit report date field                                                      |
+| Categoría del Evento 1/2              | From `caso["categoria1"]` and `caso["categoria2"]`                                                                |
+| Tipología del Evento                  | From `caso["modalidad"]`                                                                                          |
+| Importe Investigado                   | Computed: `sum(p["monto_investigado"] for p in productos)`                                                        |
+| Contingencia                          | Computed: `sum(p["monto_contingencia"] for p in productos)`                                                       |
+| Pérdida Total                         | Computed: `sum(p["monto_perdida_fraude"] for p in productos)`                                                     |
+| Normal / Vencido / Judicial / Castigo | Leave blank placeholders in report. The user will fill manually. **Do NOT add to UI.**                            |
+| Analítica Contable                    | Use the `analitica_contable` field from each `reclamo` (linked via products)                                      |
+| Centro de Costos                      |  Add new field to `caso` as a semicolon-separated string of numeric cost centers. Each entry must be ≥ 5 digits. |
+| Producto                              | From unique `tipo_producto` values in `productos`                                                                 |
+| Procesos Impactados                   | From `caso["proceso"]` or derived from `productos`                                                                |
+| N° de Reclamos                        | `len(case_data.reclamos)` or auto-generated from products’ `reclamos` field                                       |
+
+2. Antecedentes
+---------------
+* Source: `case_data.analisis["antecedentes"]`
+* UI: Text field already present
+* Report behavior: Always show heading; fallback text if empty.
+
+3. Detalle de los Colaboradores Involucrados (Table)
+-----------------------------------------------------
+| Column                    | Mapping                                                                                  |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| Nombres y Apellidos       |  Add new field to each `colaborador` and auto-fill from team CSV using `id_colaborador` |
+| Matrícula                 | `colaborador["id_colaborador"]`                                                          |
+| Cargo                     | `colaborador["puesto"]`                                                                  |
+| Falta cometida            | `colaborador["tipo_falta"]`                                                              |
+| Fecha Carta de Inmediatez |  New optional field (date). Not all collaborators are summoned. Add validation.         |
+| Fecha Carta de Renuncia   |  New optional field (date). Not all collaborators resign. Add validation.               |
+
+4. Modus Operandi
+------------------
+* Source: `case_data.analisis["modus_operandi"]`
+* UI: Already present
+* Report behavior: Narrative block, fallback to "No aplica" if empty
+
+5. Principales Hallazgos (Table + Text)
+---------------------------------------
+* Text: `case_data.analisis["hallazgos"]`
+* Table:
+  * Render empty table with correct headers
+  * Include 3-5 empty rows as placeholders
+  * Columns: as per template (N°, Fecha aprobación, Cliente, etc.)
+* Status:
+  *  Do not pull any new fields yet
+  * User will fill table manually after export
+  * Do not auto-generate any rows
+
+Implementation Brief - Revised (Part 2 of 2)
+
+6. Descargos de los Colaboradores
+----------------------------------
+* Source: `case_data.analisis["descargos"]`
+* UI: Already exists as a large narrative text field
+* Report: Paragraph-style section, even if blank. Add fallback text if missing.
+
+7. Riesgos Identificados y Debilidades de Control (Table)
+----------------------------------------------------------
+| Column                    | Mapping                                     |
+| ------------------------- | ------------------------------------------- |
+| Líder del riesgo          | `riesgo["lider"]`                           |
+| ID Riesgo (GRC)           | `riesgo["id_riesgo"]`                       |
+| Descripción del riesgo    | `riesgo["descripcion"]`                     |
+| Criticidad del riesgo     | `riesgo["criticidad"]`                      |
+| Exposición residual (USD) | `riesgo["exposicion_residual"]`             |
+| ID Plan de Acción         | `riesgo["planes_accion"]` (fallback to "-") |
+
+8. Normas Transgredidas
+------------------------
+* Source: `case_data.normas`
+* Mapping:
+  * `id_norma` -> Norma #
+  * `descripcion` -> Descripción
+  * `fecha_vigencia` -> (Optional column if desired)
+* Report format:
+  * If short: display as 2-column table
+  * If verbose: show as bullet list
+* Fallback: show "No se registraron normas transgredidas."
+
+9. Conclusiones
+----------------
+* Source: `case_data.analisis["conclusiones"]`
+* UI: Already present
+* Behavior: Always display heading; use "Sin información registrada" if blank.
+
+10. Recomendaciones y Mejoras de Procesos
+------------------------------------------
+* Source: `case_data.analisis["recomendaciones"]`
+* UI: Already present (may include sub-categorization)
+* Optional Enhancement: allow categories: Laboral, Operativo, Legal
+  * Split narrative by tags or headers if possible
+* Fallback: Show full text in one block
+
+11. Anexos
+-----------
+* Source: `case_data.analisis["anexos"]` or new text area
+* UI: Free-text field to be filled with list of annexes
+* Report: Bulleted list
+* Behavior: Include heading even if empty, default message: "No se registraron anexos relevantes."
+
+12. Firma
+---------
+* Fields to add:
+  * `matricula_investigador` (linked to collaborator)
+  * Look up `nombres` and `cargo` from team CSV
+  * Autocomplete full name and set role to "Investigador Principal"
+* Do not add fields for other approvers
+* Report:
+  * Add one line for signed investigator
+  * Leave additional signature lines blank
+
+13. Resumen de Secciones y Tablas del Informe
+----------------------------------------------
+* Report: Final table summarizing which sections contain what type of data
+* Build statically from previous sections (not user input)
+* Use checkmarks or counts per table if feasible
+* No UI changes required
+
+Notes for Implementation
+-------------------------
+* All optional fields should pass validation only if filled (e.g. valid date if present)
+* Use "-" for missing values in tables
+* Ensure all headings appear in output, even when no data is present
