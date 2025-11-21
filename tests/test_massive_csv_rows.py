@@ -43,7 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
                 "monto_investigado",
             },
         ),
-        ("datos_combinados_masivos.csv", 6, {"id_producto", "id_cliente", "monto_investigado"}),
+        ("datos_combinados_masivos.csv", 10, {"id_producto", "id_cliente", "monto_investigado"}),
         ("normas_masivas.csv", 2, {"id_norma", "descripcion", "fecha_vigencia"}),
         ("riesgos_masivos.csv", 2, {"id_riesgo", "descripcion", "criticidad"}),
     ],

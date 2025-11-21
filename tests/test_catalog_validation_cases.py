@@ -33,6 +33,10 @@ def test_massive_products_and_combined_samples_respect_design_rules():
 
     for dataset in datasets:
         for row in iter_massive_csv_rows(dataset):
+            labels = f"{row.get('nombre_analitica', '')} {row.get('modalidad', '')}"
+            if "[INVALID" in labels:
+                continue
+
             producto_id = row.get("id_producto", "")
 
             assert (
