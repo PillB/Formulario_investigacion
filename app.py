@@ -225,6 +225,7 @@ class FraudCaseApp:
         self._autosave_job_id = None
         self._autosave_dirty = False
         self._rich_text_images = defaultdict(list)
+        self._rich_text_image_sources = {}
         self._rich_text_fonts = {}
         self.clients_detail_wrapper = None
         self.team_detail_wrapper = None
@@ -381,14 +382,85 @@ class FraudCaseApp:
     def _get_text_content(self, widget: tk.Text) -> str:
         if widget is None:
             return ""
-        return widget.get("1.0", "end-1c").strip()
+        return widget.get("1.0", "end-1c")
 
-    def _set_text_content(self, widget: tk.Text, value: str) -> None:
+    def _serialize_rich_text_widget(self, widget: tk.Text) -> dict:
+        if widget is None:
+            return {"text": "", "tags": [], "images": []}
+
+        text = widget.get("1.0", "end-1c")
+        allowed_tags = {"bold", "header", "table", "list"}
+        tag_ranges = []
+        for tag_name in widget.tag_names():
+            if tag_name not in allowed_tags:
+                continue
+            ranges = widget.tag_ranges(tag_name)
+            for start, end in zip(ranges[0::2], ranges[1::2]):
+                tag_ranges.append({
+                    "tag": tag_name,
+                    "start": str(start),
+                    "end": str(end),
+                })
+
+        images = []
+        for element_type, image_name, index in widget.dump("1.0", "end", image=True):
+            if element_type != "image":
+                continue
+            images.append({
+                "index": str(index),
+                "source": self._rich_text_image_sources.get(image_name),
+            })
+
+        return {"text": text, "tags": tag_ranges, "images": images}
+
+    def _deserialize_rich_text_payload(self, payload) -> tuple[str, list, list]:
+        if isinstance(payload, Mapping):
+            text = payload.get("text", "")
+            tags = payload.get("tags") or []
+            images = payload.get("images") or []
+            return str(text), list(tags), list(images)
+        return str(payload or ""), [], []
+
+    def _set_rich_text_content(self, widget: tk.Text, payload) -> None:
         if widget is None:
             return
+        text, tags, images = self._deserialize_rich_text_payload(payload)
         widget.delete("1.0", "end")
-        if value:
-            widget.insert("1.0", value)
+        self._rich_text_images[widget].clear()
+        if text:
+            widget.insert("1.0", text)
+
+        for tag_data in tags:
+            tag_name = tag_data.get("tag")
+            start = tag_data.get("start")
+            end = tag_data.get("end")
+            if not (tag_name and start and end):
+                continue
+            with suppress(tk.TclError):
+                widget.tag_add(tag_name, start, end)
+
+        for image_data in images:
+            index = image_data.get("index")
+            source = image_data.get("source")
+            if not index:
+                continue
+            photo = None
+            if source:
+                try:
+                    photo = tk.PhotoImage(file=source)
+                    self._rich_text_image_sources[str(photo)] = source
+                except tk.TclError:
+                    photo = None
+            if photo is None:
+                continue
+            try:
+                widget.image_create(index, image=photo)
+            except tk.TclError:
+                continue
+            self._rich_text_images[widget].append(photo)
+
+    def _set_text_content(self, widget: tk.Text, value: str) -> None:
+        self._set_rich_text_content(widget, {"text": value or ""})
 
     def _analysis_text_widgets(self):
         return {
@@ -399,6 +471,28 @@ class FraudCaseApp:
             "conclusiones": getattr(self, "conclusiones_text", None),
             "recomendaciones": getattr(self, "recomendaciones_text", None),
         }
+
+    def _normalize_analysis_texts(self, analysis_payload):
+        def _get_text(value):
+            if isinstance(value, Mapping):
+                return str(value.get("text") or "")
+            return str(value or "")
+
+        sections = [
+            "antecedentes",
+            "modus_operandi",
+            "hallazgos",
+            "descargos",
+            "conclusiones",
+            "recomendaciones",
+        ]
+        payload = analysis_payload or {}
+        normalized = {name: _get_text(payload.get(name)) for name in sections}
+        for name, value in payload.items():
+            if name in normalized:
+                continue
+            normalized[name] = _get_text(value)
+        return normalized
 
     def _get_exports_folder(self) -> Optional[Path]:
         base_path = getattr(self, "_export_base_path", None) or EXPORTS_DIR
@@ -1751,6 +1845,8 @@ class FraudCaseApp:
         except tk.TclError as exc:  # pragma: no cover - rutas inválidas dependen del usuario
             messagebox.showerror("Imagen inválida", f"No se pudo cargar la imagen: {exc}")
             return
+        image_name = str(photo)
+        self._rich_text_image_sources[image_name] = filepath
         text_widget.image_create("insert", image=photo)
         self._rich_text_images[text_widget].append(photo)
         text_widget.insert("insert", " ")
@@ -4931,12 +5027,12 @@ class FraudCaseApp:
         data['normas'] = normas
         analysis_widgets = self._analysis_text_widgets()
         data['analisis'] = {
-            "antecedentes": self._get_text_content(analysis_widgets["antecedentes"]),
-            "modus_operandi": self._get_text_content(analysis_widgets["modus_operandi"]),
-            "hallazgos": self._get_text_content(analysis_widgets["hallazgos"]),
-            "descargos": self._get_text_content(analysis_widgets["descargos"]),
-            "conclusiones": self._get_text_content(analysis_widgets["conclusiones"]),
-            "recomendaciones": self._get_text_content(analysis_widgets["recomendaciones"]),
+            "antecedentes": self._serialize_rich_text_widget(analysis_widgets["antecedentes"]),
+            "modus_operandi": self._serialize_rich_text_widget(analysis_widgets["modus_operandi"]),
+            "hallazgos": self._serialize_rich_text_widget(analysis_widgets["hallazgos"]),
+            "descargos": self._serialize_rich_text_widget(analysis_widgets["descargos"]),
+            "conclusiones": self._serialize_rich_text_widget(analysis_widgets["conclusiones"]),
+            "recomendaciones": self._serialize_rich_text_widget(analysis_widgets["recomendaciones"]),
         }
         return CaseData.from_mapping(data)
 
@@ -5109,12 +5205,12 @@ class FraudCaseApp:
         # Analisis
         analisis = data.get('analisis', {})
         analysis_widgets = self._analysis_text_widgets()
-        self._set_text_content(analysis_widgets['antecedentes'], analisis.get('antecedentes', ''))
-        self._set_text_content(analysis_widgets['modus_operandi'], analisis.get('modus_operandi', ''))
-        self._set_text_content(analysis_widgets['hallazgos'], analisis.get('hallazgos', ''))
-        self._set_text_content(analysis_widgets['descargos'], analisis.get('descargos', ''))
-        self._set_text_content(analysis_widgets['conclusiones'], analisis.get('conclusiones', ''))
-        self._set_text_content(analysis_widgets['recomendaciones'], analisis.get('recomendaciones', ''))
+        self._set_rich_text_content(analysis_widgets['antecedentes'], analisis.get('antecedentes', ''))
+        self._set_rich_text_content(analysis_widgets['modus_operandi'], analisis.get('modus_operandi', ''))
+        self._set_rich_text_content(analysis_widgets['hallazgos'], analisis.get('hallazgos', ''))
+        self._set_rich_text_content(analysis_widgets['descargos'], analisis.get('descargos', ''))
+        self._set_rich_text_content(analysis_widgets['conclusiones'], analisis.get('conclusiones', ''))
+        self._set_rich_text_content(analysis_widgets['recomendaciones'], analisis.get('recomendaciones', ''))
         self._rebuild_frame_id_indexes()
         self._schedule_summary_refresh(data=data)
 
@@ -5915,7 +6011,8 @@ class FraudCaseApp:
         # DETALLES_NORMA
         write_csv('detalles_norma.csv', data['normas'], ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia'])
         # ANALISIS
-        write_csv('analisis.csv', [dict({'id_caso': data['caso']['id_caso']}, **data['analisis'])], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
+        analysis_texts = self._normalize_analysis_texts(data['analisis'])
+        write_csv('analisis.csv', [dict({'id_caso': data['caso']['id_caso']}, **analysis_texts)], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
         # LOGS
         if self.logs:
             write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES)

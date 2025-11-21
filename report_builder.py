@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Mapping
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
@@ -84,6 +84,30 @@ def _normalize_report_segment(value: str | None, placeholder: str) -> str:
     return text.replace(" ", "_")
 
 
+def _extract_analysis_text(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return str(value.get("text") or "")
+    return str(value or "")
+
+
+def normalize_analysis_texts(analysis: Mapping[str, Any] | None) -> Dict[str, str]:
+    keys = [
+        "antecedentes",
+        "modus_operandi",
+        "hallazgos",
+        "descargos",
+        "conclusiones",
+        "recomendaciones",
+    ]
+    payload = analysis or {}
+    normalized = {name: _extract_analysis_text(payload.get(name)) for name in keys}
+    for name, value in payload.items():
+        if name in normalized:
+            continue
+        normalized[name] = _extract_analysis_text(value)
+    return normalized
+
+
 def build_report_filename(tipo_informe: str | None, case_id: str | None, extension: str) -> str:
     safe_tipo_informe = _normalize_report_segment(tipo_informe, "Generico")
     safe_case_id = _normalize_report_segment(case_id, "caso")
@@ -142,7 +166,7 @@ def _build_summary_paragraphs(
 
 def _build_report_context(case_data: CaseData):
     case = case_data.caso
-    analysis = case_data.analisis
+    analysis = normalize_analysis_texts(case_data.analisis)
     clients = case_data.clientes
     team = case_data.colaboradores
     products = case_data.productos
