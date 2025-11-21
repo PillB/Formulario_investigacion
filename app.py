@@ -187,6 +187,7 @@ class FraudCaseApp:
         self.claim_lookup = {}
         self.risk_lookup = {}
         self.norm_lookup = {}
+        self._reset_extended_sections()
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
         self.import_progress = None
         self._import_progress_visible = False
@@ -4892,6 +4893,7 @@ class FraudCaseApp:
         # Limpiar análisis
         for widget in self._analysis_text_widgets().values():
             self._set_text_content(widget, "")
+        self._reset_extended_sections()
         if save_autosave:
             self.save_auto()
 
@@ -4932,6 +4934,67 @@ class FraudCaseApp:
 
     # ---------------------------------------------------------------------
     # Recolección y población de datos
+
+    def _reset_extended_sections(self) -> None:
+        self._encabezado_data: dict[str, str] = {}
+        self._operaciones_data: list[dict[str, str]] = []
+        self._anexos_data: list[dict[str, str]] = []
+        self._firmas_data: list[dict[str, str]] = []
+        self._recomendaciones_categorias: dict[str, list[str]] = {}
+
+    @staticmethod
+    def _sanitize_text(value) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        return text
+
+    @classmethod
+    def _normalize_mapping_strings(cls, payload, keys: Optional[list[str]] = None) -> dict:
+        if not isinstance(payload, Mapping):
+            payload = {}
+        normalized = {}
+        keys = keys or []
+        for key in keys:
+            normalized[key] = cls._sanitize_text(payload.get(key))
+        for key, value in payload.items():
+            if key in normalized:
+                continue
+            normalized[str(key)] = cls._sanitize_text(value)
+        return normalized
+
+    @classmethod
+    def _normalize_table_rows(cls, payload) -> list[dict[str, str]]:
+        if not isinstance(payload, list):
+            return []
+        rows: list[dict[str, str]] = []
+        for item in payload:
+            if not isinstance(item, Mapping):
+                continue
+            rows.append({str(key): cls._sanitize_text(value) for key, value in item.items()})
+        return rows
+
+    @classmethod
+    def _normalize_recommendation_categories(cls, payload) -> dict[str, list[str]]:
+        if not isinstance(payload, Mapping):
+            payload = {}
+        categories: dict[str, list[str]] = {}
+        for key in ("laboral", "operativo", "legal"):
+            values = payload.get(key) or []
+            if not isinstance(values, list):
+                values = [values]
+            categories[key] = [text for text in (cls._sanitize_text(v) for v in values) if text]
+        for key, value in payload.items():
+            if key in categories:
+                continue
+            extra_values: list[str]
+            if isinstance(value, list):
+                extra_values = [text for text in (cls._sanitize_text(v) for v in value) if text]
+            else:
+                text = cls._sanitize_text(value)
+                extra_values = [text] if text else []
+            categories[str(key)] = extra_values
+        return categories
 
     def gather_data(self):
         """Reúne todos los datos del formulario en una estructura de diccionarios."""
@@ -4993,6 +5056,26 @@ class FraudCaseApp:
             "conclusiones": self._serialize_rich_text_widget(analysis_widgets["conclusiones"]),
             "recomendaciones": self._serialize_rich_text_widget(analysis_widgets["recomendaciones"]),
         }
+        data['encabezado'] = self._normalize_mapping_strings(
+            getattr(self, '_encabezado_data', {}),
+            [
+                "dirigido_a",
+                "referencia",
+                "area_reporte",
+                "fecha_reporte",
+                "tipologia_evento",
+                "centro_costos",
+                "procesos_impactados",
+                "numero_reclamos",
+                "analitica_contable",
+            ],
+        )
+        data['operaciones'] = self._normalize_table_rows(getattr(self, '_operaciones_data', []))
+        data['anexos'] = self._normalize_table_rows(getattr(self, '_anexos_data', []))
+        data['firmas'] = self._normalize_table_rows(getattr(self, '_firmas_data', []))
+        data['recomendaciones_categorias'] = self._normalize_recommendation_categories(
+            getattr(self, '_recomendaciones_categorias', {})
+        )
         return CaseData.from_mapping(data)
 
     def _normalize_export_amount_strings(self, products):
@@ -5170,6 +5253,26 @@ class FraudCaseApp:
         self._set_rich_text_content(analysis_widgets['descargos'], analisis.get('descargos', ''))
         self._set_rich_text_content(analysis_widgets['conclusiones'], analisis.get('conclusiones', ''))
         self._set_rich_text_content(analysis_widgets['recomendaciones'], analisis.get('recomendaciones', ''))
+        self._encabezado_data = self._normalize_mapping_strings(
+            data.get('encabezado', {}),
+            [
+                "dirigido_a",
+                "referencia",
+                "area_reporte",
+                "fecha_reporte",
+                "tipologia_evento",
+                "centro_costos",
+                "procesos_impactados",
+                "numero_reclamos",
+                "analitica_contable",
+            ],
+        )
+        self._operaciones_data = self._normalize_table_rows(data.get('operaciones', []))
+        self._anexos_data = self._normalize_table_rows(data.get('anexos', []))
+        self._firmas_data = self._normalize_table_rows(data.get('firmas', []))
+        self._recomendaciones_categorias = self._normalize_recommendation_categories(
+            data.get('recomendaciones_categorias', {})
+        )
         self._rebuild_frame_id_indexes()
         self._schedule_summary_refresh(data=data)
 
