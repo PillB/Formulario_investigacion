@@ -2337,10 +2337,20 @@ class FraudCaseApp:
         self._schedule_summary_refresh()
 
     def _handle_notebook_tab_change(self, event):
-        if getattr(self, "notebook", None) is None:
+        notebook = getattr(self, "notebook", None)
+        if notebook is None:
             return
-        if event.widget is not self.notebook:
+        if event.widget is not notebook:
             return
+
+        selected_tab = notebook.select()
+        tab_text = notebook.tab(selected_tab, "text") if selected_tab else ""
+        tab_index = notebook.index(selected_tab) if selected_tab else -1
+        log_event(
+            "navegacion",
+            f"Abrió pestaña: {tab_text} (índice {tab_index})",
+            self.logs,
+        )
         if self._is_summary_tab_visible():
             self._flush_summary_refresh()
 
