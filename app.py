@@ -5808,6 +5808,7 @@ __all__ = ["FraudCaseApp", "should_autofill_field"]
 def run_app():
     root = tk.Tk()
     style = init_styles(root)
-    ThemeManager.apply(ThemeManager.current, root=root, style=style)
+    saved_theme = ThemeManager.load_saved_theme()
+    ThemeManager.apply(saved_theme, root=root, style=style)
     app = FraudCaseApp(root)
     root.mainloop()
