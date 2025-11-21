@@ -91,7 +91,7 @@ def build_report_filename(tipo_informe: str | None, case_id: str | None, extensi
 
 
 def _create_word_document():
-    if DocxDocument is None:
+    if not DOCX_AVAILABLE or DocxDocument is None:
         raise RuntimeError(DOCX_MISSING_MESSAGE)
     return DocxDocument()
 
