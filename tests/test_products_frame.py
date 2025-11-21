@@ -202,7 +202,7 @@ def test_optional_amount_field_normalizes_blank_value():
     )
 
     assert message is None
-    assert decimal_value == Decimal("0.00")
+    assert decimal_value is None
 
 
 def test_involvement_validator_requires_amount_when_collaborator_selected():
