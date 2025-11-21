@@ -16,6 +16,16 @@ def sample_case_data():
                 "categoria1": "Fraude",
                 "categoria2": "Digital",
                 "modalidad": "Remota",
+                "lugar": "Lima",
+                "fecha_informe": "01 de enero de 2024",
+            },
+            "encabezado": {
+                "area_reporte": "Seguridad",
+                "fecha_reporte": "02/01/2024",
+                "tipologia_evento": "Ingeniería social",
+                "referencia": "Caso de referencia",
+                "centro_costos": "CC-01",
+                "procesos_impactados": "Onboarding",
             },
             "clientes": [
                 {
@@ -67,6 +77,21 @@ def sample_case_data():
                     "codigo_analitica": "4300000001",
                 }
             ],
+            "operaciones": [
+                {
+                    "numero": 1,
+                    "fecha_aprobacion": "2024-01-10",
+                    "cliente": "Cliente Uno",
+                    "ingreso_bruto_mensual": "5000",
+                    "empresa_empleadora": "Empresa A",
+                    "vendedor_inmueble": "Vendedor 1",
+                    "vendedor_credito": "Ejecutivo 1",
+                    "producto": "Crédito",
+                    "importe_desembolsado": "60.00",
+                    "saldo_deudor": "50.00",
+                    "status": "BCP",
+                }
+            ],
             "involucramientos": [],
             "riesgos": [
                 {
@@ -92,6 +117,13 @@ def sample_case_data():
                 "conclusiones": "Conclusión",
                 "recomendaciones": "Recomendar",
             },
+            "anexos": [{"titulo": "Anexo 1", "descripcion": "Detalle de pruebas"}],
+            "firmas": [{"nombre": "Investigador", "cargo": "Analista"}],
+            "recomendaciones_categorias": {
+                "laboral": ["Capacitar al equipo"],
+                "operativo": ["Actualizar control"],
+                "legal": ["Escalar a legal"],
+            },
         }
     )
 
@@ -102,36 +134,35 @@ def test_md_headings_and_tables(sample_case_data):
 
     headings = [line for line in lines if line.startswith("## ")]
     assert headings == [
-        "## 1. Antecedentes",
-        "## 2. Tabla de clientes",
-        "## 3. Tabla de team members involucrados",
-        "## 4. Tabla de productos combinado",
-        "## 5. Descripción breve automatizada",
-        "## 6. Modus Operandi",
-        "## 7. Hallazgos Principales",
-        "## 8. Descargo de colaboradores",
-        "## 9. Tabla de riesgos identificados",
-        "## 10. Tabla de normas transgredidas",
-        "## 11. Conclusiones",
-        "## 12. Recomendaciones y mejoras de procesos",
+        "## Encabezado Institucional",
+        "## Antecedentes",
+        "## Detalle de los Colaboradores Involucrados",
+        "## Modus operandi",
+        "## Principales Hallazgos",
+        "## Descargos",
+        "## Riesgos identificados",
+        "## Normas transgredidas",
+        "## Conclusiones",
+        "## Recomendaciones",
+        "## Anexos",
+        "## Firma",
+        "## Resumen de Secciones y Tablas del Informe",
     ]
 
-    assert "| Cliente | Tipo ID | ID | Flag | Teléfonos | Correos | Direcciones | Accionado |" in md
-    assert "| Colaborador | ID | Flag | División | Área | Servicio | Puesto | Agencia | Código | Falta | Sanción |" in md
-    assert "| Registro | ID | Cliente | Tipo | Canal | Proceso | Cat.1 | Cat.2 | Modalidad | Montos | Reclamo/Analítica |" in md
-    assert "| ID Riesgo | Líder | Criticidad | Exposición US$ | Planes |" in md
-    assert "| N° de norma | Descripción | Fecha de vigencia |" in md
-
-    assert "Se documentaron 1 clientes, 1 colaboradores y 1 productos" in md
+    assert "| Dirigido a | Referencia | Área de Reporte | Fecha de reporte |" in md
+    assert "| Nombres y Apellidos | Matrícula | Cargo | Falta cometida | Fecha Carta de Inmediatez | Fecha Carta de Renuncia |" in md
+    assert "| N° | Fecha de aprobación | Cliente/DNI | Ingreso Bruto Mensual | Empresa Empleadora | Vendedor del Inmueble | Vendedor del Crédito | Producto | Importe Desembolsado | Saldo Deudor | Status (BCP/SBS) |" in md
+    assert "| Líder del riesgo | ID Riesgo (GRC) | Descripción del riesgo de fraude | Criticidad del riesgo | Exposición residual (USD) | ID Plan de Acción |" in md
+    assert "| Norma/Política | Descripción de la transgresión |" in md
+    assert "Totales" in md
 
 
 def test_md_empty_tables_and_summary():
-    empty_case = CaseData.from_mapping({"caso": {}, "clientes": [], "colaboradores": [], "productos": [], "reclamos": [], "involucramientos": [], "riesgos": [], "normas": [], "analisis": {}})
+    empty_case = CaseData.from_mapping({"caso": {}, "clientes": [], "colaboradores": [], "productos": [], "reclamos": [], "involucramientos": [], "riesgos": [], "normas": [], "analisis": {}, "encabezado": {}, "operaciones": [], "anexos": [], "firmas": [], "recomendaciones_categorias": {}})
     md = report_builder.build_md(empty_case)
     lines = md.splitlines()
 
-    assert lines.count("Sin registros.") >= 3
-    assert "Se documentaron 0 clientes, 0 colaboradores y 0 productos." in md
+    assert md.count(report_builder.PLACEHOLDER) >= 3
 
 
 def test_md_handles_rich_text_analysis_payload(sample_case_data):
