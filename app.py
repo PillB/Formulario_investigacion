@@ -2388,11 +2388,13 @@ class FraudCaseApp:
         except tk.TclError:
             messagebox.showerror("Portapapeles", "No se pudo leer el portapapeles desde el sistema.")
             return "break"
+        log_event("navegacion", f"Intento de pegado en resumen:{key}", self.logs)
         try:
             parsed_rows = self._parse_clipboard_rows(clipboard_text, len(columns))
             sanitized_rows = self._transform_summary_clipboard_rows(key, parsed_rows)
         except ValueError as exc:
             messagebox.showerror("Pegado no válido", str(exc))
+            log_event("validacion", f"Pegado fallido en {key}: {exc}", self.logs)
             return "break"
         ingestible_sections = {
             "clientes",
@@ -2406,8 +2408,10 @@ class FraudCaseApp:
         if key in ingestible_sections:
             try:
                 self.ingest_summary_rows(key, sanitized_rows, stay_on_summary=True)
+                log_event("navegacion", f"{key} pegados desde resumen: {len(sanitized_rows)}", self.logs)
             except ValueError as exc:
                 messagebox.showerror("Pegado no válido", str(exc))
+                log_event("validacion", f"Pegado fallido en {key}: {exc}", self.logs)
             return "break"
         tree.delete(*tree.get_children())
         for row in sanitized_rows:
