@@ -482,11 +482,15 @@ def _build_sections_summary(context: Mapping[str, Any], analysis: Mapping[str, A
         ["Modus operandi", "Narrativa", _section_state(bool(analysis.get("modus_operandi")))],
         ["Principales Hallazgos", "Tabla + texto", _section_state(bool(context["operation_rows"]))],
         ["Descargos", "Narrativa", _section_state(bool(analysis.get("descargos")))],
-        ["Riesgos identificados", "Tabla", _section_state(bool(context["risk_rows"]))],
+        [
+            "Riesgos identificados y debilidades de los controles",
+            "Tabla",
+            _section_state(bool(context["risk_rows"])),
+        ],
         ["Normas transgredidas", "Tabla", _section_state(bool(context["norm_rows"]))],
         ["Conclusiones", "Narrativa", _section_state(bool(analysis.get("conclusiones")))],
         [
-            "Recomendaciones",
+            "Recomendaciones y Mejoras de Procesos",
             "Listas",
             _section_state(
                 bool(recommendations["laboral"] or recommendations["operativo"] or recommendations["legal"])
@@ -550,7 +554,7 @@ def build_md(case_data: CaseData) -> str:
             [
                 "N°",
                 "Fecha de aprobación",
-                "Cliente/DNI",
+                "Cliente / DNI",
                 "Ingreso Bruto Mensual",
                 "Empresa Empleadora",
                 "Vendedor del Inmueble",
@@ -566,13 +570,12 @@ def build_md(case_data: CaseData) -> str:
     lines.extend(
         [
             "",
-            "### Narrativa de hallazgos",
             analysis.get("hallazgos") or PLACEHOLDER,
             "",
             "## Descargos",
             analysis.get("descargos") or PLACEHOLDER,
             "",
-            "## Riesgos identificados",
+            "## Riesgos identificados y debilidades de los controles",
         ]
     )
     lines.extend(
@@ -601,7 +604,7 @@ def build_md(case_data: CaseData) -> str:
             "## Conclusiones",
             analysis.get("conclusiones") or PLACEHOLDER,
             "",
-            "## Recomendaciones",
+            "## Recomendaciones y Mejoras de Procesos",
             "### De carácter laboral",
         ]
     )
@@ -686,7 +689,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         [
             "N°",
             "Fecha de aprobación",
-            "Cliente/DNI",
+            "Cliente / DNI",
             "Ingreso Bruto Mensual",
             "Empresa Empleadora",
             "Vendedor del Inmueble",
@@ -698,11 +701,10 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         ],
         context["operation_rows"],
     )
-    document.add_heading("Narrativa de hallazgos", level=3)
     add_paragraphs([analysis.get("hallazgos") or PLACEHOLDER])
     document.add_heading("Descargos", level=2)
     add_paragraphs([analysis.get("descargos") or PLACEHOLDER])
-    document.add_heading("Riesgos identificados", level=2)
+    document.add_heading("Riesgos identificados y debilidades de los controles", level=2)
     append_table(
         [
             "Líder del riesgo",
@@ -718,7 +720,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     append_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"])
     document.add_heading("Conclusiones", level=2)
     add_paragraphs([analysis.get("conclusiones") or PLACEHOLDER])
-    document.add_heading("Recomendaciones", level=2)
+    document.add_heading("Recomendaciones y Mejoras de Procesos", level=2)
     document.add_heading("De carácter laboral", level=3)
     add_list(context["recomendaciones"]["laboral"])
     document.add_heading("De carácter operativo", level=3)
