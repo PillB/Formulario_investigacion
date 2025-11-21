@@ -129,6 +129,12 @@ graph TD
 - **Importar CSV**: desde **Acciones**, selecciona el archivo adecuado; la app valida, omite duplicados y sincroniza combobox/listados.
 - **Exportar**: **Guardar y enviar** genera CSV por entidad, JSON completo, Markdown y Word (`python-docx` necesario) en `exports/`; luego duplica a `external drive/<id_caso>/`. Mensajes claros aparecen si hay problemas de escritura.
 
+### Registro de eventos
+- Los eventos se guardan en `logs.csv` con columnas `timestamp`, `tipo`, `subtipo`, `widget_id`, `coords` y `mensaje`.
+- Usa IDs legibles y estables para `widget_id` (por ejemplo, `btn_guardar_enviar`, `btn_importar_clientes`, `tab_riesgos`).
+- Para `subtipo`, detalla la acción (`click`, `cambio_tab`, `paste`, etc.).
+- `coords` es opcional; cuando apliquen, registra la posición como `x,y` proveniente del evento Tkinter.
+
 ## Solución de problemas
 - **Errores de validación**: se muestran debajo de los campos o mediante diálogos; corrige el formato indicado y repite la acción.
 - **Permisos**: verifica acceso a `exports/` y `external drive/` si fallan los respaldos.
