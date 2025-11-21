@@ -93,6 +93,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY, init_styles
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
+from ui.frames.utils import ensure_grid_support
 from ui.tooltips import HoverTooltip
 from validators import (drain_log_queue, FieldValidator, log_event,
                         normalize_without_accents, parse_decimal_amount,
