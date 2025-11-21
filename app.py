@@ -90,7 +90,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_INFORME_LIST, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
                       ensure_external_drive_dir)
-from ui.config import init_styles
+from ui.config import COL_PADX, ROW_PADY, init_styles
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
@@ -583,57 +583,123 @@ class FraudCaseApp:
         """Construye la pestaña de detalles del caso."""
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True, padx=5, pady=5)
-        # Case ID y tipo de informe
-        row1 = ttk.Frame(frame)
-        row1.pack(fill="x", pady=2)
-        ttk.Label(row1, text="Número de caso (AAAA-NNNN):").pack(side="left")
-        id_entry = ttk.Entry(row1, textvariable=self.id_caso_var, width=20)
-        id_entry.pack(side="left", padx=5)
-        id_entry.bind("<FocusOut>", lambda e: self._log_navigation_change("Modificó número de caso"))
+        frame.columnconfigure(0, weight=0)
+        frame.columnconfigure(1, weight=1)
+        frame.columnconfigure(2, weight=0)
+
+        ttk.Label(frame, text="Número de caso (AAAA-NNNN):").grid(
+            row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        id_entry = ttk.Entry(frame, textvariable=self.id_caso_var, width=20)
+        id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_entry.bind(
+            "<FocusOut>", lambda e: self._log_navigation_change("Modificó número de caso")
+        )
         self.register_tooltip(id_entry, "Identificador del expediente con formato AAAA-NNNN.")
-        ttk.Label(row1, text="Tipo de informe:").pack(side="left")
-        tipo_cb = ttk.Combobox(row1, textvariable=self.tipo_informe_var, values=TIPO_INFORME_LIST, state="readonly", width=15)
-        tipo_cb.pack(side="left", padx=5)
+
+        ttk.Label(frame, text="Tipo de informe:").grid(
+            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        tipo_cb = ttk.Combobox(
+            frame,
+            textvariable=self.tipo_informe_var,
+            values=TIPO_INFORME_LIST,
+            state="readonly",
+            width=15,
+        )
+        tipo_cb.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(tipo_cb, "Selecciona si el reporte es interno o regulatorio.")
 
-        # Categorías y modalidad
-        row2 = ttk.Frame(frame)
-        row2.pack(fill="x", pady=2)
-        ttk.Label(row2, text="Categoría nivel 1:").pack(side="left")
-        cat1_cb = ttk.Combobox(row2, textvariable=self.cat_caso1_var, values=list(TAXONOMIA.keys()), state="readonly", width=20)
-        cat1_cb.pack(side="left", padx=5)
+        ttk.Label(frame, text="Categorías y modalidad:").grid(
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        cat_container = ttk.Frame(frame)
+        cat_container.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        for idx in (1, 3, 5):
+            cat_container.columnconfigure(idx, weight=1)
+        ttk.Label(cat_container, text="Categoría nivel 1:").grid(
+            row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        cat1_cb = ttk.Combobox(
+            cat_container,
+            textvariable=self.cat_caso1_var,
+            values=list(TAXONOMIA.keys()),
+            state="readonly",
+            width=20,
+        )
+        cat1_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         cat1_cb.bind("<FocusOut>", lambda e: self.on_case_cat1_change())
         cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_case_cat1_change())
         self.register_tooltip(cat1_cb, "Nivel superior de la taxonomía de fraude.")
-        ttk.Label(row2, text="Categoría nivel 2:").pack(side="left")
-        self.case_cat2_cb = ttk.Combobox(row2, textvariable=self.cat_caso2_var, values=list(TAXONOMIA[self.cat_caso1_var.get()].keys()), state="readonly", width=20)
-        self.case_cat2_cb.pack(side="left", padx=5)
+        ttk.Label(cat_container, text="Categoría nivel 2:").grid(
+            row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        self.case_cat2_cb = ttk.Combobox(
+            cat_container,
+            textvariable=self.cat_caso2_var,
+            values=list(TAXONOMIA[self.cat_caso1_var.get()].keys()),
+            state="readonly",
+            width=20,
+        )
+        self.case_cat2_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.case_cat2_cb.bind("<FocusOut>", lambda e: self.on_case_cat2_change())
         self.case_cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_case_cat2_change())
         self.register_tooltip(self.case_cat2_cb, "Subcategoría que precisa el evento.")
-        ttk.Label(row2, text="Modalidad:").pack(side="left")
-        self.case_mod_cb = ttk.Combobox(row2, textvariable=self.mod_caso_var, values=TAXONOMIA[self.cat_caso1_var.get()][self.cat_caso2_var.get()], state="readonly", width=25)
-        self.case_mod_cb.pack(side="left", padx=5)
+        ttk.Label(cat_container, text="Modalidad:").grid(
+            row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        self.case_mod_cb = ttk.Combobox(
+            cat_container,
+            textvariable=self.mod_caso_var,
+            values=TAXONOMIA[self.cat_caso1_var.get()][self.cat_caso2_var.get()],
+            state="readonly",
+            width=25,
+        )
+        self.case_mod_cb.grid(row=0, column=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(self.case_mod_cb, "Modalidad específica dentro de la taxonomía.")
 
-        # Canal y proceso
-        row3 = ttk.Frame(frame)
-        row3.pack(fill="x", pady=2)
-        ttk.Label(row3, text="Canal:").pack(side="left")
-        canal_cb = ttk.Combobox(row3, textvariable=self.canal_caso_var, values=CANAL_LIST, state="readonly", width=25)
-        canal_cb.pack(side="left", padx=5)
+        ttk.Label(frame, text="Canal y proceso:").grid(
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        canal_proc_container = ttk.Frame(frame)
+        canal_proc_container.grid(
+            row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+        )
+        canal_proc_container.columnconfigure(1, weight=1)
+        canal_proc_container.columnconfigure(3, weight=1)
+        ttk.Label(canal_proc_container, text="Canal:").grid(
+            row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        canal_cb = ttk.Combobox(
+            canal_proc_container,
+            textvariable=self.canal_caso_var,
+            values=CANAL_LIST,
+            state="readonly",
+            width=25,
+        )
+        canal_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(canal_cb, "Canal donde se originó el evento.")
-        ttk.Label(row3, text="Proceso impactado:").pack(side="left")
-        proc_cb = ttk.Combobox(row3, textvariable=self.proceso_caso_var, values=PROCESO_LIST, state="readonly", width=25)
-        proc_cb.pack(side="left", padx=5)
+        ttk.Label(canal_proc_container, text="Proceso impactado:").grid(
+            row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        proc_cb = ttk.Combobox(
+            canal_proc_container,
+            textvariable=self.proceso_caso_var,
+            values=PROCESO_LIST,
+            state="readonly",
+            width=25,
+        )
+        proc_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
 
-        row4 = ttk.Frame(frame)
-        row4.pack(fill="x", pady=2)
-        ttk.Label(row4, text="Fecha de ocurrencia del caso (YYYY-MM-DD):").pack(side="left")
-        fecha_case_entry = ttk.Entry(row4, textvariable=self.fecha_caso_var, width=18)
-        fecha_case_entry.pack(side="left", padx=5)
-        self.register_tooltip(fecha_case_entry, "Fecha en que se originó el caso a nivel general.")
+        ttk.Label(frame, text="Fecha de ocurrencia del caso (YYYY-MM-DD):").grid(
+            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        fecha_case_entry = ttk.Entry(frame, textvariable=self.fecha_caso_var, width=18)
+        fecha_case_entry.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.register_tooltip(
+            fecha_case_entry, "Fecha en que se originó el caso a nivel general."
+        )
 
         # Validaciones del caso
         self.validators.append(
