@@ -99,18 +99,35 @@ from ui.config import COL_PADX, FONT_BASE, ROW_PADY
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
-from validators import (drain_log_queue, FieldValidator, log_event,
-                        normalize_without_accents, parse_decimal_amount,
-                        resolve_catalog_product_type, should_autofill_field,
-                        sum_investigation_components, TIPO_PRODUCTO_NORMALIZED,
-                        validate_agency_code, validate_case_id,
-                        validate_client_id, validate_codigo_analitica,
-                        validate_date_text, validate_email_list,
-                        validate_money_bounds, validate_multi_selection,
-                        validate_norm_id, validate_phone_list,
-                      validate_product_dates, validate_product_id,
-                      validate_reclamo_id, validate_required_text,
-                        validate_risk_id, validate_team_member_id)
+from validators import (
+    LOG_FIELDNAMES,
+    FieldValidator,
+    TIPO_PRODUCTO_NORMALIZED,
+    drain_log_queue,
+    log_event,
+    normalize_log_row,
+    normalize_without_accents,
+    parse_decimal_amount,
+    resolve_catalog_product_type,
+    should_autofill_field,
+    sum_investigation_components,
+    validate_agency_code,
+    validate_case_id,
+    validate_client_id,
+    validate_codigo_analitica,
+    validate_date_text,
+    validate_email_list,
+    validate_money_bounds,
+    validate_multi_selection,
+    validate_norm_id,
+    validate_phone_list,
+    validate_product_dates,
+    validate_product_id,
+    validate_reclamo_id,
+    validate_required_text,
+    validate_risk_id,
+    validate_team_member_id,
+)
 from theme_manager import ThemeManager
 
 
@@ -4345,10 +4362,10 @@ class FraudCaseApp:
         if track_attr:
             file_exists = getattr(self, track_attr, False) or file_exists
         with target.open('a', newline='', encoding='utf-8') as file_handle:
-            writer = csv.DictWriter(file_handle, fieldnames=['timestamp', 'tipo', 'mensaje'])
+            writer = csv.DictWriter(file_handle, fieldnames=LOG_FIELDNAMES)
             if not file_exists:
                 writer.writeheader()
-            writer.writerows(rows)
+            writer.writerows([normalize_log_row(row) for row in rows])
         if track_attr:
             setattr(self, track_attr, True)
 
@@ -5672,7 +5689,7 @@ class FraudCaseApp:
         write_csv('analisis.csv', [dict({'id_caso': data['caso']['id_caso']}, **data['analisis'])], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
         # LOGS
         if self.logs:
-            write_csv('logs.csv', self.logs, ['timestamp', 'tipo', 'mensaje'])
+            write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES)
         # Guardar JSON
         json_path = folder / f"{report_prefix}_version.json"
         with json_path.open('w', encoding="utf-8") as f:

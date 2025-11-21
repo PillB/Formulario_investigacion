@@ -12,6 +12,7 @@ from settings import TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
 
 _LOG_QUEUE: List[dict] = []
+LOG_FIELDNAMES = ["timestamp", "tipo", "subtipo", "widget_id", "coords", "mensaje"]
 
 
 def validate_required_text(value: str, label: str) -> Optional[str]:
@@ -368,9 +369,44 @@ def should_autofill_field(current_value, preserve_existing: bool) -> bool:
     return False
 
 
-def log_event(event_type: str, message: str, logs: List[dict]) -> None:
+def _serialize_coords(coords) -> str:
+    if coords is None:
+        return ""
+    if isinstance(coords, (list, tuple)) and len(coords) == 2:
+        return f"{coords[0]},{coords[1]}"
+    return str(coords)
+
+
+def normalize_log_row(row: dict) -> dict:
+    return {
+        "timestamp": row.get("timestamp", ""),
+        "tipo": row.get("tipo", ""),
+        "subtipo": row.get("subtipo", ""),
+        "widget_id": row.get("widget_id", ""),
+        "coords": _serialize_coords(row.get("coords")),
+        "mensaje": row.get("mensaje", ""),
+    }
+
+
+def log_event(
+    event_type: str,
+    message: str,
+    logs: List[dict],
+    widget_id: Optional[str] = None,
+    event_subtipo: Optional[str] = None,
+    coords=None,
+) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    row = {"timestamp": timestamp, "tipo": event_type, "mensaje": message}
+    row = normalize_log_row(
+        {
+            "timestamp": timestamp,
+            "tipo": event_type,
+            "subtipo": event_subtipo or "",
+            "widget_id": widget_id or "",
+            "coords": coords,
+            "mensaje": message,
+        }
+    )
     logs.append(row)
     _LOG_QUEUE.append(row)
 
@@ -388,9 +424,11 @@ def drain_log_queue() -> List[dict]:
 __all__ = [
     'FieldValidator',
     'drain_log_queue',
+    'LOG_FIELDNAMES',
     'log_event',
     'normalize_without_accents',
     'normalize_team_member_identifier',
+    'normalize_log_row',
     'parse_decimal_amount',
     'resolve_catalog_product_type',
     'should_autofill_field',
