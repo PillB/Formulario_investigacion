@@ -69,14 +69,15 @@ class TeamMemberFrame:
         self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
+            self.frame.columnconfigure(0, weight=0)
             self.frame.columnconfigure(1, weight=1)
+            self.frame.columnconfigure(2, weight=1)
 
         ttk.Label(self.frame, text="ID del colaborador:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
-        id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY)
+        id_entry.grid(row=0, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
 
@@ -90,8 +91,7 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        flag_cb.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
+        flag_cb.grid(row=1, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
@@ -113,8 +113,7 @@ class TeamMemberFrame:
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         div_entry = ttk.Entry(self.frame, textvariable=self.division_var, width=20)
-        div_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
+        div_entry.grid(row=2, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(div_entry, "division")
         self.tooltip_register(div_entry, "Ingresa la división o gerencia del colaborador.")
         div_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
@@ -123,8 +122,7 @@ class TeamMemberFrame:
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         area_entry = ttk.Entry(self.frame, textvariable=self.area_var, width=20)
-        area_entry.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=3, column=2, padx=COL_PADX, pady=ROW_PADY)
+        area_entry.grid(row=3, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(area_entry, "area")
         self.tooltip_register(area_entry, "Detalla el área específica.")
         area_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
@@ -133,8 +131,7 @@ class TeamMemberFrame:
             row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         serv_entry = ttk.Entry(self.frame, textvariable=self.servicio_var, width=20)
-        serv_entry.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=4, column=2, padx=COL_PADX, pady=ROW_PADY)
+        serv_entry.grid(row=4, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(serv_entry, "servicio")
         self.tooltip_register(serv_entry, "Describe el servicio o célula.")
 
@@ -142,8 +139,7 @@ class TeamMemberFrame:
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         puesto_entry = ttk.Entry(self.frame, textvariable=self.puesto_var, width=20)
-        puesto_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=5, column=2, padx=COL_PADX, pady=ROW_PADY)
+        puesto_entry.grid(row=5, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(puesto_entry, "puesto")
         self.tooltip_register(puesto_entry, "Define el cargo actual del colaborador.")
 
@@ -151,8 +147,7 @@ class TeamMemberFrame:
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         nombre_ag_entry = ttk.Entry(self.frame, textvariable=self.nombre_agencia_var, width=25)
-        nombre_ag_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=6, column=2, padx=COL_PADX, pady=ROW_PADY)
+        nombre_ag_entry.grid(row=6, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(nombre_ag_entry, "nombre_agencia")
         self.tooltip_register(nombre_ag_entry, "Especifica la agencia u oficina de trabajo.")
 
@@ -160,8 +155,7 @@ class TeamMemberFrame:
             row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         cod_ag_entry = ttk.Entry(self.frame, textvariable=self.codigo_agencia_var, width=10)
-        cod_ag_entry.grid(row=7, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=7, column=2, padx=COL_PADX, pady=ROW_PADY)
+        cod_ag_entry.grid(row=7, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(cod_ag_entry, "codigo_agencia")
         self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
         self._division_entry = div_entry
@@ -177,8 +171,7 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        falta_cb.grid(row=8, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=8, column=2, padx=COL_PADX, pady=ROW_PADY)
+        falta_cb.grid(row=8, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         falta_cb.set('')
         self.tooltip_register(falta_cb, "Selecciona la falta disciplinaria tipificada.")
 
@@ -192,8 +185,7 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        sanc_cb.grid(row=9, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=9, column=2, padx=COL_PADX, pady=ROW_PADY)
+        sanc_cb.grid(row=9, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         sanc_cb.set('')
         self.tooltip_register(sanc_cb, "Describe la sanción propuesta o aplicada.")
 
@@ -311,8 +303,11 @@ class TeamMemberFrame:
         self._fallback_message_var.set("")
         try:
             if self._fallback_label.winfo_ismapped():
-                self._fallback_label.pack_forget()
-        except tk.TclError:
+                if hasattr(self._fallback_label, "grid_remove"):
+                    self._fallback_label.grid_remove()
+                elif hasattr(self._fallback_label, "pack_forget"):
+                    self._fallback_label.pack_forget()
+        except Exception:
             pass
 
     def _set_fallback_warning(self, message: str | None) -> None:
@@ -322,8 +317,11 @@ class TeamMemberFrame:
         self._fallback_message_var.set(message)
         try:
             if not self._fallback_label.winfo_ismapped():
-                self._fallback_label.pack(fill="x", padx=COL_PADX, pady=(0, ROW_PADY // 2))
-        except tk.TclError:
+                if hasattr(self._fallback_label, "grid"):
+                    self._fallback_label.grid()
+                elif hasattr(self._fallback_label, "pack"):
+                    self._fallback_label.pack(fill="x", padx=COL_PADX, pady=(0, ROW_PADY // 2))
+        except Exception:
             pass
 
     @staticmethod
