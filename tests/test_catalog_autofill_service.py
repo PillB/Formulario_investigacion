@@ -62,7 +62,7 @@ def test_lookup_team_member_defaults_to_latest_with_invalid_case_date():
 
     data, meta = service.lookup_team_member("Z99999", "not-a-date")
 
-    assert data["fecha_actualizacion"] == "2025-06-18"
+    assert data["fecha_actualizacion"] == "2024-06-18"
     assert meta["fallback_used"] is True
     assert meta["reason"] == "case_date_missing_or_invalid"
 
