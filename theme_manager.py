@@ -1,16 +1,18 @@
-"""Utilities to style Tkinter widgets with a consistent light/dark palette.
+"""Headless theme coordinator for Tkinter/ttk widgets.
 
-Palette rationale:
-- Light: background #e9f1f7 (off-white with a cool blue tint to reduce glare), text #2b2f36 (dark gray for contrast), accents #7d93b5 (muted blue-gray for focus without harshness).
-- Dark: background #1f242b (soft charcoal that keeps contrast high), text #e3e6eb (light gray that avoids pure white bloom), accents #7a8aa6 (desaturated blue-gray that reads well on dark surfaces).
+El administrador mantiene los temas claro y oscuro, aplica los colores
+mediante ``ttk.Style`` y actualiza de forma recursiva los árboles de widgets
+existentes, incluyendo ventanas ``Toplevel`` registradas. También expone
+persistencia simple para recordar la preferencia activa entre sesiones.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from pathlib import Path
+from typing import Dict, Optional, Set
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import scrolledtext, ttk
 
 
 LIGHT_THEME: Dict[str, str] = {
@@ -43,14 +45,31 @@ DARK_THEME: Dict[str, str] = {
 class ThemeManager:
     """Apply and toggle Tkinter ttk styles without coupling to a running UI."""
 
+    PREFERENCE_FILE = Path(__file__).with_name(".theme_preference")
+
     _style: Optional[ttk.Style] = None
     _root: Optional[tk.Misc] = None
     _current: Dict[str, str] = LIGHT_THEME
+    _base_style_configured: bool = False
+    _tracked_toplevels: Set[tk.Toplevel] = set()
 
     THEMES: Dict[str, Dict[str, str]] = {
         LIGHT_THEME["name"]: LIGHT_THEME,
         DARK_THEME["name"]: DARK_THEME,
     }
+
+    @classmethod
+    def build_style(cls, root: tk.Misc) -> ttk.Style:
+        """Return a ttk.Style bound to ``root`` with base fonts and paddings."""
+
+        cls._root = root
+        if cls._style is None or str(cls._style.master) != str(root):
+            cls._style = ttk.Style(master=root)
+            cls._base_style_configured = False
+        if not cls._base_style_configured:
+            cls._configure_base_style(cls._style)
+            cls._base_style_configured = True
+        return cls._style
 
     @classmethod
     def current(cls) -> Dict[str, str]:
@@ -61,7 +80,7 @@ class ThemeManager:
     @classmethod
     def apply(
         cls, theme_name: str, root: Optional[tk.Misc] = None, style: Optional[ttk.Style] = None
-    ) -> None:
+    ) -> Dict[str, str]:
         """Apply the requested theme and refresh existing widgets."""
 
         normalized = (theme_name or "").lower()
@@ -74,27 +93,118 @@ class ThemeManager:
         ttk_style = cls._ensure_style()
 
         cls._current = theme
-        cls._configure_style(ttk_style, theme)
-        cls._refresh_widget_tree(theme)
+        cls._configure_palette(ttk_style, theme)
+        cls._persist_theme(theme["name"])
+        cls.apply_to_widget_tree(cls._root)
+        cls._refresh_toplevels()
+        return cls._current
 
     @classmethod
     def toggle(cls) -> Dict[str, str]:
         """Switch between light and dark themes and return the active palette."""
 
         next_theme = "dark" if cls._current["name"] == "light" else "light"
-        cls.apply(next_theme)
-        return cls._current
+        return cls.apply(next_theme)
 
+    @classmethod
+    def apply_to_widget_tree(cls, root: Optional[tk.Misc]) -> None:
+        """Recursively apply theme colors to ``root`` and its children."""
+
+        if root is None:
+            return
+
+        theme = cls._current
+        background = theme["background"]
+        foreground = theme["foreground"]
+
+        try:
+            root.configure(background=background)
+        except tk.TclError:
+            pass
+
+        def _update(widget: tk.Misc) -> None:
+            if isinstance(widget, (tk.Text, scrolledtext.ScrolledText, tk.Entry, tk.Spinbox, tk.Listbox)):
+                try:
+                    widget.configure(
+                        background=theme["input_background"],
+                        foreground=theme["input_foreground"],
+                        insertbackground=theme["accent"],
+                        selectbackground=theme["select_background"],
+                        selectforeground=theme["select_foreground"],
+                    )
+                except tk.TclError:
+                    pass
+            elif isinstance(widget, (tk.Frame, tk.Toplevel, tk.Canvas, tk.LabelFrame)):
+                try:
+                    widget.configure(background=background)
+                except tk.TclError:
+                    pass
+            elif isinstance(widget, (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton)):
+                try:
+                    widget.configure(background=background, foreground=foreground)
+                except tk.TclError:
+                    pass
+            elif isinstance(widget, ttk.Treeview):
+                try:
+                    widget.tag_configure("", background=background, foreground=foreground)
+                except tk.TclError:
+                    pass
+
+            for child in widget.winfo_children():
+                _update(child)
+
+        _update(root)
+
+    @classmethod
+    def register_toplevel(cls, window: Optional[tk.Toplevel]) -> None:
+        """Track a Toplevel so it gets refreshed when the theme changes."""
+
+        if window is None:
+            return
+        cls._tracked_toplevels.add(window)
+        try:
+            window.bind("<Destroy>", lambda _evt, win=window: cls._tracked_toplevels.discard(win))
+        except tk.TclError:
+            pass
+        cls.apply_to_widget_tree(window)
+
+    @classmethod
+    def load_saved_theme(cls) -> str:
+        """Return persisted theme name or ``light`` when unavailable."""
+
+        try:
+            saved = cls.PREFERENCE_FILE.read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            return LIGHT_THEME["name"]
+        return saved if saved in cls.THEMES else LIGHT_THEME["name"]
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
     @classmethod
     def _ensure_style(cls) -> ttk.Style:
         if cls._style is None:
             if cls._root is None:
                 raise RuntimeError("ThemeManager requires a Tk root before applying styles.")
             cls._style = ttk.Style(master=cls._root)
+            cls._base_style_configured = False
+        if not cls._base_style_configured:
+            cls._configure_base_style(cls._style)
+            cls._base_style_configured = True
         return cls._style
 
     @classmethod
-    def _configure_style(cls, ttk_style: ttk.Style, theme: Dict[str, str]) -> None:
+    def _configure_base_style(cls, ttk_style: ttk.Style) -> None:
+        from ui.config import FONT_BASE, FONT_HEADER
+
+        ttk_style.configure("TLabel", font=FONT_BASE, padding=(2, 2))
+        ttk_style.configure("TEntry", font=FONT_BASE, padding=(6, 6))
+        ttk_style.configure("TCombobox", font=FONT_BASE, padding=(6, 6))
+        ttk_style.configure("TButton", font=FONT_BASE, padding=(8, 6))
+        ttk_style.configure("TLabelframe.Label", font=FONT_HEADER)
+
+    @classmethod
+    def _configure_palette(cls, ttk_style: ttk.Style, theme: Dict[str, str]) -> None:
         background = theme["background"]
         foreground = theme["foreground"]
         input_background = theme["input_background"]
@@ -155,48 +265,23 @@ class ThemeManager:
         )
 
     @classmethod
-    def _refresh_widget_tree(cls, theme: Dict[str, str]) -> None:
-        if cls._root is None:
-            return
-
-        background = theme["background"]
-        foreground = theme["foreground"]
-
+    def _persist_theme(cls, theme_name: str) -> None:
         try:
-            cls._root.configure(background=background)
-        except tk.TclError:
+            cls.PREFERENCE_FILE.write_text(theme_name, encoding="utf-8")
+        except OSError:
             pass
 
-        def _update(widget: tk.Misc) -> None:
-            if isinstance(widget, (tk.Text, tk.Entry, tk.Spinbox, tk.Listbox)):
-                try:
-                    widget.configure(
-                        background=theme["input_background"],
-                        foreground=theme["input_foreground"],
-                        insertbackground=theme["accent"],
-                        selectbackground=theme["select_background"],
-                        selectforeground=theme["select_foreground"],
-                    )
-                except tk.TclError:
-                    pass
-            elif isinstance(widget, (tk.Frame, tk.Toplevel, tk.Canvas, tk.LabelFrame)):
-                try:
-                    widget.configure(background=background)
-                except tk.TclError:
-                    pass
-            elif isinstance(widget, (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton)):
-                try:
-                    widget.configure(background=background, foreground=foreground)
-                except tk.TclError:
-                    pass
-            elif isinstance(widget, ttk.Treeview):
-                try:
-                    widget.tag_configure("", background=background, foreground=foreground)
-                except tk.TclError:
-                    pass
+    @classmethod
+    def _refresh_toplevels(cls) -> None:
+        for window in list(cls._tracked_toplevels):
+            try:
+                exists = bool(window.winfo_exists())
+            except tk.TclError:
+                exists = False
+            if not exists:
+                cls._tracked_toplevels.discard(window)
+                continue
+            cls.apply_to_widget_tree(window)
 
-            for child in widget.winfo_children():
-                _update(child)
 
-        _update(cls._root)
-
+__all__ = ["ThemeManager", "LIGHT_THEME", "DARK_THEME"]

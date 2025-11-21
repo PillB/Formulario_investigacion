@@ -10,7 +10,6 @@ import pytest
 
 from app import FraudCaseApp
 from theme_manager import DARK_THEME, LIGHT_THEME, ThemeManager
-from ui.config import init_styles
 
 
 ColorPair = Tuple[str, str]
@@ -66,19 +65,22 @@ def test_theme_colors_meet_contrast(
     os.name != "nt" and not os.environ.get("DISPLAY"),
     reason="Tkinter no disponible en el entorno de pruebas",
 )
-def test_theme_application_smoke(messagebox_spy) -> None:
+def test_theme_application_smoke(messagebox_spy, tmp_path, monkeypatch) -> None:
     try:
         root = tk.Tk()
         root.withdraw()
     except tk.TclError:
         pytest.skip("Tkinter no disponible en el entorno de pruebas")
 
+    monkeypatch.setattr(ThemeManager, "PREFERENCE_FILE", tmp_path / "theme_pref.txt")
     previous_style = ThemeManager._style
     previous_root = ThemeManager._root
     previous_current = ThemeManager._current
+    previous_base_configured = ThemeManager._base_style_configured
+    previous_windows = set(ThemeManager._tracked_toplevels)
 
     try:
-        style = init_styles(root)
+        style = ThemeManager.build_style(root)
         _app = FraudCaseApp(root)
 
         ThemeManager.apply("light", root=root, style=style)
@@ -88,3 +90,5 @@ def test_theme_application_smoke(messagebox_spy) -> None:
         ThemeManager._style = previous_style
         ThemeManager._root = previous_root
         ThemeManager._current = previous_current
+        ThemeManager._base_style_configured = previous_base_configured
+        ThemeManager._tracked_toplevels = previous_windows
