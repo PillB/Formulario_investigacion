@@ -384,6 +384,12 @@ def build_headless_app(
     case_cat2 = next(iter(TAXONOMIA[case_cat1]))
     case_modalidad = TAXONOMIA[case_cat1][case_cat2][0]
     app.logs = []
+    app._encabezado_vars = {}
+    app._operation_vars = {}
+    app._anexo_vars = {}
+    app._firma_vars = {}
+    app._recommendation_widgets = {}
+    app._reset_extended_sections()
     app.id_caso_var = DummyVar("2024-0001")
     app.tipo_informe_var = DummyVar(TIPO_INFORME_LIST[0])
     app.cat_caso1_var = DummyVar(case_cat1)
