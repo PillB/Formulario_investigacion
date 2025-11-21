@@ -95,7 +95,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_FALTA_LIST, TIPO_ID_LIST, TIPO_INFORME_LIST,
                       TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
                       ensure_external_drive_dir)
-from ui.config import COL_PADX, FONT_BASE, ROW_PADY, init_styles
+from ui.config import COL_PADX, FONT_BASE, ROW_PADY
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
@@ -5809,8 +5809,9 @@ __all__ = ["FraudCaseApp", "should_autofill_field"]
 
 def run_app():
     root = tk.Tk()
-    style = init_styles(root)
+    style = ThemeManager.build_style(root)
     saved_theme = ThemeManager.load_saved_theme()
     ThemeManager.apply(saved_theme, root=root, style=style)
     app = FraudCaseApp(root)
+    ThemeManager.apply_to_widget_tree(root)
     root.mainloop()
