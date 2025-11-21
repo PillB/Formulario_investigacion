@@ -405,6 +405,17 @@ def _build_report_context(case_data: CaseData):
         if text and text != PLACEHOLDER:
             rec_operativas = [text]
 
+    investigator = case.get("investigador") if isinstance(case, Mapping) else {}
+    firmas: List[Dict[str, Any]] = []
+    if isinstance(investigator, Mapping):
+        nombre_investigador = investigator.get("nombre") or ""
+        cargo_investigador = investigator.get("cargo") or "Investigador Principal"
+        if nombre_investigador or investigator.get("matricula"):
+            firmas.append({"nombre": nombre_investigador, "cargo": cargo_investigador})
+    matricula_investigador = case.get("matricula_investigador") if isinstance(case, Mapping) else None
+    if matricula_investigador and not firmas:
+        firmas.append({"nombre": "", "cargo": "Investigador Principal"})
+
     return {
         "case": case,
         "analysis": analysis,
@@ -420,7 +431,7 @@ def _build_report_context(case_data: CaseData):
             "legal": rec_legales,
         },
         "anexos": case_data.anexos or [],
-        "firmas": case_data.firmas or [],
+        "firmas": firmas,
     }
 
 
