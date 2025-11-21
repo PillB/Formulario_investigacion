@@ -1585,8 +1585,7 @@ class FraudCaseApp:
 
         analysis_container = ttk.Frame(analysis_group)
         analysis_container.grid(row=0, column=0, sticky="nsew")
-        analysis_container.columnconfigure(0, weight=0)
-        analysis_container.columnconfigure(1, weight=1)
+        analysis_container.columnconfigure(0, weight=1)
 
         fields = [
             ("Antecedentes:", "Modificó antecedentes", "Resume los hechos previos y contexto del caso."),
@@ -1599,27 +1598,37 @@ class FraudCaseApp:
 
         text_widgets = []
         for idx, (label_text, log_message, tooltip) in enumerate(fields):
+            row_label = idx * 2
+            row_text = row_label + 1
+
             ttk.Label(analysis_container, text=label_text).grid(
-                row=idx,
+                row=row_label,
                 column=0,
                 padx=COL_PADX,
-                pady=ROW_PADY,
-                sticky="e",
+                pady=(ROW_PADY, ROW_PADY // 2),
+                sticky="w",
             )
             text_widget = scrolledtext.ScrolledText(
                 analysis_container,
                 width=1,
-                height=6,
+                height=12,
                 wrap="word",
             )
             text_widget.grid(
-                row=idx,
-                column=1,
+                row=row_text,
+                column=0,
+                padx=COL_PADX,
+                pady=(0, ROW_PADY),
+                sticky="nsew",
+            )
+            analysis_container.rowconfigure(row_text, weight=1)
+            text_widget.configure(
+                takefocus=True,
+                font=FONT_BASE,
                 padx=COL_PADX,
                 pady=ROW_PADY,
-                sticky="we",
+                wrap=tk.WORD,
             )
-            text_widget.configure(takefocus=True, font=FONT_BASE, padx=COL_PADX, pady=ROW_PADY)
             text_widget.bind(
                 "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
             )
