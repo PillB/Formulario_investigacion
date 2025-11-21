@@ -1,5 +1,7 @@
-
 id_colaborador,flag,division,area,servicio,puesto,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion
 T12345,Involucrado,DCA,Área Comercial,Servicio 1,Puesto 1,Agencia Central,123456,Inconducta funcional,Amonestación
-U00123,Relacionado,Finanzas,Área de Control,Servicio 2,Puesto 2,, ,Negligencia funcional,Suspensión 2 días
-T54321,Involucrado,Operaciones,Área de Operaciones,Servicio 3,Puesto 3,, ,No aplica,No aplica
+U00123,Relacionado,Finanzas,Área de Control,Servicio 2,Puesto 2,,,Negligencia funcional,Suspensión 2 días
+T54321,Involucrado,Operaciones,Área de Operaciones,Servicio 3,Puesto 3,,,No aplica,No aplica
+A98765,Afectado,Canales de atención,Área Comercial,Servicio 4,Puesto 4,Agencia Norte,654321,N/A,N/A
+B00077,Involucrado,Riesgos,Gestión Integral de Riesgos,Servicio 5,Puesto 5,,,Omisión de control,Llamada de atención
+C11223,Relacionado,DCA,Área de soporte,Servicio 6,Puesto 6,Agencia Callao,222333,Falta leve,Capacitación
