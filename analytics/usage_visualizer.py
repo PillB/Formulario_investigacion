@@ -102,12 +102,14 @@ def _accumulate_time_by_screen(rows: List[MutableMapping[str, str]], screen_hint
     ordered = sorted(rows, key=lambda r: parse_timestamp(r.get("timestamp", "")) or datetime.min)
     current_screen: Optional[str] = None
     last_ts: Optional[datetime] = None
+    last_processed_ts: Optional[datetime] = None
     time_spent: Dict[str, float] = defaultdict(float)
     for row in ordered:
         ts = parse_timestamp(row.get("timestamp", ""))
         screen = infer_screen(row, screen_hints)
         if ts is None:
             continue
+        last_processed_ts = ts
         if current_screen is None:
             current_screen = screen
             last_ts = ts
@@ -118,6 +120,11 @@ def _accumulate_time_by_screen(rows: List[MutableMapping[str, str]], screen_hint
                 time_spent[current_screen] += elapsed
             current_screen = screen
             last_ts = ts
+    if current_screen and last_ts:
+        final_ts = last_processed_ts or last_ts
+        elapsed = (final_ts - last_ts).total_seconds()
+        if elapsed >= 0:
+            time_spent[current_screen] += elapsed
     return dict(time_spent)
 
 

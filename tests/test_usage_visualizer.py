@@ -4,6 +4,7 @@ from analytics.usage_visualizer import (
     DEFAULT_SCREEN_DIMENSIONS,
     DEFAULT_SCREEN_HINTS,
     AnalyticsReport,
+    _accumulate_time_by_screen,
     infer_screen,
     visualize_usage,
 )
@@ -52,3 +53,23 @@ def test_visualize_usage_builds_heatmaps(sample_log_file, tmp_path):
 def test_defaults_are_exported():
     assert DEFAULT_SCREEN_DIMENSIONS[0] > 0
     assert "resumen" in DEFAULT_SCREEN_HINTS
+
+
+def test_time_accumulation_counts_last_screen_without_switch():
+    rows = [
+        {"timestamp": "2024-01-01 10:00:00", "widget_id": "tab_clientes", "mensaje": ""},
+        {
+            "timestamp": "2024-01-01 10:02:00",
+            "widget_id": "entry_cliente",
+            "mensaje": "Ingreso cliente",
+        },
+        {
+            "timestamp": "2024-01-01 10:05:00",
+            "widget_id": "btn_guardar",
+            "mensaje": "Guarda datos",
+        },
+    ]
+
+    time_spent = _accumulate_time_by_screen(rows, DEFAULT_SCREEN_HINTS)
+
+    assert time_spent["clientes"] == pytest.approx(5 * 60)
