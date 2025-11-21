@@ -70,7 +70,7 @@ from contextlib import suppress
 from typing import Optional
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, ttk
+from tkinter import filedialog, font as tkfont, messagebox, scrolledtext, ttk
 
 from models import (AutofillService, CatalogService, build_detail_catalog_id_index,
                     iter_massive_csv_rows, normalize_detail_catalog_key,
@@ -224,6 +224,8 @@ class FraudCaseApp:
         self._summary_pending_dataset = None
         self._autosave_job_id = None
         self._autosave_dirty = False
+        self._rich_text_images = defaultdict(list)
+        self._rich_text_fonts = {}
         self.clients_detail_wrapper = None
         self.team_detail_wrapper = None
         self.clients_summary_tree = None
@@ -1588,32 +1590,46 @@ class FraudCaseApp:
             ("Recomendaciones y mejoras:", "Modificó recomendaciones", "Propón acciones correctivas y preventivas."),
         ]
 
+        bold_font, header_font, mono_font = self._get_rich_text_fonts()
+
         text_widgets = []
         for idx, (label_text, log_message, tooltip) in enumerate(fields):
-            row_label = idx * 2
-            row_text = row_label + 1
-
-            ttk.Label(analysis_container, text=label_text).grid(
-                row=row_label,
+            section_frame = ttk.Frame(analysis_container)
+            section_frame.grid(
+                row=idx,
                 column=0,
                 padx=COL_PADX,
-                pady=(ROW_PADY, ROW_PADY // 2),
+                pady=(ROW_PADY, ROW_PADY),
+                sticky="nsew",
+            )
+            analysis_container.rowconfigure(idx, weight=1)
+            section_frame.columnconfigure(0, weight=1)
+            section_frame.rowconfigure(2, weight=1)
+
+            ttk.Label(section_frame, text=label_text).grid(
+                row=0,
+                column=0,
+                padx=COL_PADX,
+                pady=(0, ROW_PADY // 2),
                 sticky="w",
             )
+
+            toolbar = ttk.Frame(section_frame)
+            toolbar.grid(row=1, column=0, padx=COL_PADX, pady=(0, ROW_PADY // 2), sticky="w")
+
             text_widget = scrolledtext.ScrolledText(
-                analysis_container,
-                width=1,
-                height=12,
+                section_frame,
+                width=4,
+                height=16,
                 wrap="word",
             )
             text_widget.grid(
-                row=row_text,
+                row=2,
                 column=0,
                 padx=COL_PADX,
                 pady=(0, ROW_PADY),
                 sticky="nsew",
             )
-            analysis_container.rowconfigure(row_text, weight=1)
             text_widget.configure(
                 takefocus=True,
                 font=FONT_BASE,
@@ -1621,10 +1637,12 @@ class FraudCaseApp:
                 pady=ROW_PADY,
                 wrap=tk.WORD,
             )
+            self._configure_rich_text_tags(text_widget, bold_font, header_font, mono_font)
             text_widget.bind(
                 "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
             )
             self.register_tooltip(text_widget, tooltip)
+            self._add_rich_text_toolbar(toolbar, text_widget)
             text_widgets.append(text_widget)
 
         (
@@ -1635,6 +1653,108 @@ class FraudCaseApp:
             self.conclusiones_text,
             self.recomendaciones_text,
         ) = text_widgets
+
+    def _get_rich_text_fonts(self):
+        if self._rich_text_fonts:
+            return (
+                self._rich_text_fonts["bold"],
+                self._rich_text_fonts["header"],
+                self._rich_text_fonts["mono"],
+            )
+
+        base_font = tkfont.nametofont("TkDefaultFont")
+        bold_font = base_font.copy()
+        bold_font.configure(weight="bold")
+
+        header_font = tkfont.nametofont("TkHeadingFont").copy()
+        header_font.configure(weight="bold", size=max(header_font.cget("size"), 12))
+
+        mono_font = tkfont.nametofont("TkFixedFont").copy()
+
+        self._rich_text_fonts = {
+            "bold": bold_font,
+            "header": header_font,
+            "mono": mono_font,
+        }
+        return bold_font, header_font, mono_font
+
+    def _configure_rich_text_tags(self, widget, bold_font, header_font, mono_font):
+        widget.tag_configure("bold", font=bold_font)
+        widget.tag_configure("header", font=header_font)
+        widget.tag_configure("table", font=mono_font)
+        widget.tag_configure("list", lmargin1=20, lmargin2=30)
+
+    def _add_rich_text_toolbar(self, toolbar, text_widget):
+        ttk.Button(
+            toolbar,
+            text="Negrita",
+            command=lambda w=text_widget: self._apply_text_tag(w, "bold"),
+        ).grid(row=0, column=0, padx=(0, 6))
+        ttk.Button(
+            toolbar,
+            text="Encabezado",
+            command=lambda w=text_widget: self._apply_text_tag(w, "header"),
+        ).grid(row=0, column=1, padx=(0, 6))
+        ttk.Button(
+            toolbar,
+            text="Tabla",
+            command=lambda w=text_widget: self._insert_table_template(w),
+        ).grid(row=0, column=2, padx=(0, 6))
+        ttk.Button(
+            toolbar,
+            text="Imagen",
+            command=lambda w=text_widget: self._insert_image(w),
+        ).grid(row=0, column=3, padx=(0, 6))
+
+        tips = [
+            "Aplica formato en negrita al texto seleccionado.",
+            "Resalta la línea actual como encabezado.",
+            "Inserta una tabla de texto preformateada.",
+            "Agrega una imagen junto al cursor actual.",
+        ]
+        for idx, tip in enumerate(tips):
+            child = toolbar.grid_slaves(row=0, column=idx)
+            if child:
+                self.register_tooltip(child[0], tip)
+
+    def _apply_text_tag(self, text_widget, tag_name):
+        try:
+            start = text_widget.index("sel.first")
+            end = text_widget.index("sel.last")
+        except tk.TclError:
+            start = text_widget.index("insert linestart")
+            end = text_widget.index("insert lineend")
+        text_widget.tag_add(tag_name, start, end)
+        text_widget.focus_set()
+
+    def _insert_table_template(self, text_widget):
+        table_template = (
+            "\n| Columna 1 | Columna 2 | Columna 3 |\n"
+            "|-----------|-----------|-----------|\n"
+            "| Dato 1    | Dato 2    | Dato 3    |\n"
+        )
+        insertion_point = text_widget.index("insert")
+        text_widget.insert(insertion_point, table_template)
+        text_widget.tag_add("table", insertion_point, f"{insertion_point} + {len(table_template)} chars")
+        text_widget.focus_set()
+
+    def _insert_image(self, text_widget):
+        filetypes = [
+            ("Imágenes", "*.png *.gif *.ppm *.pgm"),
+            ("Todos los archivos", "*.*"),
+        ]
+        filepath = filedialog.askopenfilename(title="Selecciona una imagen", filetypes=filetypes)
+        if not filepath:
+            return
+        try:
+            photo = tk.PhotoImage(file=filepath)
+        except tk.TclError as exc:  # pragma: no cover - rutas inválidas dependen del usuario
+            messagebox.showerror("Imagen inválida", f"No se pudo cargar la imagen: {exc}")
+            return
+        text_widget.image_create("insert", image=photo)
+        self._rich_text_images[text_widget].append(photo)
+        text_widget.insert("insert", " ")
+        text_widget.focus_set()
 
     def build_actions_tab(self, parent):
         PRIMARY_PADDING = (12, 6)

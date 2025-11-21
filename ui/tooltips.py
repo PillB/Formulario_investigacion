@@ -41,18 +41,22 @@ class HoverTooltip:
             y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
         except tk.TclError:
             return
+        palette = ThemeManager.current()
+        background = palette.get("background", "#333333")
+        foreground = palette.get("foreground", "#ffffff")
+        border = palette.get("border", "#555555")
         self.tipwindow = tk.Toplevel(self.widget)
         ThemeManager.register_toplevel(self.tipwindow)
         self.tipwindow.wm_overrideredirect(True)
-        self.tipwindow.configure(bg="#333333")
+        self.tipwindow.configure(bg=background, highlightbackground=border, highlightthickness=1)
         label = tk.Label(
             self.tipwindow,
             text=self.text,
             justify="left",
-            background="#333333",
-            foreground="#ffffff",
+            background=background,
+            foreground=foreground,
             relief="solid",
-            borderwidth=1,
+            borderwidth=0,
             padx=5,
             pady=3,
             wraplength=280,
@@ -91,18 +95,22 @@ class ValidationTooltip:
             y = self.widget.winfo_rooty() + self.widget.winfo_height() + 2
         except tk.TclError:
             return
+        palette = ThemeManager.current()
+        background = palette.get("background", "#1f242b")
+        foreground = palette.get("foreground", "#ffffff")
+        accent = palette.get("accent", "#8B0000")
         self.tipwindow = tk.Toplevel(self.widget)
         ThemeManager.register_toplevel(self.tipwindow)
         self.tipwindow.wm_overrideredirect(True)
-        self.tipwindow.configure(bg="#8B0000")
+        self.tipwindow.configure(bg=background, highlightbackground=accent, highlightthickness=1)
         label = tk.Label(
             self.tipwindow,
             text=text,
             justify="left",
-            background="#8B0000",
-            foreground="#ffffff",
+            background=background,
+            foreground=foreground,
             relief="solid",
-            borderwidth=1,
+            borderwidth=0,
             padx=5,
             pady=3,
             wraplength=320,
