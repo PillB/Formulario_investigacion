@@ -5142,7 +5142,8 @@ class FraudCaseApp:
             try:
                 with open(AUTOSAVE_FILE, 'r', encoding="utf-8") as f:
                     data = json.load(f)
-                self.populate_from_data(data)
+                dataset = self._ensure_case_data(data)
+                self.populate_from_data(dataset)
                 log_event("navegacion", "Se cargó el autosave", self.logs)
             except Exception as ex:
                 log_event("validacion", f"Error cargando autosave: {ex}", self.logs)
@@ -5455,7 +5456,8 @@ class FraudCaseApp:
         try:
             with open(filename, 'r', encoding="utf-8") as f:
                 data = json.load(f)
-            self.populate_from_data(data)
+            dataset = self._ensure_case_data(data)
+            self.populate_from_data(dataset)
             log_event("navegacion", f"Se cargó versión desde {filename}", self.logs)
             messagebox.showinfo("Versión cargada", "La versión se cargó correctamente.")
         except Exception as ex:
@@ -5726,8 +5728,9 @@ class FraudCaseApp:
 
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
-        if isinstance(data, CaseData):
-            data = data.as_dict()
+
+        dataset = self._ensure_case_data(data)
+        data = dataset.as_dict()
         # Limpiar primero sin confirmar ni sobrescribir el autosave
         self._clear_case_state(save_autosave=False)
         # Datos de caso
