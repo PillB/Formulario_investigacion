@@ -1087,10 +1087,10 @@ class FraudCaseApp:
         self.mod_caso_var.set('')
         self.case_mod_cb.set('')
         self._log_navigation_change("Modificó categoría 2 del caso")
-        if self.cat_caso2_var.get() == 'Fraude Externo':
+        if self.cat_caso2_var.get() == 'Fraude Interno':
             messagebox.showwarning(
-                "Analítica de fraude externo",
-                "Recuerda coordinar con el equipo de reclamos para registrar la analítica correcta en casos de Fraude Externo.",
+                "Analítica de fraude interno",
+                "Recuerda coordinar con el equipo de reclamos para registrar la analítica correcta en casos de Fraude Interno.",
             )
 
     def build_clients_tab(self, parent):
