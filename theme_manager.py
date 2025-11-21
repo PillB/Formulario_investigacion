@@ -1,124 +1,97 @@
-"""Gestor de temas ligero para la aplicación Tkinter."""
+"""Utilities to style Tkinter widgets with a consistent light/dark palette.
+
+Palette rationale:
+- Light: background #e9f1f7 (off-white with a cool blue tint to reduce glare), text #2b2f36 (dark gray for contrast), accents #7d93b5 (muted blue-gray for focus without harshness).
+- Dark: background #1f242b (soft charcoal that keeps contrast high), text #e3e6eb (light gray that avoids pure white bloom), accents #7a8aa6 (desaturated blue-gray that reads well on dark surfaces).
+"""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Dict, Optional
 
 import tkinter as tk
 from tkinter import ttk
 
-from settings import BASE_DIR
-
-THEME_CONFIG_FILE = Path(BASE_DIR) / "theme_config.json"
 
 LIGHT_THEME: Dict[str, str] = {
     "name": "light",
-    "background": "#eaf0f7",
-    "foreground": "#0f172a",
+    "background": "#e9f1f7",
+    "foreground": "#2b2f36",
     "input_background": "#ffffff",
-    "input_foreground": "#0f172a",
-    "accent": "#2563eb",
-    "border": "#cbd5e1",
-    "select_background": "#1d4ed8",
-    "select_foreground": "#f8fafc",
-    "heading_background": "#dbeafe",
+    "input_foreground": "#2b2f36",
+    "accent": "#7d93b5",
+    "border": "#c5d0df",
+    "select_background": "#b8c7dd",
+    "select_foreground": "#1f242b",
+    "heading_background": "#d7e1ed",
 }
 
 DARK_THEME: Dict[str, str] = {
     "name": "dark",
-    "background": "#1f2933",
-    "foreground": "#e5e7eb",
-    "input_background": "#111827",
-    "input_foreground": "#e5e7eb",
-    "accent": "#38bdf8",
-    "border": "#4b5563",
-    "select_background": "#0ea5e9",
-    "select_foreground": "#0b1320",
-    "heading_background": "#111827",
-}
-
-THEMES: Dict[str, Dict[str, str]] = {
-    LIGHT_THEME["name"]: LIGHT_THEME,
-    DARK_THEME["name"]: DARK_THEME,
+    "background": "#1f242b",
+    "foreground": "#e3e6eb",
+    "input_background": "#151920",
+    "input_foreground": "#e3e6eb",
+    "accent": "#7a8aa6",
+    "border": "#3a404b",
+    "select_background": "#3e4a5a",
+    "select_foreground": "#e9ecf1",
+    "heading_background": "#181c22",
 }
 
 
 class ThemeManager:
-    """Controla la aplicación y persistencia del tema."""
+    """Apply and toggle Tkinter ttk styles without coupling to a running UI."""
 
     _style: Optional[ttk.Style] = None
     _root: Optional[tk.Misc] = None
-    current: str = "light"
+    _current: Dict[str, str] = LIGHT_THEME
+
+    THEMES: Dict[str, Dict[str, str]] = {
+        LIGHT_THEME["name"]: LIGHT_THEME,
+        DARK_THEME["name"]: DARK_THEME,
+    }
 
     @classmethod
-    def load_saved_theme(cls) -> str:
-        """Carga la preferencia previa y actualiza el estado interno."""
+    def current(cls) -> Dict[str, str]:
+        """Return the active theme dictionary."""
 
-        saved = cls._load_saved_theme()
-        cls.current = saved
-        return saved
+        return cls._current
 
     @classmethod
-    def _load_saved_theme(cls) -> str:
-        if THEME_CONFIG_FILE.exists():
-            try:
-                with THEME_CONFIG_FILE.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                saved = data.get("theme", "").lower()
-                if saved in THEMES:
-                    return saved
-            except (json.JSONDecodeError, OSError):
-                return "light"
-        return "light"
+    def apply(
+        cls, theme_name: str, root: Optional[tk.Misc] = None, style: Optional[ttk.Style] = None
+    ) -> None:
+        """Apply the requested theme and refresh existing widgets."""
 
-    @classmethod
-    def _persist_theme(cls, theme_name: str) -> None:
-        try:
-            THEME_CONFIG_FILE.write_text(
-                json.dumps({"theme": theme_name}), encoding="utf-8"
-            )
-        except OSError:
-            # No se bloquea la app si no se puede escribir el archivo.
-            pass
+        normalized = (theme_name or "").lower()
+        theme = cls.THEMES.get(normalized, LIGHT_THEME)
 
-    @classmethod
-    def _ensure_style(cls, root: Optional[tk.Misc]) -> ttk.Style:
         if root is not None:
             cls._root = root
-        if cls._style is None:
-            if cls._root is None:
-                raise RuntimeError("ThemeManager requires a Tk root to apply a theme.")
-            cls._style = ttk.Style(cls._root)
-        return cls._style
-
-    @classmethod
-    def apply(cls, theme_name: str, root: Optional[tk.Misc] = None, style: Optional[ttk.Style] = None) -> None:
-        """Aplica el tema indicado y actualiza widgets existentes."""
-
-        normalized = theme_name.lower()
-        theme = THEMES.get(normalized)
-        if theme is None:
-            theme = THEMES["light"]
-            normalized = "light"
-
         if style is not None:
             cls._style = style
-        ttk_style = cls._ensure_style(root)
-        cls.current = normalized
+        ttk_style = cls._ensure_style()
 
+        cls._current = theme
         cls._configure_style(ttk_style, theme)
         cls._refresh_widget_tree(theme)
 
     @classmethod
-    def toggle(cls) -> str:
-        """Alterna entre los temas claro y oscuro, guardando la preferencia."""
+    def toggle(cls) -> Dict[str, str]:
+        """Switch between light and dark themes and return the active palette."""
 
-        next_theme = "dark" if cls.current == "light" else "light"
+        next_theme = "dark" if cls._current["name"] == "light" else "light"
         cls.apply(next_theme)
-        cls._persist_theme(next_theme)
-        return next_theme
+        return cls._current
+
+    @classmethod
+    def _ensure_style(cls) -> ttk.Style:
+        if cls._style is None:
+            if cls._root is None:
+                raise RuntimeError("ThemeManager requires a Tk root before applying styles.")
+            cls._style = ttk.Style(master=cls._root)
+        return cls._style
 
     @classmethod
     def _configure_style(cls, ttk_style: ttk.Style, theme: Dict[str, str]) -> None:
@@ -133,19 +106,27 @@ class ThemeManager:
             "TEntry",
             fieldbackground=input_background,
             foreground=input_foreground,
-            insertcolor=foreground,
+            insertcolor=theme["accent"],
         )
         ttk_style.configure(
             "TCombobox",
             fieldbackground=input_background,
             background=input_background,
             foreground=input_foreground,
+            selectbackground=theme["select_background"],
+            selectforeground=theme["select_foreground"],
         )
         ttk_style.configure(
             "TButton",
             background=theme["accent"],
             foreground=foreground,
-            focuscolor=theme["border"],
+            bordercolor=theme["border"],
+            focusthickness=1,
+        )
+        ttk_style.map(
+            "TButton",
+            background=[("active", theme["select_background"]), ("!active", theme["accent"])],
+            foreground=[("pressed", foreground), ("active", foreground)],
         )
         ttk_style.configure(
             "TLabelframe",
@@ -208,10 +189,14 @@ class ThemeManager:
                     widget.configure(background=background, foreground=foreground)
                 except tk.TclError:
                     pass
+            elif isinstance(widget, ttk.Treeview):
+                try:
+                    widget.tag_configure("", background=background, foreground=foreground)
+                except tk.TclError:
+                    pass
 
             for child in widget.winfo_children():
                 _update(child)
 
         _update(cls._root)
 
-ThemeManager.current = ThemeManager.load_saved_theme()
