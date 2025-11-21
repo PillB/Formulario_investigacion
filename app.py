@@ -1801,6 +1801,17 @@ class FraudCaseApp:
     def _toggle_theme(self):
         palette = ThemeManager.toggle()
         ThemeManager.apply_to_widget_tree(self.root)
+        widget_name = None
+        widget = getattr(self, "theme_toggle_button", None)
+        if widget is not None:
+            try:
+                widget_name = widget.winfo_name() or "theme_toggle_button"
+            except tk.TclError:
+                widget_name = "theme_toggle_button"
+        message = f"Cambio de tema a {palette['name']}"
+        if widget_name:
+            message = f"{message} (boton={widget_name})"
+        log_event("navegacion", message, self.logs)
         self._update_theme_toggle_label(palette)
         self._safe_update_idletasks()
 
