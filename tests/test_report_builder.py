@@ -106,7 +106,7 @@ def test_md_headings_and_tables(sample_case_data):
         "## 2. Tabla de clientes",
         "## 3. Tabla de team members involucrados",
         "## 4. Tabla de productos combinado",
-        "## 5. Resumen automatizado",
+        "## 5. Descripción breve automatizada",
         "## 6. Modus Operandi",
         "## 7. Hallazgos Principales",
         "## 8. Descargo de colaboradores",

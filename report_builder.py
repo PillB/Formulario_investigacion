@@ -306,7 +306,7 @@ def build_md(case_data: CaseData) -> str:
     ], context['product_rows']))
     lines.extend([
         "",
-        "## 5. Resumen automatizado",
+        "## 5. Descripción breve automatizada",
     ])
     lines.append(context['documented_counts'])
     lines.extend(context['summary_paragraphs'])
@@ -404,7 +404,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         ["Registro", "ID", "Cliente", "Tipo", "Canal", "Proceso", "Cat.1", "Cat.2", "Modalidad", "Montos", "Reclamo/Analítica"],
         context['product_rows'],
     )
-    document.add_heading("5. Resumen automatizado", level=2)
+    document.add_heading("5. Descripción breve automatizada", level=2)
     for paragraph in context['summary_paragraphs']:
         document.add_paragraph(paragraph)
     document.add_paragraph("")
