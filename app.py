@@ -82,6 +82,7 @@ from report_builder import (
     build_report_filename,
     save_md,
 )
+from inheritance_service import InheritanceService
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       EXPORTS_DIR, EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
@@ -1201,9 +1202,20 @@ class FraudCaseApp:
         frame.pack(fill="both", expand=True)
         self.product_container = ttk.Frame(frame)
         self.product_container.pack(fill="x", pady=5)
-        add_btn = ttk.Button(frame, text="Agregar producto", command=self.add_product)
+        button_row = ttk.Frame(frame)
+        button_row.pack(fill="x", padx=5, pady=5)
+        add_btn = ttk.Button(button_row, text="Crear producto nuevo (vacío)", command=self.add_product)
         add_btn.pack(side="left", padx=5)
         self.register_tooltip(add_btn, "Registra un nuevo producto investigado.")
+        inherit_btn = ttk.Button(
+            button_row,
+            text="Crear producto heredando del caso",
+            command=self.add_product_inheriting_case,
+        )
+        inherit_btn.pack(side="left", padx=5)
+        self.register_tooltip(
+            inherit_btn, "Crea un producto precargado con los datos del caso actual."
+        )
         # No añadimos automáticamente un producto porque los productos están asociados a clientes
 
     def _apply_case_taxonomy_defaults(self, product_frame):
@@ -1233,6 +1245,69 @@ class FraudCaseApp:
         finally:
             product_frame._suppress_change_notifications = previous_suppression
 
+    def _collect_case_state_for_inheritance(self):
+        return {
+            "categoria_1_caso": self.cat_caso1_var.get().strip(),
+            "categoria_2_caso": self.cat_caso2_var.get().strip(),
+            "modalidad_caso": self.mod_caso_var.get().strip(),
+            "fecha_de_ocurrencia_caso": self.fecha_caso_var.get().strip(),
+            "fecha_de_descubrimiento_caso": getattr(
+                self, "fecha_descubrimiento_caso_var", None
+            ).get().strip()
+            if hasattr(self, "fecha_descubrimiento_caso_var")
+            else "",
+        }
+
+    def _apply_inherited_fields_to_product(self, product_frame, inherited_values):
+        previous_suppression = getattr(product_frame, "_suppress_change_notifications", False)
+        product_frame._suppress_change_notifications = True
+        try:
+            cat1 = inherited_values.get("categoria1")
+            if cat1:
+                product_frame.cat1_var.set(cat1)
+                product_frame.on_cat1_change()
+            cat2 = inherited_values.get("categoria2")
+            if cat2:
+                product_frame.cat2_var.set(cat2)
+                if hasattr(product_frame, "cat2_cb"):
+                    product_frame.cat2_cb.set(cat2)
+                product_frame.on_cat2_change()
+            mod = inherited_values.get("modalidad")
+            if mod:
+                product_frame.mod_var.set(mod)
+                if hasattr(product_frame, "mod_cb"):
+                    product_frame.mod_cb.set(mod)
+            occ = inherited_values.get("fecha_ocurrencia")
+            if occ:
+                product_frame.fecha_oc_var.set(occ)
+            desc = inherited_values.get("fecha_descubrimiento")
+            if desc:
+                product_frame.fecha_desc_var.set(desc)
+        finally:
+            product_frame._suppress_change_notifications = previous_suppression
+        product_frame.focus_first_field()
+
+    def _show_inheritance_messages(self, result):
+        if getattr(self, "_suppress_messagebox", False):
+            return
+        if result.has_invalid:
+            messagebox.showwarning(
+                "Campos heredados", "Fecha heredada inválida; revisar fecha de caso."
+            )
+        if result.has_missing:
+            messagebox.showinfo(
+                "Herencia parcial",
+                "Algunos campos del caso no estaban definidos; se heredó lo disponible.",
+            )
+
+    def add_product_inheriting_case(self):
+        case_state = self._collect_case_state_for_inheritance()
+        result = InheritanceService.inherit_product_fields_from_case(case_state)
+        prod = self.add_product()
+        self._apply_inherited_fields_to_product(prod, result.values)
+        self._show_inheritance_messages(result)
+        return prod
+
     def add_product(self, initialize_rows=True):
         idx = len(self.product_frames)
         prod = ProductFrame(
@@ -1257,6 +1332,8 @@ class FraudCaseApp:
             p.idx = i
             p.frame.config(text=f"Producto {i+1}")
         self._schedule_summary_refresh({'productos', 'reclamos'})
+        prod.focus_first_field()
+        return prod
 
     def remove_product(self, prod_frame):
         self._handle_product_id_change(prod_frame, prod_frame.id_var.get(), None)
