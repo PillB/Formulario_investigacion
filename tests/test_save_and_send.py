@@ -73,6 +73,8 @@ def _make_minimal_app():
     app.logs = []
     app._export_base_path = None
     app._docx_available = DOCX_AVAILABLE
+    app._last_temp_saved_at = None
+    app._last_temp_signature = None
     for attr in [
         'id_caso_var',
         'tipo_informe_var',
