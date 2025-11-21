@@ -1149,15 +1149,12 @@ class ProductFrame:
     def _validate_amount_field(self, var, label, allow_blank):
         raw_value = var.get()
         stripped = (raw_value or "").strip()
-        if allow_blank and not stripped:
-            var.set("0.00")
-            return None, Decimal("0.00")
         message, decimal_value, normalized_text = validate_money_bounds(
             raw_value,
             label,
             allow_blank=allow_blank,
         )
-        if not message and normalized_text != stripped:
+        if not message and decimal_value is not None and normalized_text != stripped:
             var.set(normalized_text)
         return message, decimal_value
 
@@ -1175,32 +1172,37 @@ class ProductFrame:
             message, decimal_value = self._validate_amount_field(var, label, allow_blank)
             if message:
                 return None
-            values[key] = decimal_value if decimal_value is not None else Decimal('0')
+            values[key] = decimal_value
         return values
 
     def _validate_montos_consistentes(self, target_key: str | None = None):
         values = self._collect_amount_values()
         if values is None:
             return None
-        componentes = sum_investigation_components(
-            perdida=values['perdida'],
-            falla=values['falla'],
-            contingencia=values['contingencia'],
-            recuperado=values['recuperado'],
-        )
         errors = {}
-        if componentes != values['inv']:
-            errors['inv'] = (
-                "La suma de las cuatro partidas (pérdida, falla, contingencia y recuperación) "
-                "debe ser igual al monto investigado."
-            )
-        if values['recuperado'] > values['inv']:
+        inv = values.get('inv')
+        componentes_dict = {
+            'perdida': values.get('perdida'),
+            'falla': values.get('falla'),
+            'contingencia': values.get('contingencia'),
+            'recuperado': values.get('recuperado'),
+        }
+        if inv is not None and all(value is not None for value in componentes_dict.values()):
+            componentes = sum_investigation_components(**componentes_dict)
+            if componentes != inv:
+                errors['inv'] = (
+                    "La suma de las cuatro partidas (pérdida, falla, contingencia y recuperación) "
+                    "debe ser igual al monto investigado."
+                )
+        if inv is not None and values['recuperado'] is not None and values['recuperado'] > inv:
             errors['recuperado'] = "El monto recuperado no puede superar el monto investigado."
-        if values['pago'] > values['inv']:
+        if inv is not None and values['pago'] is not None and values['pago'] > inv:
             errors['pago'] = "El pago de deuda no puede ser mayor al monto investigado."
         tipo_prod = normalize_without_accents(self.tipo_prod_var.get()).lower()
-        if any(word in tipo_prod for word in ('credito', 'tarjeta')):
-            if values['contingencia'] != values['inv']:
+        if inv is not None and values['contingencia'] is not None and any(
+            word in tipo_prod for word in ('credito', 'tarjeta')
+        ):
+            if values['contingencia'] != inv:
                 errors['contingencia'] = (
                     "El monto de contingencia debe ser igual al monto investigado para créditos o tarjetas."
                 )
@@ -1253,10 +1255,9 @@ class ProductFrame:
             if not allow_blank:
                 continue
             current_value = (producto_data.get(field_name) or "").strip()
-            if current_value:
-                continue
-            producto_data[field_name] = "0.00"
-            getattr(self, var_attr).set("0.00")
+            producto_data[field_name] = current_value
+            if current_value and getattr(self, var_attr).get() != current_value:
+                getattr(self, var_attr).set(current_value)
 
     def focus_first_field(self):
         if hasattr(self, "id_entry") and hasattr(self.id_entry, "focus_set"):
