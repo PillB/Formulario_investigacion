@@ -59,7 +59,9 @@ class ClientFrame:
         self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
+            self.frame.columnconfigure(0, weight=0)
             self.frame.columnconfigure(1, weight=1)
+            self.frame.columnconfigure(2, weight=0)
 
         ttk.Label(self.frame, text="Tipo de ID:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -100,10 +102,14 @@ class ClientFrame:
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         accionado_list_container = ttk.Frame(self.frame)
+        ensure_grid_support(accionado_list_container)
         accionado_list_container.grid(
             row=3, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
-        
+        if hasattr(accionado_list_container, "columnconfigure"):
+            accionado_list_container.columnconfigure(0, weight=1)
+            accionado_list_container.columnconfigure(1, weight=0)
+
         accionado_scrollbar = None
         scrollbar_class = getattr(tk, "Scrollbar", None) or getattr(ttk, "Scrollbar", None)
         if scrollbar_class:
@@ -111,7 +117,6 @@ class ClientFrame:
                 accionado_list_container,
                 orient="vertical",
             )
-            accionado_scrollbar.pack(side="right", fill="y")
 
         listbox_kwargs = dict(
             master=accionado_list_container,
@@ -125,8 +130,9 @@ class ClientFrame:
             listbox_kwargs["yscrollcommand"] = accionado_scrollbar.set
 
         self.accionado_listbox = tk.Listbox(**listbox_kwargs)
-        self.accionado_listbox.pack(side="left", fill="x", expand=True)
+        self.accionado_listbox.grid(row=0, column=0, sticky="nsew")
         if accionado_scrollbar:
+            accionado_scrollbar.grid(row=0, column=1, sticky="ns")
             accionado_scrollbar.configure(command=self.accionado_listbox.yview)
         self.accionado_listbox.bind("<<ListboxSelect>>", self.update_accionado_var)
         self.tooltip_register(
@@ -169,11 +175,12 @@ class ClientFrame:
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=7, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        action_row.grid(row=7, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
+            action_row.columnconfigure(1, weight=0)
         remove_btn = ttk.Button(action_row, text="Eliminar cliente", command=self.remove)
-        remove_btn.grid(row=0, column=1, sticky="e")
+        remove_btn.grid(row=0, column=1, sticky="e", padx=COL_PADX)
         self.tooltip_register(remove_btn, "Quita por completo al cliente de la lista.")
 
         self.validators.append(
