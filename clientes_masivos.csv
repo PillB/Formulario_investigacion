@@ -2,7 +2,7 @@ id_cliente,tipo_id,flag,telefonos,correos,direcciones,accionado
 12345678,DNI,Afectado,987654321;912345678,cliente@example.com,Av La Paz 123 Miraflores Lima Perú,Tribu Producto Afectado
 20481234567,RUC,Involucrado,999999999,empresa@correo.pe,Calle 5 345 San Isidro Lima Perú,Centro de Contacto
 CE00098765,CE,Relacionado,910101010;914141414,extranjero@example.com,Jr Los Rosales 789 La Molina Lima Perú,Centro de Contacto
-P1234567,Pasaporte,Afectado,900000001,viajero@example.com,Av Primavera 321 Santiago de Surco Lima Perú,Tribu Producto Afectado
+P12345678,Pasaporte,Afectado,900000001,viajero@example.com,Av Primavera 321 Santiago de Surco Lima Perú,Tribu Producto Afectado
 87654321,DNI,Involucrado,912345677,ninguno@example.com,Av Benavides 456 Surco Lima Perú,Tribu Producto Afectado
 00012345,DNI,Relacionado,901010101;902020202,dni_corto@example.com,Calle Los Laureles 112 San Borja Lima Perú,Centro de Contacto
 20123456789,RUC,Afectado,933333333;944444444,negocio@correo.pe,Avenida Industrial 890 Callao Perú,Tribu Producto Afectado
