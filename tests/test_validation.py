@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from collections import defaultdict
 from types import SimpleNamespace
 
 import app as app_module
@@ -11,6 +12,7 @@ from settings import (ACCIONADO_OPTIONS, CANAL_LIST, CRITICIDAD_LIST,
                       FLAG_COLABORADOR_LIST, PROCESO_LIST, TAXONOMIA,
                       TIPO_FALTA_LIST, TIPO_ID_LIST, TIPO_INFORME_LIST,
                       TIPO_MONEDA_LIST, TIPO_SANCION_LIST, BASE_DIR)
+from tests.stubs import RichTextWidgetStub
 
 
 class DummyVar:
@@ -1001,6 +1003,41 @@ def test_get_form_data_exports_normalized_involucramientos():
     assert all(amount.strip() and '.' in amount for amount in exported_amounts)
 
 
+def test_gather_data_serializes_rich_text_analysis():
+    app = build_headless_app("Crédito personal")
+    app._rich_text_images = defaultdict(list)
+    app._rich_text_image_sources = {"img_token": "/tmp/diagrama.png"}
+
+    antecedentes = RichTextWidgetStub("Encabezado\n- Punto de lista")
+    antecedentes.tag_add("header", "1.0", "1.10")
+    antecedentes.tag_add("list", "2.0", "2.17")
+    antecedentes.images.append(("img_token", "3.0"))
+
+    hallazgos = RichTextWidgetStub("Hallazgos simples")
+
+    app.antecedentes_text = antecedentes
+    app.modus_text = RichTextWidgetStub()
+    app.hallazgos_text = hallazgos
+    app.descargos_text = RichTextWidgetStub()
+    app.conclusiones_text = RichTextWidgetStub()
+    app.recomendaciones_text = RichTextWidgetStub()
+
+    form_data = app.gather_data()
+
+    antecedentes_payload = form_data['analisis']['antecedentes']
+    assert antecedentes_payload['text'].startswith("Encabezado")
+    assert {"tag": "header", "start": "1.0", "end": "1.10"} in antecedentes_payload['tags']
+    assert {"tag": "list", "start": "2.0", "end": "2.17"} in antecedentes_payload['tags']
+    assert antecedentes_payload['images'] == [
+        {"index": "3.0", "source": "/tmp/diagrama.png"}
+    ]
+
+    hallazgos_payload = form_data['analisis']['hallazgos']
+    assert hallazgos_payload['text'] == "Hallazgos simples"
+    assert hallazgos_payload['tags'] == []
+    assert hallazgos_payload['images'] == []
+
+
 @pytest.mark.parametrize(
     "config_key,label",
     [
@@ -1971,6 +2008,61 @@ def test_transform_summary_involucramientos_rejects_invalid_amount():
         )
 
     assert "dos decimales" in str(excinfo.value)
+
+
+def test_populate_from_data_restores_rich_text_tags():
+    app = build_headless_app("Crédito personal")
+    app._rich_text_images = defaultdict(list)
+    app._rich_text_image_sources = {}
+    app._clear_case_state = lambda save_autosave=True: None
+    app.on_case_cat1_change = lambda: None
+    app.on_case_cat2_change = lambda: None
+    app._schedule_summary_refresh = lambda data=None: None
+
+    antecedentes = RichTextWidgetStub()
+    hallazgos = RichTextWidgetStub()
+
+    app.antecedentes_text = antecedentes
+    app.modus_text = RichTextWidgetStub()
+    app.hallazgos_text = hallazgos
+    app.descargos_text = RichTextWidgetStub()
+    app.conclusiones_text = RichTextWidgetStub()
+    app.recomendaciones_text = RichTextWidgetStub()
+
+    analysis_payload = {
+        'antecedentes': {
+            'text': 'Narrativa con formato',
+            'tags': [{'tag': 'bold', 'start': '1.0', 'end': '1.9'}],
+            'images': [{'index': '2.0', 'source': None}],
+        },
+        'hallazgos': 'Hallazgo sin formato',
+    }
+
+    data = {
+        'caso': {
+            'id_caso': app.id_caso_var.get(),
+            'tipo_informe': app.tipo_informe_var.get(),
+            'categoria1': app.cat_caso1_var.get(),
+            'categoria2': app.cat_caso2_var.get(),
+            'modalidad': app.mod_caso_var.get(),
+        },
+        'clientes': [],
+        'colaboradores': [],
+        'productos': [],
+        'reclamos': [],
+        'involucramientos': [],
+        'riesgos': [],
+        'normas': [],
+        'analisis': analysis_payload,
+    }
+
+    app.populate_from_data(data)
+
+    assert antecedentes.text == 'Narrativa con formato'
+    assert ('1.0', '1.9') in antecedentes.tags.get('bold', [])
+    assert antecedentes.created_images == []
+    assert hallazgos.text == 'Hallazgo sin formato'
+    assert hallazgos.tags == {}
 
 
 def test_ingest_summary_rows_involucramientos_updates_assignments():

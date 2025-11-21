@@ -134,6 +134,30 @@ def test_md_empty_tables_and_summary():
     assert "Se documentaron 0 clientes, 0 colaboradores y 0 productos." in md
 
 
+def test_md_handles_rich_text_analysis_payload(sample_case_data):
+    sample_case_data.analisis["hallazgos"] = {
+        "text": "Hallazgo con formato",
+        "tags": [{"tag": "bold", "start": "1.0", "end": "1.8"}],
+        "images": [{"index": "2.0", "source": "/tmp/diagrama.png"}],
+    }
+    sample_case_data.analisis["nota_adicional"] = {
+        "text": "Nota adicional con encabezado",
+        "tags": [{"tag": "header", "start": "1.0", "end": "1.4"}],
+    }
+
+    normalized = report_builder.normalize_analysis_texts(sample_case_data.analisis)
+
+    assert normalized["hallazgos"] == "Hallazgo con formato"
+    assert normalized["nota_adicional"] == "Nota adicional con encabezado"
+
+    md = report_builder.build_md(sample_case_data)
+
+    assert "Hallazgo con formato" in md
+    assert "Nota adicional con encabezado" not in md
+    assert "bold" not in md
+    assert "diagrama.png" not in md
+
+
 def test_report_filename_normalization():
     assert report_builder.build_report_filename("Inicial", "2024-0001", "md") == "Informe_Inicial_2024-0001.md"
     assert report_builder.build_report_filename("Cierre Especial", "2024/0002", "docx") == "Informe_Cierre_Especial_2024_0002.docx"
