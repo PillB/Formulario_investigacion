@@ -1521,7 +1521,8 @@ class FraudCaseApp:
         frame.columnconfigure(0, weight=1)
 
         header_frame = ttk.Frame(frame)
-        header_frame.grid(row=0, column=0, sticky="e", padx=COL_PADX, pady=(0, ROW_PADY))
+        header_frame.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
+        header_frame.columnconfigure(0, weight=1)
 
         self.theme_toggle_button = ttk.Button(
             header_frame,
@@ -1529,7 +1530,7 @@ class FraudCaseApp:
             command=self._toggle_theme,
             padding=PRIMARY_PADDING,
         )
-        self.theme_toggle_button.grid(row=0, column=0, sticky="e")
+        self.theme_toggle_button.grid(row=0, column=1, sticky="e")
 
         catalog_group = ttk.LabelFrame(frame, text="Catálogos de detalle")
         catalog_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
@@ -1796,12 +1797,13 @@ class FraudCaseApp:
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
 
     def _toggle_theme(self):
-        ThemeManager.toggle()
-        self._update_theme_toggle_label()
+        palette = ThemeManager.toggle()
+        self._update_theme_toggle_label(palette)
         self._safe_update_idletasks()
 
-    def _update_theme_toggle_label(self):
-        if ThemeManager.current == "dark":
+    def _update_theme_toggle_label(self, palette=None):
+        active_theme = palette or ThemeManager.current()
+        if active_theme.get("name") == "dark":
             label = "☀️ Light Mode"
         else:
             label = "🌙 Dark Mode"
