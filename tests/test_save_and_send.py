@@ -133,7 +133,8 @@ def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy)
         }
     ]
     app.save_and_send()
-    first_log = export_dir / '2024-0001_logs.csv'
+    prefix_first = Path(build_report_filename(TIPO_INFORME_LIST[0], '2024-0001', 'csv')).stem
+    first_log = export_dir / f'{prefix_first}_logs.csv'
     assert 'primer caso' in first_log.read_text(encoding='utf-8')
 
     app._reset_form_state(confirm=False, save_autosave=False)
@@ -148,7 +149,8 @@ def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy)
         }
     )
     app.save_and_send()
-    second_log = export_dir / '2024-0002_logs.csv'
+    prefix_second = Path(build_report_filename(TIPO_INFORME_LIST[0], '2024-0002', 'csv')).stem
+    second_log = export_dir / f'{prefix_second}_logs.csv'
     log_contents = second_log.read_text(encoding='utf-8')
     assert 'segundo caso' in log_contents
     assert 'primer caso' not in log_contents
@@ -205,12 +207,13 @@ def test_save_and_send_mirrors_exports_to_external_drive(
     app.save_and_send()
     case_id = '2024-9001'
     case_folder = external_drive_dir / case_id
+    report_prefix = Path(build_report_filename(TIPO_INFORME_LIST[0], case_id, 'csv')).stem
     md_report = build_report_filename(TIPO_INFORME_LIST[0], case_id, 'md')
     docx_report = build_report_filename(TIPO_INFORME_LIST[0], case_id, 'docx')
     expected_suffixes = {
-        f'{case_id}_casos.csv',
-        f'{case_id}_version.json',
-        f'{case_id}_logs.csv',
+        f'{report_prefix}_casos.csv',
+        f'{report_prefix}_version.json',
+        f'{report_prefix}_logs.csv',
         md_report,
     }
     if DOCX_AVAILABLE:
@@ -452,7 +455,8 @@ def test_save_and_send_normalizes_blank_optional_amounts(tmp_path, messagebox_sp
 
     app.save_and_send()
 
-    productos_csv = export_dir / f'{case_id}_productos.csv'
+    report_prefix = Path(build_report_filename(TIPO_INFORME_LIST[0], case_id, 'csv')).stem
+    productos_csv = export_dir / f'{report_prefix}_productos.csv'
     with productos_csv.open('r', encoding='utf-8') as handle:
         rows = list(csv.DictReader(handle))
 

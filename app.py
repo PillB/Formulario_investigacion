@@ -4715,6 +4715,20 @@ class FraudCaseApp:
         )
         return Path(folder) / report_name
 
+    @staticmethod
+    def _build_report_prefix(data: CaseData) -> str:
+        """Devuelve el prefijo normalizado para los reportes y exportaciones.
+
+        Se apoya en ``build_report_filename`` para reutilizar la misma lógica
+        de limpieza aplicada a los informes DOCX/MD, eliminando la extensión
+        para poder reutilizar el prefijo en los CSV y en el JSON.
+        """
+
+        case = data.get("caso", {}) if isinstance(data, Mapping) else {}
+        return Path(
+            build_report_filename(case.get("tipo_informe"), case.get("id_caso"), "csv")
+        ).stem
+
     def _generate_report_file(self, extension: str, builder, description: str) -> None:
         data, folder, case_id = self._prepare_case_data_for_export()
         if not data or not folder or not case_id:
@@ -4754,11 +4768,12 @@ class FraudCaseApp:
         if not data or not folder or not case_id:
             return
         folder = Path(folder)
+        report_prefix = self._build_report_prefix(data)
         # Guardar CSVs
         created_files = []
 
         def write_csv(file_name, rows, header):
-            path = folder / f"{case_id}_{file_name}"
+            path = folder / f"{report_prefix}_{file_name}"
             with path.open('w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=header)
                 writer.writeheader()
@@ -4800,7 +4815,7 @@ class FraudCaseApp:
         if self.logs:
             write_csv('logs.csv', self.logs, ['timestamp', 'tipo', 'mensaje'])
         # Guardar JSON
-        json_path = folder / f"{case_id}_version.json"
+        json_path = folder / f"{report_prefix}_version.json"
         with json_path.open('w', encoding="utf-8") as f:
             json.dump(data.as_dict(), f, ensure_ascii=False, indent=2)
         created_files.append(json_path)
@@ -4825,8 +4840,8 @@ class FraudCaseApp:
         messagebox.showinfo(
             "Datos guardados",
             (
-                f"Los archivos se han guardado como {case_id}_*.csv, {case_id}_version.json y "
-                "{informes}."
+                f"Los archivos se han guardado como {report_prefix}_*.csv, {report_prefix}_version.json "
+                "y {informes}."
             ).format(informes=" y ".join(reports)),
         )
         log_event("navegacion", "Datos guardados y enviados", self.logs)
