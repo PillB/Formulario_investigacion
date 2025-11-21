@@ -18,7 +18,10 @@ from typing import Dict, Iterable, List, MutableMapping, Optional, Sequence, Tup
 import matplotlib.pyplot as plt
 import numpy as np
 
-from validators import LOG_FIELDNAMES
+# Campos esperados en los logs generados por ``log_event``. Copiados localmente
+# para evitar depender de ``validators`` y su stack de UI/tkinter, permitiendo
+# que el visualizador siga siendo ejecutable en entornos headless.
+LOG_FIELDNAMES = ["timestamp", "tipo", "subtipo", "widget_id", "coords", "mensaje"]
 
 
 @dataclass(frozen=True)
