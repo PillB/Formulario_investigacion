@@ -144,7 +144,7 @@ graph TD
 ## Pruebas
 Para verificar rutas críticas de guardado/exportación/logs con cobertura focalizada:
 ```bash
-pytest --cov=app --cov=ui --cov-report=term-missing
+pytest --cov=app --cov=ui --cov=models --cov-report=term-missing
 ```
 Asegúrate de contar con `python-docx`, `pytest` y `pytest-cov`, y con la carpeta `external drive/` accesible.
 
