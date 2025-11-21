@@ -33,15 +33,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize(
     "filename,expected_count,required_keys",
     [
-        ("clientes_masivos.csv", 8, {"id_cliente", "tipo_id", "flag", "telefonos", "correos"}),
+        ("clientes_masivos.csv", 15, {"id_cliente", "tipo_id", "flag", "telefonos", "correos"}),
         (
             "colaboradores_masivos.csv",
-            6,
+            13,
             {"id_colaborador", "division", "area", "tipo_sancion"},
         ),
         (
             "productos_masivos.csv",
-            8,
+            16,
             {
                 "id_producto",
                 "id_cliente",
@@ -50,9 +50,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
                 "monto_investigado",
             },
         ),
-        ("datos_combinados_masivos.csv", 10, {"id_producto", "id_cliente", "monto_investigado"}),
-        ("normas_masivas.csv", 2, {"id_norma", "descripcion", "fecha_vigencia"}),
-        ("riesgos_masivos.csv", 2, {"id_riesgo", "descripcion", "criticidad"}),
+        (
+            "datos_combinados_masivos.csv",
+            16,
+            {"id_producto", "id_cliente", "monto_investigado"},
+        ),
+        ("normas_masivas.csv", 4, {"id_norma", "descripcion", "fecha_vigencia"}),
+        ("riesgos_masivos.csv", 4, {"id_riesgo", "descripcion", "criticidad"}),
     ],
 )
 def test_iter_massive_csv_rows_loads_real_datasets(filename, expected_count, required_keys):
@@ -118,7 +122,7 @@ def test_massive_products_hit_validation_rules():
 def test_real_massive_clients_enforce_contacts_and_identifiers():
     rows = list(iter_massive_csv_rows(REPO_ROOT / "clientes_masivos.csv"))
 
-    assert len(rows) == 8
+    assert len(rows) == 15
 
     for row in rows:
         assert validate_client_id(row.get("tipo_id", ""), row.get("id_cliente", "")) is None
@@ -196,7 +200,7 @@ def test_import_combined_flags_invalid_rows(monkeypatch, messagebox_spy, tmp_pat
 def test_combined_massive_dataset_matches_expected_entities_and_validations():
     rows = list(iter_massive_csv_rows(REPO_ROOT / "datos_combinados_masivos.csv"))
 
-    assert len(rows) == 10
+    assert len(rows) == 16
 
     clients = {row["id_cliente"].strip() for row in rows if row.get("id_cliente")}
     products = {row["id_producto"].strip() for row in rows if row.get("id_producto")}
@@ -244,9 +248,9 @@ def test_combined_massive_dataset_matches_expected_entities_and_validations():
             assert validate_reclamo_id(row.get("id_reclamo", "")) is None
             assert validate_codigo_analitica(row.get("codigo_analitica", "")) is None
 
-    assert len(clients) == 10
-    assert len(products) == 10
-    assert len(collaborators) == 12
+    assert len(clients) == 16
+    assert len(products) == 16
+    assert len(collaborators) == 20
 
 
 @pytest.mark.parametrize(
