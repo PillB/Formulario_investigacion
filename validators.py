@@ -361,12 +361,24 @@ class FieldValidator:
             return
         event = _args[0] if _args else None
         is_user_event = hasattr(event, "widget")
-        if is_user_event:
+        if is_user_event and not self._is_focus_out(event):
             self._validation_armed = True
         elif not self._validation_armed:
             return
         error = self.validate_callback()
         self._display_error(error)
+
+    @staticmethod
+    def _is_focus_out(event) -> bool:
+        event_type = getattr(event, "type", None)
+        try:
+            from tkinter import EventType
+
+            if event_type == EventType.FocusOut:
+                return True
+        except Exception:
+            pass
+        return str(event_type) == "FocusOut" or event_type == "9"
 
     def _display_error(self, error: Optional[str]) -> None:
         if error == self.last_error:
