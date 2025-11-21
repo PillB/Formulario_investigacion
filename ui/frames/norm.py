@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_date_text, validate_norm_id,
                         validate_required_text)
+from ui.frames.utils import ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
 
 
@@ -31,30 +32,43 @@ class NormFrame:
 
         self.frame = ttk.LabelFrame(parent, text=f"Norma {self.idx+1}")
         self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
-        row1 = ttk.Frame(self.frame)
-        row1.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(row1, text="ID de norma:").pack(side="left")
-        id_entry = ttk.Entry(row1, textvariable=self.id_var, width=20)
-        id_entry.pack(side="left", padx=COL_PADX)
+        ensure_grid_support(self.frame)
+        if hasattr(self.frame, "columnconfigure"):
+            self.frame.columnconfigure(1, weight=1)
+
+        action_row = ttk.Frame(self.frame)
+        ensure_grid_support(action_row)
+        action_row.grid(row=0, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        if hasattr(action_row, "columnconfigure"):
+            action_row.columnconfigure(0, weight=1)
+        remove_btn = ttk.Button(action_row, text="Eliminar norma", command=self.remove)
+        remove_btn.grid(row=0, column=1, sticky="e")
+        self.tooltip_register(remove_btn, "Quita esta norma del caso.")
+
+        ttk.Label(self.frame, text="ID de norma:").grid(
+            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
+        id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
-        ttk.Label(row1, text="Fecha de vigencia (YYYY-MM-DD):").pack(side="left")
-        fecha_entry = ttk.Entry(row1, textvariable=self.fecha_var, width=15)
-        fecha_entry.pack(side="left", padx=COL_PADX)
+
+        ttk.Label(self.frame, text="Fecha de vigencia (YYYY-MM-DD):").grid(
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        fecha_entry = ttk.Entry(self.frame, textvariable=self.fecha_var, width=15)
+        fecha_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(fecha_entry, "Fecha de publicación o vigencia de la norma.")
 
-        row2 = ttk.Frame(self.frame)
-        row2.pack(fill="x", pady=ROW_PADY // 2)
-        ttk.Label(row2, text="Descripción de la norma:").pack(side="left")
-        desc_entry = ttk.Entry(row2, textvariable=self.descripcion_var, width=70)
-        desc_entry.pack(side="left", padx=COL_PADX)
+        ttk.Label(self.frame, text="Descripción de la norma:").grid(
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        desc_entry = ttk.Entry(self.frame, textvariable=self.descripcion_var, width=70)
+        desc_entry.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        ttk.Label(self.frame, text="").grid(row=3, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
-
-        btn_frame = ttk.Frame(self.frame)
-        btn_frame.pack(fill="x", pady=ROW_PADY)
-        remove_btn = ttk.Button(btn_frame, text="Eliminar norma", command=self.remove)
-        remove_btn.pack(side="right")
-        self.tooltip_register(remove_btn, "Quita esta norma del caso.")
 
         self.validators.append(
             FieldValidator(
