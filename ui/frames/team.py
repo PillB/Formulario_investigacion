@@ -8,7 +8,7 @@ from tkinter import messagebox, ttk
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
 from validators import (FieldValidator, log_event, normalize_team_member_identifier,
                         normalize_without_accents, should_autofill_field,
-                        validate_agency_code, validate_required_text,
+                        validate_agency_code, validate_date_text, validate_required_text,
                         validate_team_member_id)
 from ui.frames.utils import ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
@@ -55,11 +55,15 @@ class TeamMemberFrame:
         self._fallback_message_var = tk.StringVar(value="")
 
         self.id_var = tk.StringVar()
+        self.nombres_var = tk.StringVar()
+        self.apellidos_var = tk.StringVar()
         self.flag_var = tk.StringVar()
         self.division_var = tk.StringVar()
         self.area_var = tk.StringVar()
         self.servicio_var = tk.StringVar()
         self.puesto_var = tk.StringVar()
+        self.fecha_carta_inmediatez_var = tk.StringVar()
+        self.fecha_carta_renuncia_var = tk.StringVar()
         self.nombre_agencia_var = tk.StringVar()
         self.codigo_agencia_var = tk.StringVar()
         self.tipo_falta_var = tk.StringVar()
@@ -81,8 +85,24 @@ class TeamMemberFrame:
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
 
-        ttk.Label(self.frame, text="Flag:").grid(
+        ttk.Label(self.frame, text="Nombres:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        nombres_entry = ttk.Entry(self.frame, textvariable=self.nombres_var, width=25)
+        nombres_entry.grid(row=1, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self._bind_dirty_tracking(nombres_entry, "nombres")
+        self.tooltip_register(nombres_entry, "Ingresa los nombres del colaborador.")
+
+        ttk.Label(self.frame, text="Apellidos:").grid(
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        apellidos_entry = ttk.Entry(self.frame, textvariable=self.apellidos_var, width=25)
+        apellidos_entry.grid(row=2, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self._bind_dirty_tracking(apellidos_entry, "apellidos")
+        self.tooltip_register(apellidos_entry, "Ingresa los apellidos del colaborador.")
+
+        ttk.Label(self.frame, text="Flag:").grid(
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         flag_cb = ttk.Combobox(
             self.frame,
@@ -91,7 +111,7 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        flag_cb.grid(row=1, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        flag_cb.grid(row=3, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
@@ -110,59 +130,87 @@ class TeamMemberFrame:
         )
 
         ttk.Label(self.frame, text="División:").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         div_entry = ttk.Entry(self.frame, textvariable=self.division_var, width=20)
-        div_entry.grid(row=2, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        div_entry.grid(row=4, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(div_entry, "division")
         self.tooltip_register(div_entry, "Ingresa la división o gerencia del colaborador.")
         div_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
 
         ttk.Label(self.frame, text="Área:").grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         area_entry = ttk.Entry(self.frame, textvariable=self.area_var, width=20)
-        area_entry.grid(row=3, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        area_entry.grid(row=5, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(area_entry, "area")
         self.tooltip_register(area_entry, "Detalla el área específica.")
         area_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
 
         ttk.Label(self.frame, text="Servicio:").grid(
-            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         serv_entry = ttk.Entry(self.frame, textvariable=self.servicio_var, width=20)
-        serv_entry.grid(row=4, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        serv_entry.grid(row=6, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(serv_entry, "servicio")
         self.tooltip_register(serv_entry, "Describe el servicio o célula.")
 
         ttk.Label(self.frame, text="Puesto:").grid(
-            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         puesto_entry = ttk.Entry(self.frame, textvariable=self.puesto_var, width=20)
-        puesto_entry.grid(row=5, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        puesto_entry.grid(row=7, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(puesto_entry, "puesto")
         self.tooltip_register(puesto_entry, "Define el cargo actual del colaborador.")
 
+        ttk.Label(self.frame, text="Fecha carta inmediatez:").grid(
+            row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        fecha_inm_entry = ttk.Entry(
+            self.frame, textvariable=self.fecha_carta_inmediatez_var, width=20
+        )
+        fecha_inm_entry.grid(row=8, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self._bind_dirty_tracking(fecha_inm_entry, "fecha_carta_inmediatez")
+        self._bind_date_validation(fecha_inm_entry, self.fecha_carta_inmediatez_var, "la fecha de carta de inmediatez")
+        self.tooltip_register(
+            fecha_inm_entry,
+            "Registrar en formato YYYY-MM-DD. Puede quedar vacío si no aplica.",
+        )
+
+        ttk.Label(self.frame, text="Fecha carta renuncia:").grid(
+            row=9, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        fecha_ren_entry = ttk.Entry(
+            self.frame, textvariable=self.fecha_carta_renuncia_var, width=20
+        )
+        fecha_ren_entry.grid(row=9, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self._bind_dirty_tracking(fecha_ren_entry, "fecha_carta_renuncia")
+        self._bind_date_validation(fecha_ren_entry, self.fecha_carta_renuncia_var, "la fecha de carta de renuncia")
+        self.tooltip_register(
+            fecha_ren_entry,
+            "Registrar en formato YYYY-MM-DD. Puede quedar vacío si no aplica.",
+        )
+
         ttk.Label(self.frame, text="Nombre agencia:").grid(
-            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=10, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         nombre_ag_entry = ttk.Entry(self.frame, textvariable=self.nombre_agencia_var, width=25)
-        nombre_ag_entry.grid(row=6, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        nombre_ag_entry.grid(row=10, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(nombre_ag_entry, "nombre_agencia")
         self.tooltip_register(nombre_ag_entry, "Especifica la agencia u oficina de trabajo.")
 
         ttk.Label(self.frame, text="Código agencia:").grid(
-            row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=11, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         cod_ag_entry = ttk.Entry(self.frame, textvariable=self.codigo_agencia_var, width=10)
-        cod_ag_entry.grid(row=7, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        cod_ag_entry.grid(row=11, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(cod_ag_entry, "codigo_agencia")
         self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
         self._division_entry = div_entry
         self._area_entry = area_entry
 
         ttk.Label(self.frame, text="Tipo de falta:").grid(
-            row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=12, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         falta_cb = ttk.Combobox(
             self.frame,
@@ -171,12 +219,12 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        falta_cb.grid(row=8, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        falta_cb.grid(row=12, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         falta_cb.set('')
         self.tooltip_register(falta_cb, "Selecciona la falta disciplinaria tipificada.")
 
         ttk.Label(self.frame, text="Tipo de sanción:").grid(
-            row=9, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=13, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         sanc_cb = ttk.Combobox(
             self.frame,
@@ -185,12 +233,12 @@ class TeamMemberFrame:
             state="readonly",
             width=20,
         )
-        sanc_cb.grid(row=9, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        sanc_cb.grid(row=13, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         sanc_cb.set('')
         self.tooltip_register(sanc_cb, "Describe la sanción propuesta o aplicada.")
 
         self._fallback_label.grid(
-            row=10,
+            row=14,
             column=0,
             columnspan=3,
             padx=COL_PADX,
@@ -200,7 +248,7 @@ class TeamMemberFrame:
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=11, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        action_row.grid(row=15, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
         remove_btn = ttk.Button(action_row, text="Eliminar colaborador", command=self.remove)
@@ -241,6 +289,19 @@ class TeamMemberFrame:
         )
         self.validators.extend([nombre_validator, codigo_validator])
         self._agency_validators.extend([nombre_validator, codigo_validator])
+        for widget, label, var in [
+            (fecha_inm_entry, "la fecha de carta de inmediatez", self.fecha_carta_inmediatez_var),
+            (fecha_ren_entry, "la fecha de carta de renuncia", self.fecha_carta_renuncia_var),
+        ]:
+            self.validators.append(
+                FieldValidator(
+                    widget,
+                    lambda v=var, l=label: self._validate_date_field(v, l),
+                    self.logs,
+                    f"Colaborador {self.idx+1} - {label}",
+                    variables=[var],
+                )
+            )
         catalog_validations = [
             (
                 flag_cb,
@@ -284,6 +345,13 @@ class TeamMemberFrame:
         widget.bind("<<Paste>>", lambda _e: self._mark_dirty(field_key), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self._mark_dirty(field_key), add="+")
 
+    def _bind_date_validation(self, widget, variable: tk.StringVar, label: str) -> None:
+        widget.bind(
+            "<FocusOut>",
+            lambda _e, v=variable, l=label: self._validate_date_field(v, l, show_alert=True),
+            add="+",
+        )
+
     def _mark_dirty(self, field_key: str) -> None:
         self._clear_fallback_warning()
         if field_key:
@@ -295,6 +363,10 @@ class TeamMemberFrame:
             "area": self.area_var.get(),
             "servicio": self.servicio_var.get(),
             "puesto": self.puesto_var.get(),
+            "nombres": self.nombres_var.get(),
+            "apellidos": self.apellidos_var.get(),
+            "fecha_carta_inmediatez": self.fecha_carta_inmediatez_var.get(),
+            "fecha_carta_renuncia": self.fecha_carta_renuncia_var.get(),
             "nombre_agencia": self.nombre_agencia_var.get(),
             "codigo_agencia": self.codigo_agencia_var.get(),
         }
@@ -346,6 +418,10 @@ class TeamMemberFrame:
             "area": self.area_var,
             "servicio": self.servicio_var,
             "puesto": self.puesto_var,
+            "nombres": self.nombres_var,
+            "apellidos": self.apellidos_var,
+            "fecha_carta_inmediatez": self.fecha_carta_inmediatez_var,
+            "fecha_carta_renuncia": self.fecha_carta_renuncia_var,
             "nombre_agencia": self.nombre_agencia_var,
             "codigo_agencia": self.codigo_agencia_var,
         }
@@ -445,6 +521,10 @@ class TeamMemberFrame:
                     set_if_present(self.area_var, "area")
                     set_if_present(self.servicio_var, "servicio")
                     set_if_present(self.puesto_var, "puesto")
+                    set_if_present(self.nombres_var, "nombres")
+                    set_if_present(self.apellidos_var, "apellidos")
+                    set_if_present(self.fecha_carta_inmediatez_var, "fecha_carta_inmediatez")
+                    set_if_present(self.fecha_carta_renuncia_var, "fecha_carta_renuncia")
                     set_if_present(self.nombre_agencia_var, "nombre_agencia")
                     set_if_present(self.codigo_agencia_var, "codigo_agencia")
                     self._last_missing_lookup_id = None
@@ -500,6 +580,16 @@ class TeamMemberFrame:
             pass
         log_event("validacion", message, self.logs)
 
+    @staticmethod
+    def _validate_date_field(var: tk.StringVar, label: str, show_alert: bool = False) -> str | None:
+        message = validate_date_text(var.get(), label, allow_blank=True)
+        if show_alert and message:
+            try:
+                messagebox.showerror("Fecha inválida", message)
+            except tk.TclError:
+                pass
+        return message
+
     def get_data(self):
         normalized_id = normalize_team_member_identifier(self.id_var.get())
         if normalized_id != self.id_var.get():
@@ -508,10 +598,14 @@ class TeamMemberFrame:
             "id_colaborador": normalized_id,
             "id_caso": "",
             "flag": self.flag_var.get(),
+            "nombres": self.nombres_var.get().strip(),
+            "apellidos": self.apellidos_var.get().strip(),
             "division": self.division_var.get().strip(),
             "area": self.area_var.get().strip(),
             "servicio": self.servicio_var.get().strip(),
             "puesto": self.puesto_var.get().strip(),
+            "fecha_carta_inmediatez": self.fecha_carta_inmediatez_var.get().strip(),
+            "fecha_carta_renuncia": self.fecha_carta_renuncia_var.get().strip(),
             "nombre_agencia": self.nombre_agencia_var.get().strip(),
             "codigo_agencia": self.codigo_agencia_var.get().strip(),
             "tipo_falta": self.tipo_falta_var.get(),
