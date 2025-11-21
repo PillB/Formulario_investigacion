@@ -1207,6 +1207,42 @@ def test_validate_data_reports_product_and_case_gap():
     assert case_message in errors
 
 
+def test_validate_data_flags_total_debt_payment_over_case_investigated():
+    product_configs = [
+        {
+            "tipo_producto": "Crédito personal",
+            "producto_overrides": {
+                "monto_investigado": "50.00",
+                "monto_perdida_fraude": "50.00",
+                "monto_falla_procesos": "0.00",
+                "monto_contingencia": "0.00",
+                "monto_recuperado": "0.00",
+                "monto_pago_deuda": "60.00",
+            },
+            "reclamos": [_complete_claim()],
+        },
+        {
+            "tipo_producto": "Crédito personal",
+            "producto_overrides": {
+                "monto_investigado": "50.00",
+                "monto_perdida_fraude": "50.00",
+                "monto_falla_procesos": "0.00",
+                "monto_contingencia": "0.00",
+                "monto_recuperado": "0.00",
+                "monto_pago_deuda": "50.00",
+            },
+            "reclamos": [_complete_claim()],
+        },
+    ]
+
+    app = build_headless_app("Crédito personal", product_configs=product_configs)
+
+    errors, _ = app.validate_data()
+
+    aggregate_message = "La suma de pagos de deuda no puede superar el monto investigado total del caso."
+    assert aggregate_message in errors
+
+
 def test_product_frame_amount_fields_normalize_missing_decimals(monkeypatch):
     products, validator_cls = _patch_products_module(monkeypatch)
     product = products.ProductFrame(

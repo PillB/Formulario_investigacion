@@ -5227,6 +5227,7 @@ class FraudCaseApp:
         product_client_map = {}
         total_investigado = Decimal('0')
         total_componentes = Decimal('0')
+        total_pago_deuda = Decimal('0')
         normalized_amounts = []
         team_id_occurrences = {}
         for idx, tm in enumerate(self.team_frames, start=1):
@@ -5493,6 +5494,7 @@ class FraudCaseApp:
                 errors.append(f"El monto pagado de deuda excede el monto investigado en el producto {producto['id_producto']}")
             total_investigado += m_inv
             total_componentes += componentes
+            total_pago_deuda += m_pago
             # Reclamo y analíticas
             requiere_reclamo = m_perd > 0 or m_fall > 0 or m_cont > 0
             complete_claim_found = False
@@ -5538,6 +5540,14 @@ class FraudCaseApp:
                 warnings.append(
                     f"Producto {producto['id_producto']} con categoría 2 'Fraude Externo': verifique la analítica registrada."
                 )
+        aggregate_payment_error = None
+        if self.product_frames and total_pago_deuda > total_investigado:
+            aggregate_payment_error = (
+                "La suma de pagos de deuda no puede superar el monto investigado total del caso."
+            )
+            errors.append(aggregate_payment_error)
+        if aggregate_payment_error and not getattr(self, '_suppress_messagebox', False):
+            messagebox.showerror("Monto de pago de deuda", aggregate_payment_error)
         if self.product_frames and total_componentes != total_investigado:
             errors.append(
                 "Las cuatro partidas (pérdida, falla, contingencia y recuperación) sumadas en el caso no coinciden con el total investigado."
