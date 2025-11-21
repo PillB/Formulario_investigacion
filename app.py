@@ -5626,11 +5626,13 @@ class FraudCaseApp:
         for p in self.product_frames:
             data = p.get_data()
             producto = data['producto']
-            tipo_producto = producto.get('tipo_producto', '').strip()
+            tipo_producto = (producto.get('tipo_producto') or '').strip()
+            normalized_tipo = (
+                normalize_without_accents(tipo_producto).lower() if tipo_producto else ''
+            )
             if not tipo_producto:
                 errors.append(f"Producto {producto['id_producto']}: Debe ingresar el tipo de producto.")
             else:
-                normalized_tipo = normalize_without_accents(tipo_producto).lower()
                 if normalized_tipo not in TIPO_PRODUCTO_NORMALIZED:
                     errors.append(
                         f"Producto {producto['id_producto']}: El tipo de producto '{tipo_producto}' no está en el catálogo."
@@ -5666,6 +5668,11 @@ class FraudCaseApp:
             m_cont = money_values['monto_contingencia']
             m_rec = money_values['monto_recuperado']
             m_pago = money_values['monto_pago_deuda']
+            if normalized_tipo and any(word in normalized_tipo for word in ['credito', 'tarjeta']):
+                if m_cont != m_inv:
+                    errors.append(
+                        f"El monto de contingencia debe ser igual al monto investigado en el producto {producto['id_producto']} porque es un crédito o tarjeta"
+                    )
             normalized_amounts.append({
                 'perdida': m_perd,
                 'falla': m_fall,
@@ -5725,11 +5732,6 @@ class FraudCaseApp:
                     f"Debe ingresar al menos un reclamo completo en el producto {producto['id_producto']} porque hay montos de pérdida, falla o contingencia"
                 )
             # Longitud id_producto
-            # Tipo producto vs contingencia
-            tipo_prod = normalize_without_accents(producto['tipo_producto']).lower()
-            if any(word in tipo_prod for word in ['credito', 'tarjeta']):
-                if m_cont != m_inv:
-                    errors.append(f"El monto de contingencia debe ser igual al monto investigado en el producto {producto['id_producto']} porque es un crédito o tarjeta")
             # Fraude externo
             if producto['categoria2'] == 'Fraude Externo':
                 warnings.append(
