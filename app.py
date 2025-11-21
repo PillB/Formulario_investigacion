@@ -1146,7 +1146,8 @@ class FraudCaseApp:
         ``client_details.csv``. Luego se actualizan las opciones de clientes
         disponibles para los productos.
         """
-        self._show_clients_detail()
+        was_visible = self._clients_detail_visible
+        self.show_clients_detail()
         idx = len(self.client_frames)
         client = ClientFrame(
             self.clients_container,
@@ -1163,8 +1164,8 @@ class FraudCaseApp:
         self.client_frames.append(client)
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
-        if self._clients_detail_visible:
-            self.show_clients_detail()
+        if not was_visible:
+            self.hide_clients_detail()
 
     def remove_client(self, client_frame):
         self._handle_client_id_change(client_frame, client_frame.id_var.get(), None)
@@ -1184,36 +1185,8 @@ class FraudCaseApp:
             prod.update_client_options()
         log_event("navegacion", "Actualizó opciones de cliente", self.logs)
 
-    def _toggle_clients_detail(self):
-        if getattr(self, "_clients_detail_visible", False):
-            self._hide_clients_detail()
-        else:
-            self._show_clients_detail()
-
-    def _show_clients_detail(self):
-        if not self.clients_container:
-            return
-        if not getattr(self, "_clients_detail_visible", False):
-            try:
-                self.clients_container.pack(fill="x", pady=5)
-            except tk.TclError:
-                return
-        self._clients_detail_visible = True
-        if self.clients_toggle_btn:
-            self.clients_toggle_btn.config(text="Ocultar formulario")
-
-    def _hide_clients_detail(self):
-        if not self.clients_container:
-            return
-        try:
-            self.clients_container.pack_forget()
-        except tk.TclError:
-            return
-        self._clients_detail_visible = False
-        if self.clients_toggle_btn:
-            self.clients_toggle_btn.config(text="Mostrar formulario")
-
     def _on_add_client_click(self):
+        self.show_clients_detail()
         self.add_client()
 
     def _edit_selected_client(self):
@@ -1226,7 +1199,7 @@ class FraudCaseApp:
         client_id = values[0] if values else ""
         frame = self._find_client_frame(client_id)
         if frame:
-            self._show_clients_detail()
+            self.show_clients_detail()
             try:
                 frame.frame.focus_set()
             except tk.TclError:
