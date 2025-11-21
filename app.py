@@ -252,6 +252,8 @@ class FraudCaseApp:
         self.canal_caso_var = tk.StringVar(value=CANAL_LIST[0])
         self.proceso_caso_var = tk.StringVar(value=PROCESO_LIST[0])
         self.fecha_caso_var = tk.StringVar()
+        self.fecha_descubrimiento_caso_var = tk.StringVar()
+        self.centro_costo_caso_var = tk.StringVar()
         self.investigator_id_var = tk.StringVar()
         self.investigator_nombre_var = tk.StringVar()
         self.investigator_cargo_var = tk.StringVar(value="Investigador Principal")
@@ -905,7 +907,7 @@ class FraudCaseApp:
             investigator_entry,
             "Ingresa la matrícula del investigador principal (letra + 5 dígitos) para autocompletar nombre y cargo.",
         )
-        ttk.Label(investigator_container, text="Nombre:").grid(
+        ttk.Label(investigator_container, text="Nombre y apellidos:").grid(
             row=1, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
         investigator_name = ttk.Entry(
@@ -1031,6 +1033,27 @@ class FraudCaseApp:
         self.register_tooltip(
             fecha_case_entry, "Fecha en que se originó el caso a nivel general."
         )
+        ttk.Label(dates_container, text="Descubrimiento:").grid(
+            row=0, column=2, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+        )
+        fecha_desc_entry = ttk.Entry(
+            dates_container, textvariable=self.fecha_descubrimiento_caso_var, width=16
+        )
+        fecha_desc_entry.grid(row=0, column=3, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
+        self.register_tooltip(
+            fecha_desc_entry,
+            "Fecha en que se detectó el caso. Debe ser posterior a la ocurrencia y no futura.",
+        )
+
+        ttk.Label(frame, text="Centro de costos del caso (; separados):").grid(
+            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        centro_costo_entry = ttk.Entry(frame, textvariable=self.centro_costo_caso_var, width=35)
+        centro_costo_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.register_tooltip(
+            centro_costo_entry,
+            "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
+        )
 
         # Validaciones del caso
         self.validators.append(
@@ -1105,13 +1128,49 @@ class FraudCaseApp:
                 variables=[self.fecha_caso_var],
             )
         )
+        self.validators.append(
+            FieldValidator(
+                fecha_desc_entry,
+                self._validate_case_discovery_date,
+                self.logs,
+                "Caso - Fecha de descubrimiento",
+                variables=[self.fecha_descubrimiento_caso_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                centro_costo_entry,
+                lambda: self._validate_cost_centers(text=self.centro_costo_caso_var.get()),
+                self.logs,
+                "Caso - Centro de costos",
+                variables=[self.centro_costo_caso_var],
+            )
+        )
 
     def _validate_case_occurrence_date(self):
+        self._ensure_case_vars()
         return validate_date_text(
             self.fecha_caso_var.get(),
             "La fecha de ocurrencia del caso",
             allow_blank=False,
             enforce_max_today=True,
+            must_be_before=(
+                self.fecha_descubrimiento_caso_var.get(),
+                "la fecha de descubrimiento del caso",
+            ),
+        )
+
+    def _validate_case_discovery_date(self):
+        self._ensure_case_vars()
+        return validate_date_text(
+            self.fecha_descubrimiento_caso_var.get(),
+            "La fecha de descubrimiento del caso",
+            allow_blank=False,
+            enforce_max_today=True,
+            must_be_after=(
+                self.fecha_caso_var.get(),
+                "la fecha de ocurrencia del caso",
+            ),
         )
 
     def on_case_cat1_change(self):
@@ -1520,11 +1579,7 @@ class FraudCaseApp:
             "categoria_2_caso": self.cat_caso2_var.get().strip(),
             "modalidad_caso": self.mod_caso_var.get().strip(),
             "fecha_de_ocurrencia_caso": self.fecha_caso_var.get().strip(),
-            "fecha_de_descubrimiento_caso": getattr(
-                self, "fecha_descubrimiento_caso_var", None
-            ).get().strip()
-            if hasattr(self, "fecha_descubrimiento_caso_var")
-            else "",
+            "fecha_de_descubrimiento_caso": self.fecha_descubrimiento_caso_var.get().strip(),
         }
 
     def _apply_inherited_fields_to_product(self, product_frame, inherited_values):
@@ -2087,8 +2142,10 @@ class FraudCaseApp:
         entries = [item.strip() for item in (raw_value or "").split(";") if item.strip()]
         return "; ".join(entries)
 
-    def _validate_cost_centers(self) -> Optional[str]:
-        text = self._sanitize_cost_centers_text(self._encabezado_vars.get("centro_costos", tk.StringVar()).get())
+    def _validate_cost_centers(self, *, text: Optional[str] = None) -> Optional[str]:
+        text = self._sanitize_cost_centers_text(
+            text if text is not None else self._encabezado_vars.get("centro_costos", tk.StringVar()).get()
+        )
         if not text:
             return None
         centers = [item for item in text.split(";") if item.strip()]
@@ -5561,6 +5618,7 @@ class FraudCaseApp:
         """Elimina los datos cargados y restablece los frames dinámicos."""
 
         # Limpiar campos del caso
+        self._ensure_case_vars()
         self.id_caso_var.set("")
         self.tipo_informe_var.set(TIPO_INFORME_LIST[0])
         self.cat_caso1_var.set(list(TAXONOMIA.keys())[0])
@@ -5641,6 +5699,7 @@ class FraudCaseApp:
     # Recolección y población de datos
 
     def _reset_extended_sections(self) -> None:
+        self._ensure_case_vars()
         self._encabezado_data: dict[str, str] = {}
         self._operaciones_data: list[dict[str, str]] = []
         self._anexos_data: list[dict[str, str]] = []
@@ -5716,6 +5775,7 @@ class FraudCaseApp:
 
     def gather_data(self):
         """Reúne todos los datos del formulario en una estructura de diccionarios."""
+        self._ensure_case_vars()
         data = {}
         investigator_id = self._normalize_identifier(self.investigator_id_var.get())
         investigator_name = self._sanitize_text(self.investigator_nombre_var.get())
@@ -5835,6 +5895,7 @@ class FraudCaseApp:
 
         dataset = self._ensure_case_data(data)
         data = dataset.as_dict()
+        self._ensure_case_vars()
         # Limpiar primero sin confirmar ni sobrescribir el autosave
         self._clear_case_state(save_autosave=False)
         self._ensure_investigator_vars()
@@ -6171,6 +6232,12 @@ class FraudCaseApp:
         fecha_caso_message = self._validate_case_occurrence_date()
         if fecha_caso_message:
             errors.append(fecha_caso_message)
+        fecha_descubrimiento_message = self._validate_case_discovery_date()
+        if fecha_descubrimiento_message:
+            errors.append(fecha_descubrimiento_message)
+        centro_costo_message = self._validate_cost_centers(text=self.centro_costo_caso_var.get())
+        if centro_costo_message:
+            errors.append(centro_costo_message)
         # Validar IDs de clientes
         client_id_occurrences = {}
         for idx, cframe in enumerate(self.client_frames, start=1):
@@ -6803,6 +6870,11 @@ class FraudCaseApp:
                 'canal',
                 'proceso',
                 'fecha_de_ocurrencia',
+                'fecha_de_descubrimiento',
+                'centro_costos',
+                'matricula_investigador',
+                'investigador_nombre',
+                'investigador_cargo',
             ],
         )
         # CLIENTES
