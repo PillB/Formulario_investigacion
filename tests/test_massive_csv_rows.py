@@ -12,11 +12,18 @@ from tests.app_factory import build_import_app
 from validators import (
     AGENCY_CODE_PATTERN,
     TEAM_MEMBER_ID_PATTERN,
+    validate_case_id,
+    validate_client_id,
     sum_investigation_components,
+    validate_email_list,
     validate_codigo_analitica,
+    validate_date_text,
     validate_money_bounds,
+    validate_norm_id,
     validate_product_dates,
     validate_reclamo_id,
+    validate_risk_id,
+    validate_phone_list,
 )
 
 
@@ -108,6 +115,19 @@ def test_massive_products_hit_validation_rules():
             assert money_fields["monto_contingencia"] == monto_investigado
 
 
+def test_real_massive_clients_enforce_contacts_and_identifiers():
+    rows = list(iter_massive_csv_rows(REPO_ROOT / "clientes_masivos.csv"))
+
+    assert len(rows) == 8
+
+    for row in rows:
+        assert validate_client_id(row.get("tipo_id", ""), row.get("id_cliente", "")) is None
+        assert validate_phone_list(row.get("telefonos", ""), "Teléfonos del cliente") is None
+        assert validate_email_list(row.get("correos", ""), "Correos del cliente") is None
+        assert (row.get("flag") or "").strip()
+        assert (row.get("accionado") or "").strip()
+
+
 def test_massive_collaborators_require_proper_ids_and_agency_fields():
     rows = list(iter_massive_csv_rows(REPO_ROOT / "colaboradores_masivos.csv"))
 
@@ -118,6 +138,8 @@ def test_massive_collaborators_require_proper_ids_and_agency_fields():
         if (division == "dca" or division == "canales de atención") and "area comercial" in area:
             assert row.get("nombre_agencia")
             assert AGENCY_CODE_PATTERN.fullmatch(row.get("codigo_agencia", ""))
+
+        assert (row.get("tipo_sancion") or "").strip()
 
 
 def test_import_combined_massive_dataset_hydrates_frames(monkeypatch, messagebox_spy):
@@ -169,3 +191,88 @@ def test_import_combined_flags_invalid_rows(monkeypatch, messagebox_spy, tmp_pat
         app.import_combined(filename=str(invalid_path))
 
     assert any("dos decimales" in msg for _title, msg in messagebox_spy.errors)
+
+
+def test_combined_massive_dataset_matches_expected_entities_and_validations():
+    rows = list(iter_massive_csv_rows(REPO_ROOT / "datos_combinados_masivos.csv"))
+
+    assert len(rows) == 10
+
+    clients = {row["id_cliente"].strip() for row in rows if row.get("id_cliente")}
+    products = {row["id_producto"].strip() for row in rows if row.get("id_producto")}
+    collaborators = set()
+    for row in rows:
+        collaborator = (row.get("id_colaborador") or "").strip()
+        if collaborator:
+            assert TEAM_MEMBER_ID_PATTERN.fullmatch(collaborator)
+            collaborators.add(collaborator)
+        involvement = row.get("involucramiento") or ""
+        for chunk in involvement.split(";"):
+            if not chunk.strip():
+                continue
+            collaborator = chunk.split(":", 1)[0].strip()
+            if collaborator:
+                assert TEAM_MEMBER_ID_PATTERN.fullmatch(collaborator)
+                collaborators.add(collaborator)
+
+        labels = f"{row.get('nombre_analitica', '')} {row.get('modalidad', '')}"
+        if "[INVALID" in labels:
+            continue
+
+        assert validate_product_dates(
+            row.get("id_producto", ""),
+            row.get("fecha_ocurrencia", ""),
+            row.get("fecha_descubrimiento", ""),
+        ) is None
+
+        err, monto_investigado, _ = validate_money_bounds(
+            row.get("monto_investigado", ""), "Monto investigado combinado"
+        )
+        assert err is None
+        assert monto_investigado is not None
+        for field, label in [
+            ("monto_perdida_fraude", "Monto Pérdida de Fraude"),
+            ("monto_falla_procesos", "Monto Falla en Procesos"),
+            ("monto_contingencia", "Monto Contingencia"),
+            ("monto_recuperado", "Monto Recuperado"),
+        ]:
+            msg, value, _ = validate_money_bounds(row.get(field, ""), label)
+            assert msg is None
+            assert value is not None
+
+        if monto_investigado > 0:
+            assert validate_reclamo_id(row.get("id_reclamo", "")) is None
+            assert validate_codigo_analitica(row.get("codigo_analitica", "")) is None
+
+    assert len(clients) == 10
+    assert len(products) == 10
+    assert len(collaborators) == 12
+
+
+@pytest.mark.parametrize(
+    "filename,validator",
+    [
+        (
+            REPO_ROOT / "normas_masivas.csv",
+            lambda row: (
+                validate_norm_id(row.get("id_norma", "")) is None
+                and validate_case_id(row.get("id_caso", "")) is None
+                and validate_date_text(row.get("fecha_vigencia", ""), "Fecha de vigencia", allow_blank=False)
+                is None
+            ),
+        ),
+        (
+            REPO_ROOT / "riesgos_masivos.csv",
+            lambda row: (
+                validate_risk_id(row.get("id_riesgo", "")) is None
+                and validate_case_id(row.get("id_caso", "")) is None
+            ),
+        ),
+    ],
+)
+def test_norm_and_risk_massive_files_stay_in_spec(filename, validator):
+    rows = list(iter_massive_csv_rows(filename))
+
+    assert rows, f"{filename.name} no debe estar vacío"
+    for row in rows:
+        assert validator(row)
