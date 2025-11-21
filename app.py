@@ -1666,7 +1666,6 @@ class FraudCaseApp:
 
             text_widget = scrolledtext.ScrolledText(
                 section_frame,
-                width=80,
                 height=18,
                 wrap="word",
             )
@@ -1682,6 +1681,7 @@ class FraudCaseApp:
                 font=FONT_BASE,
                 padx=COL_PADX,
                 pady=ROW_PADY,
+                width=0,
                 wrap=tk.WORD,
             )
             self._configure_rich_text_tags(text_widget, bold_font, header_font, mono_font)
