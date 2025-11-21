@@ -1025,18 +1025,11 @@ class FraudCaseApp:
         proc_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
 
-        ttk.Label(frame, text="Fechas del caso (YYYY-MM-DD):").grid(
+        ttk.Label(frame, text="Fecha de ocurrencia del caso (YYYY-MM-DD):").grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        dates_container = ttk.Frame(frame)
-        dates_container.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        for idx in (1, 3):
-            dates_container.columnconfigure(idx, weight=1)
-        ttk.Label(dates_container, text="Ocurrencia:").grid(
-            row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
-        )
-        fecha_case_entry = ttk.Entry(dates_container, textvariable=self.fecha_caso_var, width=16)
-        fecha_case_entry.grid(row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
+        fecha_case_entry = ttk.Entry(frame, textvariable=self.fecha_caso_var, width=18)
+        fecha_case_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(
             fecha_case_entry, "Fecha en que se originó el caso a nivel general."
         )
@@ -1379,9 +1372,15 @@ class FraudCaseApp:
         summary_section.columnconfigure(0, weight=1)
         team_columns = [
             ("id", "ID"),
+            ("nombres", "Nombres"),
+            ("apellidos", "Apellidos"),
             ("division", "División"),
             ("area", "Área"),
+            ("servicio", "Servicio"),
+            ("puesto", "Puesto"),
             ("tipo_sancion", "Tipo sanción"),
+            ("fecha_carta_inmediatez", "Carta inmediatez"),
+            ("fecha_carta_renuncia", "Carta renuncia"),
         ]
         self.team_summary_tree = ttk.Treeview(
             summary_section, columns=[col for col, _ in team_columns], show="headings", height=5
@@ -2233,30 +2232,6 @@ class FraudCaseApp:
             self.investigator_id_var = _SimpleVar()
             self.investigator_nombre_var = _SimpleVar()
             self.investigator_cargo_var = _SimpleVar("Investigador Principal")
-
-    def _ensure_case_vars(self) -> None:
-        def _make_var(default_value=""):
-            try:
-                return tk.StringVar(value=default_value)
-            except Exception:
-                class _SimpleVar:
-                    def __init__(self, value=""):
-                        self._value = value
-
-                    def set(self, value):
-                        self._value = value
-
-                    def get(self):
-                        return self._value
-
-                return _SimpleVar(default_value)
-
-        if not hasattr(self, "fecha_caso_var"):
-            self.fecha_caso_var = _make_var()
-        if not hasattr(self, "fecha_descubrimiento_caso_var"):
-            self.fecha_descubrimiento_caso_var = _make_var()
-        if not hasattr(self, "centro_costo_caso_var"):
-            self.centro_costo_caso_var = _make_var()
 
     def _collect_operation_form(self) -> dict[str, str]:
         return {key: self._sanitize_text(var.get()) for key, var in self._operation_vars.items()}
@@ -4217,9 +4192,15 @@ class FraudCaseApp:
             return [
                 (
                     col.get("id_colaborador", ""),
+                    col.get("nombres", ""),
+                    col.get("apellidos", ""),
                     col.get("division", ""),
                     col.get("area", ""),
+                    col.get("servicio", ""),
+                    col.get("puesto", ""),
                     col.get("tipo_sancion", ""),
+                    col.get("fecha_carta_inmediatez", ""),
+                    col.get("fecha_carta_renuncia", ""),
                 )
                 for col in dataset.get("colaboradores", [])
             ]
@@ -5645,8 +5626,6 @@ class FraudCaseApp:
         self.canal_caso_var.set(CANAL_LIST[0])
         self.proceso_caso_var.set(PROCESO_LIST[0])
         self.fecha_caso_var.set("")
-        self.fecha_descubrimiento_caso_var.set("")
-        self.centro_costo_caso_var.set("")
         self._reset_investigator_fields()
         # Vaciar listas dinámicas
         for cf in self.client_frames:
@@ -5801,7 +5780,6 @@ class FraudCaseApp:
         investigator_id = self._normalize_identifier(self.investigator_id_var.get())
         investigator_name = self._sanitize_text(self.investigator_nombre_var.get())
         investigator_role = self._sanitize_text(self.investigator_cargo_var.get()) or "Investigador Principal"
-        case_cost_centers = self._sanitize_cost_centers_text(self.centro_costo_caso_var.get())
         data['caso'] = {
             "id_caso": self.id_caso_var.get().strip(),
             "tipo_informe": self.tipo_informe_var.get(),
@@ -5811,11 +5789,7 @@ class FraudCaseApp:
             "canal": self.canal_caso_var.get(),
             "proceso": self.proceso_caso_var.get(),
             "fecha_de_ocurrencia": self.fecha_caso_var.get().strip(),
-            "fecha_de_descubrimiento": self.fecha_descubrimiento_caso_var.get().strip(),
-            "centro_costos": case_cost_centers,
             "matricula_investigador": investigator_id,
-            "investigador_nombre": investigator_name,
-            "investigador_cargo": investigator_role or "Investigador Principal",
             "investigador": {
                 "matricula": investigator_id,
                 "nombre": investigator_name,
@@ -5952,8 +5926,6 @@ class FraudCaseApp:
         _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
         _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
         self.fecha_caso_var.set(caso.get('fecha_de_ocurrencia', ''))
-        self.fecha_descubrimiento_caso_var.set(caso.get('fecha_de_descubrimiento', ''))
-        self.centro_costo_caso_var.set(caso.get('centro_costos', ''))
         investigator_payload = caso.get('investigador', {}) if isinstance(caso, Mapping) else {}
         matricula_investigador = caso.get('matricula_investigador') or investigator_payload.get('matricula')
         self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
