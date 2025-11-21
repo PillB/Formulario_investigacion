@@ -30,13 +30,51 @@ def validate_case_id(value: str) -> Optional[str]:
     return None
 
 
-def validate_date_text(value: str, label: str, allow_blank: bool = True) -> Optional[str]:
-    if not value.strip():
-        return None if allow_blank else f"Debe ingresar {label}."
+def _parse_date(value: str) -> Optional[datetime]:
+    text = (value or "").strip()
+    if not text:
+        return None
     try:
-        datetime.strptime(value, "%Y-%m-%d")
+        return datetime.strptime(text, "%Y-%m-%d")
     except ValueError:
+        return None
+
+
+def validate_date_text(
+    value: str,
+    label: str,
+    allow_blank: bool = True,
+    *,
+    enforce_max_today: bool = False,
+    must_be_before: Optional[Tuple[str, str]] = None,
+    must_be_after: Optional[Tuple[str, str]] = None,
+) -> Optional[str]:
+    text = (value or "").strip()
+    if not text:
+        return None if allow_blank else f"Debe ingresar {label}."
+
+    parsed_date = _parse_date(text)
+    if not parsed_date:
         return f"{label} debe tener el formato YYYY-MM-DD."
+
+    today = datetime.today().date()
+    if enforce_max_today and parsed_date.date() > today:
+        return f"{label} no puede estar en el futuro."
+
+    if must_be_before:
+        other_value, other_label = must_be_before
+        other_date = _parse_date(other_value)
+        if other_date and parsed_date >= other_date:
+            compare_label = other_label or "la fecha de referencia"
+            return f"{label} debe ser anterior a {compare_label}."
+
+    if must_be_after:
+        other_value, other_label = must_be_after
+        other_date = _parse_date(other_value)
+        if other_date and parsed_date <= other_date:
+            compare_label = other_label or "la fecha de referencia"
+            return f"{label} debe ser posterior a {compare_label}."
+
     return None
 
 

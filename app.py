@@ -913,20 +913,12 @@ class FraudCaseApp:
         )
 
     def _validate_case_occurrence_date(self):
-        message = validate_date_text(
+        return validate_date_text(
             self.fecha_caso_var.get(),
-            "la fecha de ocurrencia del caso",
+            "La fecha de ocurrencia del caso",
             allow_blank=False,
+            enforce_max_today=True,
         )
-        if message:
-            return message
-        try:
-            occurrence_date = datetime.strptime(self.fecha_caso_var.get().strip(), "%Y-%m-%d")
-        except ValueError:
-            return "La fecha de ocurrencia del caso debe tener el formato YYYY-MM-DD."
-        if occurrence_date > datetime.today():
-            return "La fecha de ocurrencia del caso no puede estar en el futuro."
-        return None
 
     def on_case_cat1_change(self):
         """Actualiza las opciones de categoría 2 y modalidad cuando cambia cat1 del caso."""
