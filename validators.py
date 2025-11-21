@@ -10,9 +10,9 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from settings import TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
+from log_schema import LOG_FIELDNAMES
 
 _LOG_QUEUE: List[dict] = []
-LOG_FIELDNAMES = ["timestamp", "tipo", "subtipo", "widget_id", "coords", "mensaje"]
 
 
 def validate_required_text(value: str, label: str) -> Optional[str]:
