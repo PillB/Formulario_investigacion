@@ -140,10 +140,10 @@ def test_md_headings_and_tables(sample_case_data):
         "## Modus operandi",
         "## Principales Hallazgos",
         "## Descargos",
-        "## Riesgos identificados",
+        "## Riesgos identificados y debilidades de los controles",
         "## Normas transgredidas",
         "## Conclusiones",
-        "## Recomendaciones",
+        "## Recomendaciones y Mejoras de Procesos",
         "## Anexos",
         "## Firma",
         "## Resumen de Secciones y Tablas del Informe",
@@ -151,7 +151,7 @@ def test_md_headings_and_tables(sample_case_data):
 
     assert "| Dirigido a | Referencia | Área de Reporte | Fecha de reporte |" in md
     assert "| Nombres y Apellidos | Matrícula | Cargo | Falta cometida | Fecha Carta de Inmediatez | Fecha Carta de Renuncia |" in md
-    assert "| N° | Fecha de aprobación | Cliente/DNI | Ingreso Bruto Mensual | Empresa Empleadora | Vendedor del Inmueble | Vendedor del Crédito | Producto | Importe Desembolsado | Saldo Deudor | Status (BCP/SBS) |" in md
+    assert "| N° | Fecha de aprobación | Cliente / DNI | Ingreso Bruto Mensual | Empresa Empleadora | Vendedor del Inmueble | Vendedor del Crédito | Producto | Importe Desembolsado | Saldo Deudor | Status (BCP/SBS) |" in md
     assert "| Líder del riesgo | ID Riesgo (GRC) | Descripción del riesgo de fraude | Criticidad del riesgo | Exposición residual (USD) | ID Plan de Acción |" in md
     assert "| Norma/Política | Descripción de la transgresión |" in md
     assert "Totales" in md
