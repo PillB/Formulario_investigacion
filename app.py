@@ -1523,14 +1523,16 @@ class FraudCaseApp:
         header_frame = ttk.Frame(frame)
         header_frame.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
         header_frame.columnconfigure(0, weight=1)
+        header_frame.columnconfigure(1, weight=0)
 
+        ttk.Frame(header_frame).grid(row=0, column=0, sticky="ew")
         self.theme_toggle_button = ttk.Button(
             header_frame,
             textvariable=self.theme_toggle_text,
             command=self._toggle_theme,
             padding=PRIMARY_PADDING,
         )
-        self.theme_toggle_button.grid(row=0, column=1, sticky="e")
+        self.theme_toggle_button.grid(row=0, column=1, sticky="ne")
 
         catalog_group = ttk.LabelFrame(frame, text="Catálogos de detalle")
         catalog_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
@@ -1798,6 +1800,7 @@ class FraudCaseApp:
 
     def _toggle_theme(self):
         palette = ThemeManager.toggle()
+        ThemeManager.apply_to_widget_tree(self.root)
         self._update_theme_toggle_label(palette)
         self._safe_update_idletasks()
 
