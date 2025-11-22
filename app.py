@@ -97,7 +97,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
                       ensure_external_drive_dir)
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY
-from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
+from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
 from validators import (
@@ -874,278 +874,7 @@ class FraudCaseApp:
 
     def build_case_tab(self, parent):
         """Construye la pestaña de detalles del caso."""
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True, padx=5, pady=5)
-        frame.columnconfigure(0, weight=0)
-        frame.columnconfigure(1, weight=1)
-        frame.columnconfigure(2, weight=0)
-
-        ttk.Label(frame, text="Número de caso (AAAA-NNNN):").grid(
-            row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        id_entry = ttk.Entry(frame, textvariable=self.id_caso_var, width=20)
-        id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        id_entry.bind(
-            "<FocusOut>", lambda e: self._log_navigation_change("Modificó número de caso")
-        )
-        self.register_tooltip(id_entry, "Identificador del expediente con formato AAAA-NNNN.")
-
-        ttk.Label(frame, text="Investigador principal:").grid(
-            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        investigator_container = ttk.Frame(frame)
-        investigator_container.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        investigator_container.columnconfigure(1, weight=1)
-        investigator_container.columnconfigure(2, weight=1)
-        ttk.Label(investigator_container, text="Matrícula:").grid(
-            row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
-        )
-        investigator_entry = ttk.Entry(investigator_container, textvariable=self.investigator_id_var, width=16)
-        investigator_entry.grid(row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
-        investigator_entry.bind("<FocusOut>", lambda _e: self._autofill_investigator(show_errors=True))
-        self.register_tooltip(
-            investigator_entry,
-            "Ingresa la matrícula del investigador principal (letra + 5 dígitos) para autocompletar nombre y cargo.",
-        )
-        ttk.Label(investigator_container, text="Nombre y apellidos:").grid(
-            row=1, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
-        )
-        investigator_name = ttk.Entry(
-            investigator_container, textvariable=self.investigator_nombre_var, state="readonly"
-        )
-        investigator_name.grid(row=1, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
-        ttk.Label(investigator_container, text="Cargo:").grid(
-            row=2, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
-        )
-        investigator_role = ttk.Entry(
-            investigator_container, textvariable=self.investigator_cargo_var, state="readonly"
-        )
-        investigator_role.grid(row=2, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
-        self.register_tooltip(
-            investigator_name,
-            "Nombre del investigador obtenido automáticamente desde team_details.csv.",
-        )
-        self.register_tooltip(
-            investigator_role,
-            "Cargo fijo que se mostrará en el reporte.",
-        )
-
-        ttk.Label(frame, text="Tipo de informe:").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        tipo_cb = ttk.Combobox(
-            frame,
-            textvariable=self.tipo_informe_var,
-            values=TIPO_INFORME_LIST,
-            state="readonly",
-            width=15,
-        )
-        tipo_cb.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self.register_tooltip(tipo_cb, "Selecciona si el reporte es interno o regulatorio.")
-
-        ttk.Label(frame, text="Categorías y modalidad:").grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        cat_container = ttk.Frame(frame)
-        cat_container.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        for idx in (1, 3, 5):
-            cat_container.columnconfigure(idx, weight=1)
-        ttk.Label(cat_container, text="Categoría nivel 1:").grid(
-            row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        cat1_cb = ttk.Combobox(
-            cat_container,
-            textvariable=self.cat_caso1_var,
-            values=list(TAXONOMIA.keys()),
-            state="readonly",
-            width=20,
-        )
-        cat1_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        cat1_cb.bind("<FocusOut>", lambda e: self.on_case_cat1_change())
-        cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_case_cat1_change())
-        self.register_tooltip(cat1_cb, "Nivel superior de la taxonomía de fraude.")
-        ttk.Label(cat_container, text="Categoría nivel 2:").grid(
-            row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        self.case_cat2_cb = ttk.Combobox(
-            cat_container,
-            textvariable=self.cat_caso2_var,
-            values=list(TAXONOMIA[self.cat_caso1_var.get()].keys()),
-            state="readonly",
-            width=20,
-        )
-        self.case_cat2_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self.case_cat2_cb.bind("<FocusOut>", lambda e: self.on_case_cat2_change())
-        self.case_cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_case_cat2_change())
-        self.register_tooltip(self.case_cat2_cb, "Subcategoría que precisa el evento.")
-        ttk.Label(cat_container, text="Modalidad:").grid(
-            row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        self.case_mod_cb = ttk.Combobox(
-            cat_container,
-            textvariable=self.mod_caso_var,
-            values=TAXONOMIA[self.cat_caso1_var.get()][self.cat_caso2_var.get()],
-            state="readonly",
-            width=25,
-        )
-        self.case_mod_cb.grid(row=0, column=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self.register_tooltip(self.case_mod_cb, "Modalidad específica dentro de la taxonomía.")
-
-        ttk.Label(frame, text="Canal y proceso:").grid(
-            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        canal_proc_container = ttk.Frame(frame)
-        canal_proc_container.grid(
-            row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we"
-        )
-        canal_proc_container.columnconfigure(1, weight=1)
-        canal_proc_container.columnconfigure(3, weight=1)
-        ttk.Label(canal_proc_container, text="Canal:").grid(
-            row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        canal_cb = ttk.Combobox(
-            canal_proc_container,
-            textvariable=self.canal_caso_var,
-            values=CANAL_LIST,
-            state="readonly",
-            width=25,
-        )
-        canal_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self.register_tooltip(canal_cb, "Canal donde se originó el evento.")
-        ttk.Label(canal_proc_container, text="Proceso impactado:").grid(
-            row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        proc_cb = ttk.Combobox(
-            canal_proc_container,
-            textvariable=self.proceso_caso_var,
-            values=PROCESO_LIST,
-            state="readonly",
-            width=25,
-        )
-        proc_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
-
-        ttk.Label(frame, text="Fecha de ocurrencia del caso (YYYY-MM-DD):").grid(
-            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        fecha_case_entry = ttk.Entry(frame, textvariable=self.fecha_caso_var, width=18)
-        fecha_case_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self.register_tooltip(
-            fecha_case_entry, "Fecha en que se originó el caso a nivel general."
-        )
-        ttk.Label(dates_container, text="Descubrimiento:").grid(
-            row=0, column=2, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
-        )
-        fecha_desc_entry = ttk.Entry(
-            dates_container, textvariable=self.fecha_descubrimiento_caso_var, width=16
-        )
-        fecha_desc_entry.grid(row=0, column=3, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
-        self.register_tooltip(
-            fecha_desc_entry,
-            "Fecha en que se detectó el caso. Debe ser posterior a la ocurrencia y no futura.",
-        )
-
-        ttk.Label(frame, text="Centro de costos del caso (; separados):").grid(
-            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        centro_costo_entry = ttk.Entry(frame, textvariable=self.centro_costo_caso_var, width=35)
-        centro_costo_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self.register_tooltip(
-            centro_costo_entry,
-            "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
-        )
-
-        # Validaciones del caso
-        self.validators.append(
-            FieldValidator(
-                id_entry,
-                lambda: validate_case_id(self.id_caso_var.get()),
-                self.logs,
-                "Caso - ID",
-                variables=[self.id_caso_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                tipo_cb,
-                lambda: validate_required_text(self.tipo_informe_var.get(), "el tipo de informe"),
-                self.logs,
-                "Caso - Tipo de informe",
-                variables=[self.tipo_informe_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                cat1_cb,
-                lambda: validate_required_text(self.cat_caso1_var.get(), "la categoría nivel 1"),
-                self.logs,
-                "Caso - Categoría 1",
-                variables=[self.cat_caso1_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                self.case_cat2_cb,
-                lambda: validate_required_text(self.cat_caso2_var.get(), "la categoría nivel 2"),
-                self.logs,
-                "Caso - Categoría 2",
-                variables=[self.cat_caso2_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                self.case_mod_cb,
-                lambda: validate_required_text(self.mod_caso_var.get(), "la modalidad del caso"),
-                self.logs,
-                "Caso - Modalidad",
-                variables=[self.mod_caso_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                canal_cb,
-                lambda: validate_required_text(self.canal_caso_var.get(), "el canal del caso"),
-                self.logs,
-                "Caso - Canal",
-                variables=[self.canal_caso_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                proc_cb,
-                lambda: validate_required_text(self.proceso_caso_var.get(), "el proceso impactado"),
-                self.logs,
-                "Caso - Proceso",
-                variables=[self.proceso_caso_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                fecha_case_entry,
-                self._validate_case_occurrence_date,
-                self.logs,
-                "Caso - Fecha de ocurrencia",
-                variables=[self.fecha_caso_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                fecha_desc_entry,
-                self._validate_case_discovery_date,
-                self.logs,
-                "Caso - Fecha de descubrimiento",
-                variables=[self.fecha_descubrimiento_caso_var],
-            )
-        )
-        self.validators.append(
-            FieldValidator(
-                centro_costo_entry,
-                lambda: self._validate_cost_centers(text=self.centro_costo_caso_var.get()),
-                self.logs,
-                "Caso - Centro de costos",
-                variables=[self.centro_costo_caso_var],
-            )
-        )
+        self.case_frame = CaseFrame(self, parent)
 
     def _validate_case_occurrence_date(self):
         self._ensure_case_vars()
@@ -2232,6 +1961,68 @@ class FraudCaseApp:
             self.investigator_id_var = _SimpleVar()
             self.investigator_nombre_var = _SimpleVar()
             self.investigator_cargo_var = _SimpleVar("Investigador Principal")
+
+    def _ensure_case_vars(self) -> None:
+        try:
+            VarClass = tk.StringVar
+        except (tk.TclError, RuntimeError):
+            VarClass = None
+
+        class _SimpleVar:
+            def __init__(self, value=""):
+                self._value = value
+
+            def set(self, value):
+                self._value = value
+
+            def get(self):
+                return self._value
+
+        def _create_var(value=""):
+            if VarClass is None:
+                return _SimpleVar(value)
+            try:
+                return VarClass(value=value)
+            except Exception:
+                return _SimpleVar(value)
+
+        def _current_or_default(attr_name, default_value=""):
+            var = getattr(self, attr_name, None)
+            try:
+                return var.get()
+            except Exception:
+                return default_value
+
+        cat1_value = _current_or_default("cat_caso1_var", next(iter(TAXONOMIA), ""))
+        cat2_candidates = list(TAXONOMIA.get(cat1_value, {}).keys())
+        cat2_value = _current_or_default(
+            "cat_caso2_var", cat2_candidates[0] if cat2_candidates else ""
+        )
+        modalidad_candidates = TAXONOMIA.get(cat1_value, {}).get(cat2_value, [])
+        mod_value = _current_or_default(
+            "mod_caso_var", modalidad_candidates[0] if modalidad_candidates else ""
+        )
+
+        self.id_caso_var = getattr(self, "id_caso_var", _create_var())
+        self.tipo_informe_var = getattr(
+            self, "tipo_informe_var", _create_var(TIPO_INFORME_LIST[0])
+        )
+        self.cat_caso1_var = getattr(self, "cat_caso1_var", _create_var(cat1_value))
+        self.cat_caso2_var = getattr(self, "cat_caso2_var", _create_var(cat2_value))
+        self.mod_caso_var = getattr(self, "mod_caso_var", _create_var(mod_value))
+        self.canal_caso_var = getattr(
+            self, "canal_caso_var", _create_var(_current_or_default("canal_caso_var", CANAL_LIST[0]))
+        )
+        self.proceso_caso_var = getattr(
+            self,
+            "proceso_caso_var",
+            _create_var(_current_or_default("proceso_caso_var", PROCESO_LIST[0])),
+        )
+        self.fecha_caso_var = getattr(self, "fecha_caso_var", _create_var())
+        self.fecha_descubrimiento_caso_var = getattr(
+            self, "fecha_descubrimiento_caso_var", _create_var()
+        )
+        self.centro_costo_caso_var = getattr(self, "centro_costo_caso_var", _create_var())
 
     def _collect_operation_form(self) -> dict[str, str]:
         return {key: self._sanitize_text(var.get()) for key, var in self._operation_vars.items()}
@@ -5926,6 +5717,7 @@ class FraudCaseApp:
         _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
         _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
         self.fecha_caso_var.set(caso.get('fecha_de_ocurrencia', ''))
+        self.fecha_descubrimiento_caso_var.set(caso.get('fecha_de_descubrimiento', ''))
         investigator_payload = caso.get('investigador', {}) if isinstance(caso, Mapping) else {}
         matricula_investigador = caso.get('matricula_investigador') or investigator_payload.get('matricula')
         self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
@@ -5937,6 +5729,8 @@ class FraudCaseApp:
         cargo_investigador = investigator_payload.get('cargo') or "Investigador Principal"
         self.investigator_cargo_var.set(cargo_investigador)
         self._autofill_investigator(show_errors=False)
+        centro_costo = caso.get('centro_costo') or caso.get('centro_costos')
+        self.centro_costo_caso_var.set(centro_costo or '')
         # Clientes
         for i, cliente in enumerate(data.get('clientes', [])):
             if i >= len(self.client_frames):
