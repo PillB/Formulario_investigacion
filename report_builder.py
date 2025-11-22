@@ -415,6 +415,8 @@ def _build_report_context(case_data: CaseData):
     matricula_investigador = case.get("matricula_investigador") if isinstance(case, Mapping) else None
     if matricula_investigador and not firmas:
         firmas.append({"nombre": "", "cargo": "Investigador Principal"})
+    if not firmas and case_data.firmas:
+        firmas = list(case_data.firmas)
 
     return {
         "case": case,
