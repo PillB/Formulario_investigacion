@@ -712,6 +712,7 @@ class FraudCaseApp:
         summary_tab = ttk.Frame(self.notebook)
         self.notebook.add(summary_tab, text="Resumen")
         self.build_summary_tab(summary_tab)
+        self._current_tab_id = self.notebook.select()
 
     def clipboard_get(self):
         """Proxy para ``Tk.clipboard_get`` que simplifica las pruebas unitarias."""
@@ -3485,6 +3486,7 @@ class FraudCaseApp:
         if event.widget is not notebook:
             return
 
+        previous_tab = getattr(self, "_current_tab_id", None)
         selected_tab = notebook.select()
         tab_text = notebook.tab(selected_tab, "text") if selected_tab else ""
         tab_index = notebook.index(selected_tab) if selected_tab else -1
@@ -3493,8 +3495,24 @@ class FraudCaseApp:
             f"Abrió pestaña: {tab_text} (índice {tab_index})",
             self.logs,
         )
+        previous_tab_text = notebook.tab(previous_tab, "text") if previous_tab else ""
+        self._current_tab_id = selected_tab
+        if (
+            previous_tab_text == "Caso y participantes"
+            and selected_tab != previous_tab
+            and not getattr(self, "_suppress_messagebox", False)
+        ):
+            claim_errors = self._collect_claim_requirement_errors()
+            if claim_errors:
+                messagebox.showerror("Reclamos requeridos", "\n".join(claim_errors))
         if self._is_summary_tab_visible():
             self._flush_summary_refresh()
+
+    def _collect_claim_requirement_errors(self) -> list[str]:
+        errors: list[str] = []
+        for frame in getattr(self, "product_frames", []):
+            errors.extend(frame.claim_requirement_errors())
+        return errors
 
     def _register_summary_tree_bindings(self, tree, key):
         """Configura atajos de pegado y el menú contextual para una tabla."""

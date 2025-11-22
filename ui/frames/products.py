@@ -192,6 +192,7 @@ class ClaimRow:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self._claims_required = bool(getattr(product_frame, "claim_fields_required", True))
 
         self.id_var = tk.StringVar()
         self.name_var = tk.StringVar()
@@ -239,7 +240,7 @@ class ClaimRow:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_reclamo_id(self.id_var.get()),
+                self._validate_claim_id,
                 self.logs,
                 f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} ID",
                 variables=[self.id_var],
@@ -248,9 +249,7 @@ class ClaimRow:
         self.validators.append(
             FieldValidator(
                 name_entry,
-                lambda: validate_required_text(
-                    self.name_var.get(), "el nombre de la analítica"
-                ),
+                self._validate_claim_name,
                 self.logs,
                 f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Nombre analítica",
                 variables=[self.name_var],
@@ -260,7 +259,7 @@ class ClaimRow:
         self.validators.append(
             FieldValidator(
                 code_entry,
-                lambda: validate_codigo_analitica(self.code_var.get()),
+                self._validate_claim_code,
                 self.logs,
                 f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Código",
                 variables=[self.code_var],
@@ -288,6 +287,7 @@ class ClaimRow:
         self.name_var.set((data.get("nombre_analitica") or "").strip())
         self.code_var.set((data.get("codigo_analitica") or "").strip())
         self.on_id_change(preserve_existing=True, silent=True)
+        self.set_claim_requirement(getattr(self.product_frame, "claim_fields_required", self._claims_required))
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         rid = self.id_var.get().strip()
@@ -337,6 +337,31 @@ class ClaimRow:
             self.frame.destroy()
             self.remove_callback(self)
 
+    def set_claim_requirement(self, required: bool):
+        previously_required = self._claims_required
+        self._claims_required = required
+        if previously_required and not required:
+            for validator in self.validators:
+                validator.show_custom_error(None)
+
+    def _validate_claim_id(self):
+        value = self.id_var.get()
+        if not value.strip():
+            return validate_reclamo_id(value) if self._claims_required else None
+        return validate_reclamo_id(value)
+
+    def _validate_claim_name(self):
+        value = self.name_var.get()
+        if not value.strip():
+            return validate_required_text(value, "el nombre de la analítica") if self._claims_required else None
+        return validate_required_text(value, "el nombre de la analítica")
+
+    def _validate_claim_code(self):
+        value = self.code_var.get()
+        if not value.strip():
+            return validate_codigo_analitica(value) if self._claims_required else None
+        return validate_codigo_analitica(value)
+
 
 PRODUCT_MONEY_SPECS = (
     ("monto_investigado", "monto_inv_var", "Monto investigado", False, "inv"),
@@ -383,6 +408,7 @@ class ProductFrame:
         self.involvements = []
         self.claims = []
         self._last_missing_lookup_id = None
+        self._claim_requirement_active = False
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
@@ -612,6 +638,12 @@ class ProductFrame:
         ttk.Label(self.frame, text="").grid(row=15, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(cont_entry, "Monto reservado por contingencias.")
 
+        self._register_claim_requirement_triggers(
+            cont_entry,
+            falla_entry,
+            perdida_entry,
+        )
+
         ttk.Label(self.frame, text="Monto recuperado:").grid(
             row=16, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
@@ -809,6 +841,7 @@ class ProductFrame:
     def add_claim(self):
         idx = len(self.claims)
         row = ClaimRow(self.claims_frame, self, idx, self.remove_claim, self.logs, self.tooltip_register)
+        row.set_claim_requirement(self._claim_requirement_active)
         self.claims.append(row)
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
@@ -856,6 +889,42 @@ class ProductFrame:
                 variables=variables,
             )
             self.validators.append(validator)
+
+    def _register_claim_requirement_triggers(self, cont_entry, falla_entry, perdida_entry):
+        for entry in (cont_entry, falla_entry, perdida_entry):
+            entry.bind("<FocusOut>", self._handle_claim_requirement_change, add="+")
+        for var in (self.monto_cont_var, self.monto_falla_var, self.monto_perdida_var):
+            trace_add = getattr(var, "trace_add", None)
+            if callable(trace_add):
+                trace_add("write", self._handle_claim_requirement_change)
+        self._handle_claim_requirement_change()
+
+    def _handle_claim_requirement_change(self, *_args):
+        required = self._claim_fields_required()
+        if required == self._claim_requirement_active:
+            return
+        self._claim_requirement_active = required
+        for claim in self.claims:
+            claim.set_claim_requirement(required)
+        self.schedule_summary_refresh({'reclamos'})
+
+    def _claim_fields_required(self) -> bool:
+        return any(
+            self._has_positive_amount(var)
+            for var in (self.monto_perdida_var, self.monto_falla_var, self.monto_cont_var)
+        )
+
+    def _has_positive_amount(self, var: tk.StringVar) -> bool:
+        message, value, _normalized = validate_money_bounds(
+            var.get(),
+            "monto",
+            allow_blank=True,
+        )
+        return message is None and value is not None and value > 0
+
+    @property
+    def claim_fields_required(self) -> bool:
+        return self._claim_requirement_active
 
     def _register_product_catalog_validators(self, canal_cb, proc_cb, moneda_cb):
         catalog_specs = [
@@ -918,6 +987,28 @@ class ProductFrame:
 
     def claims_have_content(self):
         return any(not claim.is_empty() for claim in self.claims)
+
+    def claim_requirement_errors(self):
+        if not self.claim_fields_required:
+            return []
+        errors = []
+        complete_claim_found = False
+        for idx, claim in enumerate(self.claims, start=1):
+            data = claim.get_data()
+            has_any_value = any(data.values())
+            has_all_values = all(data.values())
+            if has_any_value and not has_all_values:
+                claim_label = data.get('id_reclamo') or f"reclamo {idx}"
+                errors.append(
+                    f"{self._get_product_label()}: El {claim_label} debe tener ID, nombre y código de analítica."
+                )
+            if has_all_values:
+                complete_claim_found = True
+        if not complete_claim_found:
+            errors.append(
+                f"Debe ingresar al menos un reclamo completo en {self._get_product_label()} porque hay montos de pérdida, falla o contingencia."
+            )
+        return errors
 
     def _normalize_claim_dict(self, payload):
         return {
@@ -1226,6 +1317,9 @@ class ProductFrame:
         if normalized not in catalog:
             return f"El valor '{value}' no está en el catálogo CM de {catalog_label}."
         return None
+
+    def _get_product_label(self) -> str:
+        return self.id_var.get().strip() or f"Producto {self.idx+1}"
 
     def get_data(self):
         producto_data = {
