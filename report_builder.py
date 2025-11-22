@@ -198,7 +198,6 @@ def _build_report_context(case_data: CaseData):
     riesgos = case_data.riesgos
     normas = case_data.normas
     encabezado = case_data.encabezado or {}
-    operaciones = case_data.operaciones or []
     reclamos = case_data.reclamos or []
     recomendaciones = case_data.recomendaciones_categorias or {}
 
@@ -313,61 +312,11 @@ def _build_report_context(case_data: CaseData):
         for col in team
     ]
 
-    def _build_operation_row(idx: int, op: Mapping[str, Any]) -> List[str]:
-        importe_desemb = parse_decimal_amount(op.get("importe_desembolsado") or op.get("monto_investigado"))
-        saldo_deudor = parse_decimal_amount(op.get("saldo_deudor") or op.get("monto_contingencia"))
-        return [
-            str(op.get("numero") or idx),
-            _safe_text(op.get("fecha_aprobacion") or op.get("fecha") or op.get("fecha_aprob"), placeholder="-"),
-            _safe_text(
-                op.get("cliente")
-                or op.get("cliente_dni")
-                or op.get("id_cliente")
-                or op.get("cliente_documento"),
-                placeholder="-",
-            ),
-            _safe_text(op.get("ingreso_bruto_mensual") or op.get("ingresos"), placeholder="-"),
-            _safe_text(op.get("empresa_empleadora"), placeholder="-"),
-            _safe_text(op.get("vendedor_inmueble"), placeholder="-"),
-            _safe_text(op.get("vendedor_credito"), placeholder="-"),
-            _safe_text(op.get("producto") or op.get("tipo_producto"), placeholder="-"),
-            _format_decimal_value(importe_desemb),
-            _format_decimal_value(saldo_deudor),
-            _safe_text(op.get("status") or op.get("estado"), placeholder="-"),
-        ]
+    def _build_placeholder_operation_rows(count: int = 3) -> List[List[str]]:
+        placeholder_cells = [PLACEHOLDER] * 10
+        return [[str(idx)] + placeholder_cells for idx in range(1, count + 1)]
 
-    source_operaciones = operaciones or products
-    operation_rows = []
-    total_desembolso = Decimal("0")
-    total_saldo = Decimal("0")
-    for idx, op in enumerate(source_operaciones, start=1):
-        if not isinstance(op, Mapping):
-            continue
-        importe_desemb = parse_decimal_amount(op.get("importe_desembolsado") or op.get("monto_investigado"))
-        saldo_deudor = parse_decimal_amount(op.get("saldo_deudor") or op.get("monto_contingencia"))
-        if importe_desemb is not None:
-            total_desembolso += importe_desemb
-        if saldo_deudor is not None:
-            total_saldo += saldo_deudor
-        operation_rows.append(_build_operation_row(idx, op))
-
-    operation_table_rows = list(operation_rows)
-    if operation_rows:
-        operation_table_rows.append(
-            [
-                "Totales",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                _format_decimal_value(total_desembolso),
-                _format_decimal_value(total_saldo),
-                "",
-            ]
-        )
+    operation_table_rows = _build_placeholder_operation_rows()
 
     risk_rows = [
         [
