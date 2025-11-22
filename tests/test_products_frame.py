@@ -274,3 +274,44 @@ def test_claim_row_shows_message_for_unknown_id(monkeypatch):
     product.set_claim_lookup({"OTHER": {"nombre_analitica": "X"}})
     row.on_id_change(from_focus=True)
     assert captured and "Reclamo no encontrado" in captured[0][0]
+
+
+def test_contingency_must_match_investigated_for_credit_types():
+    product = _build_product_frame()
+    product.tipo_prod_var.set("Tarjeta de crédito")
+    product.monto_inv_var.set("100.00")
+    product.monto_cont_var.set("50.00")
+
+    validator = _find_validator("Consistencia de montos (Monto contingencia)")
+    assert validator is not None
+
+    error = validator.validate_callback()
+
+    assert error is not None
+    assert "contingencia" in error.lower()
+    assert "monto investigado" in error.lower()
+
+
+def test_claims_required_when_positive_losses_from_user_actions(monkeypatch):
+    product = _build_product_frame()
+    captured = []
+    monkeypatch.setattr(products.messagebox, "showerror", lambda *args: captured.append(args))
+
+    product.monto_perdida_var.set("10.00")
+    product._handle_claim_requirement_change(source_is_user=True)
+
+    assert product.claim_fields_required is True
+    assert captured and "al menos un reclamo completo" in captured[0][1]
+
+
+def test_payload_loaded_claim_requirement_enforced_with_partial_claim():
+    product = _build_product_frame()
+    product.set_claims_from_data([{"id_reclamo": "C00001234"}])
+
+    product.monto_falla_var.set("5.00")
+    product._handle_claim_requirement_change()
+
+    errors = product.claim_requirement_errors()
+
+    assert any("C00001234" in err for err in errors)
+    assert any("al menos un reclamo completo" in err for err in errors)
