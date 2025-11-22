@@ -402,6 +402,8 @@ def build_headless_app(
     app.canal_caso_var = DummyVar(CANAL_LIST[0])
     app.proceso_caso_var = DummyVar(PROCESO_LIST[0])
     app.fecha_caso_var = DummyVar("2024-01-01")
+    app.fecha_descubrimiento_caso_var = DummyVar("2024-01-02")
+    app.centro_costo_caso_var = DummyVar("12345")
     for attr in (
         'antecedentes_var',
         'modus_var',
@@ -1955,16 +1957,17 @@ def test_validate_data_normalizes_risk_exposure_after_populate():
     app.add_risk = lambda: app.risk_frames.append(_PopulateRiskFrameStub())
 
     payload = {
-        'caso': {
-            'id_caso': '2024-0001',
-            'tipo_informe': TIPO_INFORME_LIST[0],
-            'categoria1': case_cat1,
-            'categoria2': case_cat2,
-            'modalidad': case_modalidad,
-            'canal': CANAL_LIST[0],
-            'proceso': PROCESO_LIST[0],
-            'fecha_de_ocurrencia': '2024-01-01',
-        },
+            'caso': {
+                'id_caso': '2024-0001',
+                'tipo_informe': TIPO_INFORME_LIST[0],
+                'categoria1': case_cat1,
+                'categoria2': case_cat2,
+                'modalidad': case_modalidad,
+                'canal': CANAL_LIST[0],
+                'proceso': PROCESO_LIST[0],
+                'fecha_de_ocurrencia': '2024-01-01',
+                'fecha_de_descubrimiento': '2024-01-02',
+            },
         'clientes': [],
         'colaboradores': [],
         'productos': [],

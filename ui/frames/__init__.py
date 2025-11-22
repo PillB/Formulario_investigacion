@@ -1,5 +1,6 @@
 """Paquete que agrupa los frames dinámicos de la interfaz."""
 
+from .case import CaseFrame
 from .clients import ClientFrame
 from .norm import NormFrame
 from .products import (ClaimRow, InvolvementRow, PRODUCT_MONEY_SPECS,
@@ -9,6 +10,7 @@ from .team import TeamMemberFrame
 
 __all__ = [
     "ClientFrame",
+    "CaseFrame",
     "TeamMemberFrame",
     "ProductFrame",
     "RiskFrame",
