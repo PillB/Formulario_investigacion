@@ -97,7 +97,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
                       ensure_external_drive_dir)
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY
-from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
+from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.tooltips import HoverTooltip
 from validators import (
