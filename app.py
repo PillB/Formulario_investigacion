@@ -5533,6 +5533,11 @@ class FraudCaseApp:
         self._anexos_data: list[dict[str, str]] = []
         self._firmas_data: list[dict[str, str]] = []
         self._recomendaciones_categorias: dict[str, list[str]] = {}
+        for widget in getattr(self, "_recommendation_widgets", {}).values():
+            try:
+                widget.delete("1.0", tk.END)
+            except tk.TclError:
+                continue
         for var_dict in (getattr(self, "_encabezado_vars", {}), getattr(self, "_operation_vars", {}), getattr(self, "_anexo_vars", {}), getattr(self, "_firma_vars", {})):
             for var in var_dict.values():
                 try:
