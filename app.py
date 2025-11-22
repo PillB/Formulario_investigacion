@@ -2213,8 +2213,14 @@ class FraudCaseApp:
         normalized = self._normalize_identifier(raw_id)
         if raw_id != normalized:
             self.investigator_id_var.set(normalized)
-        self.investigator_nombre_var.set("")
-        self.investigator_cargo_var.set("Investigador Principal")
+        previous_name = self.investigator_nombre_var.get()
+        previous_cargo = self.investigator_cargo_var.get()
+
+        def _reset_investigator_defaults():
+            self.investigator_nombre_var.set("")
+            self.investigator_cargo_var.set("Investigador Principal")
+
+        _reset_investigator_defaults()
         if not normalized:
             return "Ingresa la matrícula del investigador principal para completar sus datos."
         validation_error = validate_team_member_id(normalized)
@@ -2222,6 +2228,8 @@ class FraudCaseApp:
             return validation_error
         lookup = self.team_lookup.get(normalized)
         if not lookup:
+            self.investigator_nombre_var.set(previous_name)
+            self.investigator_cargo_var.set(previous_cargo)
             return "No se encontró la matrícula indicada en team_details.csv. Verifica el ID y vuelve a intentarlo."
         composed_name = lookup.get("nombres_apellidos") or lookup.get("nombre_completo")
         if not composed_name:
@@ -2229,6 +2237,7 @@ class FraudCaseApp:
             apellidos = lookup.get("apellidos") or ""
             composed_name = " ".join(part for part in [nombres, apellidos] if part).strip()
         self.investigator_nombre_var.set(composed_name)
+        self.investigator_cargo_var.set(lookup.get("cargo") or "Investigador Principal")
         return None
 
     def _ensure_investigator_vars(self) -> None:
