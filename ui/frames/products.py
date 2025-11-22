@@ -125,12 +125,14 @@ class InvolvementRow:
             f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto"
         )
         self._notify_summary_change()
+        self.product_frame.trigger_duplicate_check()
 
     def _handle_team_focus_out(self):
         self.product_frame.log_change(
             f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó colaborador"
         )
         self._notify_summary_change()
+        self.product_frame.trigger_duplicate_check()
 
     def _notify_summary_change(self):
         if hasattr(self.product_frame, 'schedule_summary_refresh'):
@@ -324,6 +326,8 @@ class ClaimRow:
                 f"Producto {self.product_frame.idx+1}: autopobló reclamo {rid} desde catálogo"
             )
         self.product_frame.persist_lookup_snapshot()
+        if from_focus:
+            self.product_frame.trigger_duplicate_check()
 
     def is_empty(self):
         snapshot = self.get_data()
@@ -393,6 +397,7 @@ class ProductFrame:
         change_notifier=None,
         id_change_callback=None,
         initialize_rows=True,
+        duplicate_key_checker=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -403,6 +408,7 @@ class ProductFrame:
         self.product_lookup = product_lookup or {}
         self.claim_lookup = claim_lookup or {}
         self.tooltip_register = tooltip_register
+        self.duplicate_key_checker = duplicate_key_checker
         self.validators = []
         self.client_validator = None
         self.involvements = []
@@ -460,6 +466,7 @@ class ProductFrame:
         self.id_entry = id_entry
         ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self._bind_identifier_triggers(id_entry)
+        self._register_duplicate_triggers(id_entry)
         self.tooltip_register(id_entry, "Código único del producto investigado.")
 
         ttk.Label(self.frame, text="Cliente:").grid(
@@ -477,8 +484,9 @@ class ProductFrame:
         self.client_cb.set('')
         self.client_cb.bind(
             "<FocusOut>",
-            lambda e: self.log_change(f"Producto {self.idx+1}: seleccionó cliente"),
+            lambda e: self._handle_client_focus_out(),
         )
+        self.client_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_client_focus_out(), add="+")
         self.tooltip_register(self.client_cb, "Selecciona al cliente dueño del producto.")
 
         ttk.Label(self.frame, text="Categoría 1:").grid(
@@ -582,6 +590,7 @@ class ProductFrame:
         focc_entry.grid(row=9, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=9, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(focc_entry, "Fecha exacta del evento.")
+        self._register_duplicate_triggers(focc_entry)
 
         ttk.Label(self.frame, text="Fecha de descubrimiento (YYYY-MM-DD):").grid(
             row=10, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -889,6 +898,14 @@ class ProductFrame:
                 variables=variables,
             )
             self.validators.append(validator)
+
+    def _register_duplicate_triggers(self, widget) -> None:
+        widget.bind("<FocusOut>", self._handle_duplicate_check_event, add="+")
+        if isinstance(widget, ttk.Combobox):
+            widget.bind("<<ComboboxSelected>>", self._handle_duplicate_check_event, add="+")
+
+    def _handle_duplicate_check_event(self, *_args):
+        self.trigger_duplicate_check()
 
     def _register_claim_requirement_triggers(self, cont_entry, falla_entry, perdida_entry):
         for entry in (cont_entry, falla_entry, perdida_entry):
@@ -1204,6 +1221,10 @@ class ProductFrame:
         if callable(self.id_change_callback):
             self.id_change_callback(self, previous, new_id)
 
+    def trigger_duplicate_check(self):
+        if callable(self.duplicate_key_checker):
+            self.duplicate_key_checker(armed=True)
+
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
@@ -1370,6 +1391,10 @@ class ProductFrame:
                 self.id_entry.focus_set()
             except Exception:
                 return
+
+    def _handle_client_focus_out(self):
+        self.log_change(f"Producto {self.idx+1}: seleccionó cliente")
+        self.trigger_duplicate_check()
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el producto {self.idx+1}?"):
