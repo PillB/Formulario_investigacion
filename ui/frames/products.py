@@ -816,10 +816,17 @@ class ProductFrame:
     def remove_claim(self, row):
         if row in self.claims:
             self.claims.remove(row)
+            self._regrid_rows(self.claims)
         if not self.claims:
             self.add_claim()
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
+
+    def _regrid_rows(self, rows):
+        for idx, row in enumerate(rows):
+            row.idx = idx
+            if hasattr(row.frame, "grid_configure"):
+                row.frame.grid_configure(row=idx + 1)
 
     def clear_claims(self):
         for claim in self.claims:
@@ -950,6 +957,7 @@ class ProductFrame:
     def remove_involvement(self, row):
         if row in self.involvements:
             self.involvements.remove(row)
+            self._regrid_rows(self.involvements)
         self.schedule_summary_refresh('involucramientos')
 
     def update_client_options(self):
