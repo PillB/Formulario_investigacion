@@ -4060,6 +4060,7 @@ class FraudCaseApp:
                 self._notify_dataset_changed(summary_sections="involucramientos")
                 self.save_auto()
                 self.sync_main_form_after_import("involucramientos", stay_on_summary=stay_on_summary)
+                self._run_duplicate_check_post_load()
             return processed
         if section_key == "productos":
             for values in rows:
@@ -4110,6 +4111,7 @@ class FraudCaseApp:
             if processed:
                 self._notify_dataset_changed(summary_sections="productos")
                 self.sync_main_form_after_import("productos", stay_on_summary=stay_on_summary)
+                self._run_duplicate_check_post_load()
             return processed
         if section_key == "reclamos":
             missing_products = []
@@ -4167,6 +4169,7 @@ class FraudCaseApp:
                 self._notify_dataset_changed(summary_sections="reclamos")
                 self.sync_main_form_after_import("reclamos", stay_on_summary=stay_on_summary)
                 log_event("navegacion", f"Reclamos pegados desde resumen: {processed}", self.logs)
+                self._run_duplicate_check_post_load()
             if missing_products:
                 self._report_missing_detail_ids("productos", missing_products)
             if unhydrated_products:
@@ -4640,6 +4643,27 @@ class FraudCaseApp:
     @staticmethod
     def _normalize_identifier(identifier):
         return (identifier or '').strip().upper()
+
+    def _run_duplicate_check_post_load(self, from_background: Optional[bool] = None):
+        """Ejecuta la validación de claves técnicas tras cargas masivas.
+
+        Cuando el origen es un hilo en segundo plano, reenvía la ejecución
+        al hilo de UI para evitar conflictos con widgets de Tkinter.
+        """
+
+        if from_background is None:
+            from_background = threading.current_thread() is not threading.main_thread()
+
+        def _perform_check():
+            try:
+                self._check_duplicate_technical_keys_realtime(armed=True)
+            except AttributeError:
+                return
+
+        if from_background:
+            self._dispatch_to_ui(_perform_check)
+        else:
+            _perform_check()
 
     def _check_duplicate_technical_keys_realtime(self, armed: bool = False):
         if armed:
@@ -5241,6 +5265,7 @@ class FraudCaseApp:
         else:
             messagebox.showwarning("Sin cambios", "No se detectaron productos nuevos en el archivo.")
         self._report_missing_detail_ids("productos", missing_ids)
+        self._run_duplicate_check_post_load()
 
     def _apply_combined_import_payload(self, entries):
         created_records = False
@@ -5353,6 +5378,7 @@ class FraudCaseApp:
         self._report_missing_detail_ids("clientes", missing_clients)
         self._report_missing_detail_ids("colaboradores", missing_team)
         self._report_missing_detail_ids("productos", missing_products)
+        self._run_duplicate_check_post_load()
 
     def _apply_risk_import_payload(self, entries):
         imported = 0
@@ -5453,6 +5479,7 @@ class FraudCaseApp:
         else:
             messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
         self._report_missing_detail_ids("productos", missing_products)
+        self._run_duplicate_check_post_load()
 
     def import_clients(self, filename=None):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
@@ -6354,6 +6381,7 @@ class FraudCaseApp:
         )
         self._sync_extended_sections_to_ui()
         self._rebuild_frame_id_indexes()
+        self._run_duplicate_check_post_load()
         self._schedule_summary_refresh(data=data)
 
     # ---------------------------------------------------------------------
