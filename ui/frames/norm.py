@@ -83,7 +83,10 @@ class NormFrame:
             FieldValidator(
                 fecha_entry,
                 lambda: validate_date_text(
-                    self.fecha_var.get(), "la fecha de vigencia", allow_blank=False
+                    self.fecha_var.get(),
+                    "la fecha de vigencia",
+                    allow_blank=False,
+                    enforce_max_today=True,
                 ),
                 self.logs,
                 f"Norma {self.idx+1} - Fecha",
