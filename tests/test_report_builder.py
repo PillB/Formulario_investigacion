@@ -154,7 +154,7 @@ def test_md_headings_and_tables(sample_case_data):
     assert "| N° | Fecha de aprobación | Cliente / DNI | Ingreso Bruto Mensual | Empresa Empleadora | Vendedor del Inmueble | Vendedor del Crédito | Producto | Importe Desembolsado | Saldo Deudor | Status (BCP/SBS) |" in md
     assert "| Líder del riesgo | ID Riesgo (GRC) | Descripción del riesgo de fraude | Criticidad del riesgo | Exposición residual (USD) | ID Plan de Acción |" in md
     assert "| Norma/Política | Descripción de la transgresión |" in md
-    assert "Totales" in md
+    assert report_builder.PLACEHOLDER in md
 
 
 def test_md_empty_tables_and_summary():
@@ -163,6 +163,14 @@ def test_md_empty_tables_and_summary():
     lines = md.splitlines()
 
     assert md.count(report_builder.PLACEHOLDER) >= 3
+
+
+def test_hallazgos_table_uses_placeholders_with_products(sample_case_data):
+    md = report_builder.build_md(sample_case_data)
+
+    assert "Cliente Uno" not in md
+    assert "Totales" not in md
+    assert "| 1 | No aplica / Sin información registrada. |" in md
 
 
 def test_md_handles_rich_text_analysis_payload(sample_case_data):
