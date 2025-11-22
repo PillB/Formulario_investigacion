@@ -170,10 +170,10 @@ def _aggregate_amounts(
         "investigado": get_amount("importe_investigado", "monto_investigado"),
         "contingencia": get_amount("contingencia", "monto_contingencia"),
         "perdida_total": perdida_total if perdida_total != Decimal("0") else perdida_total,
-        "normal": get_amount("normal", "monto_normal"),
-        "vencido": get_amount("vencido", "monto_vencido"),
-        "judicial": get_amount("judicial", "monto_judicial"),
-        "castigo": get_amount("castigo", "monto_castigo"),
+        "normal": get_amount("normal"),
+        "vencido": get_amount("vencido"),
+        "judicial": get_amount("judicial"),
+        "castigo": get_amount("castigo"),
     }
 
 
