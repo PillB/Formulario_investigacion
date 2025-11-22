@@ -8,6 +8,8 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_UP
 from typing import Callable, Dict, List, Optional, Tuple
 
+from tkinter import TclError, messagebox
+
 from settings import TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
 
@@ -325,6 +327,10 @@ def validate_product_id(tipo_producto: str, value: str) -> Optional[str]:
 class FieldValidator:
     """Vincula un widget con una función de validación en tiempo real."""
 
+    notifications_enabled = True
+    notification_title = "Dato inválido"
+    notification_handler = messagebox.showerror
+
     def __init__(
         self,
         widget,
@@ -341,6 +347,7 @@ class FieldValidator:
         self.variables = variables or []
         self._traces: List[str] = []
         self.last_error: Optional[str] = None
+        self.last_notified_error: Optional[str] = None
         self._suspend_count = 0
         self._validation_armed = False
         for var in self.variables:
@@ -380,19 +387,41 @@ class FieldValidator:
             pass
         return str(event_type) == "FocusOut" or event_type == "9"
 
-    def _display_error(self, error: Optional[str]) -> None:
-        if error == self.last_error:
-            return
+    def _display_error(self, error: Optional[str], *, notify: bool = True) -> None:
+        error_changed = error != self.last_error
         if error:
-            self.tooltip.show(error)
-            log_event("validacion", f"{self.field_name}: {error}", self.logs)
+            if error_changed:
+                self.tooltip.show(error)
+                log_event("validacion", f"{self.field_name}: {error}", self.logs)
+            if notify and self._validation_armed and error != self.last_notified_error:
+                self._notify_modal_error(error)
+                self.last_notified_error = error
         else:
-            self.tooltip.hide()
-        self.last_error = error
+            if self.last_error:
+                self.tooltip.hide()
+            self.last_notified_error = None
+        if error_changed:
+            self.last_error = error
 
-    def show_custom_error(self, message: Optional[str]) -> None:
+    def _notify_modal_error(self, error: str) -> None:
+        if not self.notifications_enabled:
+            return
+        handler = getattr(type(self), "notification_handler", None)
+        if isinstance(handler, staticmethod):
+            handler = handler.__func__
+        if not handler:
+            return
+        try:
+            handler(
+                getattr(type(self), "notification_title", "Dato inválido"),
+                f"{self.field_name}: {error}",
+            )
+        except TclError:
+            return
+
+    def show_custom_error(self, message: Optional[str], *, notify: bool = False) -> None:
         self._validation_armed = True
-        self._display_error(message)
+        self._display_error(message, notify=notify)
 
     def suppress_during(self, callback: Callable):
         self._suspend_count += 1
