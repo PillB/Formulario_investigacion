@@ -42,6 +42,9 @@ class CaseFrame:
         )
         id_entry = ttk.Entry(frame, textvariable=owner.id_caso_var, width=20)
         id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_entry.bind(
+            "<FocusOut>", lambda _e: owner._log_navigation_change("Modificó número de caso")
+        )
         owner.register_tooltip(
             id_entry, "Formato AAAA-XXXX. Se usa para detectar duplicados."
         )
