@@ -23,7 +23,7 @@ class DummyTooltip:
         return None
 
 
-EVENTS = ("<FocusOut>", "<KeyRelease>", "<<ComboboxSelected>>")
+EVENTS = ("<FocusOut>", "<KeyRelease>", "<<ComboboxSelected>>", "<<Paste>>", "<<Cut>>")
 
 
 def _assert_events_have_add(bind_calls):
@@ -47,3 +47,59 @@ def test_field_validator_add_widget_uses_non_overriding_bindings(monkeypatch):
     validator = validators.FieldValidator(widget, lambda: None, [], "id_field")
     validator.add_widget(extra_widget)
     _assert_events_have_add(extra_widget.bind_calls)
+
+
+class DummyVar:
+    def __init__(self, value=""):
+        self._value = value
+        self._callbacks = []
+
+    def get(self):
+        return self._value
+
+    def set(self, value):
+        self._value = value
+        for cb in self._callbacks:
+            cb("", "", "write")
+
+    def trace_add(self, _mode, callback):
+        self._callbacks.append(callback)
+        return f"trace_{len(self._callbacks)}"
+
+
+class DummyEvent:
+    def __init__(self, widget, type_name):
+        self.widget = widget
+        self.type = type_name
+
+
+def test_focusout_after_value_change_runs_validation_once(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+    widget = DummyWidget()
+    variable = DummyVar("initial")
+    calls = []
+
+    def recorder():
+        calls.append(variable.get())
+
+    validator = validators.FieldValidator(widget, recorder, [], "id_field", variables=[variable])
+    variable.set("pasted value")
+    assert calls == []
+
+    focus_event = DummyEvent(widget, "FocusOut")
+    validator._on_change(focus_event)
+
+    assert calls == ["pasted value"]
+
+
+def test_focusout_without_changes_skips_validation(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+    widget = DummyWidget()
+    variable = DummyVar("initial")
+    calls = []
+
+    validator = validators.FieldValidator(widget, lambda: calls.append("called"), [], "id_field", variables=[variable])
+    focus_event = DummyEvent(widget, "FocusOut")
+    validator._on_change(focus_event)
+
+    assert calls == []
