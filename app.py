@@ -6692,7 +6692,27 @@ class FraudCaseApp:
         # CLIENTES
         write_csv('clientes.csv', data['clientes'], ['id_cliente', 'id_caso', 'tipo_id', 'flag', 'telefonos', 'correos', 'direcciones', 'accionado'])
         # COLABORADORES
-        write_csv('colaboradores.csv', data['colaboradores'], ['id_colaborador', 'id_caso', 'flag', 'division', 'area', 'servicio', 'puesto', 'nombre_agencia', 'codigo_agencia', 'tipo_falta', 'tipo_sancion'])
+        write_csv(
+            'colaboradores.csv',
+            data['colaboradores'],
+            [
+                'id_colaborador',
+                'id_caso',
+                'flag',
+                'nombres',
+                'apellidos',
+                'division',
+                'area',
+                'servicio',
+                'puesto',
+                'fecha_carta_inmediatez',
+                'fecha_carta_renuncia',
+                'nombre_agencia',
+                'codigo_agencia',
+                'tipo_falta',
+                'tipo_sancion',
+            ],
+        )
         # PRODUCTOS
         write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'])
         # PRODUCTO_RECLAMO
