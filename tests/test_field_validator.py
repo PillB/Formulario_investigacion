@@ -23,7 +23,7 @@ class DummyTooltip:
         return None
 
 
-EVENTS = ("<FocusOut>", "<KeyRelease>", "<<ComboboxSelected>>")
+EVENTS = ("<FocusOut>", "<KeyRelease>", "<<ComboboxSelected>>", "<<Paste>>", "<<Cut>>")
 
 
 def _assert_events_have_add(bind_calls):
@@ -49,38 +49,57 @@ def test_field_validator_add_widget_uses_non_overriding_bindings(monkeypatch):
     _assert_events_have_add(extra_widget.bind_calls)
 
 
-def test_display_error_uses_modal_notification(monkeypatch):
+class DummyVar:
+    def __init__(self, value=""):
+        self._value = value
+        self._callbacks = []
+
+    def get(self):
+        return self._value
+
+    def set(self, value):
+        self._value = value
+        for cb in self._callbacks:
+            cb("", "", "write")
+
+    def trace_add(self, _mode, callback):
+        self._callbacks.append(callback)
+        return f"trace_{len(self._callbacks)}"
+
+
+class DummyEvent:
+    def __init__(self, widget, type_name):
+        self.widget = widget
+        self.type = type_name
+
+
+def test_focusout_after_value_change_runs_validation_once(monkeypatch):
     monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
     widget = DummyWidget()
-    captured = []
-    monkeypatch.setattr(validators.FieldValidator, "notification_handler", lambda *args: captured.append(args))
-    monkeypatch.setattr(validators.FieldValidator, "notification_title", "Dato inválido")
-    monkeypatch.setattr(validators.FieldValidator, "notifications_enabled", True)
+    variable = DummyVar("initial")
+    calls = []
 
-    validator = validators.FieldValidator(widget, lambda: None, [], "Campo X")
-    validator._display_error("Primer error")
-    validator._display_error("Primer error")
-    validator._display_error("Segundo error")
-    validator._display_error(None)
+    def recorder():
+        calls.append(variable.get())
 
-    assert captured == [
-        ("Dato inválido", "Campo X: Primer error"),
-        ("Dato inválido", "Campo X: Segundo error"),
-    ]
+    validator = validators.FieldValidator(widget, recorder, [], "id_field", variables=[variable])
+    variable.set("pasted value")
+    assert calls == []
+
+    focus_event = DummyEvent(widget, "FocusOut")
+    validator._on_change(focus_event)
+
+    assert calls == ["pasted value"]
 
 
-def test_modal_notification_ignores_tcl_error(monkeypatch):
+def test_focusout_without_changes_skips_validation(monkeypatch):
     monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
     widget = DummyWidget()
+    variable = DummyVar("initial")
+    calls = []
 
-    def failing_notifier(_title, _message):
-        raise validators.TclError("no display")
+    validator = validators.FieldValidator(widget, lambda: calls.append("called"), [], "id_field", variables=[variable])
+    focus_event = DummyEvent(widget, "FocusOut")
+    validator._on_change(focus_event)
 
-    monkeypatch.setattr(validators.FieldValidator, "notification_handler", failing_notifier)
-    monkeypatch.setattr(validators.FieldValidator, "notifications_enabled", True)
-
-    validator = validators.FieldValidator(widget, lambda: None, [], "Campo Y")
-
-    validator._display_error("Error")
-
-    assert validator.last_error == "Error"
+    assert calls == []

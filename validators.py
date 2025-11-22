@@ -349,12 +349,19 @@ class FieldValidator:
         self.last_error: Optional[str] = None
         self._suspend_count = 0
         self._validation_armed = False
+        self._last_validated_value = self._capture_current_value()
         for var in self.variables:
             self._traces.append(var.trace_add("write", self._on_change))
         self._bind_widget_events(widget)
 
     def _bind_widget_events(self, widget) -> None:
-        for event_name in ("<FocusOut>", "<KeyRelease>", "<<ComboboxSelected>>"):
+        for event_name in (
+            "<FocusOut>",
+            "<KeyRelease>",
+            "<<ComboboxSelected>>",
+            "<<Paste>>",
+            "<<Cut>>",
+        ):
             widget.bind(event_name, self._on_change, add="+")
 
     def add_widget(self, widget) -> None:
@@ -366,13 +373,30 @@ class FieldValidator:
         if self._suspend_count > 0:
             return
         event = _args[0] if _args else None
+        current_value = self._capture_current_value()
+        value_changed_since_validation = current_value != self._last_validated_value
         is_user_event = hasattr(event, "widget")
-        if is_user_event and not self._is_focus_out(event):
+        is_focus_out = is_user_event and self._is_focus_out(event)
+        if is_user_event and not is_focus_out:
             self._validation_armed = True
-        elif not self._validation_armed:
+        elif not self._validation_armed and not (is_focus_out and value_changed_since_validation):
             return
         error = self.validate_callback()
         self._display_error(error)
+        self._last_validated_value = current_value
+        if is_focus_out:
+            self._validation_armed = False
+
+    def _capture_current_value(self):
+        if self.variables:
+            return tuple(var.get() for var in self.variables)
+        getter = getattr(self.widget, "get", None)
+        if getter:
+            try:
+                return getter()
+            except Exception:
+                return None
+        return None
 
     @staticmethod
     def _is_focus_out(event) -> bool:
