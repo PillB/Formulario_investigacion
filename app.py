@@ -232,6 +232,7 @@ class FraudCaseApp:
         self._summary_pending_dataset = None
         self._autosave_job_id = None
         self._autosave_dirty = False
+        self._duplicate_checks_armed = False
         self._rich_text_images = defaultdict(list)
         self._rich_text_image_sources = {}
         self._rich_text_fonts = {}
@@ -1731,6 +1732,7 @@ class FraudCaseApp:
             change_notifier=self._log_navigation_change,
             id_change_callback=self._handle_product_id_change,
             initialize_rows=initialize_rows,
+            duplicate_key_checker=self._check_duplicate_technical_keys_realtime,
         )
         self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
@@ -4638,6 +4640,67 @@ class FraudCaseApp:
     @staticmethod
     def _normalize_identifier(identifier):
         return (identifier or '').strip().upper()
+
+    def _check_duplicate_technical_keys_realtime(self, armed: bool = False):
+        if armed:
+            self._duplicate_checks_armed = True
+        if not self._duplicate_checks_armed:
+            return
+        normalized_case_id = self._normalize_identifier(self.id_caso_var.get())
+        if not normalized_case_id:
+            return
+
+        seen_keys = {}
+        duplicate_messages: list[str] = []
+        for product in self.product_frames:
+            pid_norm = self._normalize_identifier(product.id_var.get())
+            client_norm = self._normalize_identifier(product.client_var.get())
+            occ_date = (product.fecha_oc_var.get() or '').strip()
+            if not (pid_norm and client_norm and occ_date):
+                continue
+
+            product_label = product._get_product_label()
+            claim_rows = [claim.get_data() for claim in product.claims if any(claim.get_data().values())]
+            if not claim_rows:
+                claim_rows = [{'id_reclamo': ''}]
+            assignment_rows = [inv.get_data() for inv in product.involvements if any(inv.get_data().values())]
+            if not assignment_rows:
+                assignment_rows = [{'id_colaborador': ''}]
+
+            for claim in claim_rows:
+                claim_id_raw = (claim.get('id_reclamo') or '').strip()
+                claim_norm = self._normalize_identifier(claim_id_raw)
+                for assignment in assignment_rows:
+                    collaborator_raw = (assignment.get('id_colaborador') or '').strip()
+                    collaborator_norm = self._normalize_identifier(collaborator_raw)
+                    key = (
+                        normalized_case_id,
+                        pid_norm,
+                        client_norm,
+                        collaborator_norm,
+                        occ_date,
+                        claim_norm,
+                    )
+                    if key in seen_keys:
+                        base_message = f"Registro duplicado de clave técnica (producto {product_label}"
+                        if collaborator_norm:
+                            collaborator_label = collaborator_raw or collaborator_norm
+                            base_message += f", colaborador {collaborator_label}"
+                        if claim_id_raw:
+                            base_message += f", reclamo {claim_id_raw}"
+                        base_message += ")"
+                        if base_message not in duplicate_messages:
+                            duplicate_messages.append(base_message)
+                    else:
+                        seen_keys[key] = True
+
+        if duplicate_messages:
+            message = "\n".join(duplicate_messages)
+            log_event("validacion", message, self.logs)
+            try:
+                messagebox.showerror("Registro duplicado", message)
+            except tk.TclError:
+                return
 
     @staticmethod
     def _frame_entity_label(frame):
