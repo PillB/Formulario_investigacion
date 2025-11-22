@@ -192,7 +192,6 @@ class FraudCaseApp:
         self._encabezado_vars: dict[str, tk.StringVar] = {}
         self._operation_vars: dict[str, tk.StringVar] = {}
         self._anexo_vars: dict[str, tk.StringVar] = {}
-        self._firma_vars: dict[str, tk.StringVar] = {}
         self._recommendation_widgets: dict[str, scrolledtext.ScrolledText] = {}
         self._suppress_post_edit_validation = False
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
@@ -253,6 +252,11 @@ class FraudCaseApp:
         self.canal_caso_var = tk.StringVar(value=CANAL_LIST[0])
         self.proceso_caso_var = tk.StringVar(value=PROCESO_LIST[0])
         self.fecha_caso_var = tk.StringVar()
+        self.fecha_descubrimiento_caso_var = tk.StringVar()
+        self.centro_costo_caso_var = tk.StringVar()
+        self.investigator_id_var = tk.StringVar()
+        self.investigator_nombre_var = tk.StringVar()
+        self.investigator_cargo_var = tk.StringVar(value="Investigador Principal")
 
         # Referencias a cuadros de texto de análisis
         self.antecedentes_text = None
@@ -856,8 +860,17 @@ class FraudCaseApp:
     def _notify_dataset_changed(self, summary_sections=None):
         """Marca el formulario como modificado y agenda el autosave diferido."""
 
+        if not hasattr(self, "_autosave_job_id"):
+            self._autosave_job_id = None
+            self._autosave_dirty = False
         self.request_autosave()
-        self._schedule_summary_refresh(sections=summary_sections)
+        try:
+            self._schedule_summary_refresh(sections=summary_sections)
+        except TypeError:
+            try:
+                self._schedule_summary_refresh(summary_sections)
+            except TypeError:
+                pass
 
     def build_case_tab(self, parent):
         """Construye la pestaña de detalles del caso."""
@@ -877,8 +890,53 @@ class FraudCaseApp:
         )
         self.register_tooltip(id_entry, "Identificador del expediente con formato AAAA-NNNN.")
 
-        ttk.Label(frame, text="Tipo de informe:").grid(
+        ttk.Label(frame, text="Investigador principal:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        investigator_container = ttk.Frame(frame)
+        investigator_container.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        investigator_container.columnconfigure(1, weight=1)
+        investigator_container.columnconfigure(2, weight=1)
+        ttk.Label(investigator_container, text="Matrícula:").grid(
+            row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+        )
+        investigator_entry = ttk.Entry(investigator_container, textvariable=self.investigator_id_var, width=16)
+        investigator_entry.grid(row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
+        investigator_entry.bind("<FocusOut>", lambda _e: self._autofill_investigator(show_errors=True))
+        self._register_post_edit_validation(
+            investigator_entry,
+            self._validate_investigator_field,
+            "Matrícula del investigador",
+        )
+        self.register_tooltip(
+            investigator_entry,
+            "Ingresa la matrícula del investigador principal (letra + 5 dígitos) para autocompletar nombre y cargo.",
+        )
+        ttk.Label(investigator_container, text="Nombre y apellidos:").grid(
+            row=1, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+        )
+        investigator_name = ttk.Entry(
+            investigator_container, textvariable=self.investigator_nombre_var, state="readonly"
+        )
+        investigator_name.grid(row=1, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
+        ttk.Label(investigator_container, text="Cargo:").grid(
+            row=2, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+        )
+        investigator_role = ttk.Entry(
+            investigator_container, textvariable=self.investigator_cargo_var, state="readonly"
+        )
+        investigator_role.grid(row=2, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
+        self.register_tooltip(
+            investigator_name,
+            "Nombre del investigador obtenido automáticamente desde team_details.csv.",
+        )
+        self.register_tooltip(
+            investigator_role,
+            "Cargo fijo que se mostrará en el reporte.",
+        )
+
+        ttk.Label(frame, text="Tipo de informe:").grid(
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         tipo_cb = ttk.Combobox(
             frame,
@@ -887,14 +945,14 @@ class FraudCaseApp:
             state="readonly",
             width=15,
         )
-        tipo_cb.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        tipo_cb.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(tipo_cb, "Selecciona si el reporte es interno o regulatorio.")
 
         ttk.Label(frame, text="Categorías y modalidad:").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         cat_container = ttk.Frame(frame)
-        cat_container.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        cat_container.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         for idx in (1, 3, 5):
             cat_container.columnconfigure(idx, weight=1)
         ttk.Label(cat_container, text="Categoría nivel 1:").grid(
@@ -939,11 +997,11 @@ class FraudCaseApp:
         self.register_tooltip(self.case_mod_cb, "Modalidad específica dentro de la taxonomía.")
 
         ttk.Label(frame, text="Canal y proceso:").grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         canal_proc_container = ttk.Frame(frame)
         canal_proc_container.grid(
-            row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+            row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
         canal_proc_container.columnconfigure(1, weight=1)
         canal_proc_container.columnconfigure(3, weight=1)
@@ -972,13 +1030,56 @@ class FraudCaseApp:
         proc_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
 
-        ttk.Label(frame, text="Fecha de ocurrencia del caso (YYYY-MM-DD):").grid(
-            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        ttk.Label(frame, text="Fechas del caso (YYYY-MM-DD):").grid(
+            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        fecha_case_entry = ttk.Entry(frame, textvariable=self.fecha_caso_var, width=18)
-        fecha_case_entry.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        dates_container = ttk.Frame(frame)
+        dates_container.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        for idx in (1, 3):
+            dates_container.columnconfigure(idx, weight=1)
+        ttk.Label(dates_container, text="Ocurrencia:").grid(
+            row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+        )
+        fecha_case_entry = ttk.Entry(dates_container, textvariable=self.fecha_caso_var, width=16)
+        fecha_case_entry.grid(row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
+        self._register_post_edit_validation(
+            fecha_case_entry,
+            self._validate_case_occurrence_date,
+            "Fecha de ocurrencia del caso",
+        )
         self.register_tooltip(
             fecha_case_entry, "Fecha en que se originó el caso a nivel general."
+        )
+        ttk.Label(dates_container, text="Descubrimiento:").grid(
+            row=0, column=2, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+        )
+        fecha_desc_entry = ttk.Entry(
+            dates_container, textvariable=self.fecha_descubrimiento_caso_var, width=16
+        )
+        fecha_desc_entry.grid(row=0, column=3, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
+        self._register_post_edit_validation(
+            fecha_desc_entry,
+            self._validate_case_discovery_date,
+            "Fecha de descubrimiento del caso",
+        )
+        self.register_tooltip(
+            fecha_desc_entry,
+            "Fecha en que se detectó el caso. Debe ser posterior a la ocurrencia y no futura.",
+        )
+
+        ttk.Label(frame, text="Centro de costos del caso (; separados):").grid(
+            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        centro_costo_entry = ttk.Entry(frame, textvariable=self.centro_costo_caso_var, width=35)
+        centro_costo_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self._register_post_edit_validation(
+            centro_costo_entry,
+            lambda: self._validate_cost_centers(text=self.centro_costo_caso_var.get()),
+            "Centro de costos del caso",
+        )
+        self.register_tooltip(
+            centro_costo_entry,
+            "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
         )
 
         # Validaciones del caso
@@ -1054,13 +1155,49 @@ class FraudCaseApp:
                 variables=[self.fecha_caso_var],
             )
         )
+        self.validators.append(
+            FieldValidator(
+                fecha_desc_entry,
+                self._validate_case_discovery_date,
+                self.logs,
+                "Caso - Fecha de descubrimiento",
+                variables=[self.fecha_descubrimiento_caso_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                centro_costo_entry,
+                lambda: self._validate_cost_centers(text=self.centro_costo_caso_var.get()),
+                self.logs,
+                "Caso - Centro de costos",
+                variables=[self.centro_costo_caso_var],
+            )
+        )
 
     def _validate_case_occurrence_date(self):
+        self._ensure_case_vars()
         return validate_date_text(
             self.fecha_caso_var.get(),
             "La fecha de ocurrencia del caso",
             allow_blank=False,
             enforce_max_today=True,
+            must_be_before=(
+                self.fecha_descubrimiento_caso_var.get(),
+                "la fecha de descubrimiento del caso",
+            ),
+        )
+
+    def _validate_case_discovery_date(self):
+        self._ensure_case_vars()
+        return validate_date_text(
+            self.fecha_descubrimiento_caso_var.get(),
+            "La fecha de descubrimiento del caso",
+            allow_blank=False,
+            enforce_max_today=True,
+            must_be_after=(
+                self.fecha_caso_var.get(),
+                "la fecha de ocurrencia del caso",
+            ),
         )
 
     def on_case_cat1_change(self):
@@ -1463,11 +1600,7 @@ class FraudCaseApp:
             "categoria_2_caso": self.cat_caso2_var.get().strip(),
             "modalidad_caso": self.mod_caso_var.get().strip(),
             "fecha_de_ocurrencia_caso": self.fecha_caso_var.get().strip(),
-            "fecha_de_descubrimiento_caso": getattr(
-                self, "fecha_descubrimiento_caso_var", None
-            ).get().strip()
-            if hasattr(self, "fecha_descubrimiento_caso_var")
-            else "",
+            "fecha_de_descubrimiento_caso": self.fecha_descubrimiento_caso_var.get().strip(),
         }
 
     def _apply_inherited_fields_to_product(self, product_frame, inherited_values):
@@ -1856,55 +1989,42 @@ class FraudCaseApp:
             )
 
     def _build_signature_fields(self, parent):
-        firmas_group = ttk.LabelFrame(parent, text="Firma del investigador")
-        firmas_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        firmas_group = ttk.LabelFrame(parent, text="Investigador principal")
+        firmas_group.pack(fill="x", expand=False, padx=COL_PADX, pady=ROW_PADY)
         firmas_group.columnconfigure(1, weight=1)
-        firmas_group.columnconfigure(3, weight=1)
 
-        specs = [
-            ("Matrícula/ID investigador:", "matricula", 0, validate_team_member_id),
-            ("Nombre completo:", "nombre", 1, None),
-            ("Cargo:", "cargo", 2, None),
-        ]
-        for label_text, key, row, validator in specs:
-            ttk.Label(firmas_group, text=label_text).grid(
-                row=row,
-                column=0,
-                padx=COL_PADX,
-                pady=(ROW_PADY // 2),
-                sticky="e",
-            )
-            var = self._firma_vars.get(key) or tk.StringVar()
-            self._firma_vars[key] = var
-            entry = ttk.Entry(firmas_group, textvariable=var)
-            entry.grid(row=row, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
-            var.trace_add("write", lambda *_args, k=key: self._on_firma_change(k))
-            if validator:
-                self._register_post_edit_validation(entry, lambda v=var: validator(v.get()), "ID de investigador")
-                self.register_tooltip(entry, "Usa el ID del colaborador con formato estándar (letra + 5 dígitos).")
-            elif key == "nombre":
-                self.register_tooltip(entry, "Nombre completo del firmante del informe.")
-            else:
-                self.register_tooltip(entry, "Cargo o rol del investigador principal.")
-
-        buttons = ttk.Frame(firmas_group)
-        buttons.grid(row=0, column=2, rowspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ns")
-        ttk.Button(buttons, text="Agregar/Actualizar", command=self._save_firma).pack(fill="x", pady=(0, ROW_PADY // 2))
-        ttk.Button(buttons, text="Limpiar selección", command=self._clear_firma_form).pack(fill="x")
-
-        self.firmas_tree = ttk.Treeview(
-            firmas_group,
-            columns=("matricula", "nombre", "cargo"),
-            show="headings",
-            height=4,
+        ttk.Label(firmas_group, text="Matrícula/ID:").grid(
+            row=0, column=0, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="e"
         )
-        self.firmas_tree.heading("matricula", text="Matrícula")
-        self.firmas_tree.heading("nombre", text="Nombre")
-        self.firmas_tree.heading("cargo", text="Cargo")
-        self.firmas_tree.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
-        self.firmas_tree.bind("<<TreeviewSelect>>", lambda _e: self._load_selected_firma())
-        firmas_group.rowconfigure(3, weight=1)
-        self._refresh_firmas_tree()
+        matricula_entry = ttk.Entry(
+            firmas_group, textvariable=self.investigator_id_var, state="readonly"
+        )
+        matricula_entry.grid(row=0, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+        self.register_tooltip(
+            matricula_entry,
+            "La matrícula se edita en la sección de Datos generales del caso y se refleja aquí automáticamente.",
+        )
+
+        ttk.Label(firmas_group, text="Nombre:").grid(
+            row=1, column=0, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="e"
+        )
+        nombre_entry = ttk.Entry(
+            firmas_group, textvariable=self.investigator_nombre_var, state="readonly"
+        )
+        nombre_entry.grid(row=1, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+        self.register_tooltip(
+            nombre_entry,
+            "Nombre autocompletado desde team_details.csv al ingresar la matrícula del investigador.",
+        )
+
+        ttk.Label(firmas_group, text="Cargo:").grid(
+            row=2, column=0, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="e"
+        )
+        cargo_entry = ttk.Entry(
+            firmas_group, textvariable=self.investigator_cargo_var, state="readonly"
+        )
+        cargo_entry.grid(row=2, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+        self.register_tooltip(cargo_entry, "Cargo fijo a mostrar en el reporte final.")
 
     def _build_operations_section(self, parent):
         operations_group = ttk.LabelFrame(parent, text="Tabla de operaciones")
@@ -2043,8 +2163,10 @@ class FraudCaseApp:
         entries = [item.strip() for item in (raw_value or "").split(";") if item.strip()]
         return "; ".join(entries)
 
-    def _validate_cost_centers(self) -> Optional[str]:
-        text = self._sanitize_cost_centers_text(self._encabezado_vars.get("centro_costos", tk.StringVar()).get())
+    def _validate_cost_centers(self, *, text: Optional[str] = None) -> Optional[str]:
+        text = self._sanitize_cost_centers_text(
+            text if text is not None else self._encabezado_vars.get("centro_costos", tk.StringVar()).get()
+        )
         if not text:
             return None
         centers = [item for item in text.split(";") if item.strip()]
@@ -2070,81 +2192,90 @@ class FraudCaseApp:
         self._recomendaciones_categorias[key] = clean_lines
         self._notify_dataset_changed()
 
-    def _on_firma_change(self, key: str) -> None:
-        if key != "matricula":
-            self._notify_dataset_changed()
-            return
-        matricula = self._normalize_identifier(self._firma_vars.get("matricula", tk.StringVar()).get())
-        if not matricula:
-            return
-        lookup = self.team_lookup.get(matricula)
+    def _reset_investigator_fields(self) -> None:
+        self._ensure_investigator_vars()
+        self.investigator_id_var.set("")
+        self.investigator_nombre_var.set("")
+        self.investigator_cargo_var.set("Investigador Principal")
+
+    def _autofill_investigator(self, *, show_errors: bool = False) -> None:
+        error = self._validate_investigator_field()
+        if error and show_errors and not getattr(self, "_suppress_messagebox", False):
+            try:
+                messagebox.showerror("ID de investigador inválido", error)
+            except tk.TclError:
+                pass
+        self._notify_dataset_changed()
+
+    def _validate_investigator_field(self) -> Optional[str]:
+        self._ensure_investigator_vars()
+        raw_id = self.investigator_id_var.get()
+        normalized = self._normalize_identifier(raw_id)
+        if raw_id != normalized:
+            self.investigator_id_var.set(normalized)
+        self.investigator_nombre_var.set("")
+        self.investigator_cargo_var.set("Investigador Principal")
+        if not normalized:
+            return "Ingresa la matrícula del investigador principal para completar sus datos."
+        validation_error = validate_team_member_id(normalized)
+        if validation_error:
+            return validation_error
+        lookup = self.team_lookup.get(normalized)
         if not lookup:
-            self._notify_dataset_changed()
+            return "No se encontró la matrícula indicada en team_details.csv. Verifica el ID y vuelve a intentarlo."
+        composed_name = lookup.get("nombres_apellidos") or lookup.get("nombre_completo")
+        if not composed_name:
+            nombres = lookup.get("nombres") or lookup.get("nombre") or ""
+            apellidos = lookup.get("apellidos") or ""
+            composed_name = " ".join(part for part in [nombres, apellidos] if part).strip()
+        self.investigator_nombre_var.set(composed_name)
+        return None
+
+    def _ensure_investigator_vars(self) -> None:
+        if hasattr(self, "investigator_id_var"):
             return
-        self._suppress_post_edit_validation = True
         try:
-            if should_autofill_field(self._firma_vars["nombre"].get(), preserve_existing=True):
-                nombre = lookup.get("nombres") or lookup.get("nombre") or lookup.get("nombres_apellidos")
-                self._firma_vars["nombre"].set(nombre or "")
-            if should_autofill_field(self._firma_vars["cargo"].get(), preserve_existing=True):
-                cargo = lookup.get("puesto") or lookup.get("cargo") or lookup.get("rol")
-                self._firma_vars["cargo"].set(cargo or "")
-        finally:
-            self._suppress_post_edit_validation = False
-        self._notify_dataset_changed()
+            self.investigator_id_var = tk.StringVar()
+            self.investigator_nombre_var = tk.StringVar()
+            self.investigator_cargo_var = tk.StringVar(value="Investigador Principal")
+        except (tk.TclError, RuntimeError):
+            class _SimpleVar:
+                def __init__(self, value=""):
+                    self._value = value
 
-    def _save_firma(self):
-        matricula = self._sanitize_text(self._firma_vars.get("matricula", tk.StringVar()).get())
-        nombre = self._sanitize_text(self._firma_vars.get("nombre", tk.StringVar()).get())
-        cargo = self._sanitize_text(self._firma_vars.get("cargo", tk.StringVar()).get())
-        if not any([matricula, nombre, cargo]):
-            if not getattr(self, "_suppress_messagebox", False):
-                messagebox.showerror("Firma incompleta", "Agrega al menos el ID, nombre o cargo para registrar la firma.")
-            return
-        if matricula:
-            validation = validate_team_member_id(matricula)
-            if validation:
-                if not getattr(self, "_suppress_messagebox", False):
-                    messagebox.showerror("ID inválido", validation)
-                return
-        firma_payload = {"matricula": matricula, "nombre": nombre, "cargo": cargo}
-        selection = self.firmas_tree.selection()
-        if selection:
-            index = int(self.firmas_tree.index(selection[0]))
-            self._firmas_data[index] = firma_payload
-        else:
-            self._firmas_data.append(firma_payload)
-        self._refresh_firmas_tree()
-        self._clear_firma_form()
-        self._notify_dataset_changed()
+                def set(self, value):
+                    self._value = value
 
-    def _clear_firma_form(self):
-        for var in self._firma_vars.values():
-            var.set("")
-        if hasattr(self, "firmas_tree"):
-            self.firmas_tree.selection_remove(self.firmas_tree.selection())
+                def get(self):
+                    return self._value
 
-    def _refresh_firmas_tree(self):
-        if not hasattr(self, "firmas_tree"):
-            return
-        for item in self.firmas_tree.get_children():
-            self.firmas_tree.delete(item)
-        for firma in getattr(self, "_firmas_data", []):
-            self.firmas_tree.insert("", "end", values=(firma.get("matricula"), firma.get("nombre"), firma.get("cargo")))
+            self.investigator_id_var = _SimpleVar()
+            self.investigator_nombre_var = _SimpleVar()
+            self.investigator_cargo_var = _SimpleVar("Investigador Principal")
 
-    def _load_selected_firma(self):
-        selection = self.firmas_tree.selection()
-        if not selection:
-            return
-        index = int(self.firmas_tree.index(selection[0]))
-        firma = self._firmas_data[index]
-        self._suppress_post_edit_validation = True
-        try:
-            self._firma_vars["matricula"].set(firma.get("matricula", ""))
-            self._firma_vars["nombre"].set(firma.get("nombre", ""))
-            self._firma_vars["cargo"].set(firma.get("cargo", ""))
-        finally:
-            self._suppress_post_edit_validation = False
+    def _ensure_case_vars(self) -> None:
+        def _make_var(default_value=""):
+            try:
+                return tk.StringVar(value=default_value)
+            except Exception:
+                class _SimpleVar:
+                    def __init__(self, value=""):
+                        self._value = value
+
+                    def set(self, value):
+                        self._value = value
+
+                    def get(self):
+                        return self._value
+
+                return _SimpleVar(default_value)
+
+        if not hasattr(self, "fecha_caso_var"):
+            self.fecha_caso_var = _make_var()
+        if not hasattr(self, "fecha_descubrimiento_caso_var"):
+            self.fecha_descubrimiento_caso_var = _make_var()
+        if not hasattr(self, "centro_costo_caso_var"):
+            self.centro_costo_caso_var = _make_var()
 
     def _collect_operation_form(self) -> dict[str, str]:
         return {key: self._sanitize_text(var.get()) for key, var in self._operation_vars.items()}
@@ -2284,7 +2415,6 @@ class FraudCaseApp:
                 var.set(self._encabezado_data.get(key, ""))
             self._refresh_operations_tree()
             self._refresh_anexos_tree()
-            self._refresh_firmas_tree()
             for key, widget in getattr(self, "_recommendation_widgets", {}).items():
                 try:
                     widget.delete("1.0", tk.END)
@@ -3112,6 +3242,7 @@ class FraudCaseApp:
             if hasattr(frame, 'set_lookup'):
                 frame.set_lookup(self.norm_lookup)
                 frame.on_id_change(preserve_existing=True, silent=True)
+        self._autofill_investigator(show_errors=False)
 
     def _extract_lookup_or_empty(self, canonical_key):
         normalized = normalize_detail_catalog_key(canonical_key)
@@ -5313,7 +5444,7 @@ class FraudCaseApp:
         encabezado = self._normalize_mapping_strings(payload.get("encabezado", {}))
         operaciones = self._normalize_table_rows(payload.get("operaciones", []))
         anexos = self._normalize_table_rows(payload.get("anexos", []))
-        firmas = self._normalize_table_rows(payload.get("firmas", []))
+        investigador = self._normalize_mapping_strings(case.get("investigador", {}))
         recomendaciones = self._normalize_recommendation_categories(
             payload.get("recomendaciones_categorias", {})
         )
@@ -5332,7 +5463,7 @@ class FraudCaseApp:
             tuple(sorted(encabezado.items())),
             tuple(tuple(sorted(row.items())) for row in operaciones),
             tuple(tuple(sorted(row.items())) for row in anexos),
-            tuple(tuple(sorted(row.items())) for row in firmas),
+            tuple(sorted(investigador.items())),
             tuple((key, tuple(values)) for key, values in sorted(recomendaciones.items())),
             tuple(sorted(analysis.items())),
         )
@@ -5360,6 +5491,12 @@ class FraudCaseApp:
         return elapsed >= TEMP_AUTOSAVE_DEBOUNCE_SECONDS
 
     def request_autosave(self) -> None:
+        if not hasattr(self, "_autosave_job_id"):
+            self._autosave_job_id = None
+        if not hasattr(self, "_autosave_dirty"):
+            self._autosave_dirty = False
+        if not hasattr(self, "root") or self.root is None:
+            return
         self._autosave_dirty = True
         if self._autosave_job_id is not None:
             return
@@ -5519,6 +5656,7 @@ class FraudCaseApp:
         """Elimina los datos cargados y restablece los frames dinámicos."""
 
         # Limpiar campos del caso
+        self._ensure_case_vars()
         self.id_caso_var.set("")
         self.tipo_informe_var.set(TIPO_INFORME_LIST[0])
         self.cat_caso1_var.set(list(TAXONOMIA.keys())[0])
@@ -5526,6 +5664,9 @@ class FraudCaseApp:
         self.canal_caso_var.set(CANAL_LIST[0])
         self.proceso_caso_var.set(PROCESO_LIST[0])
         self.fecha_caso_var.set("")
+        self.fecha_descubrimiento_caso_var.set("")
+        self.centro_costo_caso_var.set("")
+        self._reset_investigator_fields()
         # Vaciar listas dinámicas
         for cf in self.client_frames:
             cf.frame.destroy()
@@ -5598,12 +5739,13 @@ class FraudCaseApp:
     # Recolección y población de datos
 
     def _reset_extended_sections(self) -> None:
+        self._ensure_case_vars()
         self._encabezado_data: dict[str, str] = {}
         self._operaciones_data: list[dict[str, str]] = []
         self._anexos_data: list[dict[str, str]] = []
         self._firmas_data: list[dict[str, str]] = []
         self._recomendaciones_categorias: dict[str, list[str]] = {}
-        for var_dict in (getattr(self, "_encabezado_vars", {}), getattr(self, "_operation_vars", {}), getattr(self, "_anexo_vars", {}), getattr(self, "_firma_vars", {})):
+        for var_dict in (getattr(self, "_encabezado_vars", {}), getattr(self, "_operation_vars", {}), getattr(self, "_anexo_vars", {})):
             for var in var_dict.values():
                 try:
                     var.set("")
@@ -5612,10 +5754,10 @@ class FraudCaseApp:
         for refresher in (
             getattr(self, "_refresh_operations_tree", None),
             getattr(self, "_refresh_anexos_tree", None),
-            getattr(self, "_refresh_firmas_tree", None),
         ):
             if callable(refresher):
                 refresher()
+        self._reset_investigator_fields()
 
     @staticmethod
     def _sanitize_text(value) -> str:
@@ -5673,7 +5815,12 @@ class FraudCaseApp:
 
     def gather_data(self):
         """Reúne todos los datos del formulario en una estructura de diccionarios."""
+        self._ensure_case_vars()
         data = {}
+        investigator_id = self._normalize_identifier(self.investigator_id_var.get())
+        investigator_name = self._sanitize_text(self.investigator_nombre_var.get())
+        investigator_role = self._sanitize_text(self.investigator_cargo_var.get()) or "Investigador Principal"
+        case_cost_centers = self._sanitize_cost_centers_text(self.centro_costo_caso_var.get())
         data['caso'] = {
             "id_caso": self.id_caso_var.get().strip(),
             "tipo_informe": self.tipo_informe_var.get(),
@@ -5683,6 +5830,16 @@ class FraudCaseApp:
             "canal": self.canal_caso_var.get(),
             "proceso": self.proceso_caso_var.get(),
             "fecha_de_ocurrencia": self.fecha_caso_var.get().strip(),
+            "fecha_de_descubrimiento": self.fecha_descubrimiento_caso_var.get().strip(),
+            "centro_costos": case_cost_centers,
+            "matricula_investigador": investigator_id,
+            "investigador_nombre": investigator_name,
+            "investigador_cargo": investigator_role or "Investigador Principal",
+            "investigador": {
+                "matricula": investigator_id,
+                "nombre": investigator_name,
+                "cargo": investigator_role or "Investigador Principal",
+            },
         }
         data['clientes'] = [c.get_data() for c in self.client_frames]
         data['colaboradores'] = [t.get_data() for t in self.team_frames]
@@ -5783,8 +5940,10 @@ class FraudCaseApp:
 
         dataset = self._ensure_case_data(data)
         data = dataset.as_dict()
+        self._ensure_case_vars()
         # Limpiar primero sin confirmar ni sobrescribir el autosave
         self._clear_case_state(save_autosave=False)
+        self._ensure_investigator_vars()
         # Datos de caso
         def _set_dropdown_value(var, value, valid_values):
             """Establece el valor de un combobox solo si está en el catálogo."""
@@ -5812,6 +5971,19 @@ class FraudCaseApp:
         _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
         _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
         self.fecha_caso_var.set(caso.get('fecha_de_ocurrencia', ''))
+        self.fecha_descubrimiento_caso_var.set(caso.get('fecha_de_descubrimiento', ''))
+        self.centro_costo_caso_var.set(caso.get('centro_costos', ''))
+        investigator_payload = caso.get('investigador', {}) if isinstance(caso, Mapping) else {}
+        matricula_investigador = caso.get('matricula_investigador') or investigator_payload.get('matricula')
+        self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
+        nombre_investigador = investigator_payload.get('nombre')
+        if nombre_investigador:
+            self.investigator_nombre_var.set(nombre_investigador)
+        else:
+            self.investigator_nombre_var.set("")
+        cargo_investigador = investigator_payload.get('cargo') or "Investigador Principal"
+        self.investigator_cargo_var.set(cargo_investigador)
+        self._autofill_investigator(show_errors=False)
         # Clientes
         for i, cliente in enumerate(data.get('clientes', [])):
             if i >= len(self.client_frames):
@@ -6107,6 +6279,12 @@ class FraudCaseApp:
         fecha_caso_message = self._validate_case_occurrence_date()
         if fecha_caso_message:
             errors.append(fecha_caso_message)
+        fecha_descubrimiento_message = self._validate_case_discovery_date()
+        if fecha_descubrimiento_message:
+            errors.append(fecha_descubrimiento_message)
+        centro_costo_message = self._validate_cost_centers(text=self.centro_costo_caso_var.get())
+        if centro_costo_message:
+            errors.append(centro_costo_message)
         # Validar IDs de clientes
         client_id_occurrences = {}
         for idx, cframe in enumerate(self.client_frames, start=1):
@@ -6739,6 +6917,11 @@ class FraudCaseApp:
                 'canal',
                 'proceso',
                 'fecha_de_ocurrencia',
+                'fecha_de_descubrimiento',
+                'centro_costos',
+                'matricula_investigador',
+                'investigador_nombre',
+                'investigador_cargo',
             ],
         )
         # CLIENTES
