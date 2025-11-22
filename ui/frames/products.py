@@ -239,34 +239,31 @@ class ClaimRow:
         self.product_frame._register_lookup_sync(name_entry)
         self.product_frame._register_lookup_sync(code_entry)
 
-        self.validators.append(
-            FieldValidator(
-                id_entry,
-                self._validate_claim_id,
-                self.logs,
-                f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} ID",
-                variables=[self.id_var],
-            )
+        self.id_validator = FieldValidator(
+            id_entry,
+            self._validate_claim_id,
+            self.logs,
+            f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} ID",
+            variables=[self.id_var],
         )
-        self.validators.append(
-            FieldValidator(
-                name_entry,
-                self._validate_claim_name,
-                self.logs,
-                f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Nombre analítica",
-                variables=[self.name_var],
-            )
+        self.validators.append(self.id_validator)
+        self.name_validator = FieldValidator(
+            name_entry,
+            self._validate_claim_name,
+            self.logs,
+            f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Nombre analítica",
+            variables=[self.name_var],
         )
+        self.validators.append(self.name_validator)
 
-        self.validators.append(
-            FieldValidator(
-                code_entry,
-                self._validate_claim_code,
-                self.logs,
-                f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Código",
-                variables=[self.code_var],
-            )
+        self.code_validator = FieldValidator(
+            code_entry,
+            self._validate_claim_code,
+            self.logs,
+            f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Código",
+            variables=[self.code_var],
         )
+        self.validators.append(self.code_validator)
 
         self._last_missing_lookup_id = None
 
@@ -365,6 +362,20 @@ class ClaimRow:
         if not value.strip():
             return validate_codigo_analitica(value) if self._claims_required else None
         return validate_codigo_analitica(value)
+
+    def show_completion_feedback(self):
+        validation_matrix = [
+            (self.id_validator, validate_reclamo_id, self.id_var.get()),
+            (
+                self.name_validator,
+                lambda v: validate_required_text(v, "el nombre de la analítica"),
+                self.name_var.get(),
+            ),
+            (self.code_validator, validate_codigo_analitica, self.code_var.get()),
+        ]
+        for validator, checker, value in validation_matrix:
+            if validator:
+                validator.show_custom_error(checker(value))
 
 
 PRODUCT_MONEY_SPECS = (
@@ -909,21 +920,52 @@ class ProductFrame:
 
     def _register_claim_requirement_triggers(self, cont_entry, falla_entry, perdida_entry):
         for entry in (cont_entry, falla_entry, perdida_entry):
-            entry.bind("<FocusOut>", self._handle_claim_requirement_change, add="+")
+            entry.bind(
+                "<FocusOut>",
+                lambda _e: self._handle_claim_requirement_change(source_is_user=True),
+                add="+",
+            )
         for var in (self.monto_cont_var, self.monto_falla_var, self.monto_perdida_var):
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
-                trace_add("write", self._handle_claim_requirement_change)
-        self._handle_claim_requirement_change()
+                trace_add("write", lambda *_: self._handle_claim_requirement_change())
+        self._handle_claim_requirement_change(initial=True)
 
-    def _handle_claim_requirement_change(self, *_args):
+    def _handle_claim_requirement_change(self, *_args, initial=False, source_is_user=False):
         required = self._claim_fields_required()
-        if required == self._claim_requirement_active:
+        required_changed = required != self._claim_requirement_active
+        if required_changed:
+            self._claim_requirement_active = required
+            for claim in self.claims:
+                claim.set_claim_requirement(required)
+            self.schedule_summary_refresh({'reclamos'})
+        if required and source_is_user and (required_changed or not self._has_complete_claim()):
+            self._enforce_claim_completion_if_required()
+
+    def _has_complete_claim(self) -> bool:
+        return any(all(data.values()) for data in (claim.get_data() for claim in self.claims))
+
+    def _apply_inline_claim_feedback(self):
+        previous_modal_setting = FieldValidator.modal_notifications_enabled
+        FieldValidator.modal_notifications_enabled = False
+        try:
+            for claim in self.claims:
+                claim.show_completion_feedback()
+        finally:
+            FieldValidator.modal_notifications_enabled = previous_modal_setting
+
+    def _enforce_claim_completion_if_required(self):
+        if self._has_complete_claim():
             return
-        self._claim_requirement_active = required
-        for claim in self.claims:
-            claim.set_claim_requirement(required)
-        self.schedule_summary_refresh({'reclamos'})
+        if self.claims:
+            self._apply_inline_claim_feedback()
+        messagebox.showerror(
+            "Reclamo requerido",
+            (
+                "Debe ingresar al menos un reclamo completo en "
+                f"{self._get_product_label()} porque hay montos de pérdida, falla o contingencia."
+            ),
+        )
 
     def _claim_fields_required(self) -> bool:
         return any(
