@@ -406,7 +406,11 @@ def _build_report_context(case_data: CaseData):
             rec_operativas = [text]
 
     investigator = case.get("investigador") if isinstance(case, Mapping) else {}
-    firmas: List[Dict[str, Any]] = []
+    firmas: List[Dict[str, Any]] = [
+        dict(firma)
+        for firma in (case_data.firmas or [])
+        if isinstance(firma, Mapping)
+    ]
     if isinstance(investigator, Mapping):
         nombre_investigador = investigator.get("nombre") or ""
         cargo_investigador = investigator.get("cargo") or "Investigador Principal"
