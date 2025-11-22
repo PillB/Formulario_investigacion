@@ -8,6 +8,8 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_UP
 from typing import Callable, Dict, List, Optional, Tuple
 
+from tkinter import TclError, messagebox
+
 from settings import TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
 
@@ -325,6 +327,8 @@ def validate_product_id(tipo_producto: str, value: str) -> Optional[str]:
 class FieldValidator:
     """Vincula un widget con una función de validación en tiempo real."""
 
+    modal_notifications_enabled = True
+
     def __init__(
         self,
         widget,
@@ -408,11 +412,21 @@ class FieldValidator:
         if error == self.last_error:
             return
         if error:
+            self._notify_modal_error(error)
             self.tooltip.show(error)
             log_event("validacion", f"{self.field_name}: {error}", self.logs)
         else:
             self.tooltip.hide()
         self.last_error = error
+
+    def _notify_modal_error(self, error: str) -> None:
+        if not self.modal_notifications_enabled:
+            return
+        message = f"{self.field_name}: {error}"
+        try:
+            messagebox.showerror("Error de validación", message)
+        except TclError:
+            return
 
     def show_custom_error(self, message: Optional[str]) -> None:
         self._validation_armed = True
