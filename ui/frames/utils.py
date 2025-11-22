@@ -1,6 +1,7 @@
 """Utilidades de soporte para marcos Tkinter en entornos de prueba sin grid."""
 from __future__ import annotations
 
+import math
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Tuple
@@ -84,7 +85,9 @@ def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
             delta = 120 if event.num == 4 else -120
         if not delta:
             return
-        steps = int(-1 * (delta / 120))
+        direction = -1 if delta > 0 else 1
+        magnitude = abs(delta)
+        steps = direction * max(1, math.ceil(magnitude / 120))
         if steps:
             canvas.yview_scroll(steps, "units")
             return "break"

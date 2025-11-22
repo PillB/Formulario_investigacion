@@ -195,6 +195,7 @@ def _build_report_context(case_data: CaseData):
     clients = case_data.clientes
     team = case_data.colaboradores
     products = case_data.productos
+    operaciones = case_data.operaciones
     riesgos = case_data.riesgos
     normas = case_data.normas
     encabezado = case_data.encabezado or {}
@@ -317,6 +318,52 @@ def _build_report_context(case_data: CaseData):
         return [[str(idx)] + placeholder_cells for idx in range(1, count + 1)]
 
     operation_table_rows = _build_placeholder_operation_rows()
+    if operaciones and not products:
+        operation_table_rows = []
+        total_desembolsado = Decimal("0")
+        total_saldo = Decimal("0")
+
+        for idx, operation in enumerate(operaciones, start=1):
+            desembolsado = parse_decimal_amount(operation.get("importe_desembolsado"))
+            saldo = parse_decimal_amount(operation.get("saldo_deudor"))
+
+            if desembolsado is not None:
+                total_desembolsado += desembolsado
+            if saldo is not None:
+                total_saldo += saldo
+
+            operation_table_rows.append(
+                [
+                    _safe_text(operation.get("numero") or idx, placeholder=str(idx)),
+                    _safe_text(operation.get("fecha_aprobacion")),
+                    _safe_text(operation.get("cliente")),
+                    _safe_text(operation.get("ingreso_bruto_mensual")),
+                    _safe_text(operation.get("empresa_empleadora")),
+                    _safe_text(operation.get("vendedor_inmueble")),
+                    _safe_text(operation.get("vendedor_credito")),
+                    _safe_text(operation.get("producto")),
+                    _format_decimal_value(desembolsado),
+                    _format_decimal_value(saldo),
+                    _safe_text(operation.get("status")),
+                ]
+            )
+
+        if operation_table_rows:
+            operation_table_rows.append(
+                [
+                    "Totales",
+                    PLACEHOLDER,
+                    PLACEHOLDER,
+                    PLACEHOLDER,
+                    PLACEHOLDER,
+                    PLACEHOLDER,
+                    PLACEHOLDER,
+                    PLACEHOLDER,
+                    _format_decimal_value(total_desembolsado),
+                    _format_decimal_value(total_saldo),
+                    PLACEHOLDER,
+                ]
+            )
 
     risk_rows = [
         [
