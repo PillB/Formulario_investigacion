@@ -99,6 +99,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY
 from ui.frames import (ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
+from ui.frames.utils import create_scrollable_container
 from ui.tooltips import HoverTooltip
 from validators import (
     LOG_FIELDNAMES,
@@ -1173,6 +1174,78 @@ class FraudCaseApp:
             ),
         )
 
+    def _ensure_case_vars(self) -> None:
+        """Garantiza que las variables del caso existan en entornos sin Tk real."""
+
+        def _simple_var(default=""):
+            class _SimpleVar:
+                def __init__(self, value=default):
+                    self._value = value
+
+                def set(self, value):
+                    self._value = value
+
+                def get(self):
+                    return self._value
+
+            return _SimpleVar()
+
+        required_attrs = (
+            "id_caso_var",
+            "tipo_informe_var",
+            "cat_caso1_var",
+            "cat_caso2_var",
+            "mod_caso_var",
+            "canal_caso_var",
+            "proceso_caso_var",
+            "fecha_caso_var",
+            "fecha_descubrimiento_caso_var",
+            "centro_costo_caso_var",
+        )
+        if all(hasattr(self, attr) for attr in required_attrs):
+            return
+
+        try:
+            def _maybe_var(name, value=None):
+                if hasattr(self, name):
+                    return
+                setattr(self, name, tk.StringVar(value=value))
+
+            default_cat1 = list(TAXONOMIA.keys())[0]
+            default_cat2 = list(TAXONOMIA[default_cat1].keys())[0]
+            default_mod = TAXONOMIA[default_cat1][default_cat2][0]
+
+            _maybe_var("id_caso_var")
+            _maybe_var("tipo_informe_var", TIPO_INFORME_LIST[0])
+            _maybe_var("cat_caso1_var", default_cat1)
+            _maybe_var("cat_caso2_var", default_cat2)
+            _maybe_var("mod_caso_var", default_mod)
+            _maybe_var("canal_caso_var", CANAL_LIST[0])
+            _maybe_var("proceso_caso_var", PROCESO_LIST[0])
+            _maybe_var("fecha_caso_var")
+            _maybe_var("fecha_descubrimiento_caso_var")
+            _maybe_var("centro_costo_caso_var")
+        except (tk.TclError, RuntimeError):
+            def _fallback(name, value=""):
+                if hasattr(self, name):
+                    return
+                setattr(self, name, _simple_var(value))
+
+            default_cat1 = list(TAXONOMIA.keys())[0]
+            default_cat2 = list(TAXONOMIA[default_cat1].keys())[0]
+            default_mod = TAXONOMIA[default_cat1][default_cat2][0]
+
+            _fallback("id_caso_var")
+            _fallback("tipo_informe_var", TIPO_INFORME_LIST[0])
+            _fallback("cat_caso1_var", default_cat1)
+            _fallback("cat_caso2_var", default_cat2)
+            _fallback("mod_caso_var", default_mod)
+            _fallback("canal_caso_var", CANAL_LIST[0])
+            _fallback("proceso_caso_var", PROCESO_LIST[0])
+            _fallback("fecha_caso_var")
+            _fallback("fecha_descubrimiento_caso_var")
+            _fallback("centro_costo_caso_var")
+
     def on_case_cat1_change(self):
         """Actualiza las opciones de categoría 2 y modalidad cuando cambia cat1 del caso."""
         cat1 = self.cat_caso1_var.get()
@@ -1676,11 +1749,20 @@ class FraudCaseApp:
     def build_risk_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        self.risk_container = ttk.Frame(frame)
-        self.risk_container.pack(fill="x", pady=5)
-        add_btn = ttk.Button(frame, text="Agregar riesgo", command=self.add_risk)
-        add_btn.pack(side="left", padx=5)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        controls = ttk.Frame(frame)
+        controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+        controls.columnconfigure(0, weight=1)
+
+        add_btn = ttk.Button(controls, text="Agregar riesgo", command=self.add_risk)
+        add_btn.grid(row=0, column=0, sticky="w")
         self.register_tooltip(add_btn, "Registra un nuevo riesgo identificado.")
+
+        scrollable, inner = create_scrollable_container(frame)
+        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.risk_container = inner
         self.add_risk()
 
     def add_risk(self):
@@ -1745,11 +1827,21 @@ class FraudCaseApp:
     def build_norm_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        self.norm_container = ttk.Frame(frame)
-        self.norm_container.pack(fill="x", pady=5)
-        add_btn = ttk.Button(frame, text="Agregar norma", command=self.add_norm)
-        add_btn.pack(side="left", padx=5)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        controls = ttk.Frame(frame)
+        controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+        controls.columnconfigure(0, weight=1)
+
+        add_btn = ttk.Button(controls, text="Agregar norma", command=self.add_norm)
+        add_btn.grid(row=0, column=0, sticky="w")
         self.register_tooltip(add_btn, "Agrega otra norma transgredida.")
+
+        scrollable, inner = create_scrollable_container(frame)
+        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.norm_container = inner
+        self.add_norm()
 
     def add_norm(self):
         idx = len(self.norm_frames)
@@ -5653,6 +5745,8 @@ class FraudCaseApp:
         self.add_client()
         self.add_team()
         self.add_risk()
+        if hasattr(self, "norm_container"):
+            self.add_norm()
         # Limpiar análisis
         for widget in self._analysis_text_widgets().values():
             self._set_text_content(widget, "")
@@ -5926,6 +6020,7 @@ class FraudCaseApp:
         _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
         _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
         self.fecha_caso_var.set(caso.get('fecha_de_ocurrencia', ''))
+        self.fecha_descubrimiento_caso_var.set(caso.get('fecha_de_descubrimiento', ''))
         investigator_payload = caso.get('investigador', {}) if isinstance(caso, Mapping) else {}
         matricula_investigador = caso.get('matricula_investigador') or investigator_payload.get('matricula')
         self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
