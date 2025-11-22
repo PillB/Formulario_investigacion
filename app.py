@@ -1221,6 +1221,8 @@ class FraudCaseApp:
         summary_section.columnconfigure(0, weight=1)
         columns = [
             ("id", "ID"),
+            ("nombres", "Nombres"),
+            ("apellidos", "Apellidos"),
             ("tipo_id", "Tipo ID"),
             ("flag", "Flag"),
             ("telefonos", "Teléfonos"),
@@ -3293,6 +3295,8 @@ class FraudCaseApp:
                 "Clientes registrados",
                 [
                     ("id", "ID"),
+                    ("nombres", "Nombres"),
+                    ("apellidos", "Apellidos"),
                     ("tipo", "Tipo ID"),
                     ("flag", "Flag"),
                     ("telefonos", "Teléfonos"),
@@ -4248,6 +4252,8 @@ class FraudCaseApp:
             return [
                 (
                     client.get("id_cliente", ""),
+                    client.get("nombres", ""),
+                    client.get("apellidos", ""),
                     client.get("tipo_id", ""),
                     client.get("flag", ""),
                     client.get("telefonos", ""),
@@ -4423,6 +4429,8 @@ class FraudCaseApp:
         return self._merge_payload_with_frame(
             payload,
             {
+                'nombres': frame.nombres_var.get,
+                'apellidos': frame.apellidos_var.get,
                 'tipo_id': frame.tipo_id_var.get,
                 'flag': frame.flag_var.get,
                 'telefonos': frame.telefonos_var.get,
@@ -4725,6 +4733,16 @@ class FraudCaseApp:
 
         id_cliente = (row.get('id_cliente') or row.get('IdCliente') or '').strip()
         frame.id_var.set(id_cliente)
+        nombres_val = (row.get('nombres') or row.get('nombre') or '').strip()
+        if nombres_val and should_autofill_field(frame.nombres_var.get(), preserve_existing):
+            frame.nombres_var.set(nombres_val)
+        elif not nombres_val and not preserve_existing:
+            frame.nombres_var.set('')
+        apellidos_val = (row.get('apellidos') or row.get('apellido') or '').strip()
+        if apellidos_val and should_autofill_field(frame.apellidos_var.get(), preserve_existing):
+            frame.apellidos_var.set(apellidos_val)
+        elif not apellidos_val and not preserve_existing:
+            frame.apellidos_var.set('')
         tipo_id = (row.get('tipo_id') or row.get('TipoID') or '').strip()
         if tipo_id and should_autofill_field(frame.tipo_id_var.get(), preserve_existing):
             frame.tipo_id_var.set(tipo_id)
@@ -4757,6 +4775,8 @@ class FraudCaseApp:
             frame.set_accionado_from_text('')
         accionado_final = frame.accionado_var.get().strip()
         self.client_lookup[id_cliente] = {
+            'nombres': frame.nombres_var.get(),
+            'apellidos': frame.apellidos_var.get(),
             'tipo_id': frame.tipo_id_var.get(),
             'flag': frame.flag_var.get(),
             'telefonos': frame.telefonos_var.get(),
@@ -5061,10 +5081,17 @@ class FraudCaseApp:
             if client_id:
                 if not client_row.get('flag') and client_row.get('flag_cliente'):
                     client_row['flag'] = client_row.get('flag_cliente')
-                for key in ('telefonos', 'correos', 'direcciones', 'accionado', 'tipo_id'):
+                raw_row = entry.get('raw_row', {}) or {}
+                for source_key, target_key in (
+                    ('nombres_cliente', 'nombres'),
+                    ('apellidos_cliente', 'apellidos'),
+                ):
+                    if not client_row.get(target_key) and raw_row.get(source_key):
+                        client_row[target_key] = raw_row[source_key]
+                for key in ('nombres', 'apellidos', 'telefonos', 'correos', 'direcciones', 'accionado', 'tipo_id'):
                     value = client_row.get(key)
-                    if not value and entry.get('raw_row', {}).get(key):
-                        client_row[key] = entry['raw_row'][key]
+                    if not value and raw_row.get(key):
+                        client_row[key] = raw_row[key]
                 client_frame, created_client = self._ensure_client_exists(client_id, client_row)
                 if created_client:
                     self._trigger_import_id_refresh(
@@ -6950,7 +6977,22 @@ class FraudCaseApp:
             ],
         )
         # CLIENTES
-        write_csv('clientes.csv', data['clientes'], ['id_cliente', 'id_caso', 'tipo_id', 'flag', 'telefonos', 'correos', 'direcciones', 'accionado'])
+        write_csv(
+            'clientes.csv',
+            data['clientes'],
+            [
+                'id_cliente',
+                'id_caso',
+                'nombres',
+                'apellidos',
+                'tipo_id',
+                'flag',
+                'telefonos',
+                'correos',
+                'direcciones',
+                'accionado',
+            ],
+        )
         # COLABORADORES
         write_csv(
             'colaboradores.csv',

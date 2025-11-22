@@ -1,16 +1,16 @@
-id_cliente,tipo_id,flag,telefonos,correos,direcciones,accionado
-12345678,DNI,Afectado,987654321;912345678,cliente@example.com,Av La Paz 123 Miraflores Lima Perú,Tribu Producto Afectado
-20481234567,RUC,Involucrado,999999999,empresa@correo.pe,Calle 5 345 San Isidro Lima Perú,Centro de Contacto
-CE00098765,CE,Relacionado,+51910101010;+51914141414,extranjero@example.com,Jr Los Rosales 789 La Molina Lima Perú,Centro de Contacto
-P123456789,Pasaporte,Afectado,+51900000001,viajero@example.com,Av Primavera 321 Santiago de Surco Lima Perú,Tribu Producto Afectado
-87654321,DNI,Involucrado,+51912345677,ninguno@example.com,Av Benavides 456 Surco Lima Perú,Tribu Producto Afectado
-00012345,DNI,Relacionado,+51901010101;+51902020202,dni_corto@example.com,Calle Los Laureles 112 San Borja Lima Perú,Centro de Contacto
-20123456789,RUC,Afectado,+51933333333;+51944444444,negocio@correo.pe,Avenida Industrial 890 Callao Perú,Tribu Producto Afectado
-99001122,DNI,Involucrado,+51955555555,vecino@example.com,Pasaje Palmeras 45 San Miguel Lima Perú,Centro de Contacto
-44556677,DNI,Afectado,+51966666666;+51977777777,familiar@example.com,Jr Las Violetas 101 Cercado de Lima Perú,Tribu Canal Impactado
-11223344566,RUC,Relacionado,+51988888888,proveedor@example.com,Av Arequipa 1500 Lince Lima Perú,Centro de Contacto
-CE00112233,CE,Involucrado,+51999999999,cecliente@example.com,Av Angamos 200 Miraflores Lima Perú,Tribu Producto Afectado
-P987654321,Pasaporte,Afectado,+51911111111;5112345678,frecuente@example.com,Calle Falsa 123 Springfield,Tribu Canal Impactado
-77889900,DNI,Relacionado,+51922222222,referido@example.com,Jiron Amazonas 450 Cercado de Lima Perú,Centro de Contacto
-22334455,DNI,Afectado,+51933322211,cliente14@example.com,Av Colonial 234 Callao Perú,Tribu Producto Afectado
-33445566789,RUC,Involucrado,+51944433322,empresario@example.com,Av Larco 789 Miraflores Lima Perú,Centro de Contacto
+id_cliente,nombres,apellidos,tipo_id,flag,telefonos,correos,direcciones,accionado
+12345678,Lucía,Pérez,DNI,Afectado,987654321;912345678,cliente@example.com,Av La Paz 123 Miraflores Lima Perú,Tribu Producto Afectado
+20481234567,Empresa,Andina,RUC,Involucrado,999999999,empresa@correo.pe,Calle 5 345 San Isidro Lima Perú,Centro de Contacto
+CE00098765,Alex,Chen,CE,Relacionado,+51910101010;+51914141414,extranjero@example.com,Jr Los Rosales 789 La Molina Lima Perú,Centro de Contacto
+P123456789,John,Doe,Pasaporte,Afectado,+51900000001,viajero@example.com,Av Primavera 321 Santiago de Surco Lima Perú,Tribu Producto Afectado
+87654321,Rosa,Díaz,DNI,Involucrado,+51912345677,ninguno@example.com,Av Benavides 456 Surco Lima Perú,Tribu Producto Afectado
+00012345,Marco,Vidal,DNI,Relacionado,+51901010101;+51902020202,dni_corto@example.com,Calle Los Laureles 112 San Borja Lima Perú,Centro de Contacto
+20123456789,Servicios,Integrales,RUC,Afectado,+51933333333;+51944444444,negocio@correo.pe,Avenida Industrial 890 Callao Perú,Tribu Producto Afectado
+99001122,Elena,Cruz,DNI,Involucrado,+51955555555,vecino@example.com,Pasaje Palmeras 45 San Miguel Lima Perú,Centro de Contacto
+44556677,Pedro,Quiroz,DNI,Afectado,+51966666666;+51977777777,familiar@example.com,Jr Las Violetas 101 Cercado de Lima Perú,Tribu Canal Impactado
+11223344566,Comercial,Export,RUC,Relacionado,+51988888888,proveedor@example.com,Av Arequipa 1500 Lince Lima Perú,Centro de Contacto
+CE00112233,Marta,Silva,CE,Involucrado,+51999999999,cecliente@example.com,Av Angamos 200 Miraflores Lima Perú,Tribu Producto Afectado
+P987654321,Sara,Gómez,Pasaporte,Afectado,+51911111111;5112345678,frecuente@example.com,Calle Falsa 123 Springfield,Tribu Canal Impactado
+77889900,Luis,Prado,DNI,Relacionado,+51922222222,referido@example.com,Jiron Amazonas 450 Cercado de Lima Perú,Centro de Contacto
+22334455,Sonia,Herrera,DNI,Afectado,+51933322211,cliente14@example.com,Av Colonial 234 Callao Perú,Tribu Producto Afectado
+33445566789,Fábrica,Norte,RUC,Involucrado,+51944433322,empresario@example.com,Av Larco 789 Miraflores Lima Perú,Centro de Contacto
