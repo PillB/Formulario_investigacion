@@ -47,3 +47,40 @@ def test_field_validator_add_widget_uses_non_overriding_bindings(monkeypatch):
     validator = validators.FieldValidator(widget, lambda: None, [], "id_field")
     validator.add_widget(extra_widget)
     _assert_events_have_add(extra_widget.bind_calls)
+
+
+def test_display_error_uses_modal_notification(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+    widget = DummyWidget()
+    captured = []
+    monkeypatch.setattr(validators.FieldValidator, "notification_handler", lambda *args: captured.append(args))
+    monkeypatch.setattr(validators.FieldValidator, "notification_title", "Dato inválido")
+    monkeypatch.setattr(validators.FieldValidator, "notifications_enabled", True)
+
+    validator = validators.FieldValidator(widget, lambda: None, [], "Campo X")
+    validator._display_error("Primer error")
+    validator._display_error("Primer error")
+    validator._display_error("Segundo error")
+    validator._display_error(None)
+
+    assert captured == [
+        ("Dato inválido", "Campo X: Primer error"),
+        ("Dato inválido", "Campo X: Segundo error"),
+    ]
+
+
+def test_modal_notification_ignores_tcl_error(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+    widget = DummyWidget()
+
+    def failing_notifier(_title, _message):
+        raise validators.TclError("no display")
+
+    monkeypatch.setattr(validators.FieldValidator, "notification_handler", failing_notifier)
+    monkeypatch.setattr(validators.FieldValidator, "notifications_enabled", True)
+
+    validator = validators.FieldValidator(widget, lambda: None, [], "Campo Y")
+
+    validator._display_error("Error")
+
+    assert validator.last_error == "Error"
