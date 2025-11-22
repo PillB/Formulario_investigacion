@@ -49,7 +49,7 @@ class RiskFrame:
         self.planes_var = tk.StringVar()
 
         self.frame = ttk.LabelFrame(parent, text=f"Riesgo {self.idx+1}")
-        self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        self.frame.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
