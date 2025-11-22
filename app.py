@@ -4616,17 +4616,33 @@ class FraudCaseApp:
             or 'No aplica'
         ).strip()
         frame.flag_var.set(flag_val or 'No aplica')
-        frame.division_var.set((row.get('division') or '').strip())
-        frame.area_var.set((row.get('area') or '').strip())
-        frame.servicio_var.set((row.get('servicio') or '').strip())
-        frame.puesto_var.set((row.get('puesto') or '').strip())
-        frame.nombre_agencia_var.set((row.get('nombre_agencia') or '').strip())
-        frame.codigo_agencia_var.set((row.get('codigo_agencia') or '').strip())
-        frame.tipo_falta_var.set((row.get('tipo_falta') or '').strip() or 'No aplica')
-        frame.tipo_sancion_var.set((row.get('tipo_sancion') or '').strip() or 'No aplica')
+
+        def _set_if_present(var, *keys):
+            for key in keys:
+                value = (row.get(key) or '').strip()
+                if value:
+                    var.set(value)
+                    return
+
+        _set_if_present(frame.nombres_var, 'nombres')
+        _set_if_present(frame.apellidos_var, 'apellidos')
+        _set_if_present(frame.division_var, 'division')
+        _set_if_present(frame.area_var, 'area')
+        _set_if_present(frame.servicio_var, 'servicio')
+        _set_if_present(frame.puesto_var, 'puesto')
+        _set_if_present(frame.fecha_carta_inmediatez_var, 'fecha_carta_inmediatez', 'fecha_carta_inmediate')
+        _set_if_present(frame.fecha_carta_renuncia_var, 'fecha_carta_renuncia')
+        _set_if_present(frame.nombre_agencia_var, 'nombre_agencia')
+        _set_if_present(frame.codigo_agencia_var, 'codigo_agencia')
+        _set_if_present(frame.tipo_falta_var, 'tipo_falta')
+        _set_if_present(frame.tipo_sancion_var, 'tipo_sancion')
+        if not frame.tipo_falta_var.get().strip():
+            frame.tipo_falta_var.set('No aplica')
+        if not frame.tipo_sancion_var.get().strip():
+            frame.tipo_sancion_var.set('No aplica')
         lookup_key = normalized_id or id_col
         if lookup_key:
-            self.team_lookup[lookup_key] = {
+            lookup_data = {
                 'division': frame.division_var.get(),
                 'area': frame.area_var.get(),
                 'servicio': frame.servicio_var.get(),
@@ -4634,6 +4650,15 @@ class FraudCaseApp:
                 'nombre_agencia': frame.nombre_agencia_var.get(),
                 'codigo_agencia': frame.codigo_agencia_var.get(),
             }
+            for key, var in [
+                ('nombres', frame.nombres_var),
+                ('apellidos', frame.apellidos_var),
+                ('fecha_carta_inmediatez', frame.fecha_carta_inmediatez_var),
+                ('fecha_carta_renuncia', frame.fecha_carta_renuncia_var),
+            ]:
+                if self._has_meaningful_value(var.get()):
+                    lookup_data[key] = var.get()
+            self.team_lookup[lookup_key] = lookup_data
 
     def _populate_product_frame_from_row(self, frame, row):
         product_id = (row.get('id_producto') or row.get('IdProducto') or '').strip()
