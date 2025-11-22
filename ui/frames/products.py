@@ -700,26 +700,17 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     focc_entry,
-                    lambda: validate_date_text(
-                        self.fecha_oc_var.get(),
-                        "la fecha de ocurrencia",
-                        allow_blank=False,
-                        enforce_max_today=True,
-                        must_be_before=(
-                            self.fecha_desc_var.get(),
-                            "la fecha de descubrimiento",
-                        ),
-                    ),
+                    self._validate_fecha_ocurrencia,
                     self.logs,
                     f"Producto {self.idx+1} - Fecha ocurrencia",
-                    variables=[self.fecha_oc_var],
+                    variables=[self.fecha_oc_var, self.fecha_desc_var, self.id_var],
                 ),
                 FieldValidator(
                     fdesc_entry,
                     self._validate_fecha_descubrimiento,
                     self.logs,
                     f"Producto {self.idx+1} - Fecha descubrimiento",
-                    variables=[self.fecha_desc_var, self.fecha_oc_var],
+                    variables=[self.fecha_desc_var, self.fecha_oc_var, self.id_var],
                 ),
                 FieldValidator(
                     inv_entry,
@@ -1129,6 +1120,29 @@ class ProductFrame:
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
+    def _validate_product_date_pair(self):
+        producto_label = self.id_var.get().strip() or f"Producto {self.idx+1}"
+        return validate_product_dates(
+            producto_label,
+            self.fecha_oc_var.get(),
+            self.fecha_desc_var.get(),
+        )
+
+    def _validate_fecha_ocurrencia(self):
+        message = validate_date_text(
+            self.fecha_oc_var.get(),
+            "la fecha de ocurrencia",
+            allow_blank=False,
+            enforce_max_today=True,
+            must_be_before=(
+                self.fecha_desc_var.get(),
+                "la fecha de descubrimiento",
+            ),
+        )
+        if message:
+            return message
+        return self._validate_product_date_pair()
+
     def _validate_fecha_descubrimiento(self):
         msg = validate_date_text(
             self.fecha_desc_var.get(),
@@ -1139,12 +1153,7 @@ class ProductFrame:
         )
         if msg:
             return msg
-        producto_label = self.id_var.get().strip() or f"Producto {self.idx+1}"
-        return validate_product_dates(
-            producto_label,
-            self.fecha_oc_var.get(),
-            self.fecha_desc_var.get(),
-        )
+        return self._validate_product_date_pair()
 
     def _validate_amount_field(self, var, label, allow_blank):
         raw_value = var.get()
