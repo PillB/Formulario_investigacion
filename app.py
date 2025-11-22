@@ -1025,15 +1025,22 @@ class FraudCaseApp:
         proc_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
 
-        ttk.Label(frame, text="Fecha de ocurrencia del caso (YYYY-MM-DD):").grid(
+        ttk.Label(frame, text="Fechas del caso:").grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        fecha_case_entry = ttk.Entry(frame, textvariable=self.fecha_caso_var, width=18)
-        fecha_case_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        dates_container = ttk.Frame(frame)
+        dates_container.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        dates_container.columnconfigure(1, weight=1)
+        dates_container.columnconfigure(3, weight=1)
+        ttk.Label(dates_container, text="Ocurrencia (YYYY-MM-DD):").grid(
+            row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+        )
+        fecha_case_entry = ttk.Entry(dates_container, textvariable=self.fecha_caso_var, width=16)
+        fecha_case_entry.grid(row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we")
         self.register_tooltip(
             fecha_case_entry, "Fecha en que se originó el caso a nivel general."
         )
-        ttk.Label(dates_container, text="Descubrimiento:").grid(
+        ttk.Label(dates_container, text="Descubrimiento (YYYY-MM-DD):").grid(
             row=0, column=2, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
         fecha_desc_entry = ttk.Entry(
@@ -2232,6 +2239,68 @@ class FraudCaseApp:
             self.investigator_id_var = _SimpleVar()
             self.investigator_nombre_var = _SimpleVar()
             self.investigator_cargo_var = _SimpleVar("Investigador Principal")
+
+    def _ensure_case_vars(self) -> None:
+        try:
+            VarClass = tk.StringVar
+        except (tk.TclError, RuntimeError):
+            VarClass = None
+
+        class _SimpleVar:
+            def __init__(self, value=""):
+                self._value = value
+
+            def set(self, value):
+                self._value = value
+
+            def get(self):
+                return self._value
+
+        def _create_var(value=""):
+            if VarClass is None:
+                return _SimpleVar(value)
+            try:
+                return VarClass(value=value)
+            except Exception:
+                return _SimpleVar(value)
+
+        def _current_or_default(attr_name, default_value=""):
+            var = getattr(self, attr_name, None)
+            try:
+                return var.get()
+            except Exception:
+                return default_value
+
+        cat1_value = _current_or_default("cat_caso1_var", next(iter(TAXONOMIA), ""))
+        cat2_candidates = list(TAXONOMIA.get(cat1_value, {}).keys())
+        cat2_value = _current_or_default(
+            "cat_caso2_var", cat2_candidates[0] if cat2_candidates else ""
+        )
+        modalidad_candidates = TAXONOMIA.get(cat1_value, {}).get(cat2_value, [])
+        mod_value = _current_or_default(
+            "mod_caso_var", modalidad_candidates[0] if modalidad_candidates else ""
+        )
+
+        self.id_caso_var = getattr(self, "id_caso_var", _create_var())
+        self.tipo_informe_var = getattr(
+            self, "tipo_informe_var", _create_var(TIPO_INFORME_LIST[0])
+        )
+        self.cat_caso1_var = getattr(self, "cat_caso1_var", _create_var(cat1_value))
+        self.cat_caso2_var = getattr(self, "cat_caso2_var", _create_var(cat2_value))
+        self.mod_caso_var = getattr(self, "mod_caso_var", _create_var(mod_value))
+        self.canal_caso_var = getattr(
+            self, "canal_caso_var", _create_var(_current_or_default("canal_caso_var", CANAL_LIST[0]))
+        )
+        self.proceso_caso_var = getattr(
+            self,
+            "proceso_caso_var",
+            _create_var(_current_or_default("proceso_caso_var", PROCESO_LIST[0])),
+        )
+        self.fecha_caso_var = getattr(self, "fecha_caso_var", _create_var())
+        self.fecha_descubrimiento_caso_var = getattr(
+            self, "fecha_descubrimiento_caso_var", _create_var()
+        )
+        self.centro_costo_caso_var = getattr(self, "centro_costo_caso_var", _create_var())
 
     def _collect_operation_form(self) -> dict[str, str]:
         return {key: self._sanitize_text(var.get()) for key, var in self._operation_vars.items()}
@@ -5926,6 +5995,7 @@ class FraudCaseApp:
         _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
         _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
         self.fecha_caso_var.set(caso.get('fecha_de_ocurrencia', ''))
+        self.fecha_descubrimiento_caso_var.set(caso.get('fecha_de_descubrimiento', ''))
         investigator_payload = caso.get('investigador', {}) if isinstance(caso, Mapping) else {}
         matricula_investigador = caso.get('matricula_investigador') or investigator_payload.get('matricula')
         self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
@@ -5937,6 +6007,8 @@ class FraudCaseApp:
         cargo_investigador = investigator_payload.get('cargo') or "Investigador Principal"
         self.investigator_cargo_var.set(cargo_investigador)
         self._autofill_investigator(show_errors=False)
+        centro_costo = caso.get('centro_costo') or caso.get('centro_costos')
+        self.centro_costo_caso_var.set(centro_costo or '')
         # Clientes
         for i, cliente in enumerate(data.get('clientes', [])):
             if i >= len(self.client_frames):
