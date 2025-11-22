@@ -103,3 +103,45 @@ def test_focusout_without_changes_skips_validation(monkeypatch):
     validator._on_change(focus_event)
 
     assert calls == []
+
+
+def test_modal_notification_shows_once_per_new_error(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+    calls = []
+
+    class DummyMessagebox:
+        def showerror(self, title, message):
+            calls.append((title, message))
+
+    monkeypatch.setattr(validators, "messagebox", DummyMessagebox())
+    widget = DummyWidget()
+    validator = validators.FieldValidator(widget, lambda: "", [], "Campo")
+
+    validator._display_error("Primer error")
+    validator._display_error("Primer error")
+    validator._display_error("Segundo error")
+
+    assert calls == [
+        ("Error de validación", "Campo: Primer error"),
+        ("Error de validación", "Campo: Segundo error"),
+    ]
+
+
+def test_modal_notification_ignores_tcl_errors(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+
+    class DummyTclError(Exception):
+        pass
+
+    class FailingMessagebox:
+        def showerror(self, _title, _message):
+            raise DummyTclError("failed")
+
+    monkeypatch.setattr(validators, "messagebox", FailingMessagebox())
+    monkeypatch.setattr(validators, "TclError", DummyTclError)
+
+    widget = DummyWidget()
+    validator = validators.FieldValidator(widget, lambda: "", [], "Campo")
+    validator._display_error("Algún error")
+
+    assert validator.last_error == "Algún error"
