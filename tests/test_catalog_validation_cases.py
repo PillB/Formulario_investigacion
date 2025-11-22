@@ -195,12 +195,23 @@ def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
     with (invalid_detail_dir / "client_details.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = DictWriter(
             handle,
-            fieldnames=["id_cliente", "tipo_id", "flag", "telefonos", "correos", "direcciones"],
+            fieldnames=[
+                "id_cliente",
+                "nombres",
+                "apellidos",
+                "tipo_id",
+                "flag",
+                "telefonos",
+                "correos",
+                "direcciones",
+            ],
         )
         writer.writeheader()
         writer.writerow(
             {
                 "id_cliente": "111",
+                "nombres": "",
+                "apellidos": "",
                 "tipo_id": "dni",
                 "flag": "Afectado",
                 "telefonos": "123",
@@ -214,6 +225,8 @@ def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
             handle,
             fieldnames=[
                 "id_colaborador",
+                "nombres",
+                "apellidos",
                 "division",
                 "area",
                 "servicio",
@@ -227,6 +240,8 @@ def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
         writer.writerow(
             {
                 "id_colaborador": "12345",
+                "nombres": "Nombre",
+                "apellidos": "Apellido",
                 "division": "DCA",
                 "area": "Área Comercial",
                 "servicio": "",

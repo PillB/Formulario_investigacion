@@ -10,6 +10,8 @@ def _write_team_details(tmp_path, rows):
     path = tmp_path / "team_details.csv"
     headers = [
         "id_colaborador",
+        "nombres",
+        "apellidos",
         "division",
         "area",
         "servicio",
@@ -71,8 +73,8 @@ def test_autofill_selects_latest_snapshot_before_case_date(tmp_path):
     _write_team_details(
         tmp_path,
         [
-            ("T1", "Division 2023", "", "", "", "", "000111", "2023-02-01"),
-            ("T1", "Division 2024", "", "", "", "", "000222", "2024-06-15"),
+            ("T1", "Nombre 2023", "Apellido 2023", "Division 2023", "", "", "", "", "000111", "2023-02-01"),
+            ("T1", "Nombre 2024", "Apellido 2024", "Division 2024", "", "", "", "", "000222", "2024-06-15"),
         ],
     )
     service, autofill, _ = _build_services(tmp_path)
@@ -101,7 +103,7 @@ def test_autofill_respects_dirty_fields(tmp_path):
     _write_team_details(
         tmp_path,
         [
-            ("T2", "Division A", "Area A", "", "", "", "001000", "2023-01-01"),
+            ("T2", "Nombre A", "Apellido A", "Division A", "Area A", "", "", "", "001000", "2023-01-01"),
         ],
     )
     _, autofill, _ = _build_services(tmp_path)
@@ -126,12 +128,34 @@ def test_autofill_respects_dirty_fields(tmp_path):
     assert result.applied["codigo_agencia"] == "001000"
 
 
+def test_autofill_applies_name_fields(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            ("T2A", "Lucía", "Herrera", "Division Z", "Area Z", "", "", "", "009999", "2024-03-03"),
+        ],
+    )
+    _, autofill, _ = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T2A",
+        current_values={"nombres": "", "apellidos": "", "division": ""},
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="2024-04-01",
+    )
+
+    assert result.applied["nombres"] == "Lucía"
+    assert result.applied["apellidos"] == "Herrera"
+    assert result.applied["division"] == "Division Z"
+
+
 def test_autofill_handles_invalid_case_date_with_latest_snapshot(tmp_path):
     _write_team_details(
         tmp_path,
         [
-            ("T3", "Division pasada", "", "", "", "", "", "2020-01-01"),
-            ("T3", "Division vigente", "", "", "", "", "", "2024-05-05"),
+            ("T3", "Nombre Pasado", "Apellido Pasado", "Division pasada", "", "", "", "", "", "2020-01-01"),
+            ("T3", "Nombre Vigente", "Apellido Vigente", "Division vigente", "", "", "", "", "", "2024-05-05"),
         ],
     )
     _, autofill, warnings = _build_services(tmp_path)
@@ -164,7 +188,7 @@ def test_autofill_warns_when_using_future_snapshot(tmp_path):
     _write_team_details(
         tmp_path,
         [
-            ("T4", "Division futura", "", "", "", "", "", "2025-01-01"),
+            ("T4", "Nombre Futuro", "Apellido Futuro", "Division futura", "", "", "", "", "", "2025-01-01"),
         ],
     )
     _, autofill, warnings = _build_services(tmp_path)
@@ -194,7 +218,7 @@ def test_autofill_returns_not_found_for_unknown_identifier(tmp_path):
     _write_team_details(
         tmp_path,
         [
-            ("T5", "Division", "", "", "", "", "", "2024-01-01"),
+            ("T5", "Nombre", "Apellido", "Division", "", "", "", "", "", "2024-01-01"),
         ],
     )
     _, autofill, warnings = _build_services(tmp_path)
@@ -216,8 +240,8 @@ def test_autofill_picks_nearest_future_snapshot(tmp_path):
     _write_team_details(
         tmp_path,
         [
-            ("T6", "Futuro lejano", "", "", "", "", "", "2030-01-01"),
-            ("T6", "Futuro cercano", "", "", "", "", "", "2025-05-05"),
+            ("T6", "Nombre Lejano", "Apellido Lejano", "Futuro lejano", "", "", "", "", "", "2030-01-01"),
+            ("T6", "Nombre Cercano", "Apellido Cercano", "Futuro cercano", "", "", "", "", "", "2025-05-05"),
         ],
     )
     _, autofill, warnings = _build_services(tmp_path)
@@ -239,8 +263,8 @@ def test_autofill_uses_latest_when_case_date_missing(tmp_path):
     _write_team_details(
         tmp_path,
         [
-            ("T7", "Antiguo", "", "", "", "", "", "2020-02-02"),
-            ("T7", "Reciente", "", "", "", "", "", "2024-04-04"),
+            ("T7", "Nombre Antiguo", "Apellido Antiguo", "Antiguo", "", "", "", "", "", "2020-02-02"),
+            ("T7", "Nombre Reciente", "Apellido Reciente", "Reciente", "", "", "", "", "", "2024-04-04"),
         ],
     )
     _, autofill, warnings = _build_services(tmp_path)
@@ -266,8 +290,8 @@ def test_autofill_meta_includes_selected_date_and_reason(tmp_path):
     _write_team_details(
         tmp_path,
         [
-            ("T8", "Antiguo", "", "", "", "", "", "2020-02-02"),
-            ("T8", "Reciente", "", "", "", "", "", "2024-04-04"),
+            ("T8", "Nombre Antiguo", "Apellido Antiguo", "Antiguo", "", "", "", "", "", "2020-02-02"),
+            ("T8", "Nombre Reciente", "Apellido Reciente", "Reciente", "", "", "", "", "", "2024-04-04"),
         ],
     )
     _, autofill, warnings = _build_services(tmp_path)

@@ -1,14 +1,14 @@
-id_colaborador,flag,division,area,servicio,puesto,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion
-T12345,Involucrado,DCA,Area Comercial,Servicio 1,Puesto 1,Agencia Central,123456,Inconducta funcional,Amonestación
-U00123,Relacionado,Finanzas,Área de Control,Servicio 2,Puesto 2,,,Negligencia funcional,Suspensión 2 días
-T54321,Involucrado,Operaciones,Área de Operaciones,Servicio 3,Puesto 3,,,No aplica,No aplica
-A98765,Afectado,Canales de atención,Area Comercial,Servicio 4,Puesto 4,Agencia Norte,654321,N/A,N/A
-C11223,Relacionado,DCA,Área de soporte,Servicio 6,Puesto 6,Agencia Callao,222333,Falta leve,Capacitación
-D33333,Involucrado,Canales de atención,Área de Experiencia,Servicio 7,Puesto 7,,,Reiterancia leve,Plan de mejora
-E12345,Relacionado,Auditoría,Área de Auditoría,Servicio 8,Puesto 8,,,Advertencia escrita,Capacitación adicional
-F54321,Involucrado,DCA,Area Comercial Digital,Servicio 9,Puesto 9,Agencia Digital,987654,Falta grave,Separación temporal
-G67890,Afectado,Canales de atención,Area Comercial,Servicio 10,Puesto 10,Agencia Sur,111222,Suspensión,Firma de compromiso
-H11111,Relacionado,Riesgos,Área de Gestión,Servicio 11,Puesto 11,,,Observación,Coaching
-J22222,Involucrado,Operaciones,Área Corporativa,Servicio 12,Puesto 12,,,Amonestación leve,Plan de mejora
-K33333,Involucrado,Canales de atención,Area Comercial Especial,Servicio 13,Puesto 13,Agencia Especial,555666,Correctivo,Plan integral
-L44444,Relacionado,DCA,Área de Seguridad,Servicio 14,Puesto 14,,,Sin sanción,Observación
+id_colaborador,flag,nombres,apellidos,division,area,servicio,puesto,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion
+T12345,Involucrado,María,Acuña,DCA,Area Comercial,Servicio 1,Puesto 1,Agencia Central,123456,Inconducta funcional,Amonestación
+U00123,Relacionado,Luis,Ramírez,Finanzas,Área de Control,Servicio 2,Puesto 2,,,Negligencia funcional,Suspensión 2 días
+T54321,Involucrado,Carmen,López,Operaciones,Área de Operaciones,Servicio 3,Puesto 3,,,No aplica,No aplica
+A98765,Afectado,Julia,Contreras,Canales de atención,Area Comercial,Servicio 4,Puesto 4,Agencia Norte,654321,N/A,N/A
+C11223,Relacionado,Carlos,Pérez,DCA,Área de soporte,Servicio 6,Puesto 6,Agencia Callao,222333,Falta leve,Capacitación
+D33333,Involucrado,Diana,Salas,Canales de atención,Área de Experiencia,Servicio 7,Puesto 7,,,Reiterancia leve,Plan de mejora
+E12345,Relacionado,Esteban,Cruz,Auditoría,Área de Auditoría,Servicio 8,Puesto 8,,,Advertencia escrita,Capacitación adicional
+F54321,Involucrado,Fernanda,Ruiz,DCA,Area Comercial Digital,Servicio 9,Puesto 9,Agencia Digital,987654,Falta grave,Separación temporal
+G67890,Afectado,Gabriel,Soto,Canales de atención,Area Comercial,Servicio 10,Puesto 10,Agencia Sur,111222,Suspensión,Firma de compromiso
+H11111,Relacionado,Helena,Vargas,Riesgos,Área de Gestión,Servicio 11,Puesto 11,,,Observación,Coaching
+J22222,Involucrado,Jorge,Medina,Operaciones,Área Corporativa,Servicio 12,Puesto 12,,,Amonestación leve,Plan de mejora
+K33333,Involucrado,Karla,Paredes,Canales de atención,Area Comercial Especial,Servicio 13,Puesto 13,Agencia Especial,555666,Correctivo,Plan integral
+L44444,Relacionado,Laura,Torres,DCA,Área de Seguridad,Servicio 14,Puesto 14,,,Sin sanción,Observación

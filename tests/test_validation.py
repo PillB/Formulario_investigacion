@@ -36,11 +36,15 @@ class DummyClient:
     def __init__(self, client_id):
         self.tipo_id_var = DummyVar(TIPO_ID_LIST[0])
         self.id_var = DummyVar(client_id)
+        self.nombres_var = DummyVar("")
+        self.apellidos_var = DummyVar("")
 
     def get_data(self):
         return {
             "tipo_id": self.tipo_id_var.get(),
             "id_cliente": self.id_var.get(),
+            "nombres": self.nombres_var.get(),
+            "apellidos": self.apellidos_var.get(),
         }
 
 

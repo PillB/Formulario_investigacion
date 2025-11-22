@@ -33,6 +33,8 @@ def test_client_autofill_respects_preserve_existing_flag():
     frame.logs = logs
     frame.client_lookup = {
         "CLI-1": {
+            "nombres": "Auto nombre",
+            "apellidos": "Auto apellido",
             "tipo_id": "DNI",
             "flag": "Afectado",
             "telefonos": "999111222",
@@ -41,6 +43,8 @@ def test_client_autofill_respects_preserve_existing_flag():
             "accionado": "Fiscalía",
         }
     }
+    frame.nombres_var = DummyVar("Manual nombre")
+    frame.apellidos_var = DummyVar("Manual apellido")
     frame.tipo_id_var = DummyVar("Manual tipo")
     frame.id_var = DummyVar("CLI-1")
     frame.flag_var = DummyVar("Manual flag")
@@ -65,6 +69,8 @@ def test_client_autofill_respects_preserve_existing_flag():
     assert frame.correos_var.get() == "auto@example.com"
     assert frame.direcciones_var.get() == "Calle 123"
     assert frame.accionado_var.get() == "Fiscalía"
+    assert frame.nombres_var.get() == "Manual nombre"
+    assert frame.apellidos_var.get() == "Manual apellido"
 
 
 def test_product_autofill_preserves_dirty_amounts():

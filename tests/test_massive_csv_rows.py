@@ -128,6 +128,8 @@ def test_real_massive_clients_enforce_contacts_and_identifiers():
         assert validate_client_id(row.get("tipo_id", ""), row.get("id_cliente", "")) is None
         assert validate_phone_list(row.get("telefonos", ""), "Teléfonos del cliente") is None
         assert validate_email_list(row.get("correos", ""), "Correos del cliente") is None
+        assert (row.get("nombres") or "").strip()
+        assert (row.get("apellidos") or "").strip()
         assert (row.get("flag") or "").strip()
         assert (row.get("accionado") or "").strip()
 
