@@ -3151,16 +3151,22 @@ class FraudCaseApp:
                     ("accionado", "Accionado"),
                 ],
             ),
-            (
-                "colaboradores",
-                "Colaboradores involucrados",
-                [
-                    ("id", "ID"),
-                    ("division", "División"),
-                    ("area", "Área"),
-                    ("sancion", "Sanción"),
-                ],
-            ),
+                (
+                    "colaboradores",
+                    "Colaboradores involucrados",
+                    [
+                        ("id", "ID"),
+                        ("nombres", "Nombres"),
+                        ("apellidos", "Apellidos"),
+                        ("division", "División"),
+                        ("area", "Área"),
+                        ("servicio", "Servicio"),
+                        ("puesto", "Puesto"),
+                        ("tipo_sancion", "Tipo sanción"),
+                        ("fecha_carta_inmediatez", "Carta inmediatez"),
+                        ("fecha_carta_renuncia", "Carta renuncia"),
+                    ],
+                ),
             (
                 "involucramientos",
                 "Asignaciones por colaborador",
