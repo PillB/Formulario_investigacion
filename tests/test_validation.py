@@ -72,6 +72,10 @@ class DummyTeam:
         team_id,
         division="otra division",
         area="otra area",
+        nombres="",
+        apellidos="",
+        fecha_carta_inmediatez="",
+        fecha_carta_renuncia="",
         nombre_agencia="",
         codigo_agencia="",
         flag=None,
@@ -85,6 +89,10 @@ class DummyTeam:
         self.codigo_agencia_var = DummyVar(codigo_agencia)
         self.division_var = DummyVar(division)
         self.area_var = DummyVar(area)
+        self.nombres_var = DummyVar(nombres)
+        self.apellidos_var = DummyVar(apellidos)
+        self.fecha_carta_inmediatez_var = DummyVar(fecha_carta_inmediatez)
+        self.fecha_carta_renuncia_var = DummyVar(fecha_carta_renuncia)
         self.nombre_agencia_var = DummyVar(nombre_agencia)
         self.flag_var = DummyVar(flag)
         self.tipo_falta_var = DummyVar(tipo_falta)
@@ -93,8 +101,12 @@ class DummyTeam:
     def get_data(self):
         return {
             "id_colaborador": self.id_var.get(),
+            "nombres": self.nombres_var.get(),
+            "apellidos": self.apellidos_var.get(),
             "division": self.division_var.get(),
             "area": self.area_var.get(),
+            "fecha_carta_inmediatez": self.fecha_carta_inmediatez_var.get(),
+            "fecha_carta_renuncia": self.fecha_carta_renuncia_var.get(),
             "nombre_agencia": self.nombre_agencia_var.get(),
             "codigo_agencia": self.codigo_agencia_var.get(),
             "flag": self.flag_var.get(),
