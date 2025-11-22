@@ -1172,6 +1172,8 @@ class ProductFrame:
             message, decimal_value = self._validate_amount_field(var, label, allow_blank)
             if message:
                 return None
+            if decimal_value is None:
+                decimal_value = Decimal("0") if allow_blank else None
             values[key] = decimal_value
         return values
 
@@ -1187,7 +1189,7 @@ class ProductFrame:
             'contingencia': values.get('contingencia'),
             'recuperado': values.get('recuperado'),
         }
-        if inv is not None and all(value is not None for value in componentes_dict.values()):
+        if inv is not None:
             componentes = sum_investigation_components(**componentes_dict)
             if componentes != inv:
                 errors['inv'] = (
