@@ -162,9 +162,7 @@ def _aggregate_amounts(
 
     perdida_total = get_amount("perdida_total")
     if perdida_total is None:
-        perdida_total = _sum_amounts(products, "monto_perdida_fraude") + _sum_amounts(
-            products, "monto_falla_procesos"
-        )
+        perdida_total = _sum_amounts(products, "monto_perdida_fraude")
 
     return {
         "investigado": get_amount("importe_investigado", "monto_investigado"),
