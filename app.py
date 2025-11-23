@@ -88,7 +88,8 @@ from inheritance_service import InheritanceService
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       EXPORTS_DIR, EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
-                      FLAG_COLABORADOR_LIST, LOGS_FILE, STORE_LOGS_LOCALLY,
+                      FLAG_COLABORADOR_LIST, LOGS_FILE, RICH_TEXT_MAX_CHARS,
+                      STORE_LOGS_LOCALLY,
                       MASSIVE_SAMPLE_FILES, NORM_ID_ALIASES, PROCESO_LIST,
                       PRODUCT_ID_ALIASES, RISK_ID_ALIASES, TAXONOMIA,
                       TEAM_ID_ALIASES, TEMP_AUTOSAVE_COMPRESS_OLD,
@@ -112,6 +113,7 @@ from validators import (
     normalize_without_accents,
     parse_decimal_amount,
     resolve_catalog_product_type,
+    sanitize_rich_text,
     should_autofill_field,
     sum_investigation_components,
     validate_agency_code,
@@ -191,6 +193,7 @@ class FraudCaseApp:
         self.norm_lookup = {}
         self._reset_extended_sections()
         self._post_edit_validators = []
+        self._rich_text_limiters: dict[tk.Text, "FraudCaseApp._RichTextLimiter"] = {}
         self._encabezado_vars: dict[str, tk.StringVar] = {}
         self._operation_vars: dict[str, tk.StringVar] = {}
         self._anexo_vars: dict[str, tk.StringVar] = {}
@@ -321,6 +324,57 @@ class FraudCaseApp:
         )
         self._post_edit_validators.append(validator)
         return validator
+
+    def _register_rich_text_limit(self, widget: tk.Text, label: str) -> None:
+        limiter = self._RichTextLimiter(
+            widget, lambda: self._enforce_rich_text_limits(widget, label)
+        )
+        self._rich_text_limiters[widget] = limiter
+
+    def _mark_rich_text_modified(self, widget: tk.Text) -> None:
+        limiter = self._rich_text_limiters.get(widget)
+        if limiter:
+            limiter.arm()
+
+    def _enforce_rich_text_limits(self, widget: tk.Text, section_label: str) -> None:
+        raw_text = self._get_text_content(widget)
+        cleaned_text = sanitize_rich_text(raw_text, max_chars=None)
+        trimmed_text = sanitize_rich_text(cleaned_text, max_chars=RICH_TEXT_MAX_CHARS)
+        over_limit = len(cleaned_text) > RICH_TEXT_MAX_CHARS
+        if trimmed_text != raw_text:
+            self._set_text_content(widget, trimmed_text)
+        if over_limit and not getattr(self, "_suppress_messagebox", False):
+            message = (
+                f"El campo {section_label} supera el máximo de {RICH_TEXT_MAX_CHARS} caracteres."
+            )
+            try:
+                messagebox.showerror("Texto demasiado largo", message)
+            except tk.TclError:
+                pass
+            else:
+                log_event("validacion", message, self.logs)
+        self._notify_dataset_changed()
+
+    class _RichTextLimiter:
+        def __init__(self, widget: tk.Text, on_commit):
+            self.widget = widget
+            self._on_commit = on_commit
+            self._armed = False
+            for event_name in ("<KeyRelease>", "<<Paste>>", "<<Cut>>"):
+                widget.bind(event_name, self._arm, add="+")
+            widget.bind("<FocusOut>", self._handle_edit, add="+")
+
+        def _arm(self, *_args):
+            self._armed = True
+
+        def _handle_edit(self, *_args):
+            if not self._armed:
+                return
+            self._armed = False
+            self._on_commit()
+
+        def arm(self):
+            self._armed = True
 
     def _prepare_external_drive(self) -> Optional[Path]:
         try:
@@ -529,6 +583,7 @@ class FraudCaseApp:
         if pad:
             widget.insert("insert", " ")
             widget.focus_set()
+        self._mark_rich_text_modified(widget)
 
     def _create_photo_image_from_source(self, source):
         if not source:
@@ -579,11 +634,14 @@ class FraudCaseApp:
             "recomendaciones",
         ]
         payload = analysis_payload or {}
-        normalized = {name: _get_text(payload.get(name)) for name in sections}
+        normalized = {
+            name: sanitize_rich_text(_get_text(payload.get(name)), RICH_TEXT_MAX_CHARS)
+            for name in sections
+        }
         for name, value in payload.items():
             if name in normalized:
                 continue
-            normalized[name] = _get_text(value)
+            normalized[name] = sanitize_rich_text(_get_text(value), RICH_TEXT_MAX_CHARS)
         return normalized
 
     def _get_exports_folder(self) -> Optional[Path]:
@@ -2007,6 +2065,7 @@ class FraudCaseApp:
             text_widget.bind(
                 "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
             )
+            self._register_rich_text_limit(text_widget, label_text.rstrip(":"))
             self.register_tooltip(text_widget, tooltip)
             toolbar = ttk.Frame(section_frame)
             toolbar.grid(
@@ -2694,6 +2753,7 @@ class FraudCaseApp:
             end = text_widget.index("insert lineend")
         text_widget.tag_add(tag_name, start, end)
         text_widget.focus_set()
+        self._mark_rich_text_modified(text_widget)
 
     def _insert_table_template(self, text_widget):
         table_template = (
@@ -2705,6 +2765,7 @@ class FraudCaseApp:
         text_widget.insert(insertion_point, table_template)
         text_widget.tag_add("table", insertion_point, f"{insertion_point} + {len(table_template)} chars")
         text_widget.focus_set()
+        self._mark_rich_text_modified(text_widget)
 
     def _handle_rich_text_paste(self, event):
         widget = event.widget
@@ -2714,6 +2775,7 @@ class FraudCaseApp:
         if photo is None:
             return None
         self._record_rich_text_image(widget, photo, source)
+        self._mark_rich_text_modified(widget)
         return "break"
 
     def _get_clipboard_photo(self):
@@ -2775,6 +2837,7 @@ class FraudCaseApp:
             )
             return
         self._record_rich_text_image(text_widget, photo, source)
+        self._mark_rich_text_modified(text_widget)
 
     def _insert_image(self, text_widget):
         filetypes = [
@@ -2790,6 +2853,7 @@ class FraudCaseApp:
             messagebox.showerror("Imagen inválida", f"No se pudo cargar la imagen: {exc}")
             return
         self._record_rich_text_image(text_widget, photo, filepath)
+        self._mark_rich_text_modified(text_widget)
 
     def build_actions_tab(self, parent):
         PRIMARY_PADDING = (12, 6)

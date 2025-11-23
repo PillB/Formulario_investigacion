@@ -10,7 +10,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from tkinter import TclError, messagebox
 
-from settings import TIPO_PRODUCTO_LIST
+from settings import RICH_TEXT_MAX_CHARS, TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
 
 _LOG_QUEUE: List[dict] = []
@@ -479,6 +479,29 @@ def should_autofill_field(current_value, preserve_existing: bool) -> bool:
     return False
 
 
+def sanitize_rich_text(text: str | None, max_chars: Optional[int] = RICH_TEXT_MAX_CHARS) -> str:
+    """Normaliza texto enriquecido eliminando caracteres de control y aplicando un límite.
+
+    Args:
+        text: Texto a limpiar. Se convierte a ``str`` si no lo es.
+        max_chars: Máximo de caracteres permitidos tras la limpieza. Si es ``None``
+            o un valor menor que 1 no se aplica truncamiento.
+
+    Returns:
+        Texto saneado sin caracteres de control no imprimibles, con saltos de línea
+        normalizados y recortado al límite especificado.
+    """
+
+    normalized = "" if text is None else str(text).replace("\r\n", "\n").replace("\r", "\n")
+    filtered_chars = [
+        ch for ch in normalized if ch in {"\n", "\t"} or ch.isprintable()
+    ]
+    sanitized = "".join(filtered_chars)
+    if max_chars is not None and max_chars > 0:
+        return sanitized[:max_chars]
+    return sanitized
+
+
 def _serialize_coords(coords) -> str:
     if coords is None:
         return ""
@@ -540,6 +563,7 @@ __all__ = [
     'normalize_team_member_identifier',
     'normalize_log_row',
     'parse_decimal_amount',
+    'sanitize_rich_text',
     'resolve_catalog_product_type',
     'should_autofill_field',
     'sum_investigation_components',
