@@ -1275,11 +1275,15 @@ class ProductFrame:
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def _validate_product_date_pair(self):
+        fecha_oc = (self.fecha_oc_var.get() or "").strip()
+        fecha_desc = (self.fecha_desc_var.get() or "").strip()
+        if not (fecha_oc and fecha_desc):
+            return None
         producto_label = self.id_var.get().strip() or f"Producto {self.idx+1}"
         return validate_product_dates(
             producto_label,
-            self.fecha_oc_var.get(),
-            self.fecha_desc_var.get(),
+            fecha_oc,
+            fecha_desc,
         )
 
     def _validate_fecha_ocurrencia(self):
