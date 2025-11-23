@@ -1893,12 +1893,11 @@ class FraudCaseApp:
         self._schedule_summary_refresh('normas')
 
     def build_analysis_tab(self, parent):
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True)
-        frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
+        scrollable_tab, tab_container = create_scrollable_container(parent)
+        scrollable_tab.pack(fill="both", expand=True)
+        tab_container.columnconfigure(0, weight=1)
 
-        analysis_group = ttk.LabelFrame(frame, text="Análisis narrativo")
+        analysis_group = ttk.LabelFrame(tab_container, text="Análisis narrativo")
         analysis_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
         analysis_group.columnconfigure(0, weight=1)
         analysis_group.rowconfigure(0, weight=1)
@@ -1980,7 +1979,7 @@ class FraudCaseApp:
             self.recomendaciones_text,
         ) = text_widgets
 
-        self._build_extended_analysis_sections(frame)
+        self._build_extended_analysis_sections(tab_container)
 
     def _build_extended_analysis_sections(self, parent):
         extended_group = ttk.LabelFrame(parent, text="Secciones extendidas del informe")
