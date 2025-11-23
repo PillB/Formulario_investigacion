@@ -1929,7 +1929,7 @@ class FraudCaseApp:
             )
             analysis_container.rowconfigure(idx, weight=1)
             section_frame.columnconfigure(0, weight=1)
-            section_frame.rowconfigure(2, weight=1)
+            section_frame.rowconfigure(1, weight=1)
 
             ttk.Label(section_frame, text=label_text).grid(
                 row=0,
@@ -1939,19 +1939,17 @@ class FraudCaseApp:
                 sticky="w",
             )
 
-            toolbar = ttk.Frame(section_frame)
-            toolbar.grid(row=1, column=0, padx=COL_PADX, pady=(0, ROW_PADY // 2), sticky="w")
-
             text_widget = scrolledtext.ScrolledText(
                 section_frame,
-                height=12,
+                height=22,
+                width=100,
                 wrap="word",
             )
             text_widget.grid(
-                row=2,
+                row=1,
                 column=0,
                 padx=COL_PADX,
-                pady=(0, ROW_PADY),
+                pady=(ROW_PADY // 2, ROW_PADY // 2),
                 sticky="nsew",
             )
             text_widget.configure(
@@ -1959,9 +1957,11 @@ class FraudCaseApp:
                 font=FONT_BASE,
                 padx=COL_PADX,
                 pady=ROW_PADY,
-                width=0,
+                width=100,
                 wrap=tk.WORD,
             )
+            toolbar = ttk.Frame(section_frame)
+            toolbar.grid(row=2, column=0, padx=COL_PADX, pady=(0, ROW_PADY), sticky="w")
             self._configure_rich_text_tags(text_widget, bold_font, header_font, mono_font)
             text_widget.bind(
                 "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
