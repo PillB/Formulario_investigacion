@@ -373,28 +373,86 @@ class TeamMemberFrame:
 
     def _clear_fallback_warning(self) -> None:
         self._fallback_message_var.set("")
+        exists_fn = getattr(self._fallback_label, "winfo_exists", None)
+        try:
+            label_exists = exists_fn() if callable(exists_fn) else True
+        except tk.TclError as exc:
+            log_event(
+                "validacion",
+                f"Error verificando existencia de etiqueta de fallback: {exc}",
+                self.logs,
+            )
+            label_exists = False
+        if not label_exists:
+            log_event(
+                "validacion",
+                "No se pudo ocultar advertencia: la etiqueta de fallback no existe",
+                self.logs,
+            )
+            return
         try:
             if self._fallback_label.winfo_ismapped():
-                if hasattr(self._fallback_label, "grid_remove"):
+                manager = getattr(self._fallback_label, "winfo_manager", lambda: "")()
+                if manager == "grid" and hasattr(self._fallback_label, "grid_remove"):
                     self._fallback_label.grid_remove()
+                elif manager == "pack" and hasattr(self._fallback_label, "pack_forget"):
+                    self._fallback_label.pack_forget()
                 elif hasattr(self._fallback_label, "pack_forget"):
                     self._fallback_label.pack_forget()
-        except Exception:
-            pass
+                elif hasattr(self._fallback_label, "grid_remove"):
+                    self._fallback_label.grid_remove()
+                else:
+                    log_event(
+                        "validacion",
+                        "No se pudo ocultar advertencia: no hay método para desacoplar la etiqueta",
+                        self.logs,
+                    )
+        except tk.TclError as exc:
+            log_event(
+                "validacion",
+                f"Error al ocultar advertencia de fallback: {exc}",
+                self.logs,
+            )
 
     def _set_fallback_warning(self, message: str | None) -> None:
         if not message:
             self._clear_fallback_warning()
             return
         self._fallback_message_var.set(message)
+        exists_fn = getattr(self._fallback_label, "winfo_exists", None)
+        try:
+            label_exists = exists_fn() if callable(exists_fn) else True
+        except tk.TclError as exc:
+            log_event(
+                "validacion",
+                f"Error verificando existencia de etiqueta de fallback: {exc}",
+                self.logs,
+            )
+            label_exists = False
+        if not label_exists:
+            log_event(
+                "validacion",
+                "No se pudo mostrar advertencia: la etiqueta de fallback no existe",
+                self.logs,
+            )
+            return
         try:
             if not self._fallback_label.winfo_ismapped():
-                if hasattr(self._fallback_label, "grid"):
+                manager = getattr(self._fallback_label, "winfo_manager", lambda: "")()
+                if manager == "grid" and hasattr(self._fallback_label, "grid"):
                     self._fallback_label.grid()
+                elif manager == "pack" and hasattr(self._fallback_label, "pack"):
+                    self._fallback_label.pack(fill="x", padx=COL_PADX, pady=(0, ROW_PADY // 2))
                 elif hasattr(self._fallback_label, "pack"):
                     self._fallback_label.pack(fill="x", padx=COL_PADX, pady=(0, ROW_PADY // 2))
-        except Exception:
-            pass
+                elif hasattr(self._fallback_label, "grid"):
+                    self._fallback_label.grid()
+        except tk.TclError as exc:
+            log_event(
+                "validacion",
+                f"Error al mostrar advertencia de fallback: {exc}",
+                self.logs,
+            )
 
     @staticmethod
     def _build_fallback_warning(reason: str | None) -> str | None:
