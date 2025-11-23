@@ -818,6 +818,14 @@ class ProductFrame:
             self.monto_pago_var,
         ]
         shared_amount_vars = amount_vars + [self.tipo_prod_var]
+        amount_widgets = [
+            inv_entry,
+            perdida_entry,
+            falla_entry,
+            cont_entry,
+            rec_entry,
+            pago_entry,
+        ]
         self._create_amount_consistency_validators(
             shared_amount_vars,
             {
@@ -826,6 +834,7 @@ class ProductFrame:
                 'pago': (pago_entry, "Monto pago de deuda"),
                 'contingencia': (cont_entry, "Monto contingencia"),
             },
+            related_widgets=amount_widgets,
         )
 
         if initialize_rows:
@@ -899,7 +908,7 @@ class ProductFrame:
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
 
-    def _create_amount_consistency_validators(self, variables, widget_map):
+    def _create_amount_consistency_validators(self, variables, widget_map, *, related_widgets=None):
         for key, (widget, label) in widget_map.items():
             validator = FieldValidator(
                 widget,
@@ -908,6 +917,10 @@ class ProductFrame:
                 f"Producto {self.idx+1} - Consistencia de montos ({label})",
                 variables=variables,
             )
+            if related_widgets:
+                for extra_widget in related_widgets:
+                    if extra_widget is not widget:
+                        validator.add_widget(extra_widget)
             self.validators.append(validator)
 
     def _register_duplicate_triggers(self, widget) -> None:
