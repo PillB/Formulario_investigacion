@@ -5587,8 +5587,10 @@ class FraudCaseApp:
 
     def _handle_window_close(self):
         self.flush_autosave()
+        self._cancel_summary_refresh_job()
         self.flush_logs_now(reschedule=False)
-        self.root.destroy()
+        with suppress(tk.TclError):
+            self.root.destroy()
 
     def _schedule_log_flush(self) -> None:
         if not self._has_log_targets():
