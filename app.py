@@ -1882,14 +1882,16 @@ class FraudCaseApp:
     def build_analysis_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
 
         analysis_group = ttk.LabelFrame(frame, text="Análisis narrativo")
         analysis_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
         analysis_group.columnconfigure(0, weight=1)
         analysis_group.rowconfigure(0, weight=1)
 
-        analysis_container = ttk.Frame(analysis_group)
-        analysis_container.grid(row=0, column=0, sticky="nsew")
+        scrollable, analysis_container = create_scrollable_container(analysis_group)
+        scrollable.grid(row=0, column=0, sticky="nsew")
         analysis_container.columnconfigure(0, weight=1)
 
         fields = [
@@ -1930,7 +1932,7 @@ class FraudCaseApp:
 
             text_widget = scrolledtext.ScrolledText(
                 section_frame,
-                height=18,
+                height=12,
                 wrap="word",
             )
             text_widget.grid(
