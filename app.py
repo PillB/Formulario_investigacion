@@ -285,6 +285,7 @@ class FraudCaseApp:
             self._armed = False
             self._last_error: Optional[str] = None
             widget.bind("<KeyRelease>", self._arm, add="+")
+            widget.bind("<<ComboboxSelected>>", self._arm, add="+")
             widget.bind("<<ComboboxSelected>>", self._on_edit, add="+")
             widget.bind("<FocusOut>", self._on_edit, add="+")
 
