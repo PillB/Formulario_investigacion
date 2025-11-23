@@ -1297,10 +1297,13 @@ class FraudCaseApp:
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        frame.rowconfigure(2, weight=1)
 
         summary_section = ttk.LabelFrame(frame, text="Resumen de clientes")
         summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         summary_section.columnconfigure(0, weight=1)
+        summary_section.rowconfigure(0, weight=1)
         columns = [
             ("id", "ID"),
             ("nombres", "Nombres"),
@@ -1338,10 +1341,12 @@ class FraudCaseApp:
 
         self.clients_detail_wrapper = ttk.LabelFrame(frame, text="Detalle de clientes")
         ensure_grid_support(self.clients_detail_wrapper)
-        self.clients_detail_wrapper.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        self.clients_detail_wrapper.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         self.clients_detail_wrapper.columnconfigure(0, weight=1)
-        self.clients_container = ttk.Frame(self.clients_detail_wrapper)
-        self.clients_container.pack(fill="x", pady=5)
+        self.clients_detail_wrapper.rowconfigure(0, weight=1)
+        scrollable, inner = create_scrollable_container(self.clients_detail_wrapper)
+        scrollable.grid(row=0, column=0, sticky="nsew")
+        self.clients_container = inner
         # Inicialmente un cliente en blanco
         self.add_client()
         self.hide_clients_detail()
@@ -1456,10 +1461,13 @@ class FraudCaseApp:
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        frame.rowconfigure(2, weight=1)
 
         summary_section = ttk.LabelFrame(frame, text="Resumen de colaboradores")
         summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         summary_section.columnconfigure(0, weight=1)
+        summary_section.rowconfigure(0, weight=1)
         team_columns = [
             ("id", "ID"),
             ("nombres", "Nombres"),
@@ -1495,10 +1503,12 @@ class FraudCaseApp:
 
         self.team_detail_wrapper = ttk.LabelFrame(frame, text="Detalle de colaboradores")
         ensure_grid_support(self.team_detail_wrapper)
-        self.team_detail_wrapper.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        self.team_detail_wrapper.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         self.team_detail_wrapper.columnconfigure(0, weight=1)
-        self.team_container = ttk.Frame(self.team_detail_wrapper)
-        self.team_container.pack(fill="x", pady=5)
+        self.team_detail_wrapper.rowconfigure(0, weight=1)
+        scrollable, inner = create_scrollable_container(self.team_detail_wrapper)
+        scrollable.grid(row=0, column=0, sticky="nsew")
+        self.team_container = inner
         self.add_team()
         self.hide_team_detail()
         self._refresh_inline_section_tables("colaboradores")
@@ -1613,13 +1623,16 @@ class FraudCaseApp:
     def build_products_tab(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        self.product_container = ttk.Frame(frame)
-        self.product_container.pack(fill="x", pady=5)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
         button_row = ttk.Frame(frame)
-        button_row.pack(fill="x", padx=5, pady=5)
+        button_row.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=ROW_PADY)
         add_btn = ttk.Button(button_row, text="Crear producto nuevo (vacío)", command=self.add_product)
-        add_btn.pack(side="left", padx=5)
+        add_btn.grid(row=0, column=0, sticky="w", padx=5)
         self.register_tooltip(add_btn, "Registra un nuevo producto investigado.")
+        scrollable, inner = create_scrollable_container(frame)
+        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.product_container = inner
         inherit_btn = ttk.Button(
             button_row,
             text="Crear producto heredando del caso",
