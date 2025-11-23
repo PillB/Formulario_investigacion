@@ -284,7 +284,14 @@ class FraudCaseApp:
             self._suppression_flag = suppression_flag
             self._armed = False
             self._last_error: Optional[str] = None
-            widget.bind("<KeyRelease>", self._arm, add="+")
+            for event_name in (
+                "<KeyRelease>",
+                "<<Paste>>",
+                "<<Cut>>",
+                "<<ComboboxSelected>>",
+            ):
+                widget.bind(event_name, self._arm, add="+")
+
             widget.bind("<<ComboboxSelected>>", self._on_edit, add="+")
             widget.bind("<FocusOut>", self._on_edit, add="+")
 
