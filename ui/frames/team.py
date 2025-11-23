@@ -582,7 +582,9 @@ class TeamMemberFrame:
 
     @staticmethod
     def _validate_date_field(var: tk.StringVar, label: str, show_alert: bool = False) -> str | None:
-        message = validate_date_text(var.get(), label, allow_blank=True)
+        message = validate_date_text(
+            var.get(), label, allow_blank=True, enforce_max_today=True
+        )
         if show_alert and message:
             try:
                 messagebox.showerror("Fecha inválida", message)
