@@ -3216,14 +3216,17 @@ class FraudCaseApp:
     def _build_compact_table(self, parent, columns, height=6, column_width=140):
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
         tree = ttk.Treeview(frame, columns=[col for col, _ in columns], show="headings", height=height)
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
+        vscrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        hscrollbar = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vscrollbar.set, xscrollcommand=hscrollbar.set)
         for col_id, heading in columns:
             tree.heading(col_id, text=heading)
             tree.column(col_id, width=column_width, stretch=True)
         tree.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        vscrollbar.grid(row=0, column=1, sticky="ns")
+        hscrollbar.grid(row=1, column=0, sticky="ew")
         return tree, frame
 
     def _start_background_import(self, task_label, button, worker, ui_callback, error_prefix, ui_error_prefix=None):
@@ -3433,7 +3436,20 @@ class FraudCaseApp:
                     ("id", "ID Producto"),
                     ("cliente", "Cliente"),
                     ("tipo", "Tipo"),
-                    ("monto", "Monto investigado"),
+                    ("categoria1", "Categoría 1"),
+                    ("categoria2", "Categoría 2"),
+                    ("modalidad", "Modalidad"),
+                    ("canal", "Canal"),
+                    ("proceso", "Proceso"),
+                    ("fecha_oc", "Fecha ocurrencia"),
+                    ("fecha_desc", "Fecha descubrimiento"),
+                    ("moneda", "Moneda"),
+                    ("monto_inv", "Monto investigado"),
+                    ("monto_perdida", "Pérdida"),
+                    ("monto_falla", "Falla procesos"),
+                    ("monto_cont", "Contingencia"),
+                    ("monto_rec", "Recuperado"),
+                    ("monto_pago", "Pago deuda"),
                 ],
             ),
             (
@@ -3779,13 +3795,55 @@ class FraudCaseApp:
 
     def _transform_clipboard_productos(self, rows):
         sanitized = []
+        field_order = [
+            "id_producto",
+            "id_cliente",
+            "tipo_producto",
+            "categoria1",
+            "categoria2",
+            "modalidad",
+            "canal",
+            "proceso",
+            "fecha_ocurrencia",
+            "fecha_descubrimiento",
+            "tipo_moneda",
+            "monto_investigado",
+            "monto_perdida_fraude",
+            "monto_falla_procesos",
+            "monto_contingencia",
+            "monto_recuperado",
+            "monto_pago_deuda",
+        ]
         for idx, values in enumerate(rows, start=1):
-            product = {
-                "id_producto": values[0].strip(),
-                "id_cliente": values[1].strip(),
-                "tipo_producto": values[2].strip(),
-                "monto_investigado": values[3].strip(),
-            }
+            is_legacy = len(values) == 4
+            normalized_values: list[str]
+            if len(values) == len(field_order):
+                normalized_values = [value.strip() for value in values]
+            elif is_legacy:
+                normalized_values = [
+                    values[0].strip(),
+                    values[1].strip(),
+                    values[2].strip(),
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    values[3].strip(),
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                ]
+            else:
+                raise ValueError(
+                    f"Producto fila {idx}: se esperaban {len(field_order)} columnas para el pegado."
+                )
+            product = dict(zip(field_order, normalized_values))
             if not product["id_cliente"]:
                 raise ValueError(f"Producto fila {idx}: el ID de cliente es obligatorio.")
             tipo_catalogo = resolve_catalog_product_type(product["tipo_producto"])
@@ -3799,6 +3857,29 @@ class FraudCaseApp:
             message = validate_product_id(product["tipo_producto"], product["id_producto"])
             if message:
                 raise ValueError(f"Producto fila {idx}: {message}")
+            occ_message = validate_date_text(
+                product["fecha_ocurrencia"],
+                "la fecha de ocurrencia",
+                allow_blank=True,
+                enforce_max_today=True,
+                must_be_before=(product["fecha_descubrimiento"], "la fecha de descubrimiento"),
+            )
+            if occ_message:
+                raise ValueError(f"Producto fila {idx}: {occ_message}")
+            desc_message = validate_date_text(
+                product["fecha_descubrimiento"],
+                "la fecha de descubrimiento",
+                allow_blank=True,
+                enforce_max_today=True,
+                must_be_after=(product["fecha_ocurrencia"], "la fecha de ocurrencia"),
+            )
+            if desc_message:
+                raise ValueError(f"Producto fila {idx}: {desc_message}")
+            moneda = product["tipo_moneda"]
+            if moneda and moneda not in TIPO_MONEDA_LIST:
+                raise ValueError(
+                    f"Producto fila {idx}: la moneda '{moneda}' no está en el catálogo CM."
+                )
             amount_message, decimal_value, _ = validate_money_bounds(
                 product["monto_investigado"],
                 "el monto investigado",
@@ -3806,14 +3887,43 @@ class FraudCaseApp:
             )
             if amount_message:
                 raise ValueError(f"Producto fila {idx}: {amount_message}")
-            sanitized.append(
-                (
-                    product["id_producto"],
-                    product["id_cliente"],
-                    product["tipo_producto"],
-                    f"{decimal_value:.2f}",
+            product["monto_investigado"] = f"{decimal_value:.2f}"
+            amount_fields = [
+                ("monto_perdida_fraude", "el monto de pérdida de fraude"),
+                ("monto_falla_procesos", "el monto de falla en procesos"),
+                ("monto_contingencia", "el monto de contingencia"),
+                ("monto_recuperado", "el monto recuperado"),
+                ("monto_pago_deuda", "el monto de pago de deuda"),
+            ]
+            for field_name, label in amount_fields:
+                extra_message, _amount_decimal, normalized = validate_money_bounds(
+                    product[field_name],
+                    label,
+                    allow_blank=True,
                 )
+                if extra_message:
+                    raise ValueError(f"Producto fila {idx}: {extra_message}")
+                product[field_name] = normalized
+            full_row = (
+                product["id_producto"],
+                product["id_cliente"],
+                product["tipo_producto"],
+                product["categoria1"],
+                product["categoria2"],
+                product["modalidad"],
+                product["canal"],
+                product["proceso"],
+                product["fecha_ocurrencia"],
+                product["fecha_descubrimiento"],
+                product["tipo_moneda"],
+                product["monto_investigado"],
+                product["monto_perdida_fraude"],
+                product["monto_falla_procesos"],
+                product["monto_contingencia"],
+                product["monto_recuperado"],
+                product["monto_pago_deuda"],
             )
+            sanitized.append(full_row if not is_legacy else full_row[:3] + (product["monto_investigado"],))
         return sanitized
 
     def _transform_clipboard_reclamos(self, rows):
@@ -4099,24 +4209,28 @@ class FraudCaseApp:
             return processed
         if section_key == "productos":
             for values in rows:
+                is_legacy_product = len(values) == 4
                 payload = {
                     "id_producto": (values[0] or "").strip(),
                     "id_cliente": (values[1] or "").strip(),
                     "tipo_producto": (values[2] or "").strip(),
-                    "monto_investigado": (values[3] or "").strip(),
-                    "categoria1": "",
-                    "categoria2": "",
-                    "modalidad": "",
-                    "canal": "",
-                    "proceso": "",
-                    "fecha_ocurrencia": "",
-                    "fecha_descubrimiento": "",
-                    "tipo_moneda": "",
-                    "monto_perdida_fraude": "",
-                    "monto_falla_procesos": "",
-                    "monto_contingencia": "",
-                    "monto_recuperado": "",
-                    "monto_pago_deuda": "",
+                    "categoria1": "" if is_legacy_product else (values[3] or "").strip(),
+                    "categoria2": "" if is_legacy_product else (values[4] or "").strip(),
+                    "modalidad": "" if is_legacy_product else (values[5] or "").strip(),
+                    "canal": "" if is_legacy_product else (values[6] or "").strip(),
+                    "proceso": "" if is_legacy_product else (values[7] or "").strip(),
+                    "fecha_ocurrencia": "" if is_legacy_product else (values[8] or "").strip(),
+                    "fecha_descubrimiento": "" if is_legacy_product else (values[9] or "").strip(),
+                    "tipo_moneda": "" if is_legacy_product else (values[10] or "").strip(),
+                    "monto_investigado": (
+                        (values[11] if not is_legacy_product else values[3] if len(values) > 3 else "")
+                        or ""
+                    ).strip(),
+                    "monto_perdida_fraude": "" if is_legacy_product else (values[12] or "").strip(),
+                    "monto_falla_procesos": "" if is_legacy_product else (values[13] or "").strip(),
+                    "monto_contingencia": "" if is_legacy_product else (values[14] or "").strip(),
+                    "monto_recuperado": "" if is_legacy_product else (values[15] or "").strip(),
+                    "monto_pago_deuda": "" if is_legacy_product else (values[16] or "").strip(),
                     "id_reclamo": "",
                     "nombre_analitica": "",
                     "codigo_analitica": "",
@@ -4444,7 +4558,20 @@ class FraudCaseApp:
                     prod.get("id_producto", ""),
                     prod.get("id_cliente", ""),
                     prod.get("tipo_producto", ""),
+                    prod.get("categoria1", ""),
+                    prod.get("categoria2", ""),
+                    prod.get("modalidad", ""),
+                    prod.get("canal", ""),
+                    prod.get("proceso", ""),
+                    prod.get("fecha_ocurrencia", ""),
+                    prod.get("fecha_descubrimiento", ""),
+                    prod.get("tipo_moneda", ""),
                     prod.get("monto_investigado", ""),
+                    prod.get("monto_perdida_fraude", ""),
+                    prod.get("monto_falla_procesos", ""),
+                    prod.get("monto_contingencia", ""),
+                    prod.get("monto_recuperado", ""),
+                    prod.get("monto_pago_deuda", ""),
                 )
                 for prod in dataset.get("productos", [])
             ]
