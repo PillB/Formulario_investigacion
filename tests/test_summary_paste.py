@@ -81,7 +81,18 @@ def test_ingest_summary_rows_create_frames_with_normalized_values(monkeypatch, m
     assert app.ingest_summary_rows("clientes", client_rows) == 1
     assert [frame.id_var.get() for frame in app.client_frames] == ["12345678"]
 
-    team_row = ["T67890", "Division B", "Área Comercial", TIPO_SANCION_LIST[0]]
+    team_row = [
+        "T67890",
+        "Ana",
+        "López",
+        "Division B",
+        "Área Comercial",
+        "Servicio A",
+        "Puesto B",
+        TIPO_SANCION_LIST[0],
+        "2023-01-01",
+        "2023-02-01",
+    ]
     team_rows = app._transform_clipboard_colaboradores([team_row])
     assert app.ingest_summary_rows("colaboradores", team_rows) == 1
     assert [frame.id_var.get() for frame in app.team_frames] == ["T67890"]

@@ -3406,9 +3406,15 @@ class FraudCaseApp:
                 "Colaboradores involucrados",
                 [
                     ("id", "ID"),
+                    ("nombres", "Nombres"),
+                    ("apellidos", "Apellidos"),
                     ("division", "División"),
                     ("area", "Área"),
-                    ("sancion", "Sanción"),
+                    ("servicio", "Servicio"),
+                    ("puesto", "Puesto"),
+                    ("tipo_sancion", "Tipo sanción"),
+                    ("fecha_carta_inmediatez", "Carta inmediatez"),
+                    ("fecha_carta_renuncia", "Carta renuncia"),
                 ],
             ),
             (
@@ -3466,7 +3472,10 @@ class FraudCaseApp:
         for key, title, columns in config:
             section = ttk.LabelFrame(container, text=title)
             section.pack(fill="both", expand=True, pady=5)
-            tree, frame = self._build_compact_table(section, columns, height=5, column_width=150)
+            column_width = 130 if key == "colaboradores" else 150
+            tree, frame = self._build_compact_table(
+                section, columns, height=5, column_width=column_width
+            )
             frame.pack(fill="both", expand=True)
             self.summary_tables[key] = tree
             if key == "clientes" and self.clients_compact_table is None:
@@ -3674,9 +3683,15 @@ class FraudCaseApp:
         for idx, values in enumerate(rows, start=1):
             collaborator = {
                 "id_colaborador": values[0].strip(),
-                "division": values[1].strip(),
-                "area": values[2].strip(),
-                "tipo_sancion": values[3].strip(),
+                "nombres": values[1].strip(),
+                "apellidos": values[2].strip(),
+                "division": values[3].strip(),
+                "area": values[4].strip(),
+                "servicio": values[5].strip(),
+                "puesto": values[6].strip(),
+                "tipo_sancion": values[7].strip(),
+                "fecha_carta_inmediatez": values[8].strip(),
+                "fecha_carta_renuncia": values[9].strip(),
             }
             if collaborator["tipo_sancion"] not in TIPO_SANCION_LIST:
                 raise ValueError(
@@ -3685,12 +3700,32 @@ class FraudCaseApp:
             message = validate_team_member_id(collaborator["id_colaborador"])
             if message:
                 raise ValueError(f"Colaborador fila {idx}: {message}")
+            carta_inm_msg = validate_date_text(
+                collaborator["fecha_carta_inmediatez"],
+                "la fecha de carta de inmediatez",
+                enforce_max_today=True,
+            )
+            if carta_inm_msg:
+                raise ValueError(f"Colaborador fila {idx}: {carta_inm_msg}")
+            carta_ren_msg = validate_date_text(
+                collaborator["fecha_carta_renuncia"],
+                "la fecha de carta de renuncia",
+                enforce_max_today=True,
+            )
+            if carta_ren_msg:
+                raise ValueError(f"Colaborador fila {idx}: {carta_ren_msg}")
             sanitized.append(
                 (
                     collaborator["id_colaborador"],
+                    collaborator["nombres"],
+                    collaborator["apellidos"],
                     collaborator["division"],
                     collaborator["area"],
+                    collaborator["servicio"],
+                    collaborator["puesto"],
                     collaborator["tipo_sancion"],
+                    collaborator["fecha_carta_inmediatez"],
+                    collaborator["fecha_carta_renuncia"],
                 )
             )
         return sanitized
@@ -3934,12 +3969,16 @@ class FraudCaseApp:
             for values in rows:
                 payload = {
                     "id_colaborador": (values[0] or "").strip(),
-                    "division": (values[1] or "").strip(),
-                    "area": (values[2] or "").strip(),
-                    "tipo_sancion": (values[3] or "").strip(),
+                    "nombres": (values[1] or "").strip(),
+                    "apellidos": (values[2] or "").strip(),
+                    "division": (values[3] or "").strip(),
+                    "area": (values[4] or "").strip(),
+                    "servicio": (values[5] or "").strip(),
+                    "puesto": (values[6] or "").strip(),
+                    "tipo_sancion": (values[7] or "").strip(),
+                    "fecha_carta_inmediatez": (values[8] or "").strip(),
+                    "fecha_carta_renuncia": (values[9] or "").strip(),
                     "flag_colaborador": "No aplica",
-                    "servicio": "",
-                    "puesto": "",
                     "nombre_agencia": "",
                     "codigo_agencia": "",
                     "tipo_falta": "No aplica",
