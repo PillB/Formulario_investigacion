@@ -355,34 +355,55 @@ class FieldValidator:
     def _bind_widget_events(self, widget) -> None:
         for event_name in (
             "<FocusOut>",
-            "<KeyRelease>",
             "<<ComboboxSelected>>",
             "<<Paste>>",
             "<<Cut>>",
         ):
-            widget.bind(event_name, self._on_change, add="+")
+            widget.bind(
+                event_name,
+                lambda event, name=event_name: self._on_change(name, event),
+                add="+",
+            )
 
     def add_widget(self, widget) -> None:
         """Incluye widgets adicionales cuyos eventos deben disparar la validación."""
 
         self._bind_widget_events(widget)
 
-    def _on_change(self, *_args):
+    def _on_change(self, event_name=None, *_args):
         if self._suspend_count > 0:
             return
-        event = _args[0] if _args else None
+        if event_name is not None and not isinstance(event_name, str):
+            event = event_name
+            event_name = None
+        else:
+            event = _args[0] if _args else None
         current_value = self._capture_current_value()
         value_changed_since_validation = current_value != self._last_validated_value
         is_user_event = hasattr(event, "widget")
-        is_focus_out = is_user_event and self._is_focus_out(event)
-        if is_user_event and not is_focus_out:
+        is_focus_out = event_name == "<FocusOut>" or (is_user_event and self._is_focus_out(event))
+        is_commit_event = event_name in {"<<ComboboxSelected>>", "<<Paste>>", "<<Cut>>"}
+
+        should_validate = False
+        allow_modal_notifications = False
+
+        if is_focus_out and (value_changed_since_validation or self._validation_armed):
+            should_validate = True
+            allow_modal_notifications = True
+            self._validation_armed = False
+        elif is_commit_event:
             self._validation_armed = True
-        elif not self._validation_armed and not (is_focus_out and value_changed_since_validation):
+            should_validate = True
+        elif is_user_event and not is_focus_out:
+            self._validation_armed = True
+
+        if not should_validate:
             return
+
         error = self.validate_callback()
-        self._display_error(error)
+        self._display_error(error, allow_modal=allow_modal_notifications)
         self._last_validated_value = current_value
-        if is_focus_out:
+        if not is_focus_out:
             self._validation_armed = False
 
     def _capture_current_value(self):
@@ -408,11 +429,12 @@ class FieldValidator:
             pass
         return str(event_type) == "FocusOut" or event_type == "9"
 
-    def _display_error(self, error: Optional[str]) -> None:
+    def _display_error(self, error: Optional[str], *, allow_modal: bool = True) -> None:
         if error == self.last_error:
             return
         if error:
-            self._notify_modal_error(error)
+            if allow_modal:
+                self._notify_modal_error(error)
             self.tooltip.show(error)
             log_event("validacion", f"{self.field_name}: {error}", self.logs)
         else:
