@@ -17,7 +17,8 @@ DOCX_MISSING_MESSAGE = (
     "Instálala con 'pip install python-docx' para habilitar el informe Word."
 )
 
-from validators import parse_decimal_amount
+from settings import RICH_TEXT_MAX_CHARS
+from validators import parse_decimal_amount, sanitize_rich_text
 
 
 PLACEHOLDER = "No aplica / Sin información registrada."
@@ -118,11 +119,18 @@ def normalize_analysis_texts(analysis: Mapping[str, Any] | None) -> Dict[str, st
         "recomendaciones",
     ]
     payload = analysis or {}
-    normalized = {name: _extract_analysis_text(payload.get(name)) for name in keys}
+    normalized = {
+        name: sanitize_rich_text(
+            _extract_analysis_text(payload.get(name)), RICH_TEXT_MAX_CHARS
+        )
+        for name in keys
+    }
     for name, value in payload.items():
         if name in normalized:
             continue
-        normalized[name] = _extract_analysis_text(value)
+        normalized[name] = sanitize_rich_text(
+            _extract_analysis_text(value), RICH_TEXT_MAX_CHARS
+        )
     return normalized
 
 
