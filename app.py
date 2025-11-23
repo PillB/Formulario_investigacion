@@ -55,6 +55,7 @@ separados por punto y coma para campos con múltiples valores (teléfonos,
 correos, direcciones y planes de acción).
 """
 
+import base64
 import csv
 import json
 import os
@@ -504,23 +505,54 @@ class FraudCaseApp:
             source = image_data.get("source")
             if not index:
                 continue
-            photo = None
-            if source:
-                try:
-                    photo = tk.PhotoImage(file=source)
-                    self._rich_text_image_sources[str(photo)] = source
-                except tk.TclError:
-                    photo = None
+            photo = self._create_photo_image_from_source(source)
             if photo is None:
                 continue
             try:
                 widget.image_create(index, image=photo)
             except tk.TclError:
                 continue
-            self._rich_text_images[widget].append(photo)
+            self._record_rich_text_image(widget, photo, source, create=False, pad=False)
 
     def _set_text_content(self, widget: tk.Text, value: str) -> None:
         self._set_rich_text_content(widget, {"text": value or ""})
+
+    def _record_rich_text_image(
+        self, widget: tk.Text, photo: tk.PhotoImage, source, create: bool = True, pad: bool = True
+    ):
+        image_name = str(photo)
+        if source:
+            self._rich_text_image_sources[image_name] = source
+        if create:
+            widget.image_create("insert", image=photo)
+        self._rich_text_images[widget].append(photo)
+        if pad:
+            widget.insert("insert", " ")
+            widget.focus_set()
+
+    def _create_photo_image_from_source(self, source):
+        if not source:
+            return None
+        try:
+            if isinstance(source, Mapping):
+                data = source.get("data")
+                if data:
+                    return tk.PhotoImage(data=data)
+            elif isinstance(source, str):
+                if source.startswith("data:"):
+                    return tk.PhotoImage(data=source.removeprefix("data:"))
+                return tk.PhotoImage(file=source)
+        except tk.TclError:
+            return None
+        return None
+
+    def _bind_rich_text_paste_support(self, text_widget: tk.Text):
+        text_widget.bind("<<Paste>>", self._handle_rich_text_paste, add="+")
+        text_widget.bind(
+            "<Control-Shift-v>",
+            lambda event, widget=text_widget: self._insert_clipboard_image(widget) or "break",
+            add="+",
+        )
 
     def _analysis_text_widgets(self):
         return {
@@ -1900,10 +1932,21 @@ class FraudCaseApp:
         analysis_group = ttk.LabelFrame(tab_container, text="Análisis narrativo")
         analysis_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
         analysis_group.columnconfigure(0, weight=1)
-        analysis_group.rowconfigure(0, weight=1)
+        analysis_group.rowconfigure(1, weight=1)
+
+        constraints_label = ttk.Label(
+            analysis_group,
+            text=(
+                "Los campos aceptan texto enriquecido e imágenes PNG, GIF, PPM o PGM. "
+                "Puedes pegar imágenes desde el portapapeles o seleccionarlas desde un archivo."
+            ),
+            wraplength=760,
+            justify="left",
+        )
+        constraints_label.grid(row=0, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY // 4))
 
         scrollable, analysis_container = create_scrollable_container(analysis_group)
-        scrollable.grid(row=0, column=0, sticky="nsew")
+        scrollable.grid(row=1, column=0, sticky="nsew")
         analysis_container.columnconfigure(0, weight=1)
 
         fields = [
@@ -1960,6 +2003,7 @@ class FraudCaseApp:
                 wrap=tk.WORD,
             )
             self._configure_rich_text_tags(text_widget, bold_font, header_font, mono_font)
+            self._bind_rich_text_paste_support(text_widget)
             text_widget.bind(
                 "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
             )
@@ -2622,13 +2666,19 @@ class FraudCaseApp:
             text="Imagen",
             command=lambda w=text_widget: self._insert_image(w),
         ).grid(row=0, column=4, padx=(0, 6))
+        ttk.Button(
+            toolbar,
+            text="Pegar imagen",
+            command=lambda w=text_widget: self._insert_clipboard_image(w),
+        ).grid(row=0, column=5, padx=(0, 6))
 
         tips = [
             "Aplica formato en negrita al texto seleccionado.",
             "Resalta la línea actual como encabezado.",
             "Agrega viñetas o números a la selección o línea actual.",
             "Inserta una tabla de texto preformateada.",
-            "Agrega una imagen junto al cursor actual.",
+            "Agrega una imagen desde un archivo compatible.",
+            "Pega una imagen disponible en el portapapeles.",
         ]
         for idx, tip in enumerate(tips):
             child = toolbar.grid_slaves(row=0, column=idx)
@@ -2656,6 +2706,76 @@ class FraudCaseApp:
         text_widget.tag_add("table", insertion_point, f"{insertion_point} + {len(table_template)} chars")
         text_widget.focus_set()
 
+    def _handle_rich_text_paste(self, event):
+        widget = event.widget
+        if not isinstance(widget, tk.Text):
+            return None
+        photo, source = self._get_clipboard_photo()
+        if photo is None:
+            return None
+        self._record_rich_text_image(widget, photo, source)
+        return "break"
+
+    def _get_clipboard_photo(self):
+        formats = (
+            "image/png",
+            "PNG",
+            "image/gif",
+            "GIF",
+            "image/ppm",
+            "PPM",
+            "image/pgm",
+            "PGM",
+        )
+        for fmt in formats:
+            with suppress(tk.TclError):
+                data = self.root.clipboard_get(type=fmt)
+                photo, stored_data = self._create_photo_from_data(data)
+                if photo is not None:
+                    return photo, {"data": stored_data or data, "format": fmt}
+
+        with suppress(tk.TclError):
+            text_data = self.root.clipboard_get()
+            if text_data:
+                path = Path(text_data.strip())
+                if path.exists() and path.suffix.lower() in {".png", ".gif", ".pgm", ".ppm"}:
+                    try:
+                        photo = tk.PhotoImage(file=path)
+                        return photo, str(path)
+                    except tk.TclError:
+                        return None, None
+        return None, None
+
+    def _create_photo_from_data(self, data):
+        if data is None:
+            return None, None
+        attempts = []
+        if isinstance(data, bytes):
+            attempts.append(base64.b64encode(data).decode("ascii"))
+        if isinstance(data, str):
+            attempts.append(data)
+            try:
+                attempts.append(base64.b64encode(data.encode("latin1")).decode("ascii"))
+            except UnicodeEncodeError:
+                pass
+        for payload in attempts:
+            try:
+                photo = tk.PhotoImage(data=payload)
+                return photo, payload
+            except tk.TclError:
+                continue
+        return None, None
+
+    def _insert_clipboard_image(self, text_widget):
+        photo, source = self._get_clipboard_photo()
+        if photo is None:
+            messagebox.showinfo(
+                "Sin imagen",
+                "El portapapeles no contiene una imagen compatible (PNG, GIF, PPM o PGM).",
+            )
+            return
+        self._record_rich_text_image(text_widget, photo, source)
+
     def _insert_image(self, text_widget):
         filetypes = [
             ("Imágenes", "*.png *.gif *.ppm *.pgm"),
@@ -2669,12 +2789,7 @@ class FraudCaseApp:
         except tk.TclError as exc:  # pragma: no cover - rutas inválidas dependen del usuario
             messagebox.showerror("Imagen inválida", f"No se pudo cargar la imagen: {exc}")
             return
-        image_name = str(photo)
-        self._rich_text_image_sources[image_name] = filepath
-        text_widget.image_create("insert", image=photo)
-        self._rich_text_images[text_widget].append(photo)
-        text_widget.insert("insert", " ")
-        text_widget.focus_set()
+        self._record_rich_text_image(text_widget, photo, filepath)
 
     def build_actions_tab(self, parent):
         PRIMARY_PADDING = (12, 6)
