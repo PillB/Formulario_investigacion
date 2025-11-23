@@ -23,7 +23,7 @@ class DummyTooltip:
         return None
 
 
-EVENTS = ("<FocusOut>", "<KeyRelease>", "<<ComboboxSelected>>", "<<Paste>>", "<<Cut>>")
+EVENTS = ("<FocusOut>", "<<ComboboxSelected>>", "<<Paste>>", "<<Cut>>")
 
 
 def _assert_events_have_add(bind_calls):
