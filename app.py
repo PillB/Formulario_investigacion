@@ -240,6 +240,8 @@ class FraudCaseApp:
         self.team_detail_wrapper = None
         self.clients_summary_tree = None
         self.team_summary_tree = None
+        self.clients_compact_table = None
+        self.team_compact_table = None
         self._clients_detail_visible = False
         self._team_detail_visible = False
 
@@ -1313,6 +1315,7 @@ class FraudCaseApp:
         self.clients_summary_tree = ttk.Treeview(
             summary_section, columns=[col for col, _ in columns], show="headings", height=5
         )
+        self.clients_compact_table = self.clients_summary_tree
         for col_id, heading in columns:
             self.clients_summary_tree.heading(col_id, text=heading)
             self.clients_summary_tree.column(col_id, width=120, stretch=True)
@@ -1320,7 +1323,7 @@ class FraudCaseApp:
         self.clients_summary_tree.configure(yscrollcommand=clients_scroll.set)
         self.clients_summary_tree.grid(row=0, column=0, sticky="nsew")
         clients_scroll.grid(row=0, column=1, sticky="ns")
-        self.clients_summary_tree.bind("<Double-1>", lambda _e: self.show_clients_detail())
+        self.clients_summary_tree.bind("<Double-1>", lambda _e: self._edit_selected_client())
         self.inline_summary_trees["clientes"] = self.clients_summary_tree
 
         controls = ttk.Frame(frame)
@@ -1329,12 +1332,15 @@ class FraudCaseApp:
         add_btn = ttk.Button(controls, text="Agregar cliente", command=self._on_new_client)
         add_btn.grid(row=0, column=0, sticky="w", padx=5, pady=ROW_PADY)
         self.register_tooltip(add_btn, "Añade un nuevo cliente implicado en el caso.")
+        edit_btn = ttk.Button(controls, text="Editar seleccionado", command=self._edit_selected_client)
+        edit_btn.grid(row=0, column=1, sticky="w", padx=5, pady=ROW_PADY)
+        self.register_tooltip(edit_btn, "Abre el formulario del cliente resaltado en el listado.")
         self.clients_toggle_btn = ttk.Button(
             controls,
             text="Mostrar formulario",
             command=self.toggle_clients_detail,
         )
-        self.clients_toggle_btn.grid(row=0, column=1, sticky="e", padx=5, pady=ROW_PADY)
+        self.clients_toggle_btn.grid(row=0, column=2, sticky="e", padx=5, pady=ROW_PADY)
 
         self.clients_detail_wrapper = ttk.LabelFrame(frame, text="Detalle de clientes")
         ensure_grid_support(self.clients_detail_wrapper)
@@ -1436,12 +1442,13 @@ class FraudCaseApp:
         self.add_client()
 
     def _edit_selected_client(self):
-        if not self.clients_compact_table:
+        table = self.clients_compact_table
+        if not table:
             return
-        selection = self.clients_compact_table.selection()
+        selection = table.selection()
         if not selection:
             return
-        values = self.clients_compact_table.item(selection[0], "values")
+        values = table.item(selection[0], "values")
         client_id = values[0] if values else ""
         frame = self._find_client_frame(client_id)
         if frame:
