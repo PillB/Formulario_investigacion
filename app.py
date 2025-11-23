@@ -58,6 +58,7 @@ correos, direcciones y planes de acción).
 import base64
 import csv
 import json
+import math
 import os
 import shutil
 import zipfile
@@ -66,6 +67,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from decimal import Decimal
+from importlib import util as importlib_util
 from pathlib import Path
 from contextlib import suppress
 from typing import Optional
@@ -135,6 +137,12 @@ from validators import (
 )
 from theme_manager import ThemeManager
 
+PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
+if PIL_AVAILABLE:
+    from PIL import Image, ImageTk  # type: ignore
+else:  # pragma: no cover - entorno sin Pillow
+    Image = None
+    ImageTk = None
 
 
 
@@ -143,6 +151,9 @@ class FraudCaseApp:
     SUMMARY_REFRESH_DELAY_MS = 250
     LOG_FLUSH_INTERVAL_MS = 5000
     HEATMAP_BUCKET_SIZE = 100
+    IMAGE_MAX_BYTES = 3 * 1024 * 1024
+    IMAGE_MAX_DIMENSION = 2000
+    IMAGE_DISPLAY_MAX = 1000
     _external_drive_path: Optional[Path] = None
     _external_log_file_initialized: bool = False
 
@@ -2736,7 +2747,11 @@ class FraudCaseApp:
             "Resalta la línea actual como encabezado.",
             "Agrega viñetas o números a la selección o línea actual.",
             "Inserta una tabla de texto preformateada.",
-            "Agrega una imagen desde un archivo compatible.",
+            (
+                f"Agrega una imagen desde un archivo compatible (PNG, GIF, PPM, PGM), "
+                f"máximo {self.IMAGE_MAX_BYTES // (1024 * 1024)} MB y {self.IMAGE_MAX_DIMENSION}px."
+                " Las imágenes se previsualizan reducidas."
+            ),
             "Pega una imagen disponible en el portapapeles.",
         ]
         for idx, tip in enumerate(tips):
@@ -2828,6 +2843,65 @@ class FraudCaseApp:
                 continue
         return None, None
 
+    def _probe_image_dimensions(self, path: Path, ext: str) -> Optional[tuple[int, int]]:
+        if Image is not None:
+            try:
+                with Image.open(path) as img:
+                    return img.width, img.height
+            except Exception:
+                pass
+        try:
+            with path.open("rb") as file_handle:
+                if ext == ".png":
+                    header = file_handle.read(24)
+                    if len(header) >= 24 and header.startswith(b"\x89PNG\r\n\x1a\n"):
+                        return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+                elif ext == ".gif":
+                    header = file_handle.read(10)
+                    if len(header) >= 10 and header[:6] in {b"GIF87a", b"GIF89a"}:
+                        return int.from_bytes(header[6:8], "little"), int.from_bytes(header[8:10], "little")
+                elif ext in {".pgm", ".ppm"}:
+                    header = file_handle.read(1024).decode("ascii", errors="ignore")
+                    tokens = []
+                    for line in header.splitlines():
+                        stripped = line.strip()
+                        if not stripped or stripped.startswith("#"):
+                            continue
+                        tokens.extend(stripped.split())
+                        if len(tokens) >= 3:
+                            break
+                    if tokens and tokens[0] in {"P2", "P3", "P5", "P6"} and len(tokens) >= 3:
+                        return int(tokens[1]), int(tokens[2])
+        except (OSError, ValueError):
+            return None
+        return None
+
+    def _load_photo_image(self, path: Path, width: int, height: int):
+        if Image is not None and ImageTk is not None:
+            with Image.open(path) as img:
+                if width > self.IMAGE_DISPLAY_MAX or height > self.IMAGE_DISPLAY_MAX:
+                    img.thumbnail((self.IMAGE_DISPLAY_MAX, self.IMAGE_DISPLAY_MAX))
+                return ImageTk.PhotoImage(img)
+        photo = tk.PhotoImage(file=path)
+        if width > self.IMAGE_DISPLAY_MAX or height > self.IMAGE_DISPLAY_MAX:
+            factor = max(
+                1,
+                math.ceil(width / self.IMAGE_DISPLAY_MAX),
+                math.ceil(height / self.IMAGE_DISPLAY_MAX),
+            )
+            photo = photo.subsample(factor, factor)
+        return photo
+
+    def _cleanup_failed_image_insertion(self, widget: tk.Text, photo: Optional[tk.PhotoImage]):
+        if photo is None:
+            return
+        image_name = str(photo)
+        self._rich_text_image_sources.pop(image_name, None)
+        images = self._rich_text_images.get(widget)
+        if images and photo in images:
+            with suppress(ValueError):
+                images.remove(photo)
+
     def _insert_clipboard_image(self, text_widget):
         photo, source = self._get_clipboard_photo()
         if photo is None:
@@ -2840,19 +2914,50 @@ class FraudCaseApp:
         self._mark_rich_text_modified(text_widget)
 
     def _insert_image(self, text_widget):
-        filetypes = [
-            ("Imágenes", "*.png *.gif *.ppm *.pgm"),
-            ("Todos los archivos", "*.*"),
-        ]
+        allowed_exts = {".png", ".gif", ".ppm", ".pgm"}
+        filetypes = [("Imágenes PNG, GIF, PPM o PGM", "*.png *.gif *.ppm *.pgm")]
         filepath = filedialog.askopenfilename(title="Selecciona una imagen", filetypes=filetypes)
         if not filepath:
             return
+        image_path = Path(filepath)
+        ext = image_path.suffix.lower()
+        if ext not in allowed_exts:
+            messagebox.showerror("Formato no soportado", "Solo se permiten archivos PNG, GIF, PPM o PGM.")
+            return
         try:
-            photo = tk.PhotoImage(file=filepath)
-        except tk.TclError as exc:  # pragma: no cover - rutas inválidas dependen del usuario
+            file_size = image_path.stat().st_size
+        except OSError as exc:  # pragma: no cover - depende del sistema de archivos
+            messagebox.showerror("Imagen inválida", f"No se pudo leer el archivo: {exc}")
+            return
+        if file_size > self.IMAGE_MAX_BYTES:
+            limit_mb = self.IMAGE_MAX_BYTES // (1024 * 1024)
+            messagebox.showerror(
+                "Imagen demasiado grande",
+                f"El archivo supera el límite de {limit_mb} MB permitido para imágenes.",
+            )
+            return
+        dimensions = self._probe_image_dimensions(image_path, ext)
+        if not dimensions:
+            messagebox.showerror("Imagen inválida", "No se pudieron leer las dimensiones de la imagen seleccionada.")
+            return
+        width, height = dimensions
+        if width > self.IMAGE_MAX_DIMENSION or height > self.IMAGE_MAX_DIMENSION:
+            messagebox.showerror(
+                "Imagen demasiado grande",
+                (
+                    f"Las dimensiones {width}x{height} px superan el máximo permitido de "
+                    f"{self.IMAGE_MAX_DIMENSION}px por lado."
+                ),
+            )
+            return
+        photo: Optional[tk.PhotoImage] = None
+        try:
+            photo = self._load_photo_image(image_path, width, height)
+            self._record_rich_text_image(text_widget, photo, str(image_path))
+        except Exception as exc:  # pragma: no cover - fallos dependen del archivo del usuario
+            self._cleanup_failed_image_insertion(text_widget, photo)
             messagebox.showerror("Imagen inválida", f"No se pudo cargar la imagen: {exc}")
             return
-        self._record_rich_text_image(text_widget, photo, filepath)
         self._mark_rich_text_modified(text_widget)
 
     def build_actions_tab(self, parent):
