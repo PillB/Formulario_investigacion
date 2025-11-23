@@ -3458,8 +3458,10 @@ class FraudCaseApp:
                 [
                     ("id", "ID Riesgo"),
                     ("lider", "Líder"),
+                    ("descripcion", "Descripción"),
                     ("criticidad", "Criticidad"),
                     ("exposicion", "Exposición"),
+                    ("planes", "Planes de acción"),
                 ],
             ),
             (
@@ -3965,12 +3967,28 @@ class FraudCaseApp:
         valid_criticidades = set(CRITICIDAD_LIST)
         valid_criticidades_text = ", ".join(CRITICIDAD_LIST)
         for idx, values in enumerate(rows, start=1):
-            risk = {
-                "id_riesgo": values[0].strip().upper(),
-                "lider": values[1].strip(),
-                "criticidad": values[2].strip() or CRITICIDAD_LIST[0],
-                "exposicion": values[3].strip(),
-            }
+            if len(values) == 4:
+                risk = {
+                    "id_riesgo": values[0].strip().upper(),
+                    "lider": values[1].strip(),
+                    "descripcion": "",
+                    "criticidad": values[2].strip() or CRITICIDAD_LIST[0],
+                    "exposicion": values[3].strip(),
+                    "planes_accion": "",
+                }
+            elif len(values) >= 6:
+                risk = {
+                    "id_riesgo": values[0].strip().upper(),
+                    "lider": values[1].strip(),
+                    "descripcion": values[2].strip(),
+                    "criticidad": values[3].strip() or CRITICIDAD_LIST[0],
+                    "exposicion": values[4].strip(),
+                    "planes_accion": values[5].strip(),
+                }
+            else:
+                raise ValueError(
+                    "Riesgo: número de columnas no válido. Se esperaban 4 (versión anterior) o 6 columnas."
+                )
             message = validate_risk_id(risk["id_riesgo"])
             if message:
                 raise ValueError(f"Riesgo fila {idx}: {message}")
@@ -3990,8 +4008,10 @@ class FraudCaseApp:
                 (
                     risk["id_riesgo"],
                     risk["lider"],
+                    risk["descripcion"],
                     risk["criticidad"],
                     exposure_text,
+                    risk["planes_accion"],
                 )
             )
         return sanitized
@@ -4338,10 +4358,12 @@ class FraudCaseApp:
                 frame = self.risk_frames[-1]
                 frame.id_var.set(risk_id)
                 frame.lider_var.set((values[1] or "").strip())
-                criticidad = (values[2] or CRITICIDAD_LIST[0]).strip()
+                frame.descripcion_var.set((values[2] or "").strip())
+                criticidad = (values[3] or CRITICIDAD_LIST[0]).strip()
                 if criticidad in CRITICIDAD_LIST:
                     frame.criticidad_var.set(criticidad)
-                frame.exposicion_var.set((values[3] or "").strip())
+                frame.exposicion_var.set((values[4] or "").strip())
+                frame.planes_var.set((values[5] or "").strip())
                 self._trigger_import_id_refresh(frame, risk_id, preserve_existing=True)
                 processed += 1
             if duplicate_ids:
@@ -4580,8 +4602,10 @@ class FraudCaseApp:
                 (
                     risk.get("id_riesgo", ""),
                     risk.get("lider", ""),
+                    risk.get("descripcion", ""),
                     risk.get("criticidad", ""),
                     risk.get("exposicion_residual", ""),
+                    risk.get("planes_accion", ""),
                 )
                 for risk in dataset.get("riesgos", [])
             ]
