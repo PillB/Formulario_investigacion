@@ -285,16 +285,20 @@ class FraudCaseApp:
             self._armed = False
             self._last_error: Optional[str] = None
             widget.bind("<KeyRelease>", self._arm, add="+")
-            widget.bind("<<ComboboxSelected>>", self._arm, add="+")
-            widget.bind("<<ComboboxSelected>>", self._on_edit, add="+")
+            widget.bind("<<ComboboxSelected>>", self._on_combobox_selected, add="+")
             widget.bind("<FocusOut>", self._on_edit, add="+")
 
         def _arm(self, *_args):
             self._armed = True
 
+        def _on_combobox_selected(self, *_args):
+            self._arm()
+            self.widget.after_idle(self._on_edit)
+
         def _on_edit(self, *_args):
             if not self._armed:
                 return
+            self._armed = False
             error = self.validate_callback()
             if error and error != self._last_error and not self._suppression_flag():
                 try:
