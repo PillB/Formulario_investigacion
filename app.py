@@ -284,23 +284,36 @@ class FraudCaseApp:
             self._suppression_flag = suppression_flag
             self._armed = False
             self._last_error: Optional[str] = None
-            widget.bind("<KeyRelease>", self._arm, add="+")
+            for event_name in (
+                "<KeyRelease>",
+                "<<Paste>>",
+                "<<Cut>>",
+                "<<ComboboxSelected>>",
+            ):
+                widget.bind(event_name, self._arm, add="+")
+
             widget.bind("<<ComboboxSelected>>", self._on_edit, add="+")
             widget.bind("<FocusOut>", self._on_edit, add="+")
 
         def _arm(self, *_args):
             self._armed = True
+            self._last_error = None
 
         def _on_edit(self, *_args):
             if not self._armed:
                 return
+            self._armed = False
             error = self.validate_callback()
-            if error and error != self._last_error and not self._suppression_flag():
+            should_notify = (
+                error and error != self._last_error and not self._suppression_flag()
+            )
+            if should_notify:
                 try:
                     messagebox.showerror("Dato inválido", error)
                 except tk.TclError:
-                    return
-                log_event("validacion", f"{self.field_label}: {error}", self.logs)
+                    log_event("validacion", f"{self.field_label}: {error}", self.logs)
+                else:
+                    log_event("validacion", f"{self.field_label}: {error}", self.logs)
             self._last_error = error
 
     def _register_post_edit_validation(self, widget, validate_callback, field_label):
