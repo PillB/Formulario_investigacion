@@ -1312,17 +1312,11 @@ class FraudCaseApp:
             ("direcciones", "Direcciones"),
             ("accionado", "Accionado"),
         ]
-        self.clients_summary_tree = ttk.Treeview(
-            summary_section, columns=[col for col, _ in columns], show="headings", height=5
+        self.clients_summary_tree, clients_frame = self._build_compact_table(
+            summary_section, columns, height=5, column_width=120
         )
         self.clients_compact_table = self.clients_summary_tree
-        for col_id, heading in columns:
-            self.clients_summary_tree.heading(col_id, text=heading)
-            self.clients_summary_tree.column(col_id, width=120, stretch=True)
-        clients_scroll = ttk.Scrollbar(summary_section, orient="vertical", command=self.clients_summary_tree.yview)
-        self.clients_summary_tree.configure(yscrollcommand=clients_scroll.set)
-        self.clients_summary_tree.grid(row=0, column=0, sticky="nsew")
-        clients_scroll.grid(row=0, column=1, sticky="ns")
+        clients_frame.grid(row=0, column=0, sticky="nsew")
         self.clients_summary_tree.bind("<Double-1>", lambda _e: self._edit_selected_client())
         self.inline_summary_trees["clientes"] = self.clients_summary_tree
 
@@ -1478,16 +1472,11 @@ class FraudCaseApp:
             ("fecha_carta_inmediatez", "Carta inmediatez"),
             ("fecha_carta_renuncia", "Carta renuncia"),
         ]
-        self.team_summary_tree = ttk.Treeview(
-            summary_section, columns=[col for col, _ in team_columns], show="headings", height=5
+        self.team_summary_tree, team_frame = self._build_compact_table(
+            summary_section, team_columns, height=5, column_width=140
         )
-        for col_id, heading in team_columns:
-            self.team_summary_tree.heading(col_id, text=heading)
-            self.team_summary_tree.column(col_id, width=140, stretch=True)
-        team_scroll = ttk.Scrollbar(summary_section, orient="vertical", command=self.team_summary_tree.yview)
-        self.team_summary_tree.configure(yscrollcommand=team_scroll.set)
-        self.team_summary_tree.grid(row=0, column=0, sticky="nsew")
-        team_scroll.grid(row=0, column=1, sticky="ns")
+        self.team_compact_table = self.team_summary_tree
+        team_frame.grid(row=0, column=0, sticky="nsew")
         self.team_summary_tree.bind("<Double-1>", lambda _e: self.show_team_detail())
         self.inline_summary_trees["colaboradores"] = self.team_summary_tree
 
@@ -3224,18 +3213,18 @@ class FraudCaseApp:
             or ("colaboradores" in sections and self.team_compact_table is not None)
         )
 
-    def _build_compact_table(self, parent, columns, height=6):
+    def _build_compact_table(self, parent, columns, height=6, column_width=140):
         frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
         tree = ttk.Treeview(frame, columns=[col for col, _ in columns], show="headings", height=height)
         scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
         for col_id, heading in columns:
             tree.heading(col_id, text=heading)
-            tree.column(col_id, width=140, stretch=True)
-        tree.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        return tree
+            tree.column(col_id, width=column_width, stretch=True)
+        tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        return tree, frame
 
     def _start_background_import(self, task_label, button, worker, ui_callback, error_prefix, ui_error_prefix=None):
         self._ensure_import_runtime_state()
@@ -3477,18 +3466,13 @@ class FraudCaseApp:
         for key, title, columns in config:
             section = ttk.LabelFrame(container, text=title)
             section.pack(fill="both", expand=True, pady=5)
-            frame = ttk.Frame(section)
+            tree, frame = self._build_compact_table(section, columns, height=5, column_width=150)
             frame.pack(fill="both", expand=True)
-            tree = ttk.Treeview(frame, columns=[col for col, _ in columns], show="headings", height=5)
-            scrollbar = ttk.Scrollbar(frame, orient="vertical")
-            for col_id, heading in columns:
-                tree.heading(col_id, text=heading)
-                tree.column(col_id, width=150, stretch=True)
-            tree.configure(yscrollcommand=scrollbar.set)
-            scrollbar.configure(command=tree.yview)
-            tree.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
             self.summary_tables[key] = tree
+            if key == "clientes" and self.clients_compact_table is None:
+                self.clients_compact_table = tree
+            if key == "colaboradores" and self.team_compact_table is None:
+                self.team_compact_table = tree
             self._register_summary_tree_bindings(tree, key)
 
         self._schedule_summary_refresh()
