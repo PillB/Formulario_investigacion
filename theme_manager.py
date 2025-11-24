@@ -17,23 +17,23 @@ from tkinter import scrolledtext, ttk
 
 LIGHT_THEME: Dict[str, str] = {
     "name": "light",
-    "background": "#e9f1f7",
-    "foreground": "#2b2f36",
-    "input_background": "#ffffff",
-    "input_foreground": "#2b2f36",
+    "background": "#FFFFFF",
+    "foreground": "#000000",
+    "input_background": "#FFFFFF",
+    "input_foreground": "#000000",
     "accent": "#7d93b5",
     "border": "#c5d0df",
-    "select_background": "#b8c7dd",
+    "select_background": "#4e4e4e",
     "select_foreground": "#1f242b",
     "heading_background": "#d7e1ed",
 }
 
 DARK_THEME: Dict[str, str] = {
     "name": "dark",
-    "background": "#1f242b",
-    "foreground": "#e3e6eb",
-    "input_background": "#151920",
-    "input_foreground": "#e3e6eb",
+    "background": "#121212",
+    "foreground": "#FFFFFF",
+    "input_background": "#1E1E1E",
+    "input_foreground": "#FFFFFF",
     "accent": "#7a8aa6",
     "border": "#3a404b",
     "select_background": "#3e4a5a",
@@ -187,7 +187,8 @@ class ThemeManager:
             if cls._root is None:
                 raise RuntimeError("ThemeManager requires a Tk root before applying styles.")
             cls._style = ttk.Style(master=cls._root)
-            cls._base_style_configured = False
+            cls._base_style_configured = True
+        cls._style.configure('.', font=('Arial', 12))  # Sans-serif font for accessibility
         if not cls._base_style_configured:
             cls._configure_base_style(cls._style)
             cls._base_style_configured = True
