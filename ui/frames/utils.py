@@ -8,22 +8,29 @@ from typing import Any, Tuple
 
 
 def ensure_grid_support(widget: Any) -> None:
-    """Garantiza que el widget exponga un método grid, incluso si solo soporta pack.
+    """Garantiza que el widget exponga un método grid incluso en stubs de prueba.
 
-    Algunos stubs de pruebas no implementan ``grid``. En esos casos se expone un
-    proxy que delega en ``pack`` con los argumentos de relleno disponibles para
-    evitar errores durante la construcción de la interfaz.
+    Cuando se usan dobles de prueba que solo implementan ``pack`` se expone un
+    proxy de ``grid`` que persiste los argumentos recibidos y, si existe un
+    método ``grid_configure``, lo invoca de forma segura. De esta manera se
+    evita mezclar gestores de geometría en un mismo contenedor (``grid`` vs
+    ``pack``), un problema habitual de Tkinter que puede provocar errores en
+    tiempo de ejecución.
     """
     if widget is None or hasattr(widget, "grid"):
         return
 
-    pack_fn = getattr(widget, "pack", None)
-    if not callable(pack_fn):
-        return
-
     def _grid_proxy(self, *args, **kwargs):  # noqa: ANN001
-        pack_kwargs = {k: kwargs.get(k) for k in ("padx", "pady") if kwargs.get(k) is not None}
-        self.pack(**pack_kwargs)
+        grid_configure = getattr(self, "grid_configure", None)
+        if callable(grid_configure):
+            try:
+                return grid_configure(*args, **kwargs)
+            except Exception:
+                return None
+
+        self._grid_last_args = args
+        self._grid_last_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        return None
 
     setattr(widget.__class__, "grid", _grid_proxy)
 
