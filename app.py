@@ -835,8 +835,11 @@ class FraudCaseApp:
 
     def build_ui(self):
         """Construye la interfaz del usuario en diferentes pestañas."""
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
         self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill="both", expand=True)
+        self.notebook.grid(row=0, column=0, sticky="nsew")
         self.notebook.bind("<<NotebookTabChanged>>", self._handle_notebook_tab_change)
         self._register_navigation_bindings()
 
