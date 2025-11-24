@@ -66,6 +66,10 @@ class ThemeManager:
         cls._root = root
         if cls._style is None or str(cls._style.master) != str(root):
             cls._style = ttk.Style(master=root)
+            try:
+                cls._style.theme_use("clam")
+            except tk.TclError:
+                pass
             cls._use_cross_platform_theme(cls._style)
             cls._base_style_configured = False
         if not cls._base_style_configured:
