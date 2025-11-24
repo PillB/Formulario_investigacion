@@ -3575,7 +3575,10 @@ class FraudCaseApp:
             return "break"
         log_event("navegacion", f"Intento de pegado en resumen:{key}", self.logs)
         try:
-            parsed_rows = self._parse_clipboard_rows(clipboard_text, len(columns))
+            alternate_counts = {4} if key == "riesgos" else None
+            parsed_rows = self._parse_clipboard_rows(
+                clipboard_text, len(columns), alternate_counts
+            )
             sanitized_rows = self._transform_summary_clipboard_rows(key, parsed_rows)
         except ValueError as exc:
             messagebox.showerror("Pegado no válido", str(exc))
@@ -3603,8 +3606,8 @@ class FraudCaseApp:
             tree.insert("", "end", values=row)
         return "break"
 
-    def _parse_clipboard_rows(self, text, expected_columns):
-        """Convierte el texto del portapapeles en una matriz con ``expected_columns`` celdas."""
+    def _parse_clipboard_rows(self, text, expected_columns, alternate_counts=None):
+        """Convierte el texto del portapapeles en una matriz con columnas válidas."""
 
         cleaned = (text or "").strip()
         if not cleaned:
@@ -3612,16 +3615,58 @@ class FraudCaseApp:
         lines = [line for line in cleaned.splitlines() if line.strip()]
         if not lines:
             raise ValueError("No se encontraron filas para pegar.")
+
+        allowed_counts = {expected_columns}
+        if alternate_counts:
+            allowed_counts.update(alternate_counts)
+        sorted_counts = sorted(allowed_counts)
+        expected_text = (
+            str(expected_columns)
+            if len(sorted_counts) == 1
+            else ", ".join(str(c) for c in sorted_counts[:-1]) + f" o {sorted_counts[-1]}"
+        )
+
         rows = []
         for idx, line in enumerate(lines, start=1):
             delimiter = "\t" if "\t" in line else ";"
             parts = [cell.strip() for cell in line.split(delimiter)]
-            if len(parts) != expected_columns:
+            if len(parts) not in allowed_counts:
                 raise ValueError(
-                    f"La fila {idx} tiene {len(parts)} columnas y se esperaban {expected_columns}."
+                    f"La fila {idx} tiene {len(parts)} columnas y se esperaban {expected_text}."
                 )
             rows.append(parts)
         return rows
+
+    def _should_fill_missing_summary_fields(self, section_key, rows):
+        columns = self.summary_config.get(section_key, []) if hasattr(self, "summary_config") else []
+        if not rows or len(columns) <= 1:
+            return True
+        has_blanks = any(
+            not self._has_meaningful_value(value)
+            for row in rows
+            for value in row[1:]
+        )
+        if not has_blanks:
+            return True
+        section_label = section_key.replace("_", " ") if section_key else "esta tabla"
+        try:
+            should_autofill = messagebox.askyesno(
+                "Autocompletar campos vacíos",
+                (
+                    "Se detectaron columnas vacías (excepto el ID) en el pegado de "
+                    f"{section_label}. ¿Deseas autocompletar esos campos con la información "
+                    "disponible en los catálogos de detalle?"
+                ),
+            )
+        except tk.TclError:
+            return False
+        if should_autofill:
+            log_event(
+                "navegacion",
+                f"Autocompletado desde catálogos activado para {section_key}",
+                self.logs,
+            )
+        return bool(should_autofill)
 
     def _transform_summary_clipboard_rows(self, key, rows):
         """Valida y normaliza filas de acuerdo al tipo de tabla del resumen."""
@@ -4051,6 +4096,7 @@ class FraudCaseApp:
         processed = 0
         missing_ids = []
         if section_key == "clientes":
+            fill_blanks = self._should_fill_missing_summary_fields(section_key, rows)
             for idx, values in enumerate(rows, start=1):
                 payload = {
                     "id_cliente": (values[0] or "").strip(),
@@ -4061,7 +4107,9 @@ class FraudCaseApp:
                     "direcciones": (values[5] or "").strip(),
                     "accionado": (values[6] or "").strip(),
                 }
-                hydrated, found = self._hydrate_row_from_details(payload, 'id_cliente', CLIENT_ID_ALIASES)
+                hydrated, found = self._hydrate_row_from_details(
+                    payload, 'id_cliente', CLIENT_ID_ALIASES, fill_blanks=fill_blanks
+                )
                 client_id = (hydrated.get('id_cliente') or '').strip()
                 if not client_id:
                     continue
@@ -4096,6 +4144,7 @@ class FraudCaseApp:
                 self.sync_main_form_after_import("clientes", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "colaboradores":
+            fill_blanks = self._should_fill_missing_summary_fields(section_key, rows)
             for values in rows:
                 payload = {
                     "id_colaborador": (values[0] or "").strip(),
@@ -4113,7 +4162,9 @@ class FraudCaseApp:
                     "codigo_agencia": "",
                     "tipo_falta": "No aplica",
                 }
-                hydrated, found = self._hydrate_row_from_details(payload, 'id_colaborador', TEAM_ID_ALIASES)
+                hydrated, found = self._hydrate_row_from_details(
+                    payload, 'id_colaborador', TEAM_ID_ALIASES, fill_blanks=fill_blanks
+                )
                 collaborator_id = (hydrated.get('id_colaborador') or '').strip()
                 if not collaborator_id:
                     continue
@@ -4228,6 +4279,7 @@ class FraudCaseApp:
                 self._run_duplicate_check_post_load()
             return processed
         if section_key == "productos":
+            fill_blanks = self._should_fill_missing_summary_fields(section_key, rows)
             for values in rows:
                 is_legacy_product = len(values) == 4
                 payload = {
@@ -4255,7 +4307,9 @@ class FraudCaseApp:
                     "nombre_analitica": "",
                     "codigo_analitica": "",
                 }
-                hydrated, found = self._hydrate_row_from_details(payload, 'id_producto', PRODUCT_ID_ALIASES)
+                hydrated, found = self._hydrate_row_from_details(
+                    payload, 'id_producto', PRODUCT_ID_ALIASES, fill_blanks=fill_blanks
+                )
                 product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
                     continue
@@ -4285,6 +4339,7 @@ class FraudCaseApp:
         if section_key == "reclamos":
             missing_products = []
             unhydrated_products = []
+            fill_blanks = self._should_fill_missing_summary_fields(section_key, rows)
             for values in rows:
                 row_dict = {
                     'id_reclamo': (values[0] or "").strip(),
@@ -4292,7 +4347,9 @@ class FraudCaseApp:
                     'nombre_analitica': (values[2] or "").strip(),
                     'codigo_analitica': (values[3] or "").strip(),
                 }
-                hydrated, found = self._hydrate_row_from_details(row_dict, 'id_producto', PRODUCT_ID_ALIASES)
+                hydrated, found = self._hydrate_row_from_details(
+                    row_dict, 'id_producto', PRODUCT_ID_ALIASES, fill_blanks=fill_blanks
+                )
                 product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
                     continue
@@ -4346,8 +4403,20 @@ class FraudCaseApp:
             return processed
         if section_key == "riesgos":
             duplicate_ids = []
+            fill_blanks = self._should_fill_missing_summary_fields(section_key, rows)
             for values in rows:
-                risk_id = (values[0] or "").strip()
+                payload = {
+                    'id_riesgo': (values[0] or "").strip(),
+                    'lider': (values[1] or "").strip(),
+                    'descripcion': (values[2] or "").strip(),
+                    'criticidad': (values[3] or "").strip(),
+                    'exposicion': (values[4] or "").strip(),
+                    'planes_accion': (values[5] or "").strip(),
+                }
+                hydrated, _found = self._hydrate_row_from_details(
+                    payload, 'id_riesgo', RISK_ID_ALIASES, fill_blanks=fill_blanks
+                )
+                risk_id = hydrated.get('id_riesgo', '')
                 if not risk_id:
                     continue
                 if any(r.id_var.get().strip() == risk_id for r in self.risk_frames):
@@ -4357,13 +4426,13 @@ class FraudCaseApp:
                 self.add_risk()
                 frame = self.risk_frames[-1]
                 frame.id_var.set(risk_id)
-                frame.lider_var.set((values[1] or "").strip())
-                frame.descripcion_var.set((values[2] or "").strip())
-                criticidad = (values[3] or CRITICIDAD_LIST[0]).strip()
+                frame.lider_var.set(hydrated.get('lider', ''))
+                frame.descripcion_var.set(hydrated.get('descripcion', ''))
+                criticidad = (hydrated.get('criticidad') or CRITICIDAD_LIST[0]).strip()
                 if criticidad in CRITICIDAD_LIST:
                     frame.criticidad_var.set(criticidad)
-                frame.exposicion_var.set((values[4] or "").strip())
-                frame.planes_var.set((values[5] or "").strip())
+                frame.exposicion_var.set((hydrated.get('exposicion') or "").strip())
+                frame.planes_var.set((hydrated.get('planes_accion') or "").strip())
                 self._trigger_import_id_refresh(frame, risk_id, preserve_existing=True)
                 processed += 1
             if duplicate_ids:
@@ -4377,8 +4446,17 @@ class FraudCaseApp:
             return processed
         if section_key == "normas":
             duplicate_ids = []
+            fill_blanks = self._should_fill_missing_summary_fields(section_key, rows)
             for values in rows:
-                norm_id = (values[0] or "").strip()
+                payload = {
+                    'id_norma': (values[0] or "").strip(),
+                    'descripcion': (values[1] or "").strip(),
+                    'vigencia': (values[2] or "").strip(),
+                }
+                hydrated, _found = self._hydrate_row_from_details(
+                    payload, 'id_norma', NORM_ID_ALIASES, fill_blanks=fill_blanks
+                )
+                norm_id = (hydrated.get('id_norma') or '').strip()
                 if not norm_id:
                     continue
                 if any(n.id_var.get().strip() == norm_id for n in self.norm_frames):
@@ -4388,8 +4466,8 @@ class FraudCaseApp:
                 self.add_norm()
                 frame = self.norm_frames[-1]
                 frame.id_var.set(norm_id)
-                frame.descripcion_var.set((values[1] or "").strip())
-                frame.fecha_var.set((values[2] or "").strip())
+                frame.descripcion_var.set((hydrated.get('descripcion') or "").strip())
+                frame.fecha_var.set((hydrated.get('vigencia') or "").strip())
                 processed += 1
             if duplicate_ids:
                 messagebox.showwarning(
@@ -4682,7 +4760,7 @@ class FraudCaseApp:
                 return lookup
         return None
 
-    def _hydrate_row_from_details(self, row, id_column, alias_headers):
+    def _hydrate_row_from_details(self, row, id_column, alias_headers, fill_blanks=True):
         """Devuelve una copia de la fila complementada con catálogos de detalle."""
 
         hydrated = dict(row or {})
@@ -4701,10 +4779,11 @@ class FraudCaseApp:
         if canonical_id and lookup:
             details = lookup.get(canonical_id)
             if details:
-                for key, value in details.items():
-                    if hydrated.get(key):
-                        continue
-                    hydrated[key] = value
+                if fill_blanks:
+                    for key, value in details.items():
+                        if hydrated.get(key):
+                            continue
+                        hydrated[key] = value
                 found = True
         return hydrated, found
 
