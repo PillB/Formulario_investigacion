@@ -34,12 +34,15 @@ class ClientFrame:
         update_client_options,
         logs,
         tooltip_register,
+        owner=None,
+        summary_parent=None,
         client_lookup=None,
         summary_refresh_callback=None,
         change_notifier=None,
         id_change_callback=None,
     ):
         self.parent = parent
+        self.owner = owner
         self.idx = idx
         self.remove_callback = remove_callback
         self.update_client_options = update_client_options
@@ -52,6 +55,8 @@ class ClientFrame:
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
         self._last_tracked_id = ''
+        self._tree_sort_state: dict[str, bool] = {}
+        self.summary_tree = None
 
         self.tipo_id_var = tk.StringVar()
         self.id_var = tk.StringVar()
@@ -66,6 +71,15 @@ class ClientFrame:
 
         self.section = CollapsibleSection(parent, title="Clientes implicados")
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+
+        if summary_parent is not None and owner is not None and not getattr(owner, "clients_summary_tree", None):
+            self.summary_tree = self._build_summary(summary_parent)
+            owner.clients_summary_tree = self.summary_tree
+            owner.inline_summary_trees["clientes"] = self.summary_tree
+            owner._client_summary_owner = self
+        else:
+            self.summary_tree = getattr(owner, "clients_summary_tree", None)
+
         self.frame = ttk.LabelFrame(self.section.content, text=f"Cliente {self.idx+1}")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
@@ -428,6 +442,113 @@ class ClientFrame:
         else:
             log_event("navegacion", message, self.logs)
         self.schedule_summary_refresh('clientes')
+
+    # ------------------------------------------------------------------
+    # Resumen
+    # ------------------------------------------------------------------
+    def _build_summary(self, container):
+        summary_frame = ttk.Frame(container)
+        ensure_grid_support(summary_frame)
+        if hasattr(summary_frame, "columnconfigure"):
+            summary_frame.columnconfigure(0, weight=1)
+
+        columns = (
+            ("id", "ID"),
+            ("nombres", "Nombres"),
+            ("apellidos", "Apellidos"),
+            ("tipo_id", "Tipo ID"),
+            ("flag", "Flag"),
+            ("telefonos", "Teléfonos"),
+            ("correos", "Correos"),
+            ("direcciones", "Direcciones"),
+            ("accionado", "Accionado"),
+        )
+        tree = ttk.Treeview(summary_frame, columns=[col for col, _ in columns], show="headings", height=5)
+        vscroll = ttk.Scrollbar(summary_frame, orient="vertical", command=tree.yview)
+        hscroll = ttk.Scrollbar(summary_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
+        tree.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+        vscroll.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
+        hscroll.grid(row=1, column=0, sticky="ew")
+
+        for col_id, heading in columns:
+            tree.heading(col_id, text=heading, command=lambda c=col_id: self._sort_summary(c))
+            tree.column(col_id, width=140, anchor="w")
+
+        palette = ThemeManager.current()
+        if hasattr(tree, "tag_configure"):
+            tree.tag_configure("even", background=palette.get("heading_background", palette.get("background")), foreground=palette.get("foreground"))
+            tree.tag_configure("odd", background=palette.get("background"), foreground=palette.get("foreground"))
+
+        tree.bind("<<TreeviewSelect>>", self._on_summary_select)
+        tree.bind("<Double-1>", self._on_summary_double_click)
+        summary_frame.pack(fill="both", expand=True)
+        return tree
+
+    def refresh_summary(self):
+        tree = self.summary_tree or getattr(self.owner, "clients_summary_tree", None)
+        if not tree or not hasattr(tree, "get_children"):
+            return
+        try:
+            tree.delete(*tree.get_children())
+        except Exception:
+            return
+        clients = getattr(self.owner, "client_frames", []) if self.owner else []
+        for idx, client in enumerate(clients):
+            data = client.get_data()
+            values = (
+                data.get("id_cliente", ""),
+                data.get("nombres", ""),
+                data.get("apellidos", ""),
+                data.get("tipo_id", ""),
+                data.get("flag", ""),
+                data.get("telefonos", ""),
+                data.get("correos", ""),
+                data.get("direcciones", ""),
+                data.get("accionado", ""),
+            )
+            tags = ("even",) if idx % 2 == 0 else ("odd",)
+            tree.insert("", "end", iid=data.get("id_cliente", f"cliente-{idx}"), values=values, tags=tags)
+        self._apply_summary_theme(tree)
+        self._on_summary_select()
+
+    def _sort_summary(self, column):
+        tree = self.summary_tree or getattr(self.owner, "clients_summary_tree", None)
+        if not tree or not hasattr(tree, "get_children"):
+            return
+        reverse = self._tree_sort_state.get(column, False)
+        items = list(tree.get_children(""))
+        col_index = tree["columns"].index(column)
+        items.sort(key=lambda item: tree.item(item, "values")[col_index], reverse=reverse)
+        for idx, item in enumerate(items):
+            tree.move(item, "", idx)
+            tag = "even" if idx % 2 == 0 else "odd"
+            tree.item(item, tags=(tag,))
+        self._tree_sort_state[column] = not reverse
+
+    def _on_summary_select(self, _event=None):
+        tree = self.summary_tree or getattr(self.owner, "clients_summary_tree", None)
+        if not tree or not hasattr(tree, "selection"):
+            return
+        if callable(getattr(self.owner, "_on_client_selected", None)):
+            try:
+                self.owner._on_client_selected()
+            except Exception:
+                pass
+
+    def _on_summary_double_click(self, _event=None):
+        self._on_summary_select()
+        if callable(getattr(self.owner, "_edit_selected_client", None)):
+            try:
+                self.owner._edit_selected_client()
+            except Exception:
+                pass
+
+    def _apply_summary_theme(self, tree):
+        palette = ThemeManager.current()
+        if hasattr(tree, "tag_configure"):
+            tree.tag_configure("even", background=palette.get("heading_background", palette.get("background")), foreground=palette.get("foreground"))
+            tree.tag_configure("odd", background=palette.get("background"), foreground=palette.get("foreground"))
 
 
 __all__ = ["ClientFrame"]

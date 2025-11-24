@@ -21,6 +21,18 @@ def ensure_grid_support(widget: Any) -> None:
         return
 
     def _grid_proxy(self, *args, **kwargs):  # noqa: ANN001
+        manager_fn = getattr(self, "winfo_manager", None)
+        if callable(manager_fn):
+            manager = manager_fn()
+            if manager and manager != "grid":
+                raise RuntimeError(
+                    "El proxy de grid detectó un gestor incompatible: "
+                    f"{manager!r}. Evita mezclar 'pack' y 'grid' en el mismo contenedor."
+                )
+
+        self._grid_last_args = args
+        self._grid_last_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+
         grid_configure = getattr(self, "grid_configure", None)
         if callable(grid_configure):
             try:
@@ -28,8 +40,6 @@ def ensure_grid_support(widget: Any) -> None:
             except Exception:
                 return None
 
-        self._grid_last_args = args
-        self._grid_last_kwargs = {k: v for k, v in kwargs.items() if v is not None}
         return None
 
     setattr(widget.__class__, "grid", _grid_proxy)
