@@ -3740,32 +3740,71 @@ class FraudCaseApp:
         return tree, frame
 
     def _apply_treeview_theme(self, tree):
-        if not hasattr(tree, "tag_configure") or not hasattr(tree, "get_children"):
-            return
         palette = ThemeManager.current()
-        try:
-            tree.tag_configure(
-                "themed",
-                background=palette.get("background"),
-                foreground=palette.get("foreground"),
-            )
-            for tag in tree.tag_names():
+
+        if hasattr(tree, "tag_configure"):
+            try:
                 tree.tag_configure(
-                    tag,
+                    "themed",
                     background=palette.get("background"),
                     foreground=palette.get("foreground"),
                 )
-            for item in tree.get_children():
-                if not hasattr(tree, "item"):
-                    break
-                tags = tree.item(item, "tags") or ()
-                if "themed" not in tags:
-                    tree.item(item, tags=(*tags, "themed"))
+            except tk.TclError:
+                pass
+
+            tags = set()
+            children = ()
+            if hasattr(tree, "get_children"):
+                try:
+                    children = tree.get_children()
+                except tk.TclError:
+                    children = ()
+
+            for item in children:
+                item_tags = ()
+                if hasattr(tree, "item"):
+                    try:
+                        item_tags = tree.item(item, "tags") or ()
+                    except tk.TclError:
+                        item_tags = ()
+                elif hasattr(tree, "tag_has"):
+                    try:
+                        item_tags = tuple(tag for tag in ("themed",) if tree.tag_has(tag, item))
+                    except tk.TclError:
+                        item_tags = ()
+
+                tags.update(item_tags)
+
+                if hasattr(tree, "item") and "themed" not in item_tags:
+                    try:
+                        tree.item(item, tags=(*item_tags, "themed"))
+                    except tk.TclError:
+                        pass
+
+            for tag in tags:
+                try:
+                    tree.tag_configure(
+                        tag,
+                        background=palette.get("background"),
+                        foreground=palette.get("foreground"),
+                    )
+                except tk.TclError:
+                    continue
+
+        if hasattr(tree, "heading"):
             try:
                 tree.heading("#0", background=palette.get("heading_background"), foreground=palette.get("foreground"))
             except tk.TclError:
                 pass
-            for column in tree.cget("columns"):
+
+            columns = ()
+            if hasattr(tree, "cget"):
+                try:
+                    columns = tree.cget("columns")
+                except tk.TclError:
+                    columns = ()
+
+            for column in columns:
                 try:
                     tree.heading(
                         column,
@@ -3774,8 +3813,6 @@ class FraudCaseApp:
                     )
                 except tk.TclError:
                     continue
-        except tk.TclError:
-            return
 
     def _reapply_treeview_styles(self):
         trees = []
