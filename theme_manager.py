@@ -224,6 +224,8 @@ class ThemeManager:
                 )
             elif isinstance(widget, ttk.Frame):
                 widget.configure(style="TFrame")
+            elif isinstance(widget, ttk.Notebook):
+                widget.configure(style="TNotebook")
             elif isinstance(widget, ttk.Label):
                 widget.configure(style="TLabel")
             elif isinstance(widget, ttk.Entry):
@@ -232,6 +234,8 @@ class ThemeManager:
                 widget.configure(style="TCombobox")
             elif isinstance(widget, ttk.Button):
                 widget.configure(style="TButton")
+            elif isinstance(widget, ttk.Scrollbar):
+                widget.configure(style="TScrollbar")
             elif isinstance(widget, ttk.Labelframe):
                 widget.configure(style="TLabelframe")
             elif isinstance(widget, ttk.Treeview):
@@ -244,10 +248,10 @@ class ThemeManager:
     def _configure_base_style(cls, ttk_style: ttk.Style) -> None:
         from ui.config import FONT_BASE, FONT_HEADER
 
-        ttk_style.configure("TLabel", font=FONT_BASE, padding=(2, 2))
-        ttk_style.configure("TEntry", font=FONT_BASE, padding=(6, 6))
-        ttk_style.configure("TCombobox", font=FONT_BASE, padding=(6, 6))
-        ttk_style.configure("TButton", font=FONT_BASE, padding=(8, 6))
+        ttk_style.configure("TLabel", font=FONT_BASE, padding=(4, 3))
+        ttk_style.configure("TEntry", font=FONT_BASE, padding=(8, 6))
+        ttk_style.configure("TCombobox", font=FONT_BASE, padding=(8, 6))
+        ttk_style.configure("TButton", font=FONT_BASE, padding=(10, 8))
         ttk_style.configure("TLabelframe.Label", font=FONT_HEADER)
 
     @classmethod
@@ -256,6 +260,10 @@ class ThemeManager:
         foreground = theme["foreground"]
         input_background = theme["input_background"]
         input_foreground = theme["input_foreground"]
+        border = theme["border"]
+        select_background = theme["select_background"]
+        select_foreground = theme["select_foreground"]
+        heading_background = theme["heading_background"]
 
         ttk_style.configure("TFrame", background=background)
         ttk_style.configure("TLabel", background=background, foreground=foreground)
@@ -270,25 +278,25 @@ class ThemeManager:
             fieldbackground=input_background,
             background=input_background,
             foreground=input_foreground,
-            selectbackground=theme["select_background"],
-            selectforeground=theme["select_foreground"],
+            selectbackground=select_background,
+            selectforeground=select_foreground,
         )
         ttk_style.configure(
             "TButton",
             background=theme["accent"],
             foreground=foreground,
-            bordercolor=theme["border"],
+            bordercolor=border,
             focusthickness=1,
         )
         ttk_style.map(
             "TButton",
-            background=[("active", theme["select_background"]), ("!active", theme["accent"])],
+            background=[("active", select_background), ("!active", theme["accent"])],
             foreground=[("pressed", foreground), ("active", foreground)],
         )
         ttk_style.configure(
             "TLabelframe",
             background=background,
-            bordercolor=theme["border"],
+            bordercolor=border,
         )
         ttk_style.configure(
             "TLabelframe.Label", background=background, foreground=foreground
@@ -298,18 +306,49 @@ class ThemeManager:
             background=background,
             fieldbackground=background,
             foreground=foreground,
-            bordercolor=theme["border"],
+            bordercolor=border,
         )
         ttk_style.configure(
             "Treeview.Heading",
-            background=theme["heading_background"],
+            background=heading_background,
             foreground=foreground,
         )
         ttk_style.map(
             "Treeview",
-            background=[("selected", theme["select_background"])],
-            foreground=[("selected", theme["select_foreground"])],
+            background=[("selected", select_background)],
+            foreground=[("selected", select_foreground)],
         )
+        ttk_style.configure(
+            "TNotebook",
+            background=background,
+            bordercolor=border,
+            tabmargins=(8, 6, 8, 0),
+        )
+        ttk_style.configure(
+            "TNotebook.Tab",
+            background=heading_background,
+            foreground=foreground,
+            bordercolor=border,
+            padding=(12, 8),
+        )
+        ttk_style.map(
+            "TNotebook.Tab",
+            background=[("selected", select_background), ("active", select_background)],
+            foreground=[("selected", select_foreground), ("active", select_foreground)],
+        )
+        ttk_style.configure(
+            "TScrollbar",
+            background=theme["accent"],
+            troughcolor=input_background,
+            bordercolor=border,
+            arrowcolor=foreground,
+        )
+        ttk_style.map(
+            "TScrollbar",
+            background=[("active", select_background), ("pressed", select_background)],
+            arrowcolor=[("active", select_foreground), ("pressed", select_foreground)],
+        )
+        ttk_style.configure("TSeparator", background=border)
 
     @classmethod
     def _persist_theme(cls, theme_name: str) -> None:
