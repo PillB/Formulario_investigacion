@@ -46,6 +46,7 @@ class ThemeManager:
     """Apply and toggle Tkinter ttk styles without coupling to a running UI."""
 
     PREFERENCE_FILE = Path(__file__).with_name(".theme_preference")
+    CHECKBUTTON_STYLE = "Themed.TCheckbutton"
 
     _style: Optional[ttk.Style] = None
     _root: Optional[tk.Misc] = None
@@ -370,6 +371,8 @@ class ThemeManager:
                 widget.configure(style="TScrollbar")
             elif isinstance(widget, ttk.Labelframe):
                 widget.configure(style="TLabelframe")
+            elif isinstance(widget, ttk.Checkbutton):
+                widget.configure(style=cls.CHECKBUTTON_STYLE)
             elif isinstance(widget, ttk.Treeview):
                 widget.configure(style="Treeview")
                 collected_tags = {""}
@@ -411,6 +414,7 @@ class ThemeManager:
         ttk_style.configure("TSpinbox", font=FONT_BASE, padding=input_padding)
         ttk_style.configure("TButton", font=FONT_BASE, padding=button_padding)
         ttk_style.configure("TCheckbutton", font=FONT_BASE, padding=text_padding)
+        ttk_style.configure(cls.CHECKBUTTON_STYLE, font=FONT_BASE, padding=text_padding)
         ttk_style.configure("TRadiobutton", font=FONT_BASE, padding=text_padding)
         ttk_style.configure("Treeview", font=FONT_BASE)
         ttk_style.configure("Treeview.Heading", font=FONT_BASE, padding=heading_padding)
@@ -449,6 +453,21 @@ class ThemeManager:
             foreground=input_foreground,
             selectbackground=select_background,
             selectforeground=select_foreground,
+        )
+        ttk_style.configure(
+            cls.CHECKBUTTON_STYLE,
+            background=background,
+            foreground=foreground,
+        )
+        ttk_style.map(
+            cls.CHECKBUTTON_STYLE,
+            background=[("active", select_background), ("selected", background)],
+            foreground=[("active", select_foreground), ("selected", foreground)],
+            indicatorcolor=[
+                ("selected", select_background),
+                ("active", select_background),
+                ("!selected", border),
+            ],
         )
         ttk_style.configure(
             "TButton",
