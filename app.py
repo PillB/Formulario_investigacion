@@ -73,6 +73,7 @@ from importlib import util as importlib_util
 from pathlib import Path
 from contextlib import suppress
 from typing import Optional
+import wave
 
 import tkinter as tk
 from tkinter import filedialog, font as tkfont, messagebox, scrolledtext, ttk
@@ -150,6 +151,9 @@ else:  # pragma: no cover - entorno sin Pillow
 
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+CONFIRMATION_WAV_B64 = (
+    "UklGRiQFAABXQVZFZm10IBAAAAABAAEAgD4AAIA+AAABAAgAZGF0YQAFAACAlai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tKWRfGZUR0FCSllsgZept76+tqiVf2pXSUFBSFZofpOmtb2+uKuZg25aS0JARlNkeo+js7y/uq6ch3JdTUNARFBhdougsLu/u7Cgi3ZhUERAQ01dcoecrrq/vLOjj3pkU0ZAQktaboOZq7i+vbWmk35oVkhBQUlXaoCVqLa+vrepl4FsWUpCQUdUZnyRpbS9v7msm4VwXExDQEVRY3iNorK8v7uvnol0X09EQERPX3SJnq+7v7yyoo14Y1FFQENMXHCFm6y5v720pZF8ZlRHQUJKWWyBl6m3vr62qJWAaldJQUFIVmh+k6a1vb64q5mDblpLQkBGU2R6j6OzvL+6rpyHcl1NQ0BEUGF2i6Cwu7+7sKCLdmFQREBDTV1yh5yuur+8s6OPemRTRkBCS1pug5mruL69taaTfmhWSEFBSVdqgJWotr6+t6mXgWxZSkJBR1RmfJGltL2/uaybhXBcTENARVFjeI2isry/u6+eiXRfT0RARE9fdImer7u/vLKijXhjUUVAQ0xccIWbrLm/vbSlkXxmVEdBQkpZbIGXqbe+vraolX9qV0lBQUhWaH6TprW9vrirmYNuWktCQEZTZHqPo7O8v7qunIdyXU1DQERQYXaLoLC7v7uwoIt2YVBEQENNXXKHnK66v7yzo496ZFNGQEJLWm6Dmau4vr21ppN+aFZIQUFJV2p/lai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tKWRfGZUR0FCSllsgZept76+tqiVgGpXSUFBSFZofpOmtb2+uKuZg25aS0JARlNkeo+js7y/uq6ch3JdTUNARFBhdougsLu/u7Cgi3ZhUERAQ01dcoecrrq/vLOjj3pkU0ZAQktaboOZq7i+vbWmk35oVkhBQUlXaoCVqLa+vrepl4FsWUpCQUdUZnyRpbS9v7msm4VwXExDQEVRY3iNorK8v7uvnol0X09EQERPX3SJnq+7v7yyoo14Y1FFQENMXHCFm6y5v720pZF8ZlRHQUJKWWyBl6m3vr62qJV/aldJQUFIVmh+k6a1vb64q5mDblpLQkBGU2R6j6OzvL+6rpyHcl1NQ0BEUGF2i6Cwu7+7sKCLdmFQREBDTV1yh5yuur+8s6OPemRTRkBCS1pug5mruL69taaTfmhWSEFBSVdqgJWotr6+t6mXgWxZSkJBR1RmfJGltL2/uaybhXBcTENARVFjeI2isry/u6+eiXRfT0RARE9fdImer7u/vLKijXhjUUVAQ0xccIWbrLm/vbSlkXxmVEdBQkpZbIGXqbe+vraolX9qV0lBQUhWaH6TprW9vrirmYNuWktCQEZTZHqPo7O8v7qunIdyXU1DQERQYXaLoLC7v7uwoIt2YVBEQENNXXKHnK66v7yzo496ZFNGQEJLWm6Dmau4vr21ppN+aFZIQUFJV2p/lai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tA=="
+)
 
 
 
@@ -330,6 +334,8 @@ class FraudCaseApp:
         self._export_base_path: Optional[Path] = None
         self._walkthrough_state_file = Path(AUTOSAVE_FILE).with_name("walkthrough_flags.json")
         self._walkthrough_state: dict[str, object] = self._load_walkthrough_state()
+        self._user_settings_file = Path(AUTOSAVE_FILE).with_name("user_settings.json")
+        self._user_settings: dict[str, object] = self._load_user_settings()
         self._walkthrough_overlay: Optional[tk.Toplevel] = None
         self._walkthrough_steps: list[dict[str, object]] = []
         self._walkthrough_step_index = 0
@@ -378,12 +384,17 @@ class FraudCaseApp:
         self._progress_tracking_started = False
         self._progress_animation_job: Optional[str] = None
         self._progress_target_value = 0.0
+        self._sound_bytes: Optional[bytes] = None
+        self._user_has_edited = False
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
         self.import_progress = None
         self._import_progress_visible = False
         self._active_import_jobs = 0
         self.theme_toggle_text = tk.StringVar()
         self._update_theme_toggle_label()
+        self.sound_enabled_var = tk.BooleanVar(
+            value=bool(self._user_settings.get("sound_enabled", True))
+        )
 
         def register_tooltip(widget, text):
             if widget is None or not text:
@@ -463,12 +474,23 @@ class FraudCaseApp:
         self.root.after(250, self._prompt_initial_catalog_loading)
 
     class _PostEditValidator:
-        def __init__(self, widget, validate_callback, field_label, logs, suppression_flag):
+        def __init__(
+            self,
+            widget,
+            validate_callback,
+            field_label,
+            logs,
+            suppression_flag,
+            on_user_edit=None,
+            on_success=None,
+        ):
             self.widget = widget
             self.validate_callback = validate_callback
             self.field_label = field_label
             self.logs = logs
             self._suppression_flag = suppression_flag
+            self._on_user_edit = on_user_edit
+            self._on_success = on_success
             self._armed = False
             self._last_error: Optional[str] = None
             widget.bind("<KeyRelease>", self._arm, add="+")
@@ -486,6 +508,8 @@ class FraudCaseApp:
             if not self._armed:
                 return
             self._armed = False
+            if callable(self._on_user_edit):
+                self._on_user_edit()
             error = self.validate_callback()
             if error and error != self._last_error and not self._suppression_flag():
                 try:
@@ -493,6 +517,8 @@ class FraudCaseApp:
                 except tk.TclError:
                     return
                 log_event("validacion", f"{self.field_label}: {error}", self.logs)
+            elif not error and callable(self._on_success):
+                self._on_success()
             self._last_error = error
 
     def _register_post_edit_validation(self, widget, validate_callback, field_label):
@@ -502,6 +528,8 @@ class FraudCaseApp:
             field_label,
             self.logs,
             lambda: getattr(self, "_suppress_messagebox", False) or self._suppress_post_edit_validation,
+            on_user_edit=self._mark_user_edited,
+            on_success=self._play_feedback_sound,
         )
         self._post_edit_validators.append(validator)
         return validator
@@ -1266,6 +1294,71 @@ class FraudCaseApp:
         except tk.TclError:
             pass
 
+    def _mark_user_edited(self) -> None:
+        self._user_has_edited = True
+
+    def _update_sound_preference(self) -> None:
+        self._user_settings["sound_enabled"] = bool(self.sound_enabled_var.get())
+        self._persist_user_settings()
+        self._mark_user_edited()
+
+    def _should_play_sound(self) -> bool:
+        if not hasattr(self, "_user_has_edited"):
+            return False
+        sound_toggle = getattr(self, "sound_enabled_var", None)
+        try:
+            enabled = bool(sound_toggle.get()) if sound_toggle is not None else False
+        except Exception:
+            enabled = False
+        return bool(self._user_has_edited and enabled)
+
+    def _load_sound_bytes(self) -> Optional[bytes]:
+        if self._sound_bytes is None:
+            with suppress(Exception):
+                self._sound_bytes = base64.b64decode(CONFIRMATION_WAV_B64)
+        return self._sound_bytes
+
+    def _play_sound_with_winsound(self, data: bytes) -> bool:
+        if os.name != "nt":
+            return False
+        with suppress(Exception):
+            import winsound
+
+            winsound.PlaySound(data, winsound.SND_MEMORY | winsound.SND_ASYNC)
+            return True
+        return False
+
+    def _play_sound_with_simpleaudio(self, data: bytes) -> bool:
+        try:
+            import simpleaudio as sa  # type: ignore
+        except Exception:
+            return False
+        try:
+            with wave.open(io.BytesIO(data), "rb") as wav_file:
+                wave_obj = sa.WaveObject(
+                    wav_file.readframes(wav_file.getnframes()),
+                    wav_file.getnchannels(),
+                    wav_file.getsampwidth(),
+                    wav_file.getframerate(),
+                )
+            wave_obj.play()
+            return True
+        except Exception:
+            return False
+
+    def _play_feedback_sound(self) -> None:
+        if not self._should_play_sound():
+            return
+        data = self._load_sound_bytes()
+        if not data:
+            return
+        if self._play_sound_with_winsound(data):
+            return
+        if self._play_sound_with_simpleaudio(data):
+            return
+        with suppress(tk.TclError):
+            self.root.bell()
+
     def _load_walkthrough_state(self) -> dict[str, object]:
         try:
             with open(self._walkthrough_state_file, "r", encoding="utf-8") as f:
@@ -1273,6 +1366,23 @@ class FraudCaseApp:
             return data if isinstance(data, dict) else {}
         except (OSError, json.JSONDecodeError):
             return {}
+
+    def _load_user_settings(self) -> dict[str, object]:
+        try:
+            with open(self._user_settings_file, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            return data if isinstance(data, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _persist_user_settings(self) -> None:
+        try:
+            self._user_settings_file.parent.mkdir(parents=True, exist_ok=True)
+            self._user_settings_file.write_text(
+                json.dumps(self._user_settings), encoding="utf-8"
+            )
+        except OSError as ex:
+            log_event("validacion", f"No se pudo guardar las preferencias: {ex}", self.logs)
 
     def _persist_walkthrough_state(self) -> None:
         try:
@@ -2126,7 +2236,7 @@ class FraudCaseApp:
             except Exception:
                 pass
 
-    def add_client(self, summary_parent=None):
+    def add_client(self, summary_parent=None, user_initiated: bool = False):
         """Crea y añade un nuevo marco de cliente a la interfaz.
 
         Se utiliza ``self.client_lookup`` para proporcionar datos de autopoblado
@@ -2160,6 +2270,9 @@ class FraudCaseApp:
         self._schedule_summary_refresh('clientes')
         if not was_visible:
             self.hide_clients_detail()
+        if user_initiated:
+            self._mark_user_edited()
+            self._play_feedback_sound()
 
     def remove_client(self, client_frame):
         self._handle_client_id_change(client_frame, client_frame.id_var.get(), None)
@@ -2183,7 +2296,7 @@ class FraudCaseApp:
 
     def _on_add_client_click(self):
         self.show_clients_detail()
-        self.add_client()
+        self.add_client(user_initiated=True)
 
     def _edit_selected_client(self):
         table = self.clients_summary_tree
@@ -2273,7 +2386,7 @@ class FraudCaseApp:
     def _on_new_team_member(self):
         self._log_navigation_change("Agregó colaborador")
         self.show_team_detail()
-        self.add_team()
+        self.add_team(user_initiated=True)
         self._refresh_compact_views(sections={"colaboradores"})
 
     def toggle_team_detail(self):
@@ -2309,7 +2422,7 @@ class FraudCaseApp:
             except Exception:
                 pass
 
-    def add_team(self, summary_parent=None):
+    def add_team(self, summary_parent=None, user_initiated: bool = False):
         idx = len(self.team_frames)
         was_visible = self._team_detail_visible
         self.show_team_detail()
@@ -2334,6 +2447,9 @@ class FraudCaseApp:
         self._schedule_summary_refresh('colaboradores')
         if not was_visible:
             self.hide_team_detail()
+        if user_initiated:
+            self._mark_user_edited()
+            self._play_feedback_sound()
 
     def remove_team(self, team_frame):
         self._handle_team_id_change(team_frame, team_frame.id_var.get(), None)
@@ -2445,11 +2561,11 @@ class FraudCaseApp:
 
     def _on_add_empty_product(self):
         self._log_navigation_change("Agregó producto")
-        return self.add_product()
+        return self.add_product(user_initiated=True)
 
     def _on_add_inherited_product(self):
         self._log_navigation_change("Agregó producto heredado")
-        return self.add_product_inheriting_case()
+        return self.add_product_inheriting_case(user_initiated=True)
 
     def _remove_active_product_from_action(self):
         self._log_navigation_change("Eliminó producto activo")
@@ -2533,15 +2649,18 @@ class FraudCaseApp:
                 "Algunos campos del caso no estaban definidos; se heredó lo disponible.",
             )
 
-    def add_product_inheriting_case(self):
+    def add_product_inheriting_case(self, user_initiated: bool = False):
         case_state = self._collect_case_state_for_inheritance()
         result = InheritanceService.inherit_product_fields_from_case(case_state)
-        prod = self.add_product()
+        try:
+            prod = self.add_product(user_initiated=user_initiated)
+        except TypeError:
+            prod = self.add_product()
         self._apply_inherited_fields_to_product(prod, result.values)
         self._show_inheritance_messages(result)
         return prod
 
-    def add_product(self, initialize_rows=True):
+    def add_product(self, initialize_rows=True, user_initiated: bool = False):
         idx = len(self.product_frames)
         prod = ProductFrame(
             self.product_container,
@@ -2573,6 +2692,9 @@ class FraudCaseApp:
             p.frame.config(text=f"Producto {i+1}")
         self._schedule_summary_refresh({'productos', 'reclamos'})
         prod.focus_first_field()
+        if user_initiated:
+            self._mark_user_edited()
+            self._play_feedback_sound()
         return prod
 
     def remove_product(self, prod_frame):
@@ -3914,15 +4036,28 @@ class FraudCaseApp:
         header_frame.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
         header_frame.columnconfigure(0, weight=1)
         header_frame.columnconfigure(1, weight=0)
+        header_frame.columnconfigure(2, weight=0)
 
         ttk.Frame(header_frame).grid(row=0, column=0, sticky="ew")
+        sound_toggle = ttk.Checkbutton(
+            header_frame,
+            text="Sonido de confirmación",
+            variable=self.sound_enabled_var,
+            command=self._update_sound_preference,
+            style=ThemeManager.CHECKBUTTON_STYLE,
+        )
+        sound_toggle.grid(row=0, column=1, sticky="ne", padx=(0, 6))
+        self.register_tooltip(
+            sound_toggle,
+            "Reproduce un tono breve tras validaciones exitosas, altas y exportaciones.",
+        )
         self.theme_toggle_button = ttk.Button(
             header_frame,
             textvariable=self.theme_toggle_text,
             command=self._toggle_theme,
             padding=PRIMARY_PADDING,
         )
-        self.theme_toggle_button.grid(row=0, column=1, sticky="ne")
+        self.theme_toggle_button.grid(row=0, column=2, sticky="ne")
 
         catalog_group = ttk.LabelFrame(frame, text="Catálogos de detalle")
         catalog_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
@@ -8779,6 +8914,7 @@ class FraudCaseApp:
             log_event("validacion", f"Advertencias al guardar: {warnings}", self.logs)
         if errors:
             return None, None, None
+        self._play_feedback_sound()
         folder = self._get_exports_folder()
         if not folder:
             return None, None, None
@@ -8836,6 +8972,7 @@ class FraudCaseApp:
         )
         log_event("navegacion", f"Informe {extension} generado", self.logs)
         self.flush_logs_now()
+        self._play_feedback_sound()
 
     def generate_docx_report(self):
         self._generate_report_file("docx", build_docx, "Word (.docx)")
@@ -8978,6 +9115,7 @@ class FraudCaseApp:
         )
         log_event("navegacion", "Datos guardados y enviados", self.logs)
         self.flush_logs_now()
+        self._play_feedback_sound()
 
     def _mirror_exports_to_external_drive(self, file_paths, case_id: str) -> None:
         normalized_sources = [Path(path) for path in file_paths or [] if path]
