@@ -91,7 +91,8 @@ from report_builder import (
 from inheritance_service import InheritanceService
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
-                      EXPORTS_DIR, EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
+                      ENABLE_EXTENDED_ANALYSIS_SECTIONS, EXPORTS_DIR,
+                      EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, RICH_TEXT_MAX_CHARS,
                       STORE_LOGS_LOCALLY,
                       MASSIVE_SAMPLE_FILES, NORM_ID_ALIASES, PROCESO_LIST,
@@ -161,6 +162,7 @@ class FraudCaseApp:
     IMAGE_DISPLAY_MAX = 1000
     _external_drive_path: Optional[Path] = None
     _external_log_file_initialized: bool = False
+    _extended_sections_enabled: bool = ENABLE_EXTENDED_ANALYSIS_SECTIONS
 
     """Clase que encapsula la aplicación de gestión de casos de fraude."""
 
@@ -209,6 +211,7 @@ class FraudCaseApp:
         self.claim_lookup = {}
         self.risk_lookup = {}
         self.norm_lookup = {}
+        self._extended_sections_enabled = ENABLE_EXTENDED_ANALYSIS_SECTIONS
         self._reset_extended_sections()
         self._post_edit_validators = []
         self._rich_text_limiters: dict[tk.Text, "FraudCaseApp._RichTextLimiter"] = {}
@@ -2174,7 +2177,8 @@ class FraudCaseApp:
             self.recomendaciones_text,
         ) = text_widgets
 
-        self._build_extended_analysis_sections(tab_container)
+        if self._extended_sections_enabled:
+            self._build_extended_analysis_sections(tab_container)
 
     def _build_extended_analysis_sections(self, parent):
         extended_group = ttk.LabelFrame(parent, text="Secciones extendidas del informe")
@@ -2741,6 +2745,8 @@ class FraudCaseApp:
             self._suppress_post_edit_validation = False
 
     def _sync_extended_sections_to_ui(self) -> None:
+        if not self._extended_sections_enabled:
+            return
         self._suppress_post_edit_validation = True
         try:
             for key, var in getattr(self, "_encabezado_vars", {}).items():
