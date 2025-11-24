@@ -500,6 +500,24 @@ class ThemeManager:
         select_background = theme["select_background"]
         select_foreground = theme["select_foreground"]
         heading_background = theme["heading_background"]
+        disabled_background = border
+        disabled_foreground = select_foreground
+
+        entry_field_map = [
+            ("disabled", disabled_background),
+            ("readonly", heading_background),
+            ("focus", input_background),
+            ("active", input_background),
+            ("!disabled", input_background),
+        ]
+        entry_foreground_map = [
+            ("disabled", disabled_foreground),
+            ("readonly", foreground),
+            ("focus", input_foreground),
+            ("active", input_foreground),
+            ("!disabled", input_foreground),
+        ]
+        border_map = [("focus", theme["accent"]), ("!focus", border)]
 
         ttk_style.configure("TFrame", background=background)
         ttk_style.configure(
@@ -514,12 +532,37 @@ class ThemeManager:
             foreground=input_foreground,
             insertcolor=theme["accent"],
         )
+        ttk_style.map(
+            "TEntry",
+            fieldbackground=entry_field_map,
+            foreground=entry_foreground_map,
+            bordercolor=border_map,
+        )
         ttk_style.configure(
             "TSpinbox",
             fieldbackground=input_background,
             foreground=input_foreground,
             insertcolor=theme["accent"],
             bordercolor=border,
+        )
+        ttk_style.map(
+            "TSpinbox",
+            fieldbackground=entry_field_map,
+            foreground=entry_foreground_map,
+            bordercolor=border_map,
+            arrowcolor=[
+                ("disabled", disabled_foreground),
+                ("active", select_foreground),
+                ("pressed", select_foreground),
+                ("!disabled", foreground),
+            ],
+            background=[
+                ("disabled", disabled_background),
+                ("readonly", heading_background),
+                ("active", input_background),
+                ("focus", input_background),
+                ("!disabled", input_background),
+            ],
         )
         ttk_style.configure(
             "TCombobox",
@@ -528,6 +571,25 @@ class ThemeManager:
             foreground=input_foreground,
             selectbackground=select_background,
             selectforeground=select_foreground,
+        )
+        ttk_style.map(
+            "TCombobox",
+            fieldbackground=entry_field_map,
+            foreground=entry_foreground_map,
+            bordercolor=border_map,
+            background=[
+                ("disabled", disabled_background),
+                ("readonly", heading_background),
+                ("active", input_background),
+                ("focus", input_background),
+                ("!disabled", input_background),
+            ],
+            arrowcolor=[
+                ("disabled", disabled_foreground),
+                ("active", select_foreground),
+                ("pressed", select_foreground),
+                ("!disabled", foreground),
+            ],
         )
         ttk_style.configure(
             cls.CHECKBUTTON_STYLE,
@@ -568,8 +630,19 @@ class ThemeManager:
         )
         ttk_style.map(
             "TButton",
-            background=[("active", select_background), ("!active", theme["accent"])],
-            foreground=[("pressed", foreground), ("active", foreground)],
+            background=[
+                ("disabled", disabled_background),
+                ("pressed", select_background),
+                ("active", select_background),
+                ("!disabled", theme["accent"]),
+            ],
+            foreground=[
+                ("disabled", disabled_foreground),
+                ("pressed", select_foreground),
+                ("active", select_foreground),
+                ("!disabled", foreground),
+            ],
+            bordercolor=border_map,
         )
         ttk_style.configure(
             "TLabelframe",
@@ -611,8 +684,19 @@ class ThemeManager:
         )
         ttk_style.map(
             "TNotebook.Tab",
-            background=[("selected", select_background), ("active", select_background)],
-            foreground=[("selected", select_foreground), ("active", select_foreground)],
+            background=[
+                ("disabled", disabled_background),
+                ("selected", select_background),
+                ("active", select_background),
+                ("!disabled", heading_background),
+            ],
+            foreground=[
+                ("disabled", disabled_foreground),
+                ("selected", select_foreground),
+                ("active", select_foreground),
+                ("!disabled", foreground),
+            ],
+            bordercolor=border_map,
         )
         ttk_style.configure(
             "TScrollbar",
