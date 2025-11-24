@@ -316,10 +316,12 @@ class FraudCaseApp:
         self.root = root
         # FIX: Initialize autosave timestamp tracker
         self._last_temp_saved_at = None
-        self.root.title("Gestión de Casos de Fraude (App de escritorio)")
-        self._suppress_messagebox = False
         # Lista para logs de navegación y validación
         self.logs = []
+        self._streak_file = Path(AUTOSAVE_FILE).with_name("streak_status.json")
+        self._streak_info: dict[str, object] = self._load_streak_info()
+        self.root.title(self._build_window_title())
+        self._suppress_messagebox = False
         self._reset_navigation_metrics()
         self._hover_tooltips = []
         self.validators = []
@@ -1296,6 +1298,100 @@ class FraudCaseApp:
             self.root.update_idletasks()
         except tk.TclError:
             pass
+
+    def _build_window_title(self, *, case_id: Optional[str] = None, streak_days: Optional[int] = None) -> str:
+        """Devuelve el título normalizado de la ventana principal."""
+
+        identifier = case_id if case_id is not None else ""
+        if not identifier:
+            try:
+                identifier = self.id_caso_var.get().strip()
+            except Exception:
+                identifier = ""
+        streak = streak_days if streak_days is not None else self._get_streak_days()
+        safe_streak = max(int(streak or 0), 0)
+        normalized_id = identifier or "sin ID"
+        return f"FraudCase | Caso {normalized_id} | Racha: {safe_streak} días 🔥"
+
+    def _update_window_title(self, *, case_id: Optional[str] = None, streak_days: Optional[int] = None) -> None:
+        """Refresca el título de la ventana con el ID y la racha actual."""
+
+        if not hasattr(self, "root") or self.root is None:
+            return
+        try:
+            self.root.title(self._build_window_title(case_id=case_id, streak_days=streak_days))
+        except tk.TclError:
+            pass
+
+    def _get_streak_days(self) -> int:
+        info = getattr(self, "_streak_info", {}) or {}
+        try:
+            return max(int(info.get("streak_days", 0)), 0)
+        except Exception:
+            return 0
+
+    def _load_streak_info(self) -> dict[str, object]:
+        """Carga la racha guardada sin interferir con la validación inicial."""
+
+        default = {"last_active_date": None, "streak_days": 0}
+        try:
+            path = getattr(self, "_streak_file", None)
+            if not path or not Path(path).exists():
+                return default
+            with Path(path).open("r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            last_active = data.get("last_active_date")
+            if last_active:
+                datetime.fromisoformat(str(last_active))
+            streak = max(int(data.get("streak_days", 0)), 0)
+            return {"last_active_date": last_active, "streak_days": streak}
+        except Exception as ex:
+            log_event("validacion", f"Error cargando racha: {ex}", self.logs)
+            return default
+
+    def _persist_streak_info(self, info: dict[str, object]) -> None:
+        try:
+            self._streak_file.parent.mkdir(parents=True, exist_ok=True)
+            with self._streak_file.open("w", encoding="utf-8") as fh:
+                json.dump(info, fh, ensure_ascii=False, indent=2)
+        except Exception as ex:
+            log_event("validacion", f"Error guardando racha: {ex}", self.logs)
+
+    def _compute_and_persist_streak(self) -> int:
+        info = getattr(self, "_streak_info", {}) or {}
+        today = datetime.now().date()
+        last_active_raw = info.get("last_active_date")
+        last_active = None
+        if last_active_raw:
+            with suppress(Exception):
+                last_active = datetime.fromisoformat(str(last_active_raw)).date()
+        streak = max(int(info.get("streak_days", 0)), 0)
+        if last_active == today:
+            updated_streak = max(streak, 1)
+        elif last_active == today - timedelta(days=1):
+            updated_streak = max(streak, 1) + 1
+        else:
+            updated_streak = 1
+        self._streak_info = {
+            "last_active_date": today.isoformat(),
+            "streak_days": updated_streak,
+        }
+        self._persist_streak_info(self._streak_info)
+        return updated_streak
+
+    def _update_streak_if_applicable(self) -> int:
+        """Actualiza la racha sólo tras ediciones válidas del usuario."""
+
+        if not getattr(self, "_user_has_edited", False):
+            return self._get_streak_days()
+        return self._compute_and_persist_streak()
+
+    def _handle_session_saved(self, dataset: Optional[CaseData] = None) -> None:
+        streak = self._update_streak_if_applicable()
+        case_id = None
+        if dataset and isinstance(dataset, Mapping):
+            case_id = (dataset.get("caso", {}) or {}).get("id_caso")
+        self._update_window_title(case_id=case_id, streak_days=streak)
 
     def _mark_user_edited(self) -> None:
         self._user_has_edited = True
@@ -7468,6 +7564,7 @@ class FraudCaseApp:
         try:
             with open(AUTOSAVE_FILE, 'w', encoding="utf-8") as f:
                 json.dump(dataset.as_dict(), f, ensure_ascii=False, indent=2)
+            self._handle_session_saved(dataset)
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
         self._schedule_summary_refresh(data=dataset)
@@ -7482,6 +7579,8 @@ class FraudCaseApp:
                 dataset = self._ensure_case_data(data)
                 self.populate_from_data(dataset)
                 log_event("navegacion", "Se cargó el autosave", self.logs)
+                case_id = (dataset.get("caso", {}) or {}).get("id_caso")
+                self._update_window_title(case_id=case_id)
             except Exception as ex:
                 log_event("validacion", f"Error cargando autosave: {ex}", self.logs)
 
@@ -9215,6 +9314,7 @@ class FraudCaseApp:
         log_event("navegacion", "Datos guardados y enviados", self.logs)
         self.flush_logs_now()
         self._play_feedback_sound()
+        self._handle_session_saved(data)
 
     def _mirror_exports_to_external_drive(self, file_paths, case_id: str) -> None:
         normalized_sources = [Path(path) for path in file_paths or [] if path]
