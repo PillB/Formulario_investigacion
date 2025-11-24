@@ -5730,13 +5730,14 @@ class FraudCaseApp:
             _perform_check()
 
     def _check_duplicate_technical_keys_realtime(self, armed: bool = False):
+        status_message = "Clave técnica sin validar"
         if armed:
             self._duplicate_checks_armed = True
         if not self._duplicate_checks_armed:
-            return
+            return status_message
         normalized_case_id = self._normalize_identifier(self.id_caso_var.get())
         if not normalized_case_id:
-            return
+            return "Ingresa el número de caso para validar duplicados"
 
         seen_keys = {}
         duplicate_messages: list[str] = []
@@ -5812,7 +5813,9 @@ class FraudCaseApp:
             try:
                 messagebox.showerror("Validación de clave técnica", message)
             except tk.TclError:
-                return
+                return "Validación interrumpida"
+            return "Duplicado detectado o asociación faltante"
+        return "Sin duplicados detectados"
 
     @staticmethod
     def _frame_entity_label(frame):
