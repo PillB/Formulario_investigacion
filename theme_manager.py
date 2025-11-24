@@ -14,7 +14,6 @@ from typing import Dict, Iterable, Optional, Set
 import tkinter as tk
 from tkinter import scrolledtext, ttk
 
-
 LIGHT_THEME: Dict[str, str] = {
     "name": "light",
     "background": "#FFFFFF",
@@ -24,7 +23,7 @@ LIGHT_THEME: Dict[str, str] = {
     "accent": "#7d93b5",
     "border": "#c5d0df",
     "select_background": "#4e4e4e",
-    "select_foreground": "#1f242b",
+    "select_foreground": "#ffffff",
     "heading_background": "#d7e1ed",
 }
 
@@ -67,6 +66,7 @@ class ThemeManager:
         cls._root = root
         if cls._style is None or str(cls._style.master) != str(root):
             cls._style = ttk.Style(master=root)
+            cls._use_cross_platform_theme(cls._style)
             cls._base_style_configured = False
         if not cls._base_style_configured:
             cls._configure_base_style(cls._style)
@@ -187,12 +187,29 @@ class ThemeManager:
             if cls._root is None:
                 raise RuntimeError("ThemeManager requires a Tk root before applying styles.")
             cls._style = ttk.Style(master=cls._root)
+            cls._use_cross_platform_theme(cls._style)
             cls._base_style_configured = True
         cls._style.configure('.', font=('Arial', 12))  # Sans-serif font for accessibility
         if not cls._base_style_configured:
             cls._configure_base_style(cls._style)
             cls._base_style_configured = True
         return cls._style
+
+    @staticmethod
+    def _use_cross_platform_theme(ttk_style: ttk.Style) -> None:
+        """Apply a consistent ttk theme with fallbacks to avoid Tcl errors."""
+
+        fallback_theme = ttk_style.theme_use()
+        for theme_name in ("clam", "alt", "default"):
+            try:
+                ttk_style.theme_use(theme_name)
+                return
+            except tk.TclError:
+                continue
+        try:
+            ttk_style.theme_use(fallback_theme)
+        except tk.TclError:
+            return
 
     @classmethod
     def _iter_theme_windows(cls) -> Iterable[tk.Misc]:
