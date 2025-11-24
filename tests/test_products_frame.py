@@ -258,6 +258,30 @@ def test_claim_row_preserves_manual_fields_when_requested():
     assert row.code_var.get() == "4300000002"
 
 
+def test_duplicate_key_tuple_does_not_use_team_options_without_assignments():
+    product = _build_product_frame()
+    product.add_involvement()
+    product.add_involvement()
+
+    key_tuple = product._compose_duplicate_key_tuple()
+
+    parts = key_tuple.strip("()\n").split(", ")
+    assert len(parts) == 6
+    assert parts[3] == "—"
+    assert "T12345" not in key_tuple
+
+
+def test_duplicate_key_tuple_uses_assigned_involvement_collaborator():
+    product = _build_product_frame()
+    row = product.add_involvement()
+    row.team_var.set("T99999")
+
+    key_tuple = product._compose_duplicate_key_tuple()
+
+    assert "T99999" in key_tuple
+    assert "T12345" not in key_tuple
+
+
 def test_claim_row_shows_message_for_unknown_id(monkeypatch):
     product = _build_product_frame()
     product.set_claim_lookup({})
