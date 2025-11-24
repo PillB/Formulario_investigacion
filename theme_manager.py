@@ -204,7 +204,29 @@ class ThemeManager:
         input_foreground = theme["input_foreground"]
 
         try:
-            if isinstance(widget, (tk.Text, scrolledtext.ScrolledText, tk.Entry, tk.Spinbox, tk.Listbox)):
+            if isinstance(widget, scrolledtext.ScrolledText):
+                try:
+                    widget.configure(background=background)
+                except tk.TclError:
+                    pass
+                text_widget = getattr(widget, "text", None)
+                if isinstance(text_widget, tk.Text):
+                    text_widget.configure(
+                        background=input_background,
+                        foreground=input_foreground,
+                        insertbackground=theme["accent"],
+                        selectbackground=theme["select_background"],
+                        selectforeground=theme["select_foreground"],
+                    )
+                for scrollbar in (getattr(widget, "vbar", None), getattr(widget, "hbar", None)):
+                    if isinstance(scrollbar, tk.Scrollbar):
+                        scrollbar.configure(
+                            background=theme["accent"],
+                            troughcolor=input_background,
+                            activebackground=theme["select_background"],
+                            elementborderwidth=1,
+                        )
+            elif isinstance(widget, (tk.Text, tk.Entry, tk.Spinbox, tk.Listbox)):
                 widget.configure(
                     background=input_background,
                     foreground=input_foreground,
