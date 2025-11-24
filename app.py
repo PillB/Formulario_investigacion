@@ -1504,11 +1504,12 @@ class FraudCaseApp:
             ("accionado", "Accionado"),
         ]
         self.clients_summary_tree, clients_frame = self._build_compact_table(
-            summary_section, columns, height=5, column_width=120
+            summary_section, columns, height=5, column_width=120, sortable=True
         )
         self.clients_compact_table = self.clients_summary_tree
         clients_frame.grid(row=0, column=0, sticky="nsew")
         self.clients_summary_tree.bind("<Double-1>", lambda _e: self._edit_selected_client())
+        self.clients_summary_tree.bind("<<TreeviewSelect>>", self._on_client_selected)
         self.inline_summary_trees["clientes"] = self.clients_summary_tree
 
         controls = ttk.Frame(frame)
@@ -1640,6 +1641,22 @@ class FraudCaseApp:
         frame = self._find_client_frame(client_id)
         if frame:
             self.show_clients_detail()
+            try:
+                frame.frame.focus_set()
+            except tk.TclError:
+                pass
+
+    def _on_client_selected(self, _event=None):
+        table = self.clients_compact_table
+        if not table:
+            return
+        selection = table.selection()
+        if not selection:
+            return
+        values = table.item(selection[0], "values")
+        client_id = values[0] if values else ""
+        frame = self._find_client_frame(client_id)
+        if frame:
             try:
                 frame.frame.focus_set()
             except tk.TclError:
@@ -3795,8 +3812,10 @@ class FraudCaseApp:
             tree.delete(*tree.get_children())
         except tk.TclError:
             return
-        for row in rows:
-            self._insert_themed_row(tree, row)
+        for idx, row in enumerate(rows):
+            tags = ("even",) if idx % 2 == 0 else ("odd",)
+            self._insert_themed_row(tree, row, tags=tags)
+        self._apply_treeview_theme(tree)
 
     def _compact_views_present(self, sections):
         return (
@@ -3804,7 +3823,7 @@ class FraudCaseApp:
             or ("colaboradores" in sections and self.team_compact_table is not None)
         )
 
-    def _build_compact_table(self, parent, columns, height=6, column_width=140):
+    def _build_compact_table(self, parent, columns, height=6, column_width=140, sortable=False):
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
@@ -3813,7 +3832,10 @@ class FraudCaseApp:
         hscrollbar = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
         tree.configure(yscrollcommand=vscrollbar.set, xscrollcommand=hscrollbar.set)
         for col_id, heading in columns:
-            tree.heading(col_id, text=heading)
+            heading_kwargs = {"text": heading}
+            if sortable:
+                heading_kwargs["command"] = lambda c=col_id: self._sort_treeview(tree, c, False)
+            tree.heading(col_id, **heading_kwargs)
             tree.column(col_id, width=column_width, stretch=True)
         tree.grid(row=0, column=0, sticky="nsew")
         vscrollbar.grid(row=0, column=1, sticky="ns")
@@ -3827,6 +3849,16 @@ class FraudCaseApp:
             try:
                 tree.tag_configure(
                     "themed",
+                    background=palette.get("background"),
+                    foreground=palette.get("foreground"),
+                )
+                tree.tag_configure(
+                    "even",
+                    background=palette.get("heading_background", palette.get("background")),
+                    foreground=palette.get("foreground"),
+                )
+                tree.tag_configure(
+                    "odd",
                     background=palette.get("background"),
                     foreground=palette.get("foreground"),
                 )
@@ -3911,10 +3943,50 @@ class FraudCaseApp:
             seen.add(tree)
             self._apply_treeview_theme(tree)
 
-    def _insert_themed_row(self, tree, values):
+    def _apply_zebra_tags(self, tree):
+        try:
+            children = tree.get_children()
+        except tk.TclError:
+            return
+        for idx, item in enumerate(children):
+            try:
+                tags = tree.item(item, "tags") or ()
+            except tk.TclError:
+                continue
+            filtered = tuple(tag for tag in tags if tag not in {"even", "odd"})
+            try:
+                tree.item(item, tags=(*filtered, "even" if idx % 2 == 0 else "odd"))
+            except tk.TclError:
+                continue
+        self._apply_treeview_theme(tree)
+
+    def _sort_treeview(self, tree, column, reverse=False):
+        try:
+            data = [(tree.set(k, column), k) for k in tree.get_children("")]
+        except tk.TclError:
+            return
+        try:
+            data.sort(key=lambda item: (item[0] or "").lower())
+        except Exception:
+            data.sort(key=lambda item: item[0])
+        if reverse:
+            data.reverse()
+        for index, (_, item) in enumerate(data):
+            try:
+                tree.move(item, "", index)
+            except tk.TclError:
+                continue
+        try:
+            tree.heading(column, command=lambda c=column: self._sort_treeview(tree, c, not reverse))
+        except tk.TclError:
+            pass
+        self._apply_zebra_tags(tree)
+
+    def _insert_themed_row(self, tree, values, tags=()):
         self._apply_treeview_theme(tree)
         try:
-            tree.insert("", "end", values=values, tags=("themed",))
+            normalized_tags = tuple(tags) if tags else ()
+            tree.insert("", "end", values=values, tags=("themed", *normalized_tags))
         except tk.TclError:
             return
 
@@ -5334,8 +5406,9 @@ class FraudCaseApp:
         if not tree:
             return
         tree.delete(*tree.get_children())
-        for row in rows:
-            self._insert_themed_row(tree, row)
+        for idx, row in enumerate(rows):
+            tags = ("even",) if idx % 2 == 0 else ("odd",)
+            self._insert_themed_row(tree, row, tags=tags)
         self._apply_treeview_theme(tree)
 
     # ---------------------------------------------------------------------
