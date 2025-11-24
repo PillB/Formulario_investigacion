@@ -430,9 +430,11 @@ class ProductFrame:
         id_change_callback=None,
         initialize_rows=True,
         duplicate_key_checker=None,
+        owner=None,
     ):
         self.parent = parent
         self.idx = idx
+        self.owner = owner
         self.remove_callback = remove_callback
         self.get_client_options = get_client_options
         self.get_team_options = get_team_options
@@ -485,16 +487,8 @@ class ProductFrame:
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
-
-        action_row = ttk.Frame(self.frame)
-        ensure_grid_support(action_row)
-        action_row.grid(row=0, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
-        if hasattr(action_row, "columnconfigure"):
-            action_row.columnconfigure(0, weight=1)
-            action_row.columnconfigure(1, weight=0)
-        remove_btn = ttk.Button(action_row, text="Eliminar producto", command=self.remove)
-        remove_btn.grid(row=0, column=1, sticky="e")
-        self.tooltip_register(remove_btn, "Quita por completo el producto de la lista.")
+        if hasattr(self.owner, "_set_active_product_frame"):
+            self.frame.bind("<FocusIn>", lambda _e: self.owner._set_active_product_frame(self), add="+")
 
         ttk.Label(self.frame, text="ID del producto:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
