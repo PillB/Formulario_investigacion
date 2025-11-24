@@ -56,6 +56,7 @@ correos, direcciones y planes de acción).
 """
 
 import base64
+import binascii
 import csv
 import io
 import json
@@ -2993,9 +2994,14 @@ class FraudCaseApp:
             raw_bytes = data
         elif isinstance(data, str):
             try:
-                raw_bytes = data.encode("latin1")
-            except UnicodeEncodeError:
-                raw_bytes = data.encode("utf-8", errors="ignore")
+                raw_bytes = base64.b64decode(data, validate=True)
+            except (binascii.Error, ValueError):
+                raw_bytes = None
+            if raw_bytes is None:
+                try:
+                    raw_bytes = data.encode("latin1")
+                except UnicodeEncodeError:
+                    raw_bytes = data.encode("utf-8", errors="ignore")
         if raw_bytes is not None and not self._validate_image_size(len(raw_bytes)):
             return None, None
         if ext and raw_bytes is not None:
