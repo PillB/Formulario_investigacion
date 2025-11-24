@@ -3886,12 +3886,17 @@ class FraudCaseApp:
         """Construye la pestaña de resumen con tablas compactas."""
 
         self.summary_tab = parent
-        container = ttk.Frame(parent)
-        container.pack(fill="both", expand=True, padx=5, pady=5)
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+
+        scrollable_tab, container = create_scrollable_container(parent)
+        scrollable_tab.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        container.columnconfigure(0, weight=1)
+
         ttk.Label(
             container,
             text="Resumen compacto de los datos capturados. Las tablas se actualizan tras cada guardado o importación.",
-        ).pack(anchor="w", pady=(0, 5))
+        ).grid(row=0, column=0, sticky="w", pady=(0, 5))
 
         config = [
             (
@@ -3992,9 +3997,12 @@ class FraudCaseApp:
 
         self.summary_tables.clear()
         self.summary_config = {key: columns for key, _, columns in config}
+        row_idx = 1
         for key, title, columns in config:
             section = ttk.LabelFrame(container, text=title)
-            section.pack(fill="both", expand=True, pady=5)
+            section.grid(row=row_idx, column=0, sticky="nsew", pady=5)
+            container.rowconfigure(row_idx, weight=1)
+            section.columnconfigure(0, weight=1)
             column_width = 130 if key == "colaboradores" else 150
             tree, frame = self._build_compact_table(
                 section, columns, height=5, column_width=column_width
@@ -4006,6 +4014,7 @@ class FraudCaseApp:
             if key == "colaboradores" and self.team_compact_table is None:
                 self.team_compact_table = tree
             self._register_summary_tree_bindings(tree, key)
+            row_idx += 1
 
         self._schedule_summary_refresh()
 
