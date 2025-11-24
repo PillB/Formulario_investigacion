@@ -397,6 +397,8 @@ class ThemeManager:
                 widget.configure(style="TLabel")
             elif isinstance(widget, ttk.Entry):
                 widget.configure(style="TEntry")
+            elif isinstance(widget, ttk.Spinbox):
+                widget.configure(style="TSpinbox")
             elif isinstance(widget, ttk.Combobox):
                 widget.configure(style="TCombobox")
             elif isinstance(widget, ttk.Button):
@@ -491,6 +493,13 @@ class ThemeManager:
             fieldbackground=input_background,
             foreground=input_foreground,
             insertcolor=theme["accent"],
+        )
+        ttk_style.configure(
+            "TSpinbox",
+            fieldbackground=input_background,
+            foreground=input_foreground,
+            insertcolor=theme["accent"],
+            bordercolor=border,
         )
         ttk_style.configure(
             "TCombobox",
