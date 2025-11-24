@@ -60,6 +60,7 @@ import csv
 import json
 import math
 import os
+import re
 import shutil
 import zipfile
 import threading
@@ -143,6 +144,9 @@ if PIL_AVAILABLE:
 else:  # pragma: no cover - entorno sin Pillow
     Image = None
     ImageTk = None
+
+SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
+CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 
@@ -679,8 +683,8 @@ class FraudCaseApp:
         log_event("navegacion", "Inició importación de datos combinados", self.logs)
         def worker():
             prepared_rows = []
-            for row in iter_massive_csv_rows(filename):
-                raw_row = dict(row)
+            for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+                raw_row = self._sanitize_import_row(row, row_number=index)
                 client_row, client_found = self._hydrate_row_from_details(raw_row, 'id_cliente', CLIENT_ID_ALIASES)
                 team_row, team_found = self._hydrate_row_from_details(raw_row, 'id_colaborador', TEAM_ID_ALIASES)
                 product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
@@ -721,8 +725,9 @@ class FraudCaseApp:
         log_event("navegacion", "Inició importación de riesgos", self.logs)
         def worker():
             payload = []
-            for row in iter_massive_csv_rows(filename):
-                hydrated, _ = self._hydrate_row_from_details(row, 'id_riesgo', RISK_ID_ALIASES)
+            for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, _ = self._hydrate_row_from_details(sanitized_row, 'id_riesgo', RISK_ID_ALIASES)
                 payload.append(hydrated)
             return payload
 
@@ -745,8 +750,9 @@ class FraudCaseApp:
         log_event("navegacion", "Inició importación de normas", self.logs)
         def worker():
             payload = []
-            for row in iter_massive_csv_rows(filename):
-                hydrated, _ = self._hydrate_row_from_details(row, 'id_norma', NORM_ID_ALIASES)
+            for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, _ = self._hydrate_row_from_details(sanitized_row, 'id_norma', NORM_ID_ALIASES)
                 payload.append(hydrated)
             return payload
 
@@ -769,8 +775,9 @@ class FraudCaseApp:
         log_event("navegacion", "Inició importación de reclamos", self.logs)
         def worker():
             payload = []
-            for row in iter_massive_csv_rows(filename):
-                hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
+            for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, found = self._hydrate_row_from_details(sanitized_row, 'id_producto', PRODUCT_ID_ALIASES)
                 payload.append({'row': hydrated, 'found': found})
             return payload
 
@@ -890,6 +897,42 @@ class FraudCaseApp:
             self.root.update_idletasks()
         except tk.TclError:
             pass
+
+    @classmethod
+    def _sanitize_import_value(cls, value, column_name: str | None = None, row_number: int | None = None) -> str:
+        """Normaliza valores provenientes de CSV para evitar inyección o caracteres de control."""
+
+        if value is None:
+            return ""
+        text = str(value)
+        sanitized = CONTROL_CHAR_PATTERN.sub("", text).strip()
+        if not sanitized:
+            return ""
+        if sanitized.startswith(SPREADSHEET_FORMULA_PREFIXES):
+            location = []
+            if row_number is not None:
+                location.append(f"fila {row_number}")
+            if column_name:
+                location.append(f"columna '{column_name}'")
+            location_hint = f" en {' y '.join(location)}" if location else ""
+            raise ValueError(
+                f"Se rechazó un valor{location_hint} por iniciar con un prefijo de fórmula: '{sanitized[:32]}'"
+            )
+        return sanitized
+
+    @classmethod
+    def _sanitize_import_row(cls, row, row_number: int | None = None) -> dict[str, str]:
+        """Aplica saneamiento consistente a cada celda de una fila importada."""
+
+        sanitized = {}
+        if not isinstance(row, Mapping):
+            return sanitized
+        for key, value in row.items():
+            if key is None:
+                continue
+            normalized_key = cls._sanitize_text(key)
+            sanitized[normalized_key] = cls._sanitize_import_value(value, normalized_key, row_number)
+        return sanitized
 
     def _notify_taxonomy_warning(self, message):
         """Centraliza el aviso de inconsistencias en la taxonomía."""
