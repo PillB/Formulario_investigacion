@@ -486,14 +486,16 @@ class FraudCaseApp:
     def _handle_global_navigation_event(self, event: tk.Event, subtype: str) -> None:
         try:
             # FIX 2: focus_displayof() falla en macOS con widgets temporales (popdown, tooltips, etc.)
+            # FIX FINAL: focus_get() explota con widgets temporales como .popdown (macOS)
             try:
                 focused = self.root.focus_get()
-                if focused is None:
-                    return
-            except tk.TclError:
+            except (tk.TclError, KeyError, AttributeError):
+                # KeyError ocurre específicamente con 'popdown'
+                # TclError ocurre si la ventana perdió foco
+                # AttributeError por seguridad extra
                 return
-        except tk.TclError:
-            return
+            if focused is None:
+                return
         # FIX 3: event.widget a veces es str (!) en ciertos eventos sintetizados
         widget = event.widget if hasattr(event, "widget") else None
         if not hasattr(widget, "winfo_class"):
