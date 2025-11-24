@@ -51,6 +51,10 @@ class ThemeManager:
     COMBOBOX_STYLE = "Modern.TCombobox"
     SPINBOX_STYLE = "Modern.TSpinbox"
     BUTTON_STYLE = "Modern.TButton"
+    BUTTON_HOVER_STYLE = "ModernHover.TButton"
+    ENTRY_FOCUS_STYLE = "ModernFocus.TEntry"
+    COMBOBOX_FOCUS_STYLE = "ModernFocus.TCombobox"
+    SPINBOX_FOCUS_STYLE = "ModernFocus.TSpinbox"
 
     _style: Optional[ttk.Style] = None
     _root: Optional[tk.Misc] = None
@@ -495,12 +499,16 @@ class ThemeManager:
                 widget.configure(style="TLabel")
             elif isinstance(widget, ttk.Entry):
                 widget.configure(style=cls.ENTRY_STYLE)
+                cls._register_focus_glow(widget)
             elif isinstance(widget, ttk.Spinbox):
                 widget.configure(style=cls.SPINBOX_STYLE)
+                cls._register_focus_glow(widget)
             elif isinstance(widget, ttk.Combobox):
                 widget.configure(style=cls.COMBOBOX_STYLE)
+                cls._register_focus_glow(widget)
             elif isinstance(widget, ttk.Button):
                 widget.configure(style=cls.BUTTON_STYLE)
+                cls._register_button_animation(widget)
             elif isinstance(widget, ttk.Progressbar):
                 widget.configure(style="TProgressbar")
             elif isinstance(widget, ttk.Scrollbar):
@@ -535,6 +543,117 @@ class ThemeManager:
                         continue
         except tk.TclError:
             return
+
+    @classmethod
+    def _register_button_animation(cls, widget: tk.Misc) -> None:
+        if not isinstance(widget, ttk.Button):
+            return
+        if getattr(widget, "_theme_button_bound", False):
+            return
+        widget._theme_button_bound = True
+        widget._tm_pulse_after_id = None
+
+        def cancel_pulse() -> None:
+            after_id = getattr(widget, "_tm_pulse_after_id", None)
+            if after_id:
+                try:
+                    widget.after_cancel(after_id)
+                except tk.TclError:
+                    pass
+                widget._tm_pulse_after_id = None
+
+        def start_pulse(_event=None) -> None:
+            cancel_pulse()
+            try:
+                widget.configure(style=cls.BUTTON_HOVER_STYLE)
+            except tk.TclError:
+                return
+            try:
+                widget._tm_pulse_after_id = widget.after(150, lambda: cls._reset_button_style(widget))
+            except tk.TclError:
+                widget._tm_pulse_after_id = None
+
+        def end_pulse(_event=None) -> None:
+            cancel_pulse()
+            cls._reset_button_style(widget)
+
+        widget.bind("<Enter>", start_pulse, add="+")
+        widget.bind("<Leave>", end_pulse, add="+")
+        widget.bind("<FocusOut>", end_pulse, add="+")
+
+    @classmethod
+    def _reset_button_style(cls, widget: tk.Misc) -> None:
+        try:
+            widget.configure(style=cls.BUTTON_STYLE)
+        except tk.TclError:
+            pass
+
+    @classmethod
+    def _register_focus_glow(cls, widget: tk.Misc) -> None:
+        if not isinstance(widget, (ttk.Entry, ttk.Combobox, ttk.Spinbox)):
+            return
+        if getattr(widget, "_theme_focus_bound", False):
+            return
+        widget._theme_focus_bound = True
+
+        def apply_focus(_event=None) -> None:
+            if not cls._widget_is_valid(widget):
+                return
+            try:
+                widget.configure(style=cls._focus_style_for_widget(widget))
+            except tk.TclError:
+                return
+
+        def remove_focus(_event=None) -> None:
+            cls._reset_input_style(widget)
+
+        widget.bind("<FocusIn>", apply_focus, add="+")
+        widget.bind("<FocusOut>", remove_focus, add="+")
+
+        try:
+            remove_focus()
+            if widget.focus_get() == widget and cls._widget_is_valid(widget):
+                apply_focus()
+        except tk.TclError:
+            pass
+
+    @classmethod
+    def _reset_input_style(cls, widget: tk.Misc) -> None:
+        try:
+            widget.configure(style=cls._base_style_for_widget(widget))
+        except tk.TclError:
+            pass
+
+    @classmethod
+    def _base_style_for_widget(cls, widget: tk.Misc) -> str:
+        if isinstance(widget, ttk.Entry):
+            return cls.ENTRY_STYLE
+        if isinstance(widget, ttk.Combobox):
+            return cls.COMBOBOX_STYLE
+        if isinstance(widget, ttk.Spinbox):
+            return cls.SPINBOX_STYLE
+        return str(widget.cget("style")) if hasattr(widget, "cget") else ""
+
+    @classmethod
+    def _focus_style_for_widget(cls, widget: tk.Misc) -> str:
+        if isinstance(widget, ttk.Entry):
+            return cls.ENTRY_FOCUS_STYLE
+        if isinstance(widget, ttk.Combobox):
+            return cls.COMBOBOX_FOCUS_STYLE
+        if isinstance(widget, ttk.Spinbox):
+            return cls.SPINBOX_FOCUS_STYLE
+        return cls._base_style_for_widget(widget)
+
+    @staticmethod
+    def _widget_is_valid(widget: tk.Misc) -> bool:
+        state_getter = getattr(widget, "state", None)
+        if callable(state_getter):
+            try:
+                states = set(state_getter())
+            except tk.TclError:
+                return False
+            return "invalid" not in states
+        return True
 
     @classmethod
     def _configure_base_style(cls, ttk_style: ttk.Style) -> None:
@@ -1131,6 +1250,136 @@ class ThemeManager:
             bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
             background=[("active", background), ("!active", background)],
         )
+
+        cls._configure_interaction_variants(
+            ttk_style,
+            theme,
+            glow,
+            shadow,
+            disabled_background,
+            disabled_foreground,
+            select_background,
+            select_foreground,
+        )
+
+    @classmethod
+    def _configure_interaction_variants(
+        cls,
+        ttk_style: ttk.Style,
+        theme: Dict[str, str],
+        glow: str,
+        shadow: str,
+        disabled_background: str,
+        disabled_foreground: str,
+        select_background: str,
+        select_foreground: str,
+    ) -> None:
+        """Create hover/focus variants so bindings can toggle subtle animations."""
+
+        hover_background = cls._shade_color(theme["accent"], 0.12)
+        base_button_padding = ttk_style.configure(cls.BUTTON_STYLE).get("padding", (12, 8))
+        padded_hover = cls._bump_padding(base_button_padding, delta=1)
+
+        cls._clone_style(
+            ttk_style,
+            cls.BUTTON_STYLE,
+            cls.BUTTON_HOVER_STYLE,
+            configure_overrides={
+                "background": hover_background,
+                "lightcolor": glow,
+                "darkcolor": glow,
+                "bordercolor": glow,
+                "padding": padded_hover,
+            },
+            map_overrides={
+                "background": [
+                    ("disabled", disabled_background),
+                    ("pressed", select_background),
+                    ("active", hover_background),
+                    ("focus", hover_background),
+                    ("!disabled", hover_background),
+                ],
+                "foreground": [
+                    ("disabled", disabled_foreground),
+                    ("pressed", select_foreground),
+                    ("active", select_foreground),
+                    ("!disabled", theme["foreground"]),
+                ],
+                "bordercolor": [("focus", glow), ("active", glow), ("!focus", shadow)],
+            },
+        )
+
+        focus_overrides = {
+            "bordercolor": glow,
+            "lightcolor": glow,
+            "darkcolor": glow,
+        }
+        cls._clone_style(ttk_style, cls.ENTRY_STYLE, cls.ENTRY_FOCUS_STYLE, configure_overrides=focus_overrides)
+        cls._clone_style(
+            ttk_style,
+            cls.COMBOBOX_STYLE,
+            cls.COMBOBOX_FOCUS_STYLE,
+            configure_overrides=focus_overrides,
+        )
+        cls._clone_style(
+            ttk_style,
+            cls.SPINBOX_STYLE,
+            cls.SPINBOX_FOCUS_STYLE,
+            configure_overrides=focus_overrides,
+        )
+
+    @staticmethod
+    def _bump_padding(padding, delta: int) -> tuple:
+        if isinstance(padding, (list, tuple)):
+            try:
+                values = [int(float(value)) for value in padding]
+                return tuple(value + delta for value in values)
+            except (TypeError, ValueError):
+                return tuple(padding)
+        if isinstance(padding, str):
+            try:
+                numeric = int(float(padding))
+                return (numeric + delta, numeric + delta)
+            except ValueError:
+                return (delta, delta)
+        return (delta, delta)
+
+    @classmethod
+    def _clone_style(
+        cls,
+        ttk_style: ttk.Style,
+        source: str,
+        target: str,
+        *,
+        configure_overrides: Optional[Dict[str, str]] = None,
+        map_overrides: Optional[Dict[str, list]] = None,
+    ) -> None:
+        """Copy layout/configuration from ``source`` into ``target`` with overrides."""
+
+        try:
+            layout = ttk_style.layout(source)
+            if layout:
+                ttk_style.layout(target, layout)
+        except tk.TclError:
+            layout = None
+
+        try:
+            config = ttk_style.configure(source)
+        except tk.TclError:
+            config = {}
+        if configure_overrides:
+            config.update(configure_overrides)
+        if config:
+            ttk_style.configure(target, **config)
+
+        try:
+            mapped = ttk_style.map(source)
+        except tk.TclError:
+            mapped = {}
+        if map_overrides:
+            mapped.update(map_overrides)
+        if mapped:
+            ttk_style.map(target, **mapped)
 
     @staticmethod
     def _shade_color(color: str, factor: float) -> str:
