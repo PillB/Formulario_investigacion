@@ -220,7 +220,9 @@ class FraudCaseApp:
         self._anexo_vars: dict[str, tk.StringVar] = {}
         self._recommendation_widgets: dict[str, scrolledtext.ScrolledText] = {}
         self._analysis_tab_container: Optional[ttk.Frame] = None
+        self._analysis_group: Optional[ttk.LabelFrame] = None
         self._extended_analysis_group: Optional[ttk.LabelFrame] = None
+        self._extended_notebook: Optional[ttk.Notebook] = None
         self._extended_sections_toggle_var: Optional[tk.BooleanVar] = None
         self._suppress_post_edit_validation = False
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
@@ -2102,6 +2104,7 @@ class FraudCaseApp:
         analysis_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
         analysis_group.columnconfigure(0, weight=1)
         analysis_group.rowconfigure(1, weight=1)
+        self._analysis_group = analysis_group
 
         constraints_label = ttk.Label(
             analysis_group,
@@ -2212,6 +2215,7 @@ class FraudCaseApp:
 
         notebook = ttk.Notebook(extended_group)
         notebook.grid(row=0, column=0, sticky="nsew")
+        self._extended_notebook = notebook
 
         header_tab = ttk.Frame(notebook)
         tables_tab = ttk.Frame(notebook)
@@ -2237,9 +2241,16 @@ class FraudCaseApp:
             self._sync_extended_sections_to_ui()
         else:
             self._destroy_extended_analysis_sections()
+            if self._analysis_group is not None:
+                self._analysis_group.pack_configure(expand=True, fill="both")
         self._notify_dataset_changed()
 
     def _destroy_extended_analysis_sections(self):
+        if self._extended_analysis_group is None and self._extended_notebook is None:
+            return
+        if self._extended_notebook is not None and self._extended_notebook.winfo_exists():
+            self._extended_notebook.destroy()
+        self._extended_notebook = None
         if self._extended_analysis_group is None:
             return
         try:
@@ -2249,6 +2260,8 @@ class FraudCaseApp:
             for attr in ("operations_tree", "anexos_tree"):
                 if hasattr(self, attr):
                     setattr(self, attr, None)
+            if self._analysis_group is not None:
+                self._analysis_group.pack_configure(expand=True, fill="both")
 
     def _build_header_fields(self, parent):
         header_group = ttk.LabelFrame(parent, text="Encabezado extendido")
