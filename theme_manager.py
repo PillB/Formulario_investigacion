@@ -252,8 +252,16 @@ class ThemeManager:
                 widget.configure(style="TLabelframe")
             elif isinstance(widget, ttk.Treeview):
                 widget.configure(style="Treeview")
-                widget.tag_configure("", background=background, foreground=foreground)
-                for tag in widget.tag_names():
+                collected_tags = {""}
+                for item_id in widget.get_children(""):
+                    tags = widget.item(item_id, "tags")
+                    if not tags:
+                        continue
+                    if isinstance(tags, (list, tuple, set)):
+                        collected_tags.update(tags)
+                    else:
+                        collected_tags.add(tags)
+                for tag in collected_tags:
                     widget.tag_configure(tag, background=background, foreground=foreground)
                 try:
                     widget.heading("#0", background=heading_background, foreground=foreground)
