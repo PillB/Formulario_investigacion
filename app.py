@@ -6676,8 +6676,30 @@ class FraudCaseApp:
     def _sanitize_text(value) -> str:
         if value is None:
             return ""
-        text = str(value).strip()
+        text = str(value)
+        text = CONTROL_CHAR_PATTERN.sub("", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text.startswith(SPREADSHEET_FORMULA_PREFIXES):
+            text = f"'{text}"
         return text
+
+    @classmethod
+    def _sanitize_payload_strings(cls, payload, *, skip_keys: Optional[set[str]] = None):
+        if skip_keys is None:
+            skip_keys = set()
+        if isinstance(payload, dict):
+            sanitized = {}
+            for key, value in payload.items():
+                if key in skip_keys:
+                    sanitized[key] = value
+                else:
+                    sanitized[key] = cls._sanitize_payload_strings(value, skip_keys=skip_keys)
+            return sanitized
+        if isinstance(payload, list):
+            return [cls._sanitize_payload_strings(item, skip_keys=skip_keys) for item in payload]
+        if isinstance(payload, str):
+            return cls._sanitize_text(payload)
+        return payload
 
     @classmethod
     def _normalize_mapping_strings(cls, payload, keys: Optional[list[str]] = None) -> dict:
@@ -6734,14 +6756,14 @@ class FraudCaseApp:
         investigator_name = self._sanitize_text(self.investigator_nombre_var.get())
         investigator_role = self._sanitize_text(self.investigator_cargo_var.get()) or "Investigador Principal"
         data['caso'] = {
-            "id_caso": self.id_caso_var.get().strip(),
-            "tipo_informe": self.tipo_informe_var.get(),
-            "categoria1": self.cat_caso1_var.get(),
-            "categoria2": self.cat_caso2_var.get(),
-            "modalidad": self.mod_caso_var.get(),
-            "canal": self.canal_caso_var.get(),
-            "proceso": self.proceso_caso_var.get(),
-            "fecha_de_ocurrencia": self.fecha_caso_var.get().strip(),
+            "id_caso": self._sanitize_text(self.id_caso_var.get()),
+            "tipo_informe": self._sanitize_text(self.tipo_informe_var.get()),
+            "categoria1": self._sanitize_text(self.cat_caso1_var.get()),
+            "categoria2": self._sanitize_text(self.cat_caso2_var.get()),
+            "modalidad": self._sanitize_text(self.mod_caso_var.get()),
+            "canal": self._sanitize_text(self.canal_caso_var.get()),
+            "proceso": self._sanitize_text(self.proceso_caso_var.get()),
+            "fecha_de_ocurrencia": self._sanitize_text(self.fecha_caso_var.get()),
             "matricula_investigador": investigator_id,
             "investigador": {
                 "matricula": investigator_id,
@@ -6816,7 +6838,8 @@ class FraudCaseApp:
         data['recomendaciones_categorias'] = self._normalize_recommendation_categories(
             getattr(self, '_recomendaciones_categorias', {})
         )
-        return CaseData.from_mapping(data)
+        sanitized_data = self._sanitize_payload_strings(data, skip_keys={"analisis"})
+        return CaseData.from_mapping(sanitized_data)
 
     def _normalize_export_amount_strings(self, products):
         if not products:
