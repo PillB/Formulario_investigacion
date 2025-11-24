@@ -433,14 +433,14 @@ class FraudCaseApp:
             return None
         bucket = self.HEATMAP_BUCKET_SIZE
         # FIX: Tkinter sometimes passes coords as strings → convert safely
-+        try:
-+            x = float(coords[0])
-+            y = float(coords[1])
-+        except (ValueError, TypeError):
-+            return None  # Invalid coords
++       try:
++           x = float(coords[0])
++           y = float(coords[1])
++       except (ValueError, TypeError):
++           return None  # Invalid coords
 +
-+        x_bucket = int(x // bucket * bucket)
-+        y_bucket = int(y // bucket * bucket)
++       x_bucket = int(x // bucket * bucket)
++       y_bucket = int(y // bucket * bucket)
         return (x_bucket, y_bucket)
 
     def _accumulate_navigation_metrics(
