@@ -199,6 +199,7 @@ class ThemeManager:
     def _apply_widget_attributes(cls, widget: tk.Misc, theme: Dict[str, str]) -> None:
         background = theme["background"]
         foreground = theme["foreground"]
+        heading_background = theme["heading_background"]
         input_background = theme["input_background"]
         input_foreground = theme["input_foreground"]
 
@@ -222,10 +223,21 @@ class ThemeManager:
                     activebackground=theme["select_background"],
                     activeforeground=theme["select_foreground"],
                 )
+            elif isinstance(widget, tk.Scrollbar):
+                widget.configure(
+                    background=theme["accent"],
+                    troughcolor=input_background,
+                    activebackground=theme["select_background"],
+                    elementborderwidth=1,
+                )
             elif isinstance(widget, ttk.Frame):
                 widget.configure(style="TFrame")
             elif isinstance(widget, ttk.Notebook):
                 widget.configure(style="TNotebook")
+            elif isinstance(widget, ttk.Panedwindow):
+                widget.configure(style="TPanedwindow")
+            elif isinstance(widget, ttk.Separator):
+                widget.configure(style="TSeparator")
             elif isinstance(widget, ttk.Label):
                 widget.configure(style="TLabel")
             elif isinstance(widget, ttk.Entry):
@@ -241,6 +253,17 @@ class ThemeManager:
             elif isinstance(widget, ttk.Treeview):
                 widget.configure(style="Treeview")
                 widget.tag_configure("", background=background, foreground=foreground)
+                for tag in widget.tag_names():
+                    widget.tag_configure(tag, background=background, foreground=foreground)
+                try:
+                    widget.heading("#0", background=heading_background, foreground=foreground)
+                except tk.TclError:
+                    pass
+                for column in widget.cget("columns"):
+                    try:
+                        widget.heading(column, background=heading_background, foreground=foreground)
+                    except tk.TclError:
+                        continue
         except tk.TclError:
             return
 
@@ -266,6 +289,11 @@ class ThemeManager:
         heading_background = theme["heading_background"]
 
         ttk_style.configure("TFrame", background=background)
+        ttk_style.configure(
+            "TPanedwindow",
+            background=background,
+            bordercolor=border,
+        )
         ttk_style.configure("TLabel", background=background, foreground=foreground)
         ttk_style.configure(
             "TEntry",
