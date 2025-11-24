@@ -94,6 +94,7 @@ class ThemeManager:
 
         cls._current = theme
         cls._configure_palette(ttk_style, theme)
+        cls._refresh_content_widgets()
         cls._persist_theme(theme["name"])
         cls.refresh_all_widgets()
         return cls._current
@@ -124,6 +125,7 @@ class ThemeManager:
             cls._ensure_style()
         except RuntimeError:
             return
+        cls._refresh_content_widgets()
         for window in cls._iter_theme_windows():
             cls._apply_widget_tree(window, cls._current)
 
@@ -183,6 +185,102 @@ class ThemeManager:
             else:
                 stale.add(window)
         cls._tracked_toplevels.difference_update(stale)
+
+    @classmethod
+    def _iter_window_children(cls, widget: tk.Misc) -> Iterable[tk.Misc]:
+        """Yield ``widget`` and all of its descendants."""
+
+        stack = [widget]
+        while stack:
+            current = stack.pop()
+            yield current
+            try:
+                stack.extend(current.winfo_children())
+            except tk.TclError:
+                continue
+
+    @classmethod
+    def _refresh_content_widgets(cls) -> None:
+        """Reapply tag colors for text and tree widgets after palette updates."""
+
+        theme = cls._current
+        try:
+            select_background = theme["select_background"]
+        except KeyError:
+            return
+        for window in cls._iter_theme_windows():
+            for widget in cls._iter_window_children(window):
+                if isinstance(widget, ttk.Treeview):
+                    cls._reapply_treeview_tags(widget, theme)
+                elif isinstance(widget, scrolledtext.ScrolledText):
+                    text_area = getattr(widget, "text", None)
+                    cls._reapply_text_tags(text_area or widget, theme)
+                elif isinstance(widget, tk.Text):
+                    cls._reapply_text_tags(widget, theme)
+
+    @classmethod
+    def _reapply_treeview_tags(cls, widget: ttk.Treeview, theme: Dict[str, str]) -> None:
+        """Reset tag styling so existing rows reflect the current palette."""
+
+        background = theme["background"]
+        foreground = theme["foreground"]
+        heading_background = theme["heading_background"]
+        collected_tags = {""}
+        stack = list(widget.get_children(""))
+        while stack:
+            item_id = stack.pop()
+            tags = widget.item(item_id, "tags") or []
+            if isinstance(tags, (list, tuple, set)):
+                collected_tags.update(tags)
+            else:
+                collected_tags.add(tags)
+            stack.extend(widget.get_children(item_id))
+        for tag in collected_tags:
+            try:
+                widget.tag_configure(tag, background=background, foreground=foreground)
+            except tk.TclError:
+                continue
+        try:
+            widget.heading("#0", background=heading_background, foreground=foreground)
+        except tk.TclError:
+            pass
+        for column in widget.cget("columns"):
+            try:
+                widget.heading(column, background=heading_background, foreground=foreground)
+            except tk.TclError:
+                continue
+
+    @classmethod
+    def _reapply_text_tags(cls, widget: tk.Text, theme: Dict[str, str]) -> None:
+        """Reset default text colors and selection tag to match the palette."""
+
+        if not isinstance(widget, tk.Text):
+            return
+        try:
+            widget.configure(
+                background=theme["input_background"],
+                foreground=theme["input_foreground"],
+                insertbackground=theme["accent"],
+                selectbackground=theme["select_background"],
+                selectforeground=theme["select_foreground"],
+            )
+            widget.tag_configure(
+                "sel",
+                background=theme["select_background"],
+                foreground=theme["select_foreground"],
+            )
+        except tk.TclError:
+            return
+        for tag in widget.tag_names():
+            if tag == "sel":
+                continue
+            try:
+                if not widget.tag_cget(tag, "background"):
+                    widget.tag_configure(tag, background=theme["input_background"])
+                if not widget.tag_cget(tag, "foreground"):
+                    widget.tag_configure(tag, foreground=theme["input_foreground"])
+            except tk.TclError:
+                continue
 
     @classmethod
     def _apply_widget_tree(cls, root: tk.Misc, theme: Dict[str, str]) -> None:
