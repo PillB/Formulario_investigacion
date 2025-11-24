@@ -2082,9 +2082,10 @@ class FraudCaseApp:
         scrollable_tab.pack(fill="both", expand=True)
         self._analysis_tab_container = tab_container
         tab_container.columnconfigure(0, weight=1)
+        tab_container.rowconfigure(1, weight=1)
 
         controls = ttk.Frame(tab_container)
-        controls.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY, 0))
+        controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, 0))
         self._extended_sections_toggle_var = tk.BooleanVar(
             value=self._extended_sections_enabled
         )
@@ -2101,7 +2102,13 @@ class FraudCaseApp:
         )
 
         analysis_group = ttk.LabelFrame(tab_container, text="Análisis narrativo")
-        analysis_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        analysis_group.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=COL_PADX,
+            pady=ROW_PADY,
+        )
         analysis_group.columnconfigure(0, weight=1)
         analysis_group.rowconfigure(1, weight=1)
         self._analysis_group = analysis_group
@@ -2117,8 +2124,8 @@ class FraudCaseApp:
         )
         constraints_label.grid(row=0, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY // 4))
 
-        scrollable, analysis_container = create_scrollable_container(analysis_group)
-        scrollable.grid(row=1, column=0, sticky="nsew")
+        analysis_container = ttk.Frame(analysis_group)
+        analysis_container.grid(row=1, column=0, sticky="nsew")
         analysis_container.columnconfigure(0, weight=1)
 
         fields = [
@@ -2208,8 +2215,17 @@ class FraudCaseApp:
         if self._extended_analysis_group is not None:
             return self._extended_analysis_group
 
+        if parent is not None:
+            parent.rowconfigure(2, weight=1)
+
         extended_group = ttk.LabelFrame(parent, text="Secciones extendidas del informe")
-        extended_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+        extended_group.grid(
+            row=2,
+            column=0,
+            sticky="nsew",
+            padx=COL_PADX,
+            pady=ROW_PADY,
+        )
         extended_group.columnconfigure(0, weight=1)
         extended_group.rowconfigure(0, weight=1)
 
@@ -2241,8 +2257,8 @@ class FraudCaseApp:
             self._sync_extended_sections_to_ui()
         else:
             self._destroy_extended_analysis_sections()
-            if self._analysis_group is not None:
-                self._analysis_group.pack_configure(expand=True, fill="both")
+            if self._analysis_tab_container is not None:
+                self._analysis_tab_container.rowconfigure(2, weight=0)
         self._notify_dataset_changed()
 
     def _destroy_extended_analysis_sections(self):
@@ -2260,8 +2276,8 @@ class FraudCaseApp:
             for attr in ("operations_tree", "anexos_tree"):
                 if hasattr(self, attr):
                     setattr(self, attr, None)
-            if self._analysis_group is not None:
-                self._analysis_group.pack_configure(expand=True, fill="both")
+            if self._analysis_tab_container is not None:
+                self._analysis_tab_container.rowconfigure(2, weight=0)
 
     def _build_header_fields(self, parent):
         header_group = ttk.LabelFrame(parent, text="Encabezado extendido")
