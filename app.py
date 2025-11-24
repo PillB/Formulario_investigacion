@@ -432,8 +432,15 @@ class FraudCaseApp:
         if not coords or coords[0] is None or coords[1] is None:
             return None
         bucket = self.HEATMAP_BUCKET_SIZE
-        x_bucket = int(coords[0] // bucket * bucket)
-        y_bucket = int(coords[1] // bucket * bucket)
+        # FIX: Tkinter sometimes passes coords as strings → convert safely
++        try:
++            x = float(coords[0])
++            y = float(coords[1])
++        except (ValueError, TypeError):
++            return None  # Invalid coords
++
++        x_bucket = int(x // bucket * bucket)
++        y_bucket = int(y // bucket * bucket)
         return (x_bucket, y_bucket)
 
     def _accumulate_navigation_metrics(
