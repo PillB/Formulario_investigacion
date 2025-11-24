@@ -8,7 +8,12 @@ from tkinter import ttk
 from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
 from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import ensure_grid_support
+from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
+
+
+ENTRY_STYLE = ThemeManager.ENTRY_STYLE
+COMBOBOX_STYLE = ThemeManager.COMBOBOX_STYLE
 
 
 class CaseFrame:
@@ -40,7 +45,9 @@ class CaseFrame:
         ttk.Label(frame, text="Número de caso (AAAA-XXXX):").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(frame, textvariable=owner.id_caso_var, width=20)
+        id_entry = ttk.Entry(
+            frame, textvariable=owner.id_caso_var, width=20, style=ENTRY_STYLE
+        )
         id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(
             id_entry, "Formato AAAA-XXXX. Se usa para detectar duplicados."
@@ -55,6 +62,7 @@ class CaseFrame:
             values=TIPO_INFORME_LIST,
             state="readonly",
             width=30,
+            style=COMBOBOX_STYLE,
         )
         tipo_cb.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(tipo_cb, "Selecciona el tipo de reporte a generar.")
@@ -80,6 +88,7 @@ class CaseFrame:
             values=list(TAXONOMIA.keys()),
             state="readonly",
             width=25,
+            style=COMBOBOX_STYLE,
         )
         cat1_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(cat1_cb, "Selecciona la categoría principal del caso.")
@@ -96,6 +105,7 @@ class CaseFrame:
             values=[],
             state="readonly",
             width=25,
+            style=COMBOBOX_STYLE,
         )
         case_cat2_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(case_cat2_cb, "Selecciona la subcategoría del caso.")
@@ -113,6 +123,7 @@ class CaseFrame:
             values=[],
             state="readonly",
             width=25,
+            style=COMBOBOX_STYLE,
         )
         case_mod_cb.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(case_mod_cb, "Selecciona la modalidad específica.")
@@ -133,6 +144,7 @@ class CaseFrame:
             values=CANAL_LIST,
             state="readonly",
             width=25,
+            style=COMBOBOX_STYLE,
         )
         canal_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(canal_cb, "Canal donde se originó el evento.")
@@ -147,6 +159,7 @@ class CaseFrame:
             values=PROCESO_LIST,
             state="readonly",
             width=25,
+            style=COMBOBOX_STYLE,
         )
         proc_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
@@ -176,7 +189,10 @@ class CaseFrame:
             row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
         investigator_entry = ttk.Entry(
-            investigator_container, textvariable=owner.investigator_id_var, width=16
+            investigator_container,
+            textvariable=owner.investigator_id_var,
+            width=16,
+            style=ENTRY_STYLE,
         )
         investigator_entry.grid(
             row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
@@ -190,7 +206,10 @@ class CaseFrame:
             row=1, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
         investigator_name = ttk.Entry(
-            investigator_container, textvariable=owner.investigator_nombre_var, state="readonly"
+            investigator_container,
+            textvariable=owner.investigator_nombre_var,
+            state="readonly",
+            style=ENTRY_STYLE,
         )
         investigator_name.grid(
             row=1, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
@@ -199,7 +218,10 @@ class CaseFrame:
             row=2, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
         investigator_role = ttk.Entry(
-            investigator_container, textvariable=owner.investigator_cargo_var, state="readonly"
+            investigator_container,
+            textvariable=owner.investigator_cargo_var,
+            state="readonly",
+            style=ENTRY_STYLE,
         )
         investigator_role.grid(
             row=2, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
@@ -233,7 +255,9 @@ class CaseFrame:
         ttk.Label(dates_container, text="Ocurrencia (YYYY-MM-DD):").grid(
             row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
-        fecha_case_entry = ttk.Entry(dates_container, textvariable=owner.fecha_caso_var, width=16)
+        fecha_case_entry = ttk.Entry(
+            dates_container, textvariable=owner.fecha_caso_var, width=16, style=ENTRY_STYLE
+        )
         fecha_case_entry.grid(
             row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
         )
@@ -244,7 +268,10 @@ class CaseFrame:
             row=0, column=2, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
         fecha_desc_entry = ttk.Entry(
-            dates_container, textvariable=owner.fecha_descubrimiento_caso_var, width=16
+            dates_container,
+            textvariable=owner.fecha_descubrimiento_caso_var,
+            width=16,
+            style=ENTRY_STYLE,
         )
         fecha_desc_entry.grid(
             row=0, column=3, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
@@ -267,7 +294,7 @@ class CaseFrame:
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         centro_costo_entry = ttk.Entry(
-            frame, textvariable=owner.centro_costo_caso_var, width=35
+            frame, textvariable=owner.centro_costo_caso_var, width=35, style=ENTRY_STYLE
         )
         centro_costo_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(

@@ -46,6 +46,10 @@ class ThemeManager:
 
     PREFERENCE_FILE = Path(__file__).with_name(".theme_preference")
     CHECKBUTTON_STYLE = "Themed.TCheckbutton"
+    ENTRY_STYLE = "Modern.TEntry"
+    COMBOBOX_STYLE = "Modern.TCombobox"
+    SPINBOX_STYLE = "Modern.TSpinbox"
+    BUTTON_STYLE = "Modern.TButton"
 
     _style: Optional[ttk.Style] = None
     _root: Optional[tk.Misc] = None
@@ -452,13 +456,13 @@ class ThemeManager:
             elif isinstance(widget, ttk.Label):
                 widget.configure(style="TLabel")
             elif isinstance(widget, ttk.Entry):
-                widget.configure(style="TEntry")
+                widget.configure(style=cls.ENTRY_STYLE)
             elif isinstance(widget, ttk.Spinbox):
-                widget.configure(style="TSpinbox")
+                widget.configure(style=cls.SPINBOX_STYLE)
             elif isinstance(widget, ttk.Combobox):
-                widget.configure(style="TCombobox")
+                widget.configure(style=cls.COMBOBOX_STYLE)
             elif isinstance(widget, ttk.Button):
-                widget.configure(style="TButton")
+                widget.configure(style=cls.BUTTON_STYLE)
             elif isinstance(widget, ttk.Progressbar):
                 widget.configure(style="TProgressbar")
             elif isinstance(widget, ttk.Scrollbar):
@@ -517,6 +521,10 @@ class ThemeManager:
         ttk_style.configure("TNotebook", font=FONT_BASE)
         ttk_style.configure("TNotebook.Tab", font=FONT_BASE, padding=tab_padding)
         ttk_style.configure("TLabelframe.Label", font=FONT_HEADER)
+        ttk_style.configure(cls.ENTRY_STYLE, font=FONT_BASE, padding=input_padding)
+        ttk_style.configure(cls.COMBOBOX_STYLE, font=FONT_BASE, padding=input_padding)
+        ttk_style.configure(cls.SPINBOX_STYLE, font=FONT_BASE, padding=input_padding)
+        ttk_style.configure(cls.BUTTON_STYLE, font=FONT_BASE, padding=button_padding)
 
     @classmethod
     def _configure_palette(cls, ttk_style: ttk.Style, theme: Dict[str, str]) -> None:
@@ -555,6 +563,14 @@ class ThemeManager:
             ("focus", theme["accent"]),
             ("!focus", border),
         ]
+
+        cls._configure_modern_elements(
+            ttk_style,
+            theme,
+            input_background_map,
+            input_foreground_map,
+            border_map,
+        )
 
         ttk_style.configure("TFrame", background=background)
         ttk_style.configure(
@@ -768,6 +784,285 @@ class ThemeManager:
             background=[("active", select_background)],
         )
         ttk_style.configure("TSeparator", background=border)
+
+    @classmethod
+    def _configure_modern_elements(
+        cls,
+        ttk_style: ttk.Style,
+        theme: Dict[str, str],
+        input_background_map,
+        input_foreground_map,
+        border_map,
+    ) -> None:
+        """Build rounded, shadowed layouts for core controls."""
+
+        background = theme["background"]
+        input_background = theme["input_background"]
+        foreground = theme["foreground"]
+        input_foreground = theme["input_foreground"]
+        accent = theme["accent"]
+        select_background = theme["select_background"]
+        select_foreground = theme["select_foreground"]
+        disabled_foreground = select_foreground
+        disabled_background = theme["border"]
+        shadow = cls._shade_color(theme["border"], -0.18)
+        glow = cls._shade_color(accent, 0.12)
+
+        element_names = set(ttk_style.element_names())
+        if "Modern.Entry.border" not in element_names:
+            ttk_style.element_create(
+                "Modern.Entry.border",
+                "border",
+                border=8,
+                borderwidth=1,
+                relief="flat",
+                padding=6,
+                sticky="nswe",
+            )
+        if "Modern.Button.border" not in element_names:
+            ttk_style.element_create(
+                "Modern.Button.border",
+                "border",
+                border=10,
+                borderwidth=1,
+                relief="flat",
+                padding=8,
+                sticky="nswe",
+            )
+
+        ttk_style.layout(
+            cls.ENTRY_STYLE,
+            [
+                (
+                    "Modern.Entry.border",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            (
+                                "Entry.padding",
+                                {
+                                    "sticky": "nswe",
+                                    "children": [
+                                        (
+                                            "Entry.background",
+                                            {
+                                                "sticky": "nswe",
+                                                "children": [("Entry.textarea", {"sticky": "nswe"})],
+                                            },
+                                        )
+                                    ],
+                                },
+                            )
+                        ],
+                    },
+                )
+            ],
+        )
+        ttk_style.layout(
+            cls.COMBOBOX_STYLE,
+            [
+                (
+                    "Modern.Entry.border",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            (
+                                "Combobox.padding",
+                                {
+                                    "sticky": "nswe",
+                                    "children": [
+                                        ("Combobox.textarea", {"sticky": "nswe"}),
+                                        ("Combobox.downarrow", {"side": "right", "sticky": ""}),
+                                    ],
+                                },
+                            )
+                        ],
+                    },
+                )
+            ],
+        )
+        ttk_style.layout(
+            cls.SPINBOX_STYLE,
+            [
+                (
+                    "Modern.Entry.border",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            (
+                                "Spinbox.field",
+                                {
+                                    "side": "left",
+                                    "sticky": "nswe",
+                                    "children": [
+                                        (
+                                            "Spinbox.padding",
+                                            {
+                                                "sticky": "nswe",
+                                                "children": [("Spinbox.textarea", {"sticky": "nswe"})],
+                                            },
+                                        )
+                                    ],
+                                },
+                            ),
+                            ("Spinbox.uparrow", {"side": "top", "sticky": "e"}),
+                            ("Spinbox.downarrow", {"side": "bottom", "sticky": "e"}),
+                        ],
+                    },
+                )
+            ],
+        )
+        ttk_style.layout(
+            cls.BUTTON_STYLE,
+            [
+                (
+                    "Modern.Button.border",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            (
+                                "Button.focus",
+                                {
+                                    "sticky": "nswe",
+                                    "children": [
+                                        (
+                                            "Button.padding",
+                                            {
+                                                "sticky": "nswe",
+                                                "children": [("Button.label", {"sticky": "nswe"})],
+                                            },
+                                        )
+                                    ],
+                                },
+                            )
+                        ],
+                    },
+                )
+            ],
+        )
+
+        ttk_style.configure(
+            cls.ENTRY_STYLE,
+            fieldbackground=input_background,
+            background=input_background,
+            foreground=input_foreground,
+            bordercolor=shadow,
+            lightcolor=shadow,
+            darkcolor=shadow,
+            insertcolor=accent,
+        )
+        ttk_style.map(
+            cls.ENTRY_STYLE,
+            fieldbackground=input_background_map,
+            foreground=input_foreground_map,
+            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+        )
+
+        ttk_style.configure(
+            cls.COMBOBOX_STYLE,
+            fieldbackground=input_background,
+            background=input_background,
+            foreground=input_foreground,
+            bordercolor=shadow,
+            lightcolor=shadow,
+            darkcolor=shadow,
+            selectbackground=select_background,
+            selectforeground=select_foreground,
+        )
+        ttk_style.map(
+            cls.COMBOBOX_STYLE,
+            fieldbackground=input_background_map,
+            foreground=input_foreground_map,
+            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+            background=[
+                ("disabled", disabled_background),
+                ("readonly", theme["heading_background"]),
+                ("pressed", select_background),
+                ("active", input_background),
+                ("focus", input_background),
+                ("!disabled", input_background),
+            ],
+            arrowcolor=[
+                ("disabled", disabled_foreground),
+                ("readonly", foreground),
+                ("active", select_foreground),
+                ("pressed", select_foreground),
+                ("!disabled", foreground),
+            ],
+        )
+
+        ttk_style.configure(
+            cls.SPINBOX_STYLE,
+            fieldbackground=input_background,
+            background=input_background,
+            foreground=input_foreground,
+            bordercolor=shadow,
+            lightcolor=shadow,
+            darkcolor=shadow,
+            insertcolor=accent,
+        )
+        ttk_style.map(
+            cls.SPINBOX_STYLE,
+            fieldbackground=input_background_map,
+            foreground=input_foreground_map,
+            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+            arrowcolor=[
+                ("disabled", disabled_foreground),
+                ("readonly", foreground),
+                ("active", select_foreground),
+                ("pressed", select_foreground),
+                ("!disabled", foreground),
+            ],
+            background=[
+                ("disabled", disabled_background),
+                ("readonly", theme["heading_background"]),
+                ("pressed", select_background),
+                ("active", input_background),
+                ("focus", input_background),
+                ("!disabled", input_background),
+            ],
+        )
+
+        ttk_style.configure(
+            cls.BUTTON_STYLE,
+            background=accent,
+            foreground=foreground,
+            bordercolor=shadow,
+            lightcolor=shadow,
+            darkcolor=shadow,
+        )
+        ttk_style.map(
+            cls.BUTTON_STYLE,
+            background=[
+                ("disabled", disabled_background),
+                ("pressed", select_background),
+                ("active", glow),
+                ("focus", glow),
+                ("!disabled", accent),
+            ],
+            foreground=[
+                ("disabled", disabled_foreground),
+                ("pressed", select_foreground),
+                ("active", select_foreground),
+                ("!disabled", foreground),
+            ],
+            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+        )
+
+    @staticmethod
+    def _shade_color(color: str, factor: float) -> str:
+        color = color.lstrip("#")
+        if len(color) != 6:
+            return color
+        try:
+            channels = [int(color[i : i + 2], 16) for i in range(0, 6, 2)]
+        except ValueError:
+            return "#000000"
+        adjusted = [
+            min(255, max(0, int(channel + (255 - channel) * factor if factor > 0 else channel * (1 + factor))))
+            for channel in channels
+        ]
+        return "#" + "".join(f"{value:02x}" for value in adjusted)
 
     @classmethod
     def _persist_theme(cls, theme_name: str) -> None:

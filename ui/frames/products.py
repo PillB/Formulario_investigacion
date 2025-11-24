@@ -17,6 +17,13 @@ from validators import (FieldValidator, log_event, normalize_without_accents,
                         validate_reclamo_id, validate_required_text)
 from ui.frames.utils import ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
+from theme_manager import ThemeManager
+
+
+ENTRY_STYLE = ThemeManager.ENTRY_STYLE
+COMBOBOX_STYLE = ThemeManager.COMBOBOX_STYLE
+SPINBOX_STYLE = ThemeManager.SPINBOX_STYLE
+BUTTON_STYLE = ThemeManager.BUTTON_STYLE
 
 
 class InvolvementRow:
@@ -51,6 +58,7 @@ class InvolvementRow:
             values=self.team_getter(),
             state="readonly",
             width=20,
+            style=COMBOBOX_STYLE,
         )
         self.team_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.team_cb.set('')
@@ -61,12 +69,16 @@ class InvolvementRow:
         ttk.Label(self.frame, text="Monto asignado:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        monto_entry = ttk.Entry(self.frame, textvariable=self.monto_var, width=15)
+        monto_entry = ttk.Entry(
+            self.frame, textvariable=self.monto_var, width=15, style=ENTRY_STYLE
+        )
         monto_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
 
-        remove_btn = ttk.Button(self.frame, text="Eliminar", command=self.remove)
+        remove_btn = ttk.Button(
+            self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
+        )
         remove_btn.grid(row=0, column=2, rowspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(remove_btn, "Elimina esta asignación específica.")
 
@@ -209,7 +221,9 @@ class ClaimRow:
         ttk.Label(self.frame, text="ID reclamo:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=15)
+        id_entry = ttk.Entry(
+            self.frame, textvariable=self.id_var, width=15, style=ENTRY_STYLE
+        )
         id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
@@ -218,7 +232,9 @@ class ClaimRow:
         ttk.Label(self.frame, text="Analítica nombre:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        name_entry = ttk.Entry(self.frame, textvariable=self.name_var, width=20)
+        name_entry = ttk.Entry(
+            self.frame, textvariable=self.name_var, width=20, style=ENTRY_STYLE
+        )
         name_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
@@ -226,12 +242,16 @@ class ClaimRow:
         ttk.Label(self.frame, text="Código:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        code_entry = ttk.Entry(self.frame, textvariable=self.code_var, width=12)
+        code_entry = ttk.Entry(
+            self.frame, textvariable=self.code_var, width=12, style=ENTRY_STYLE
+        )
         code_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
 
-        remove_btn = ttk.Button(self.frame, text="Eliminar", command=self.remove)
+        remove_btn = ttk.Button(
+            self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
+        )
         remove_btn.grid(row=0, column=3, rowspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(remove_btn, "Elimina este reclamo del producto.")
 
