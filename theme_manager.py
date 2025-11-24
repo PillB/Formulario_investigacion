@@ -346,9 +346,16 @@ class ThemeManager:
         input_foreground = theme["input_foreground"]
 
         try:
+            focus_outline = {
+                "highlightbackground": theme["border"],
+                "highlightcolor": theme["accent"],
+                "highlightthickness": 1,
+                "borderwidth": 1,
+                "relief": tk.SOLID,
+            }
             if isinstance(widget, scrolledtext.ScrolledText):
                 try:
-                    widget.configure(background=background)
+                    widget.configure(background=background, **focus_outline)
                 except tk.TclError:
                     pass
                 text_widget = getattr(widget, "text", None)
@@ -359,6 +366,7 @@ class ThemeManager:
                         insertbackground=theme["accent"],
                         selectbackground=theme["select_background"],
                         selectforeground=theme["select_foreground"],
+                        **focus_outline,
                     )
                 for scrollbar in (getattr(widget, "vbar", None), getattr(widget, "hbar", None)):
                     if isinstance(scrollbar, tk.Scrollbar):
@@ -368,24 +376,43 @@ class ThemeManager:
                             activebackground=theme["select_background"],
                             elementborderwidth=1,
                         )
-            elif isinstance(widget, (tk.Text, tk.Entry, tk.Spinbox, tk.Listbox)):
+            elif isinstance(widget, tk.Text):
                 widget.configure(
                     background=input_background,
                     foreground=input_foreground,
                     insertbackground=theme["accent"],
                     selectbackground=theme["select_background"],
                     selectforeground=theme["select_foreground"],
+                    **focus_outline,
+                )
+            elif isinstance(widget, (tk.Entry, tk.Spinbox)):
+                widget.configure(
+                    background=input_background,
+                    foreground=input_foreground,
+                    insertbackground=theme["accent"],
+                    selectbackground=theme["select_background"],
+                    selectforeground=theme["select_foreground"],
+                    **focus_outline,
+                )
+            elif isinstance(widget, tk.Listbox):
+                widget.configure(
+                    background=input_background,
+                    foreground=input_foreground,
+                    selectbackground=theme["select_background"],
+                    selectforeground=theme["select_foreground"],
+                    **focus_outline,
                 )
             elif isinstance(widget, tk.LabelFrame):
-                widget.configure(background=background, foreground=foreground)
+                widget.configure(background=background, foreground=foreground, **focus_outline)
             elif isinstance(widget, (tk.Frame, tk.Toplevel, tk.Tk, tk.Canvas)):
-                widget.configure(background=background)
+                widget.configure(background=background, **focus_outline)
             elif isinstance(widget, (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton)):
                 widget.configure(
                     background=background,
                     foreground=foreground,
                     activebackground=theme["select_background"],
                     activeforeground=theme["select_foreground"],
+                    **focus_outline,
                 )
             elif isinstance(widget, tk.Scrollbar):
                 widget.configure(
