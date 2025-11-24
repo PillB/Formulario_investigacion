@@ -342,7 +342,7 @@ class FraudCaseApp:
         trimmed_text = sanitize_rich_text(cleaned_text, max_chars=RICH_TEXT_MAX_CHARS)
         over_limit = len(cleaned_text) > RICH_TEXT_MAX_CHARS
         if trimmed_text != raw_text:
-            self._set_text_content(widget, trimmed_text)
+            self._sanitize_rich_text_widget(widget, trimmed_text)
         if over_limit and not getattr(self, "_suppress_messagebox", False):
             message = (
                 f"El campo {section_label} supera el máximo de {RICH_TEXT_MAX_CHARS} caracteres."
@@ -527,6 +527,37 @@ class FraudCaseApp:
             })
 
         return {"text": text, "tags": tag_ranges, "images": images}
+
+    def _sanitize_rich_text_widget(self, widget: tk.Text, sanitized_text: str) -> None:
+        if widget is None:
+            return
+
+        current_text = self._get_text_content(widget)
+        if current_text == sanitized_text:
+            return
+
+        while "\r" in current_text:
+            pos = current_text.find("\r")
+            start = f"1.0+{pos}c"
+            end = f"1.0+{pos + 1}c"
+            widget.delete(start, end)
+            widget.insert(start, "\n")
+            current_text = self._get_text_content(widget)
+
+        allowed_chars = {"\n", "\t"}
+        idx = 0
+        while idx < len(current_text):
+            ch = current_text[idx]
+            if ch not in allowed_chars and not ch.isprintable():
+                start = f"1.0+{idx}c"
+                end = f"1.0+{idx + 1}c"
+                widget.delete(start, end)
+                current_text = self._get_text_content(widget)
+                continue
+            idx += 1
+
+        if len(current_text) > len(sanitized_text):
+            widget.delete(f"1.0+{len(sanitized_text)}c", "end")
 
     def _deserialize_rich_text_payload(self, payload) -> tuple[str, list, list]:
         if isinstance(payload, Mapping):
