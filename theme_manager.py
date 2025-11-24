@@ -525,21 +525,30 @@ class ThemeManager:
         disabled_background = border
         disabled_foreground = select_foreground
 
-        entry_field_map = [
+        input_background_map = [
             ("disabled", disabled_background),
             ("readonly", heading_background),
-            ("focus", input_background),
+            ("pressed", select_background),
             ("active", input_background),
+            ("focus", input_background),
             ("!disabled", input_background),
         ]
-        entry_foreground_map = [
+        input_foreground_map = [
             ("disabled", disabled_foreground),
             ("readonly", foreground),
-            ("focus", input_foreground),
+            ("pressed", select_foreground),
             ("active", input_foreground),
+            ("focus", input_foreground),
             ("!disabled", input_foreground),
         ]
-        border_map = [("focus", theme["accent"]), ("!focus", border)]
+        border_map = [
+            ("disabled", border),
+            ("readonly", border),
+            ("pressed", select_background),
+            ("active", select_background),
+            ("focus", theme["accent"]),
+            ("!focus", border),
+        ]
 
         ttk_style.configure("TFrame", background=background)
         ttk_style.configure(
@@ -556,8 +565,8 @@ class ThemeManager:
         )
         ttk_style.map(
             "TEntry",
-            fieldbackground=entry_field_map,
-            foreground=entry_foreground_map,
+            fieldbackground=input_background_map,
+            foreground=input_foreground_map,
             bordercolor=border_map,
         )
         ttk_style.configure(
@@ -569,11 +578,12 @@ class ThemeManager:
         )
         ttk_style.map(
             "TSpinbox",
-            fieldbackground=entry_field_map,
-            foreground=entry_foreground_map,
+            fieldbackground=input_background_map,
+            foreground=input_foreground_map,
             bordercolor=border_map,
             arrowcolor=[
                 ("disabled", disabled_foreground),
+                ("readonly", foreground),
                 ("active", select_foreground),
                 ("pressed", select_foreground),
                 ("!disabled", foreground),
@@ -581,6 +591,7 @@ class ThemeManager:
             background=[
                 ("disabled", disabled_background),
                 ("readonly", heading_background),
+                ("pressed", select_background),
                 ("active", input_background),
                 ("focus", input_background),
                 ("!disabled", input_background),
@@ -596,18 +607,20 @@ class ThemeManager:
         )
         ttk_style.map(
             "TCombobox",
-            fieldbackground=entry_field_map,
-            foreground=entry_foreground_map,
+            fieldbackground=input_background_map,
+            foreground=input_foreground_map,
             bordercolor=border_map,
             background=[
                 ("disabled", disabled_background),
                 ("readonly", heading_background),
+                ("pressed", select_background),
                 ("active", input_background),
                 ("focus", input_background),
                 ("!disabled", input_background),
             ],
             arrowcolor=[
                 ("disabled", disabled_foreground),
+                ("readonly", foreground),
                 ("active", select_foreground),
                 ("pressed", select_foreground),
                 ("!disabled", foreground),
@@ -654,14 +667,18 @@ class ThemeManager:
             "TButton",
             background=[
                 ("disabled", disabled_background),
+                ("readonly", theme["accent"]),
                 ("pressed", select_background),
                 ("active", select_background),
+                ("focus", theme["accent"]),
                 ("!disabled", theme["accent"]),
             ],
             foreground=[
                 ("disabled", disabled_foreground),
+                ("readonly", foreground),
                 ("pressed", select_foreground),
                 ("active", select_foreground),
+                ("focus", foreground),
                 ("!disabled", foreground),
             ],
             bordercolor=border_map,
