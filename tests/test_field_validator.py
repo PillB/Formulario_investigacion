@@ -1,5 +1,7 @@
 """Tests for FieldValidator event bindings."""
 
+import pytest
+
 import validators
 
 
@@ -24,6 +26,13 @@ class DummyTooltip:
 
 
 EVENTS = ("<FocusOut>", "<<ComboboxSelected>>", "<<Paste>>", "<<Cut>>")
+
+
+@pytest.fixture(autouse=True)
+def reset_status_consumer():
+    validators.FieldValidator.set_status_consumer(None)
+    yield
+    validators.FieldValidator.set_status_consumer(None)
 
 
 def _assert_events_have_add(bind_calls):
@@ -145,3 +154,19 @@ def test_modal_notification_ignores_tcl_errors(monkeypatch):
     validator._display_error("Algún error")
 
     assert validator.last_error == "Algún error"
+
+
+def test_status_consumer_receives_updates(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+    events = []
+
+    def consumer(field_name, message, widget):
+        events.append((field_name, message, widget))
+
+    validators.FieldValidator.set_status_consumer(consumer)
+    widget = DummyWidget()
+    validator = validators.FieldValidator(widget, lambda: "", [], "Campo")
+    validator._display_error("Primer error")
+    validator._display_error(None)
+
+    assert events == [("Campo", "Primer error", widget), ("Campo", None, widget)]
