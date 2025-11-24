@@ -538,8 +538,9 @@ class FraudCaseApp:
 
         while "\r" in current_text:
             pos = current_text.find("\r")
+            is_crlf = pos + 1 < len(current_text) and current_text[pos + 1] == "\n"
             start = f"1.0+{pos}c"
-            end = f"1.0+{pos + 1}c"
+            end = f"1.0+{pos + (2 if is_crlf else 1)}c"
             widget.delete(start, end)
             widget.insert(start, "\n")
             current_text = self._get_text_content(widget)
