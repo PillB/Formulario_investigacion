@@ -270,8 +270,8 @@ class FraudCaseApp:
         self.team_detail_wrapper = None
         self.clients_summary_tree = None
         self.team_summary_tree = None
-        self.clients_compact_table = None
-        self.team_compact_table = None
+        self._client_summary_owner = None
+        self._team_summary_owner = None
         self._clients_detail_visible = False
         self._team_detail_visible = False
 
@@ -1492,25 +1492,7 @@ class FraudCaseApp:
         summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         summary_section.columnconfigure(0, weight=1)
         summary_section.rowconfigure(0, weight=1)
-        columns = [
-            ("id", "ID"),
-            ("nombres", "Nombres"),
-            ("apellidos", "Apellidos"),
-            ("tipo_id", "Tipo ID"),
-            ("flag", "Flag"),
-            ("telefonos", "Teléfonos"),
-            ("correos", "Correos"),
-            ("direcciones", "Direcciones"),
-            ("accionado", "Accionado"),
-        ]
-        self.clients_summary_tree, clients_frame = self._build_compact_table(
-            summary_section, columns, height=5, column_width=120, sortable=True
-        )
-        self.clients_compact_table = self.clients_summary_tree
-        clients_frame.grid(row=0, column=0, sticky="nsew")
-        self.clients_summary_tree.bind("<Double-1>", lambda _e: self._edit_selected_client())
-        self.clients_summary_tree.bind("<<TreeviewSelect>>", self._on_client_selected)
-        self.inline_summary_trees["clientes"] = self.clients_summary_tree
+        self.clients_summary_section = summary_section
 
         controls = ttk.Frame(frame)
         controls.grid(row=1, column=0, sticky="ew", padx=5, pady=2)
@@ -1539,7 +1521,7 @@ class FraudCaseApp:
         # Inicialmente un cliente en blanco
         self.add_client()
         self.hide_clients_detail()
-        self._refresh_inline_section_tables("clientes")
+        self._refresh_client_summary()
 
     def _on_new_client(self):
         self.show_clients_detail()
@@ -1578,7 +1560,7 @@ class FraudCaseApp:
             except Exception:
                 pass
 
-    def add_client(self):
+    def add_client(self, summary_parent=None):
         """Crea y añade un nuevo marco de cliente a la interfaz.
 
         Se utiliza ``self.client_lookup`` para proporcionar datos de autopoblado
@@ -1596,6 +1578,8 @@ class FraudCaseApp:
             self.update_client_options_global,
             self.logs,
             self.register_tooltip,
+            owner=self,
+            summary_parent=summary_parent or getattr(self, "clients_summary_section", None),
             client_lookup=self.client_lookup,
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
@@ -1614,6 +1598,8 @@ class FraudCaseApp:
         for i, cl in enumerate(self.client_frames):
             cl.idx = i
             cl.frame.config(text=f"Cliente {i+1}")
+        if self._client_summary_owner is client_frame:
+            self._client_summary_owner = self.client_frames[0] if self.client_frames else None
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
 
@@ -1630,7 +1616,7 @@ class FraudCaseApp:
         self.add_client()
 
     def _edit_selected_client(self):
-        table = self.clients_compact_table
+        table = self.clients_summary_tree
         if not table:
             return
         selection = table.selection()
@@ -1647,7 +1633,7 @@ class FraudCaseApp:
                 pass
 
     def _on_client_selected(self, _event=None):
-        table = self.clients_compact_table
+        table = self.clients_summary_tree
         if not table:
             return
         selection = table.selection()
@@ -1673,25 +1659,7 @@ class FraudCaseApp:
         summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         summary_section.columnconfigure(0, weight=1)
         summary_section.rowconfigure(0, weight=1)
-        team_columns = [
-            ("id", "ID"),
-            ("nombres", "Nombres"),
-            ("apellidos", "Apellidos"),
-            ("division", "División"),
-            ("area", "Área"),
-            ("servicio", "Servicio"),
-            ("puesto", "Puesto"),
-            ("tipo_sancion", "Tipo sanción"),
-            ("fecha_carta_inmediatez", "Carta inmediatez"),
-            ("fecha_carta_renuncia", "Carta renuncia"),
-        ]
-        self.team_summary_tree, team_frame = self._build_compact_table(
-            summary_section, team_columns, height=5, column_width=140
-        )
-        self.team_compact_table = self.team_summary_tree
-        team_frame.grid(row=0, column=0, sticky="nsew")
-        self.team_summary_tree.bind("<Double-1>", lambda _e: self.show_team_detail())
-        self.inline_summary_trees["colaboradores"] = self.team_summary_tree
+        self.team_summary_section = summary_section
 
         controls = ttk.Frame(frame)
         controls.grid(row=1, column=0, sticky="ew", padx=5, pady=2)
@@ -1716,7 +1684,7 @@ class FraudCaseApp:
         self.team_container = inner
         self.add_team()
         self.hide_team_detail()
-        self._refresh_inline_section_tables("colaboradores")
+        self._refresh_team_summary()
 
     def _on_new_team_member(self):
         self.show_team_detail()
@@ -1756,7 +1724,7 @@ class FraudCaseApp:
             except Exception:
                 pass
 
-    def add_team(self):
+    def add_team(self, summary_parent=None):
         idx = len(self.team_frames)
         was_visible = self._team_detail_visible
         self.show_team_detail()
@@ -1768,6 +1736,8 @@ class FraudCaseApp:
             self.team_lookup,
             self.logs,
             self.register_tooltip,
+            owner=self,
+            summary_parent=summary_parent or getattr(self, "team_summary_section", None),
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
             id_change_callback=self._handle_team_id_change,
@@ -1787,6 +1757,8 @@ class FraudCaseApp:
         for i, tm in enumerate(self.team_frames):
             tm.idx = i
             tm.frame.config(text=f"Colaborador {i+1}")
+        if self._team_summary_owner is team_frame:
+            self._team_summary_owner = self.team_frames[0] if self.team_frames else None
         self.update_team_options_global()
         self._schedule_summary_refresh('colaboradores')
 
@@ -1810,16 +1782,31 @@ class FraudCaseApp:
         self.add_team()
 
     def _edit_selected_team_member(self):
-        if not self.team_compact_table:
+        if not self.team_summary_tree:
             return
-        selection = self.team_compact_table.selection()
+        selection = self.team_summary_tree.selection()
         if not selection:
             return
-        values = self.team_compact_table.item(selection[0], "values")
+        values = self.team_summary_tree.item(selection[0], "values")
         collaborator_id = values[0] if values else ""
         frame = self._find_team_frame(collaborator_id)
         if frame:
             self.show_team_detail()
+            try:
+                frame.frame.focus_set()
+            except tk.TclError:
+                pass
+
+    def _on_team_selected(self, _event=None):
+        if not self.team_summary_tree:
+            return
+        selection = self.team_summary_tree.selection()
+        if not selection:
+            return
+        values = self.team_summary_tree.item(selection[0], "values")
+        collaborator_id = values[0] if values else ""
+        frame = self._find_team_frame(collaborator_id)
+        if frame:
             try:
                 frame.frame.focus_set()
             except tk.TclError:
@@ -3792,18 +3779,70 @@ class FraudCaseApp:
                 self._set_catalog_dependent_state(False)
 
     def _refresh_compact_views(self, sections=None, data=None):
-        dataset = data if data is not None else None
         targets = sections or {"clientes", "colaboradores"}
-        if "clientes" in targets and self.clients_compact_table:
-            if dataset is None:
-                dataset = self.gather_data()
-            rows = self._build_summary_rows("clientes", dataset)
-            self._render_compact_rows(self.clients_compact_table, rows)
-        if "colaboradores" in targets and self.team_compact_table:
-            if dataset is None:
-                dataset = self.gather_data()
-            rows = self._build_summary_rows("colaboradores", dataset)
-            self._render_compact_rows(self.team_compact_table, rows)
+        if "clientes" in targets:
+            self._refresh_client_summary()
+        if "colaboradores" in targets:
+            self._refresh_team_summary()
+
+    def _refresh_client_summary(self):
+        host = getattr(self, "_client_summary_owner", None)
+        if host and hasattr(host, "refresh_summary"):
+            host.refresh_summary()
+            return
+        tree = getattr(self, "clients_summary_tree", None)
+        if not tree:
+            return
+        try:
+            tree.delete(*tree.get_children())
+        except tk.TclError:
+            return
+        for idx, client in enumerate(self.client_frames):
+            data = client.get_data()
+            values = (
+                data.get("id_cliente", ""),
+                data.get("nombres", ""),
+                data.get("apellidos", ""),
+                data.get("tipo_id", ""),
+                data.get("flag", ""),
+                data.get("telefonos", ""),
+                data.get("correos", ""),
+                data.get("direcciones", ""),
+                data.get("accionado", ""),
+            )
+            tags = ("even",) if idx % 2 == 0 else ("odd",)
+            tree.insert("", "end", iid=data.get("id_cliente", f"cliente-{idx}"), values=values, tags=tags)
+        self._apply_treeview_theme(tree)
+
+    def _refresh_team_summary(self):
+        host = getattr(self, "_team_summary_owner", None)
+        if host and hasattr(host, "refresh_summary"):
+            host.refresh_summary()
+            return
+        tree = getattr(self, "team_summary_tree", None)
+        if not tree:
+            return
+        try:
+            tree.delete(*tree.get_children())
+        except tk.TclError:
+            return
+        for idx, member in enumerate(self.team_frames):
+            data = member.get_data()
+            values = (
+                data.get("id_colaborador", ""),
+                data.get("nombres", ""),
+                data.get("apellidos", ""),
+                data.get("division", ""),
+                data.get("area", ""),
+                data.get("servicio", ""),
+                data.get("puesto", ""),
+                data.get("tipo_sancion", ""),
+                data.get("fecha_carta_inmediatez", ""),
+                data.get("fecha_carta_renuncia", ""),
+            )
+            tags = ("even",) if idx % 2 == 0 else ("odd",)
+            tree.insert("", "end", iid=data.get("id_colaborador", f"colaborador-{idx}"), values=values, tags=tags)
+        self._apply_treeview_theme(tree)
 
     def _render_compact_rows(self, tree, rows):
         try:
@@ -3817,8 +3856,8 @@ class FraudCaseApp:
 
     def _compact_views_present(self, sections):
         return (
-            ("clientes" in sections and self.clients_compact_table is not None)
-            or ("colaboradores" in sections and self.team_compact_table is not None)
+            ("clientes" in sections and self.clients_summary_tree is not None)
+            or ("colaboradores" in sections and self.team_summary_tree is not None)
         )
 
     def _build_compact_table(self, parent, columns, height=6, column_width=140, sortable=False):
@@ -4263,10 +4302,6 @@ class FraudCaseApp:
             )
             frame.pack(fill="both", expand=True)
             self.summary_tables[key] = tree
-            if key == "clientes" and self.clients_compact_table is None:
-                self.clients_compact_table = tree
-            if key == "colaboradores" and self.team_compact_table is None:
-                self.team_compact_table = tree
             self._register_summary_tree_bindings(tree, key)
             row_idx += 1
 
@@ -5233,21 +5268,26 @@ class FraudCaseApp:
         self._summary_pending_dataset = None
 
     def _refresh_inline_section_tables(self, sections=None, data=None):
-        if not self.inline_summary_trees:
-            return
         if sections is None:
-            targets = set(self.inline_summary_trees.keys())
+            targets = {"clientes", "colaboradores"}
         elif isinstance(sections, str):
             targets = {sections}
         else:
             targets = set(sections)
-        dataset = data or self.gather_data()
-        for key in targets:
-            tree = self.inline_summary_trees.get(key)
-            if not tree:
-                continue
-            rows = self._build_summary_rows(key, dataset)
-            self._render_inline_rows(tree, rows)
+        inline_trees = getattr(self, "inline_summary_trees", {}) or {}
+        dataset = data or (self.gather_data() if targets else {})
+        if "clientes" in targets:
+            if inline_trees.get("clientes"):
+                rows = self._build_summary_rows("clientes", dataset)
+                self._render_inline_rows(inline_trees["clientes"], rows)
+            else:
+                self._refresh_client_summary()
+        if "colaboradores" in targets:
+            if inline_trees.get("colaboradores"):
+                rows = self._build_summary_rows("colaboradores", dataset)
+                self._render_inline_rows(inline_trees["colaboradores"], rows)
+            else:
+                self._refresh_team_summary()
 
     def _render_inline_rows(self, tree, rows):
         try:

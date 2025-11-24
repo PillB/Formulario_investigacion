@@ -11,6 +11,7 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         validate_agency_code, validate_date_text, validate_required_text,
                         validate_team_member_id)
 from ui.frames.utils import ensure_grid_support
+from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 
@@ -29,6 +30,8 @@ class TeamMemberFrame:
         team_lookup,
         logs,
         tooltip_register,
+        owner=None,
+        summary_parent=None,
         summary_refresh_callback=None,
         change_notifier=None,
         id_change_callback=None,
@@ -36,6 +39,7 @@ class TeamMemberFrame:
         case_date_getter=None,
     ):
         self.parent = parent
+        self.owner = owner
         self.idx = idx
         self.remove_callback = remove_callback
         self.update_team_options = update_team_options
@@ -55,6 +59,8 @@ class TeamMemberFrame:
         self._future_snapshot_warnings: set[str] = set()
         self._fallback_message_var = tk.StringVar(value="")
         self._tree_sort_state: dict[str, bool] = {}
+        self.summary_tree = None
+        self._summary_tree_sort_state: dict[str, bool] = {}
 
         self.id_var = tk.StringVar()
         self.nombres_var = tk.StringVar()
@@ -73,6 +79,13 @@ class TeamMemberFrame:
 
         self.section = self._create_section(parent)
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        if summary_parent is not None and owner is not None and not getattr(owner, "team_summary_tree", None):
+            self.summary_tree = self._build_summary(summary_parent)
+            owner.team_summary_tree = self.summary_tree
+            owner.inline_summary_trees["colaboradores"] = self.summary_tree
+            owner._team_summary_owner = self
+        else:
+            self.summary_tree = getattr(owner, "team_summary_tree", None)
         self._build_header_table()
 
         self.frame = ttk.LabelFrame(self.section.content, text=f"Colaborador {self.idx+1}")
@@ -846,6 +859,115 @@ class TeamMemberFrame:
             tag = "even" if new_index % 2 == 0 else "odd"
             self.header_tree.item(item, tags=(tag,))
         self._tree_sort_state[column] = not reverse
+
+    # ------------------------------------------------------------------
+    # Resumen de colaboradores
+    # ------------------------------------------------------------------
+    def _build_summary(self, container):
+        summary_frame = ttk.Frame(container)
+        ensure_grid_support(summary_frame)
+        if hasattr(summary_frame, "columnconfigure"):
+            summary_frame.columnconfigure(0, weight=1)
+
+        columns = (
+            ("id", "ID"),
+            ("nombres", "Nombres"),
+            ("apellidos", "Apellidos"),
+            ("division", "División"),
+            ("area", "Área"),
+            ("servicio", "Servicio"),
+            ("puesto", "Puesto"),
+            ("tipo_sancion", "Tipo sanción"),
+            ("fecha_carta_inmediatez", "Carta inmediatez"),
+            ("fecha_carta_renuncia", "Carta renuncia"),
+        )
+        tree = ttk.Treeview(summary_frame, columns=[col for col, _ in columns], show="headings", height=5)
+        vscroll = ttk.Scrollbar(summary_frame, orient="vertical", command=tree.yview)
+        hscroll = ttk.Scrollbar(summary_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
+        tree.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+        vscroll.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
+        hscroll.grid(row=1, column=0, sticky="ew")
+
+        for col_id, heading in columns:
+            tree.heading(col_id, text=heading, command=lambda c=col_id: self._sort_summary(c))
+            tree.column(col_id, width=150, anchor="w")
+
+        palette = ThemeManager.current()
+        if hasattr(tree, "tag_configure"):
+            tree.tag_configure("even", background=palette.get("heading_background", palette.get("background")), foreground=palette.get("foreground"))
+            tree.tag_configure("odd", background=palette.get("background"), foreground=palette.get("foreground"))
+
+        tree.bind("<<TreeviewSelect>>", self._on_summary_select)
+        tree.bind("<Double-1>", self._on_summary_double_click)
+        summary_frame.pack(fill="both", expand=True)
+        return tree
+
+    def refresh_summary(self):
+        tree = self.summary_tree or getattr(self.owner, "team_summary_tree", None)
+        if not tree or not hasattr(tree, "get_children"):
+            return
+        try:
+            tree.delete(*tree.get_children())
+        except Exception:
+            return
+        team_frames = getattr(self.owner, "team_frames", []) if self.owner else []
+        for idx, member in enumerate(team_frames):
+            data = member.get_data()
+            values = (
+                data.get("id_colaborador", ""),
+                data.get("nombres", ""),
+                data.get("apellidos", ""),
+                data.get("division", ""),
+                data.get("area", ""),
+                data.get("servicio", ""),
+                data.get("puesto", ""),
+                data.get("tipo_sancion", ""),
+                data.get("fecha_carta_inmediatez", ""),
+                data.get("fecha_carta_renuncia", ""),
+            )
+            tags = ("even",) if idx % 2 == 0 else ("odd",)
+            tree.insert("", "end", iid=data.get("id_colaborador", f"colaborador-{idx}"), values=values, tags=tags)
+        self._apply_summary_theme(tree)
+        self._on_summary_select()
+
+    def _sort_summary(self, column):
+        tree = self.summary_tree or getattr(self.owner, "team_summary_tree", None)
+        if not tree or not hasattr(tree, "get_children"):
+            return
+        reverse = self._summary_tree_sort_state.get(column, False)
+        items = list(tree.get_children(""))
+        col_index = tree["columns"].index(column)
+        items.sort(key=lambda item: tree.item(item, "values")[col_index], reverse=reverse)
+        for idx, item in enumerate(items):
+            tree.move(item, "", idx)
+            tag = "even" if idx % 2 == 0 else "odd"
+            tree.item(item, tags=(tag,))
+        self._summary_tree_sort_state[column] = not reverse
+
+    def _on_summary_select(self, _event=None):
+        tree = self.summary_tree or getattr(self.owner, "team_summary_tree", None)
+        if not tree or not hasattr(tree, "selection"):
+            return
+        if callable(getattr(self.owner, "_on_team_selected", None)):
+            try:
+                self.owner._on_team_selected()
+            except Exception:
+                pass
+
+    def _on_summary_double_click(self, _event=None):
+        self._on_summary_select()
+        if callable(getattr(self.owner, "_edit_selected_team_member", None)):
+            try:
+                self.owner._edit_selected_team_member()
+            except Exception:
+                pass
+
+    def _apply_summary_theme(self, tree):
+        palette = ThemeManager.current()
+        if hasattr(tree, "tag_configure"):
+            tree.tag_configure("even", background=palette.get("heading_background", palette.get("background")), foreground=palette.get("foreground"))
+            tree.tag_configure("odd", background=palette.get("background"), foreground=palette.get("foreground"))
 
     def _on_tree_select(self, _event=None):
         item = self._first_selected_item()
