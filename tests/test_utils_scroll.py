@@ -55,3 +55,15 @@ def test_mousewheel_binds_child_widgets_for_scroll():
     child.bound["<MouseWheel>"](SimpleNamespace(delta=-240))
 
     assert canvas.scroll_calls == [(2, "units")]
+
+
+def test_mousewheel_bind_all_allows_scroll_without_focus():
+    canvas = _CanvasStub()
+    target = _Bindable()
+
+    utils._enable_mousewheel_scrolling(canvas, target)
+
+    canvas.bound["<Enter>"](SimpleNamespace())
+    canvas.bound_all["<MouseWheel>"](SimpleNamespace(delta=240))
+
+    assert canvas.scroll_calls == [(-2, "units")]
