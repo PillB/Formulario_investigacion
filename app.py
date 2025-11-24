@@ -2674,7 +2674,8 @@ class FraudCaseApp:
             self.operations_tree.delete(item)
         for op in getattr(self, "_operaciones_data", []):
             values = [op.get(col, "") for col in self.operations_tree["columns"]]
-            self.operations_tree.insert("", "end", values=values)
+            self._insert_themed_row(self.operations_tree, values)
+        self._apply_treeview_theme(self.operations_tree)
 
     def _load_selected_operation(self):
         selection = self.operations_tree.selection()
@@ -2729,7 +2730,10 @@ class FraudCaseApp:
         for item in self.anexos_tree.get_children():
             self.anexos_tree.delete(item)
         for row in getattr(self, "_anexos_data", []):
-            self.anexos_tree.insert("", "end", values=(row.get("titulo", ""), row.get("descripcion", "")))
+            self._insert_themed_row(
+                self.anexos_tree, (row.get("titulo", ""), row.get("descripcion", ""))
+            )
+        self._apply_treeview_theme(self.anexos_tree)
 
     def _load_selected_anexo(self):
         selection = self.anexos_tree.selection()
@@ -3704,14 +3708,13 @@ class FraudCaseApp:
             rows = self._build_summary_rows("colaboradores", dataset)
             self._render_compact_rows(self.team_compact_table, rows)
 
-    @staticmethod
-    def _render_compact_rows(tree, rows):
+    def _render_compact_rows(self, tree, rows):
         try:
             tree.delete(*tree.get_children())
-            for row in rows:
-                tree.insert("", "end", values=row)
         except tk.TclError:
             return
+        for row in rows:
+            self._insert_themed_row(tree, row)
 
     def _compact_views_present(self, sections):
         return (
@@ -3734,6 +3737,32 @@ class FraudCaseApp:
         vscrollbar.grid(row=0, column=1, sticky="ns")
         hscrollbar.grid(row=1, column=0, sticky="ew")
         return tree, frame
+
+    def _apply_treeview_theme(self, tree):
+        if not hasattr(tree, "tag_configure") or not hasattr(tree, "get_children"):
+            return
+        palette = ThemeManager.current()
+        try:
+            tree.tag_configure(
+                "themed",
+                background=palette.get("background"),
+                foreground=palette.get("foreground"),
+            )
+            for item in tree.get_children():
+                if not hasattr(tree, "item"):
+                    break
+                tags = tree.item(item, "tags") or ()
+                if "themed" not in tags:
+                    tree.item(item, tags=(*tags, "themed"))
+        except tk.TclError:
+            return
+
+    def _insert_themed_row(self, tree, values):
+        self._apply_treeview_theme(tree)
+        try:
+            tree.insert("", "end", values=values, tags=("themed",))
+        except tk.TclError:
+            return
 
     def _start_background_import(self, task_label, button, worker, ui_callback, error_prefix, ui_error_prefix=None):
         self._ensure_import_runtime_state()
@@ -4035,6 +4064,7 @@ class FraudCaseApp:
             f"Abrió pestaña: {tab_text} (índice {tab_index})",
             self.logs,
         )
+        ThemeManager.apply_to_widget_tree(self.root)
         previous_tab_text = notebook.tab(previous_tab, "text") if previous_tab else ""
         self._current_tab_id = selected_tab
         if (
@@ -4115,7 +4145,8 @@ class FraudCaseApp:
             return "break"
         tree.delete(*tree.get_children())
         for row in sanitized_rows:
-            tree.insert("", "end", values=row)
+            self._insert_themed_row(tree, row)
+        self._apply_treeview_theme(tree)
         return "break"
 
     def _parse_clipboard_rows(self, text, expected_columns):
@@ -5001,10 +5032,7 @@ class FraudCaseApp:
             except Exception:
                 pass
         for row in rows:
-            try:
-                tree.insert("", "end", values=row)
-            except Exception:
-                continue
+            self._insert_themed_row(tree, row)
 
     def _normalize_summary_sections(self, sections):
         if not self.summary_tables:
@@ -5151,7 +5179,8 @@ class FraudCaseApp:
             return
         tree.delete(*tree.get_children())
         for row in rows:
-            tree.insert("", "end", values=row)
+            self._insert_themed_row(tree, row)
+        self._apply_treeview_theme(tree)
 
     # ---------------------------------------------------------------------
     # Importación desde CSV
