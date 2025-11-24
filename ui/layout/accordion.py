@@ -147,23 +147,52 @@ def register_styles() -> None:
     except RuntimeError:
         style = ttk.Style()
 
+    if "Modern.Card.border" in style.element_names():
+        style.layout(
+            "AccordionCard.TFrame",
+            [
+                (
+                    "Modern.Card.border",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            (
+                                "Frame.padding",
+                                {
+                                    "sticky": "nswe",
+                                    "children": [("Frame.background", {"sticky": "nswe"})],
+                                },
+                            )
+                        ],
+                    },
+                )
+            ],
+        )
     style.configure(
         "AccordionCard.TFrame",
         background=background,
-        relief=tk.SOLID,
-        borderwidth=1,
-        highlightthickness=1,
-        highlightbackground=border,
-        highlightcolor=border,
-        padding=2,
+        bordercolor=border,
+        lightcolor=border,
+        darkcolor=border,
+        relief=tk.FLAT,
+        padding=4,
+    )
+    style.map(
+        "AccordionCard.TFrame",
+        bordercolor=[("focus", accent), ("active", accent), ("!focus", border)],
     )
     style.configure(
         "AccordionContent.TFrame",
         background=background,
-        padding=(6, 4, 6, 8),
+        padding=(8, 6, 8, 10),
     )
 
-    header_base = {"padding": (10, 8), "borderwidth": 0}
+    header_base = {
+        "padding": (12, 10),
+        "borderwidth": 0,
+        "bordercolor": border,
+        "relief": tk.FLAT,
+    }
     style.configure("AccordionHeader.TFrame", background=heading_background, **header_base)
     style.configure("AccordionHeader.Hover.TFrame", background=accent, **header_base)
     style.configure("AccordionHeader.Active.TFrame", background=active_background, **header_base)
