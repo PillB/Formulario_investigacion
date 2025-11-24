@@ -271,10 +271,23 @@ class ThemeManager:
     def _configure_base_style(cls, ttk_style: ttk.Style) -> None:
         from ui.config import FONT_BASE, FONT_HEADER
 
-        ttk_style.configure("TLabel", font=FONT_BASE, padding=(4, 3))
-        ttk_style.configure("TEntry", font=FONT_BASE, padding=(8, 6))
-        ttk_style.configure("TCombobox", font=FONT_BASE, padding=(8, 6))
-        ttk_style.configure("TButton", font=FONT_BASE, padding=(10, 8))
+        text_padding = (6, 4)
+        input_padding = (10, 8)
+        button_padding = (12, 8)
+        heading_padding = (10, 8)
+        tab_padding = (12, 8)
+
+        ttk_style.configure("TLabel", font=FONT_BASE, padding=text_padding)
+        ttk_style.configure("TEntry", font=FONT_BASE, padding=input_padding)
+        ttk_style.configure("TCombobox", font=FONT_BASE, padding=input_padding)
+        ttk_style.configure("TSpinbox", font=FONT_BASE, padding=input_padding)
+        ttk_style.configure("TButton", font=FONT_BASE, padding=button_padding)
+        ttk_style.configure("TCheckbutton", font=FONT_BASE, padding=text_padding)
+        ttk_style.configure("TRadiobutton", font=FONT_BASE, padding=text_padding)
+        ttk_style.configure("Treeview", font=FONT_BASE)
+        ttk_style.configure("Treeview.Heading", font=FONT_BASE, padding=heading_padding)
+        ttk_style.configure("TNotebook", font=FONT_BASE)
+        ttk_style.configure("TNotebook.Tab", font=FONT_BASE, padding=tab_padding)
         ttk_style.configure("TLabelframe.Label", font=FONT_HEADER)
 
     @classmethod
