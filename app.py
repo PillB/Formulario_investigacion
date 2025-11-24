@@ -3535,8 +3535,6 @@ class FraudCaseApp:
 
     def _toggle_theme(self):
         palette = ThemeManager.toggle()
-        ThemeManager.refresh_all_widgets()
-        ThemeManager.apply_to_widget_tree(self.root)
         self._reapply_treeview_styles()
         widget_name = None
         widget = getattr(self, "theme_toggle_button", None)
