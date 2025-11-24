@@ -10,6 +10,7 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_required_text)
 from ui.frames.utils import ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
+from ui.layout import CollapsibleSection
 
 
 class NormFrame:
@@ -30,8 +31,12 @@ class NormFrame:
         self.norm_lookup = {}
         self._last_missing_lookup_id = None
 
-        self.frame = ttk.LabelFrame(parent, text=f"Norma {self.idx+1}")
-        self.frame.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
+        self.section = CollapsibleSection(parent, title=f"Norma {self.idx+1}")
+        self.section.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
+        self._build_header_table()
+
+        self.frame = ttk.LabelFrame(self.section.content, text=f"Norma {self.idx+1}")
+        self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
@@ -103,6 +108,32 @@ class NormFrame:
             )
         )
 
+    def _build_header_table(self):
+        container = ttk.Frame(self.section.content)
+        self.section.pack_content(container, fill="x", expand=False)
+        ensure_grid_support(container)
+        if hasattr(container, "columnconfigure"):
+            container.columnconfigure(0, weight=1)
+
+        columns = (("id_norma", "ID"), ("fecha_vigencia", "Fecha"), ("descripcion", "Descripción"))
+        self.header_tree = ttk.Treeview(
+            container, columns=[c[0] for c in columns], show="headings", height=4
+        )
+        self.header_tree.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.header_tree.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
+        self.header_tree.configure(yscrollcommand=scrollbar.set)
+
+        for col_id, text in columns:
+            self.header_tree.heading(col_id, text=text, command=lambda c=col_id: self._sort_treeview(c))
+            self.header_tree.column(col_id, anchor="w", width=140)
+
+        self.header_tree.tag_configure("even", background="#f7f7f7")
+        self.header_tree.tag_configure("odd", background="#ffffff")
+        self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.header_tree.bind("<Double-1>", self._on_tree_double_click)
+        self._tree_sort_state = {}
+
     def get_data(self):
         norm_id = self.id_var.get().strip()
         descripcion = self.descripcion_var.get().strip()
@@ -118,6 +149,7 @@ class NormFrame:
     def set_lookup(self, lookup):
         self.norm_lookup = lookup or {}
         self._last_missing_lookup_id = None
+        self._populate_header_tree()
         self.on_id_change(preserve_existing=True, silent=True)
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
@@ -152,10 +184,64 @@ class NormFrame:
         if not silent:
             self._log_change(f"Norma {self.idx+1}: autopoblada desde catálogo")
 
+    def _populate_header_tree(self):
+        if not hasattr(self, "header_tree"):
+            return
+
+        for child in self.header_tree.get_children(""):
+            self.header_tree.delete(child)
+
+        for row_index, (norm_id, data) in enumerate(sorted(self.norm_lookup.items())):
+            values = (
+                str(norm_id),
+                str(data.get("fecha_vigencia", "")),
+                str(data.get("descripcion", "")),
+            )
+            tag = "even" if row_index % 2 == 0 else "odd"
+            self.header_tree.insert("", "end", iid=str(norm_id), values=values, tags=(tag,))
+
+    def _sort_treeview(self, column):
+        if not hasattr(self, "header_tree"):
+            return
+
+        reverse = self._tree_sort_state.get(column, False)
+        items = list(self.header_tree.get_children(""))
+        column_index = self.header_tree["columns"].index(column)
+        items.sort(key=lambda item: self.header_tree.item(item, "values")[column_index], reverse=reverse)
+        for new_index, item in enumerate(items):
+            self.header_tree.move(item, "", new_index)
+            tag = "even" if new_index % 2 == 0 else "odd"
+            self.header_tree.item(item, tags=(tag,))
+        self._tree_sort_state[column] = not reverse
+
+    def _on_tree_select(self, _event=None):
+        item = self._first_selected_item()
+        if not item:
+            return
+        values = self.header_tree.item(item, "values")
+        if not values:
+            return
+        self.id_var.set(values[0])
+        self.on_id_change(preserve_existing=True, silent=True)
+
+    def _on_tree_double_click(self, _event=None):
+        item = self._first_selected_item()
+        if not item:
+            return
+        values = self.header_tree.item(item, "values")
+        if not values:
+            return
+        self.id_var.set(values[0])
+        self.on_id_change(from_focus=True)
+
+    def _first_selected_item(self):
+        selection = self.header_tree.selection()
+        return selection[0] if selection else None
+
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar la norma {self.idx+1}?"):
             self._log_change(f"Se eliminó norma {self.idx+1}")
-            self.frame.destroy()
+            self.section.destroy()
             self.remove_callback(self)
 
     def _log_change(self, message: str):
@@ -163,6 +249,12 @@ class NormFrame:
             self.change_notifier(message)
         else:
             log_event("navegacion", message, self.logs)
+
+    def update_title(self, idx: int) -> None:
+        self.idx = idx
+        title = f"Norma {self.idx+1}"
+        self.section.title_label.configure(text=title)
+        self.frame.configure(text=title)
 
 
 __all__ = ["NormFrame"]
