@@ -372,6 +372,12 @@ class FraudCaseApp:
         self._extended_notebook: Optional[ttk.Notebook] = None
         self._extended_sections_toggle_var: Optional[tk.BooleanVar] = None
         self._suppress_post_edit_validation = False
+        self._progress_bar = None
+        self._progress_label_var: Optional[tk.StringVar] = None
+        self._progress_value_var: Optional[tk.DoubleVar] = None
+        self._progress_tracking_started = False
+        self._progress_animation_job: Optional[str] = None
+        self._progress_target_value = 0.0
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
         self.import_progress = None
         self._import_progress_visible = False
@@ -992,6 +998,25 @@ class FraudCaseApp:
         main_container.grid_columnconfigure(0, weight=1)
         main_container.grid_rowconfigure(0, weight=1)
 
+        progress_container = ttk.Frame(main_container)
+        progress_container.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 5))
+        progress_container.columnconfigure(1, weight=1)
+        ttk.Label(progress_container, text="Avance del caso").grid(
+            row=0, column=0, padx=(0, 8), pady=(5, 0), sticky="w"
+        )
+        self._progress_label_var = tk.StringVar(value="0 %")
+        self._progress_value_var = tk.DoubleVar(value=0.0)
+        self._progress_bar = ttk.Progressbar(
+            progress_container,
+            variable=self._progress_value_var,
+            maximum=100,
+            mode="determinate",
+        )
+        self._progress_bar.grid(row=0, column=1, sticky="ew", pady=(5, 0))
+        ttk.Label(progress_container, textvariable=self._progress_label_var).grid(
+            row=0, column=2, padx=(8, 0), pady=(5, 0), sticky="e"
+        )
+
         self.notebook = ttk.Notebook(main_container)
         self.notebook.grid(row=0, column=0, sticky="nsew")
         self.notebook.bind("<<NotebookTabChanged>>", self._handle_notebook_tab_change)
@@ -1058,6 +1083,7 @@ class FraudCaseApp:
             origin=field_name,
             widget=target_widget,
         )
+        self._update_completion_progress()
 
     def _build_validation_focus_map(self) -> dict[str, tk.Widget]:
         focus_map: dict[str, tk.Widget] = {}
@@ -1084,6 +1110,93 @@ class FraudCaseApp:
             self._validation_panel.show_batch_results(
                 errors, warnings, self._build_validation_focus_map()
             )
+
+    def _activate_progress_tracking(self) -> None:
+        """Habilita el cálculo de avance tras la primera interacción del usuario."""
+
+        if not hasattr(self, "_progress_tracking_started"):
+            self._progress_tracking_started = False
+        if self._progress_tracking_started:
+            return
+        self._progress_tracking_started = True
+        self._update_completion_progress(force=True)
+
+    def _update_completion_progress(self, *, force: bool = False) -> None:
+        bar = getattr(self, "_progress_bar", None)
+        value_var = getattr(self, "_progress_value_var", None)
+        label_var = getattr(self, "_progress_label_var", None)
+        if not bar or not value_var or not label_var:
+            return
+        if not hasattr(self, "_progress_tracking_started"):
+            self._progress_tracking_started = False
+        if not (self._progress_tracking_started or force):
+            value_var.set(0.0)
+            label_var.set("0 %")
+            return
+
+        completion = self._compute_completion_percentage()
+        self._start_progress_animation(completion)
+
+    def _compute_completion_percentage(self) -> float:
+        counts = {
+            "clientes": len(self.client_frames),
+            "colaboradores": len(self.team_frames),
+            "productos": len(self.product_frames),
+            "riesgos": len(self.risk_frames),
+            "normas": len(self.norm_frames),
+        }
+        count_score = (
+            sum(1 for count in counts.values() if count > 0) / len(counts)
+            if counts
+            else 0.0
+        )
+
+        total_validators = len(self.validators)
+        successful_validators = sum(
+            1 for validator in self.validators if getattr(validator, "last_error", None) in {None, ""}
+        )
+        validation_score = (
+            successful_validators / total_validators if total_validators else 0.0
+        )
+
+        blended_score = max(0.0, min(1.0, (count_score + validation_score) / 2))
+        return blended_score * 100
+
+    def _start_progress_animation(self, target: float) -> None:
+        target = max(0.0, min(100.0, target))
+        self._progress_target_value = target
+        job = getattr(self, "_progress_animation_job", None)
+        if job:
+            with suppress(tk.TclError):
+                self.root.after_cancel(job)
+            self._progress_animation_job = None
+        self._step_progress_animation()
+
+    def _step_progress_animation(self) -> None:
+        bar = getattr(self, "_progress_bar", None)
+        value_var = getattr(self, "_progress_value_var", None)
+        label_var = getattr(self, "_progress_label_var", None)
+        if not bar or not value_var or not label_var:
+            return
+        current = value_var.get()
+        target = getattr(self, "_progress_target_value", 0.0)
+        delta = target - current
+        if abs(delta) < 0.5:
+            new_value = target
+        else:
+            step = max(1.0, abs(delta) * 0.15)
+            new_value = current + step if delta > 0 else current - step
+        value_var.set(max(0.0, min(100.0, new_value)))
+        label_var.set(f"{value_var.get():.0f} %")
+        if abs(target - value_var.get()) < 0.5:
+            value_var.set(target)
+            label_var.set(f"{target:.0f} %")
+            self._progress_animation_job = None
+            return
+        try:
+            self._progress_animation_job = self.root.after(60, self._step_progress_animation)
+        except tk.TclError:
+            self._progress_animation_job = None
 
     def clipboard_get(self):
         """Proxy para ``Tk.clipboard_get`` que simplifica las pruebas unitarias."""
@@ -1976,6 +2089,7 @@ class FraudCaseApp:
         self._refresh_client_summary()
 
     def _on_new_client(self):
+        self._log_navigation_change("Agregó cliente")
         self.show_clients_detail()
         self.add_client()
 
@@ -2099,6 +2213,7 @@ class FraudCaseApp:
         client_id = values[0] if values else ""
         frame = self._find_client_frame(client_id)
         if frame:
+            self._log_navigation_change("Eliminó cliente desde resumen")
             self.remove_client(frame)
 
     def _on_client_selected(self, _event=None):
@@ -2156,6 +2271,7 @@ class FraudCaseApp:
         self._refresh_team_summary()
 
     def _on_new_team_member(self):
+        self._log_navigation_change("Agregó colaborador")
         self.show_team_detail()
         self.add_team()
         self._refresh_compact_views(sections={"colaboradores"})
@@ -2297,10 +2413,10 @@ class FraudCaseApp:
             ("Eliminar producto activo", "delete"),
         )
         product_commands = {
-            "add_empty": self.add_product,
-            "inherit_case": self.add_product_inheriting_case,
+            "add_empty": self._on_add_empty_product,
+            "inherit_case": self._on_add_inherited_product,
             "edit": self._focus_active_product,
-            "delete": self._remove_active_product,
+            "delete": self._remove_active_product_from_action,
         }
         product_action_parent = ttk.Frame(frame)
         product_action_parent.grid(row=1, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
@@ -2326,6 +2442,18 @@ class FraudCaseApp:
             "Elimina el producto activo tras confirmar la acción.",
         )
         # No añadimos automáticamente un producto porque los productos están asociados a clientes
+
+    def _on_add_empty_product(self):
+        self._log_navigation_change("Agregó producto")
+        return self.add_product()
+
+    def _on_add_inherited_product(self):
+        self._log_navigation_change("Agregó producto heredado")
+        return self.add_product_inheriting_case()
+
+    def _remove_active_product_from_action(self):
+        self._log_navigation_change("Eliminó producto activo")
+        self._remove_active_product()
 
     def _apply_case_taxonomy_defaults(self, product_frame):
         """Configura un producto nuevo con la taxonomía seleccionada en el caso."""
@@ -2491,13 +2619,17 @@ class FraudCaseApp:
         controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
         controls.columnconfigure(0, weight=1)
 
-        add_btn = ttk.Button(controls, text="Agregar riesgo", command=self.add_risk)
+        add_btn = ttk.Button(controls, text="Agregar riesgo", command=self._on_add_risk)
         add_btn.grid(row=0, column=0, sticky="w")
         self.register_tooltip(add_btn, "Registra un nuevo riesgo identificado.")
 
         scrollable, inner = create_scrollable_container(frame)
         scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.risk_container = inner
+        self.add_risk()
+
+    def _on_add_risk(self):
+        self._log_navigation_change("Agregó riesgo")
         self.add_risk()
 
     def add_risk(self):
@@ -2569,13 +2701,17 @@ class FraudCaseApp:
         controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
         controls.columnconfigure(0, weight=1)
 
-        add_btn = ttk.Button(controls, text="Agregar norma", command=self.add_norm)
+        add_btn = ttk.Button(controls, text="Agregar norma", command=self._on_add_norm)
         add_btn.grid(row=0, column=0, sticky="w")
         self.register_tooltip(add_btn, "Agrega otra norma transgredida.")
 
         scrollable, inner = create_scrollable_container(frame)
         scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.norm_container = inner
+        self.add_norm()
+
+    def _on_add_norm(self):
+        self._log_navigation_change("Agregó norma")
         self.add_norm()
 
     def add_norm(self):
@@ -5712,6 +5848,7 @@ class FraudCaseApp:
         """Marca secciones como sucias y actualiza el resumen cuando proceda."""
 
         self._refresh_inline_section_tables(sections=sections, data=data)
+        self._update_completion_progress()
         if not self.summary_tables:
             return
         normalized = self._normalize_summary_sections(sections)
@@ -7216,6 +7353,7 @@ class FraudCaseApp:
             self.request_autosave()
 
     def _log_navigation_change(self, message: str) -> None:
+        self._activate_progress_tracking()
         self._log_navigation(message, autosave=True)
 
     def _log_autofill_warning(self, message: str) -> None:
