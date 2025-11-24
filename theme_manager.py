@@ -376,6 +376,15 @@ class ThemeManager:
                     activebackground=theme["select_background"],
                     elementborderwidth=1,
                 )
+            elif isinstance(widget, tk.Menu):
+                widget.configure(
+                    background=background,
+                    foreground=foreground,
+                    activebackground=theme["select_background"],
+                    activeforeground=theme["select_foreground"],
+                    borderwidth=1,
+                    relief=tk.SOLID,
+                )
             elif isinstance(widget, ttk.Frame):
                 widget.configure(style="TFrame")
             elif isinstance(widget, ttk.Notebook):
@@ -392,6 +401,8 @@ class ThemeManager:
                 widget.configure(style="TCombobox")
             elif isinstance(widget, ttk.Button):
                 widget.configure(style="TButton")
+            elif isinstance(widget, ttk.Progressbar):
+                widget.configure(style="TProgressbar")
             elif isinstance(widget, ttk.Scrollbar):
                 widget.configure(style="TScrollbar")
             elif isinstance(widget, ttk.Labelframe):
@@ -570,6 +581,18 @@ class ThemeManager:
             "TScrollbar",
             background=[("active", select_background), ("pressed", select_background)],
             arrowcolor=[("active", select_foreground), ("pressed", select_foreground)],
+        )
+        ttk_style.configure(
+            "TProgressbar",
+            background=theme["accent"],
+            troughcolor=input_background,
+            bordercolor=border,
+            lightcolor=theme["accent"],
+            darkcolor=theme["accent"],
+        )
+        ttk_style.map(
+            "TProgressbar",
+            background=[("active", select_background)],
         )
         ttk_style.configure("TSeparator", background=border)
 
