@@ -3454,6 +3454,7 @@ class FraudCaseApp:
         palette = ThemeManager.toggle()
         ThemeManager.refresh_all_widgets()
         ThemeManager.apply_to_widget_tree(self.root)
+        self._reapply_treeview_styles()
         widget_name = None
         widget = getattr(self, "theme_toggle_button", None)
         if widget is not None:
@@ -3748,14 +3749,49 @@ class FraudCaseApp:
                 background=palette.get("background"),
                 foreground=palette.get("foreground"),
             )
+            for tag in tree.tag_names():
+                tree.tag_configure(
+                    tag,
+                    background=palette.get("background"),
+                    foreground=palette.get("foreground"),
+                )
             for item in tree.get_children():
                 if not hasattr(tree, "item"):
                     break
                 tags = tree.item(item, "tags") or ()
                 if "themed" not in tags:
                     tree.item(item, tags=(*tags, "themed"))
+            try:
+                tree.heading("#0", background=palette.get("heading_background"), foreground=palette.get("foreground"))
+            except tk.TclError:
+                pass
+            for column in tree.cget("columns"):
+                try:
+                    tree.heading(
+                        column,
+                        background=palette.get("heading_background"),
+                        foreground=palette.get("foreground"),
+                    )
+                except tk.TclError:
+                    continue
         except tk.TclError:
             return
+
+    def _reapply_treeview_styles(self):
+        trees = []
+        for attr in ("operations_tree", "anexos_tree"):
+            tree = getattr(self, attr, None)
+            if tree is not None:
+                trees.append(tree)
+        trees.extend(getattr(self, "summary_tables", {}).values())
+        trees.extend(getattr(self, "inline_summary_trees", {}).values())
+
+        seen = set()
+        for tree in trees:
+            if tree is None or tree in seen:
+                continue
+            seen.add(tree)
+            self._apply_treeview_theme(tree)
 
     def _insert_themed_row(self, tree, values):
         self._apply_treeview_theme(tree)
@@ -4065,6 +4101,7 @@ class FraudCaseApp:
             self.logs,
         )
         ThemeManager.apply_to_widget_tree(self.root)
+        self._reapply_treeview_styles()
         previous_tab_text = notebook.tab(previous_tab, "text") if previous_tab else ""
         self._current_tab_id = selected_tab
         if (
