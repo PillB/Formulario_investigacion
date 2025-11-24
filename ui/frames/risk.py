@@ -61,9 +61,10 @@ class RiskFrame:
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=0, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        action_row.grid(row=0, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
+            action_row.columnconfigure(1, weight=0)
         remove_btn = ttk.Button(action_row, text="Eliminar riesgo", command=self.remove)
         remove_btn.grid(row=0, column=1, sticky="e")
         self.tooltip_register(remove_btn, "Quita este riesgo del caso.")
