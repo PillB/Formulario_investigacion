@@ -413,6 +413,8 @@ class FraudCaseApp:
         self._active_product_frame = None
         self.risk_frames = []
         self.norm_frames = []
+        self._badge_window: Optional[tk.Toplevel] = None
+        self._badge_destroy_after_id: Optional[str] = None
         self._client_frames_by_id = {}
         self._team_frames_by_id = {}
         self._product_frames_by_id = {}
@@ -1359,6 +1361,92 @@ class FraudCaseApp:
         with suppress(tk.TclError):
             self.root.bell()
 
+    def _destroy_badge(self, window: Optional[tk.Toplevel]) -> None:
+        if window is None:
+            return
+        try:
+            window.destroy()
+        except tk.TclError:
+            pass
+        if window is self._badge_window:
+            self._badge_window = None
+            self._badge_destroy_after_id = None
+
+    def show_badge(self, title: str, detail: str | None = None) -> None:
+        """Muestra una insignia transitoria con colores acordes al tema activo."""
+
+        with suppress(tk.TclError):
+            if self._badge_destroy_after_id:
+                self.root.after_cancel(self._badge_destroy_after_id)
+        self._destroy_badge(self._badge_window)
+
+        palette = ThemeManager.current()
+        background = palette.get("background", "#1f1f1f")
+        foreground = palette.get("foreground", "#ffffff")
+        accent = palette.get("accent", "#7a8aa6")
+
+        try:
+            self.root.update_idletasks()
+            root_x = self.root.winfo_rootx()
+            root_y = self.root.winfo_rooty()
+            root_width = self.root.winfo_width()
+        except tk.TclError:
+            root_x = root_y = 0
+            root_width = 360
+        x = root_x + max(root_width - 260, 40)
+        y = root_y + 60
+
+        badge = tk.Toplevel(self.root)
+        badge.transient(self.root)
+        with suppress(tk.TclError):
+            badge.overrideredirect(True)
+            badge.attributes("-topmost", True)
+        badge.configure(bg=background, highlightbackground=accent, highlightthickness=1)
+        badge.geometry(f"+{x}+{y}")
+        ThemeManager.register_toplevel(badge)
+
+        container = tk.Frame(badge, bg=background, padx=14, pady=10)
+        container.pack(fill="both", expand=True)
+        headline = tk.Label(
+            container,
+            text=title,
+            bg=background,
+            fg=foreground,
+            font=(FONT_BASE, 12, "bold"),
+        )
+        headline.pack(anchor="w")
+        if detail:
+            body = tk.Label(
+                container,
+                text=detail,
+                bg=background,
+                fg=foreground,
+                font=(FONT_BASE, 10),
+                wraplength=240,
+                justify="left",
+            )
+            body.pack(anchor="w", pady=(2, 0))
+
+        self._badge_window = badge
+        self._badge_destroy_after_id = badge.after(2000, lambda win=badge: self._destroy_badge(win))
+
+    def _maybe_show_milestone_badge(
+        self, count: int, label: str, *, user_initiated: bool, stride: int = 5
+    ) -> None:
+        if not user_initiated or count <= 0 or stride <= 0:
+            return
+        if count % stride != 0:
+            return
+        detail = f"Llevas {count} {label.lower()} registrados."
+        self.show_badge(f"{label} +{stride}", detail)
+
+    def _count_claims(self) -> int:
+        return sum(len(getattr(prod, "claims", [])) for prod in self.product_frames)
+
+    def notify_claim_added(self, *, user_initiated: bool = False) -> None:
+        total_claims = self._count_claims()
+        self._maybe_show_milestone_badge(total_claims, "Reclamos", user_initiated=user_initiated)
+
     def _load_walkthrough_state(self) -> dict[str, object]:
         try:
             with open(self._walkthrough_state_file, "r", encoding="utf-8") as f:
@@ -2266,6 +2354,7 @@ class FraudCaseApp:
             header = getattr(anchor, "header", None)
             self._client_anchor_widget = header or anchor
         self.client_frames.append(client)
+        self._maybe_show_milestone_badge(len(self.client_frames), "Clientes", user_initiated=user_initiated)
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
         if not was_visible:
@@ -2443,6 +2532,7 @@ class FraudCaseApp:
             case_date_getter=lambda: self.fecha_caso_var.get(),
         )
         self.team_frames.append(team)
+        self._maybe_show_milestone_badge(len(self.team_frames), "Colaboradores", user_initiated=user_initiated)
         self.update_team_options_global()
         self._schedule_summary_refresh('colaboradores')
         if not was_visible:
@@ -2685,6 +2775,7 @@ class FraudCaseApp:
             self._product_anchor_widget = header or anchor
         self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
+        self._maybe_show_milestone_badge(len(self.product_frames), "Productos", user_initiated=user_initiated)
         self._set_active_product_frame(prod)
         # Renombrar
         for i, p in enumerate(self.product_frames):
@@ -2752,9 +2843,9 @@ class FraudCaseApp:
 
     def _on_add_risk(self):
         self._log_navigation_change("Agregó riesgo")
-        self.add_risk()
+        self.add_risk(user_initiated=True)
 
-    def add_risk(self):
+    def add_risk(self, user_initiated: bool = False):
         idx = len(self.risk_frames)
         default_risk_id = self._generate_next_risk_id()
         risk = RiskFrame(
@@ -2767,6 +2858,7 @@ class FraudCaseApp:
             default_risk_id=default_risk_id,
         )
         self.risk_frames.append(risk)
+        self._maybe_show_milestone_badge(len(self.risk_frames), "Riesgos", user_initiated=user_initiated)
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")

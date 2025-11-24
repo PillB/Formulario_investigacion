@@ -759,7 +759,9 @@ class ProductFrame:
         self.claims_frame.grid(row=20, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.claims_frame, "columnconfigure"):
             self.claims_frame.columnconfigure(1, weight=1)
-        claim_add_btn = ttk.Button(self.claims_frame, text="Añadir reclamo", command=self.add_claim)
+        claim_add_btn = ttk.Button(
+            self.claims_frame, text="Añadir reclamo", command=lambda: self.add_claim(user_initiated=True)
+        )
         claim_add_btn.grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(
             claim_add_btn,
@@ -1167,7 +1169,7 @@ class ProductFrame:
         self.mod_cb.set('')
         self.log_change(f"Producto {self.idx+1}: cambió categoría 2")
 
-    def add_claim(self):
+    def add_claim(self, user_initiated: bool = False):
         idx = len(self.claims)
         row = ClaimRow(self.claims_frame, self, idx, self.remove_claim, self.logs, self.tooltip_register)
         row.set_claim_requirement(self._claim_requirement_active)
@@ -1175,6 +1177,11 @@ class ProductFrame:
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
         self.refresh_claim_guidance()
+        if self.owner and hasattr(self.owner, "notify_claim_added"):
+            try:
+                self.owner.notify_claim_added(user_initiated=user_initiated)
+            except Exception:
+                pass
         return row
 
     def remove_claim(self, row):
