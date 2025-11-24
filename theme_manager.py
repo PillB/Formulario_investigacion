@@ -103,6 +103,12 @@ class ThemeManager:
         cls._refresh_content_widgets()
         cls._persist_theme(theme["name"])
         cls.refresh_all_widgets()
+        active_root = cls._root
+        if active_root is not None:
+            try:
+                active_root.update_idletasks()
+            except tk.TclError:
+                pass
         return cls._current
 
     @classmethod
