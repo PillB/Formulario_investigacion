@@ -115,8 +115,20 @@ def patch_client_widgets(monkeypatch):
         Combobox = DummyWidget
         Button = DummyWidget
 
+    class _CollapsibleSection(DummyWidget):
+        def __init__(self, parent=None, title="", open=True, **_kwargs):
+            super().__init__(parent=parent)
+            self.title = title
+            self._is_open = open
+            self.header = DummyWidget()
+            self.content = DummyWidget()
+
+        def pack_content(self, widget, **_kwargs):
+            return widget
+
     monkeypatch.setattr(clients, "tk", _TkStub())
     monkeypatch.setattr(clients, "ttk", _TtkStub())
+    monkeypatch.setattr(clients, "CollapsibleSection", _CollapsibleSection)
     RecordingValidator.instances.clear()
     monkeypatch.setattr(clients, "FieldValidator", RecordingValidator)
     yield

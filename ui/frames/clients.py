@@ -12,6 +12,7 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_required_text)
 from ui.frames.utils import ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
+from ui.layout import CollapsibleSection
 from theme_manager import ThemeManager
 
 
@@ -63,8 +64,10 @@ class ClientFrame:
         self.accionado_var = tk.StringVar()
         self.accionado_options_var = tk.StringVar(value=ACCIONADO_OPTIONS)
 
-        self.frame = ttk.LabelFrame(parent, text=f"Cliente {self.idx+1}")
-        self.frame.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        self.section = CollapsibleSection(parent, title="Clientes implicados")
+        self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        self.frame = ttk.LabelFrame(self.section.content, text=f"Cliente {self.idx+1}")
+        self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(0, weight=0)
@@ -415,6 +418,8 @@ class ClientFrame:
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el cliente {self.idx+1}?"):
             self._log_change(f"Se eliminó cliente {self.idx+1}")
             self.frame.destroy()
+            if hasattr(self, "section"):
+                self.section.destroy()
             self.remove_callback(self)
 
     def _log_change(self, message: str):
