@@ -4248,6 +4248,7 @@ class FraudCaseApp:
             label="Pegar desde portapapeles",
             command=lambda target=key: self._handle_summary_paste(target),
         )
+        ThemeManager.register_menu(menu)
         tree.bind(
             "<Button-3>",
             lambda event, context_menu=menu: self._show_summary_context_menu(event, context_menu),
