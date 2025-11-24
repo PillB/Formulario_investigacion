@@ -53,6 +53,7 @@ class ThemeManager:
     _current: Dict[str, str] = LIGHT_THEME
     _base_style_configured: bool = False
     _tracked_toplevels: Set[tk.Toplevel] = set()
+    _tracked_menus: Set[tk.Menu] = set()
 
     THEMES: Dict[str, Dict[str, str]] = {
         LIGHT_THEME["name"]: LIGHT_THEME,
@@ -120,7 +121,7 @@ class ThemeManager:
     def refresh_all_widgets(cls) -> None:
         """Update themed attributes for the root window and tracked ``Toplevel``s."""
 
-        if cls._root is None and not cls._tracked_toplevels:
+        if cls._root is None and not cls._tracked_toplevels and not cls._tracked_menus:
             return
         try:
             cls._ensure_style()
@@ -129,6 +130,17 @@ class ThemeManager:
         cls._refresh_content_widgets()
         for window in cls._iter_theme_windows():
             cls._apply_widget_tree(window, cls._current)
+        stale_menus: Set[tk.Menu] = set()
+        for menu in cls._tracked_menus:
+            try:
+                exists = bool(menu.winfo_exists())
+            except tk.TclError:
+                exists = False
+            if exists:
+                cls._apply_widget_attributes(menu, cls._current)
+            else:
+                stale_menus.add(menu)
+        cls._tracked_menus.difference_update(stale_menus)
 
     @classmethod
     def register_toplevel(cls, window: Optional[tk.Toplevel]) -> None:
@@ -142,6 +154,19 @@ class ThemeManager:
         except tk.TclError:
             pass
         cls.apply_to_widget_tree(window)
+
+    @classmethod
+    def register_menu(cls, menu: Optional[tk.Menu]) -> None:
+        """Track a Menu so it inherits the active palette automatically."""
+
+        if menu is None:
+            return
+        cls._tracked_menus.add(menu)
+        try:
+            menu.bind("<Destroy>", lambda _evt, m=menu: cls._tracked_menus.discard(m))
+        except tk.TclError:
+            pass
+        cls._apply_widget_attributes(menu, cls._current)
 
     @classmethod
     def load_saved_theme(cls) -> str:
@@ -206,7 +231,7 @@ class ThemeManager:
 
         theme = cls._current
         try:
-            select_background = theme["select_background"]
+            theme["select_background"]
         except KeyError:
             return
         for window in cls._iter_theme_windows():
@@ -395,6 +420,16 @@ class ThemeManager:
                         widget.heading(column, background=heading_background, foreground=foreground)
                     except tk.TclError:
                         continue
+            elif isinstance(widget, tk.Menu):
+                widget.configure(
+                    background=background,
+                    foreground=foreground,
+                    activebackground=theme["select_background"],
+                    activeforeground=theme["select_foreground"],
+                    selectcolor=theme["select_background"],
+                    borderwidth=1,
+                    relief="solid",
+                )
         except tk.TclError:
             return
 
