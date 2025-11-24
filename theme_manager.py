@@ -103,7 +103,7 @@ class ThemeManager:
         cls._refresh_content_widgets()
         cls._persist_theme(theme["name"])
         cls.refresh_all_widgets()
-        active_root = cls._root
+        active_root = root or cls._root or getattr(ttk_style, "master", None)
         if active_root is not None:
             try:
                 active_root.update_idletasks()
