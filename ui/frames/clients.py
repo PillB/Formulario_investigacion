@@ -12,6 +12,12 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_required_text)
 from ui.frames.utils import ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
+from theme_manager import ThemeManager
+
+
+ENTRY_STYLE = ThemeManager.ENTRY_STYLE
+COMBOBOX_STYLE = ThemeManager.COMBOBOX_STYLE
+BUTTON_STYLE = ThemeManager.BUTTON_STYLE
 
 
 class ClientFrame:
@@ -74,6 +80,7 @@ class ClientFrame:
             values=TIPO_ID_LIST,
             state="readonly",
             width=20,
+            style=COMBOBOX_STYLE,
         )
         tipo_id_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY)
@@ -83,7 +90,7 @@ class ClientFrame:
         ttk.Label(self.frame, text="ID del cliente:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
+        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20, style=ENTRY_STYLE)
         id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self._bind_identifier_triggers(id_entry)
@@ -92,7 +99,9 @@ class ClientFrame:
         ttk.Label(self.frame, text="Nombres:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        nombres_entry = ttk.Entry(self.frame, textvariable=self.nombres_var, width=25)
+        nombres_entry = ttk.Entry(
+            self.frame, textvariable=self.nombres_var, width=25, style=ENTRY_STYLE
+        )
         nombres_entry.grid(row=2, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         nombres_entry.bind(
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó nombres"), add="+"
@@ -102,7 +111,9 @@ class ClientFrame:
         ttk.Label(self.frame, text="Apellidos:").grid(
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        apellidos_entry = ttk.Entry(self.frame, textvariable=self.apellidos_var, width=25)
+        apellidos_entry = ttk.Entry(
+            self.frame, textvariable=self.apellidos_var, width=25, style=ENTRY_STYLE
+        )
         apellidos_entry.grid(row=3, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         apellidos_entry.bind(
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó apellidos"), add="+"
@@ -113,7 +124,12 @@ class ClientFrame:
             row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         flag_cb = ttk.Combobox(
-            self.frame, textvariable=self.flag_var, values=FLAG_CLIENTE_LIST, state="readonly", width=20
+            self.frame,
+            textvariable=self.flag_var,
+            values=FLAG_CLIENTE_LIST,
+            state="readonly",
+            width=20,
+            style=COMBOBOX_STYLE,
         )
         flag_cb.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=4, column=2, padx=COL_PADX, pady=ROW_PADY)
@@ -165,7 +181,9 @@ class ClientFrame:
         ttk.Label(self.frame, text="Teléfonos (separados por ;):").grid(
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        tel_entry = ttk.Entry(self.frame, textvariable=self.telefonos_var, width=30)
+        tel_entry = ttk.Entry(
+            self.frame, textvariable=self.telefonos_var, width=30, style=ENTRY_STYLE
+        )
         tel_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=6, column=2, padx=COL_PADX, pady=ROW_PADY)
         tel_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó teléfonos"))
@@ -177,7 +195,9 @@ class ClientFrame:
         ttk.Label(self.frame, text="Correos (separados por ;):").grid(
             row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        cor_entry = ttk.Entry(self.frame, textvariable=self.correos_var, width=30)
+        cor_entry = ttk.Entry(
+            self.frame, textvariable=self.correos_var, width=30, style=ENTRY_STYLE
+        )
         cor_entry.grid(row=7, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=7, column=2, padx=COL_PADX, pady=ROW_PADY)
         cor_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó correos"))
@@ -189,7 +209,9 @@ class ClientFrame:
         ttk.Label(self.frame, text="Direcciones (separados por ;):").grid(
             row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        dir_entry = ttk.Entry(self.frame, textvariable=self.direcciones_var, width=30)
+        dir_entry = ttk.Entry(
+            self.frame, textvariable=self.direcciones_var, width=30, style=ENTRY_STYLE
+        )
         dir_entry.grid(row=8, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=8, column=2, padx=COL_PADX, pady=ROW_PADY)
         dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
@@ -201,7 +223,9 @@ class ClientFrame:
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
-        remove_btn = ttk.Button(action_row, text="Eliminar cliente", command=self.remove)
+        remove_btn = ttk.Button(
+            action_row, text="Eliminar cliente", command=self.remove, style=BUTTON_STYLE
+        )
         remove_btn.grid(row=0, column=1, sticky="e", padx=COL_PADX)
         self.tooltip_register(remove_btn, "Quita por completo al cliente de la lista.")
 
