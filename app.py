@@ -5958,27 +5958,28 @@ class FraudCaseApp:
                 claim_rows = [{'id_reclamo': ''}]
 
             assignment_rows = [inv.get_data() for inv in product.involvements if any(inv.get_data().values())]
+            if not assignment_rows:
+                missing_association_messages.append(
+                    (
+                        f"{product_label}: asigna al menos un colaborador en la sección"
+                        " 'Involucramiento de colaboradores' antes de validar duplicados."
+                    )
+                )
+                continue
+
             collaborator_ids = [
                 self._normalize_identifier(assignment.get('id_colaborador'))
                 for assignment in assignment_rows
                 if (assignment.get('id_colaborador') or '').strip()
             ]
-
             if not collaborator_ids:
-                collaborator_ids = [
-                    self._normalize_identifier(team.id_var.get())
-                    for team in self.team_frames
-                    if team.id_var.get().strip()
-                ]
-
-            if not collaborator_ids and not client_norm:
                 missing_association_messages.append(
-                    f"{product_label}: debe registrar un cliente o al menos un ID de colaborador en Asignaciones o en Team Members."
+                    (
+                        f"{product_label}: selecciona el colaborador en cada asignación activa"
+                        " para validar la clave técnica."
+                    )
                 )
                 continue
-
-            if not collaborator_ids:
-                collaborator_ids = ['']
 
             for claim in claim_rows:
                 claim_id_raw = (claim.get('id_reclamo') or '').strip()
@@ -6008,6 +6009,13 @@ class FraudCaseApp:
         if duplicate_messages:
             error_messages.append("\n".join(duplicate_messages))
         if missing_association_messages:
+            guidance = (
+                "La clave técnica se valida con caso, producto, cliente, colaborador,"
+                " fecha de ocurrencia e ID de reclamo."
+                " Asigna al menos un colaborador en 'Involucramiento de colaboradores'"
+                " antes de continuar."
+            )
+            error_messages.append(guidance)
             error_messages.append("\n".join(missing_association_messages))
 
         if error_messages:
@@ -6017,7 +6025,7 @@ class FraudCaseApp:
                 messagebox.showerror("Validación de clave técnica", message)
             except tk.TclError:
                 return "Validación interrumpida"
-            return "Duplicado detectado o asociación faltante"
+            return "Duplicado detectado o colaborador faltante"
         return "Sin duplicados detectados"
 
     @staticmethod
@@ -8076,24 +8084,17 @@ class FraudCaseApp:
                 )
                 if catalog_error:
                     errors.append(catalog_error)
-            # For each involvement; if no assignments, use empty string for id_colaborador
+            # For each involvement; require collaborator IDs to validate clave técnica
             claim_rows = prod_data['reclamos'] or [{'id_reclamo': ''}]
             product_occurrence_date = prod_data['producto'].get('fecha_ocurrencia')
             if not prod_data['asignaciones']:
-                for claim in claim_rows:
-                    claim_id = (claim.get('id_reclamo') or '').strip()
-                    claim_id_norm = self._normalize_identifier(claim_id)
-                    key = (
-                        normalized_case_id,
-                        pid_norm,
-                        cid_norm,
-                        '',
-                        product_occurrence_date,
-                        claim_id_norm,
+                errors.append(
+                    (
+                        f"Producto {producto_label}: agrega al menos un colaborador en"
+                        " 'Involucramiento de colaboradores' para validar la clave técnica."
                     )
-                    if key in key_set:
-                        errors.append(f"Registro duplicado de clave técnica (producto {producto_label})")
-                    key_set.add(key)
+                )
+                continue
             for inv_idx, inv in enumerate(prod_data['asignaciones'], start=1):
                 collaborator_id = (inv.get('id_colaborador') or '').strip()
                 collaborator_norm = self._normalize_identifier(collaborator_id)
@@ -8122,6 +8123,14 @@ class FraudCaseApp:
                     errors.append(
                         f"Producto {pid}: la asignación {inv_idx} referencia un colaborador eliminado (ID {collaborator_id})."
                     )
+                if not collaborator_norm:
+                    errors.append(
+                        (
+                            f"Producto {producto_label}: la asignación {inv_idx} requiere un ID"
+                            " de colaborador para validar duplicados."
+                        )
+                    )
+                    continue
                 for claim in claim_rows:
                     claim_id = (claim.get('id_reclamo') or '').strip()
                     key = (

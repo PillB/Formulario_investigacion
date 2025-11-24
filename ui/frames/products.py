@@ -727,7 +727,10 @@ class ProductFrame:
             self.invol_frame.columnconfigure(1, weight=1)
         inv_add_btn = ttk.Button(self.invol_frame, text="Añadir involucrado", command=self.add_involvement)
         inv_add_btn.grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
-        self.tooltip_register(inv_add_btn, "Registra un colaborador asociado a este producto.")
+        self.tooltip_register(
+            inv_add_btn,
+            "Registra un colaborador asociado a este producto. Es obligatorio para validar duplicados.",
+        )
 
         self.validators.append(
             FieldValidator(
@@ -1262,7 +1265,8 @@ class ProductFrame:
             "Si el sistema marca un duplicado, ajusta cualquiera de los campos de la "
             "clave técnica (caso, producto, cliente, colaborador, fecha de ocurrencia "
             "o reclamo) hasta que la combinación sea única y vuelve a editar un campo "
-            "para revalidar."
+            "para revalidar. Debes tener al menos un colaborador asignado en "
+            "'Involucramiento de colaboradores' para que la validación sea completa."
         )
         self.tooltip_register(label, tooltip_text)
         self.duplicate_status_label = label
@@ -1292,10 +1296,6 @@ class ProductFrame:
             collaborator_id = (inv.team_var.get() if hasattr(inv, "team_var") else "").strip()
             if collaborator_id:
                 return collaborator_id
-        team_options = self.get_team_options() or []
-        for team_id in team_options:
-            if team_id:
-                return str(team_id).strip()
         return ""
 
     def _get_primary_claim_id(self) -> str:
