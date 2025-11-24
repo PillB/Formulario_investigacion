@@ -325,6 +325,10 @@ class FraudCaseApp:
         self._reset_navigation_metrics()
         self._hover_tooltips = []
         self.validators = []
+        self._validation_feedback_initialized = False
+        self._validity_initialized = False
+        self._last_all_valid = False
+        self._checkmark_overlay = None
         self._last_validated_risk_exposure_total = Decimal('0')
         self._log_flush_job_id: Optional[str] = None
         self._docx_available = DOCX_AVAILABLE
@@ -1116,6 +1120,7 @@ class FraudCaseApp:
             origin=field_name,
             widget=target_widget,
         )
+        self._validation_feedback_initialized = True
         self._update_completion_progress()
 
     def _build_validation_focus_map(self) -> dict[str, tk.Widget]:
@@ -1230,6 +1235,98 @@ class FraudCaseApp:
             self._progress_animation_job = self.root.after(60, self._step_progress_animation)
         except tk.TclError:
             self._progress_animation_job = None
+
+    def _color_to_rgb(self, color: str) -> tuple[int, int, int]:
+        try:
+            r, g, b = self.root.winfo_rgb(color)
+            return (r // 256, g // 256, b // 256)
+        except Exception:
+            return (255, 255, 255)
+
+    def _blend_color(self, color: str, background: str, alpha: float) -> str:
+        fg_r, fg_g, fg_b = self._color_to_rgb(color)
+        bg_r, bg_g, bg_b = self._color_to_rgb(background)
+        clamped_alpha = max(0.0, min(1.0, alpha))
+        blended = (
+            round(fg_r * clamped_alpha + bg_r * (1 - clamped_alpha)),
+            round(fg_g * clamped_alpha + bg_g * (1 - clamped_alpha)),
+            round(fg_b * clamped_alpha + bg_b * (1 - clamped_alpha)),
+        )
+        return "#{:02x}{:02x}{:02x}".format(*blended)
+
+    def _color_with_optional_alpha(self, color: str, background: str, alpha: float) -> str:
+        normalized = (color or "").strip() or "#2ecc71"
+        if normalized.startswith("#"):
+            hex_value = normalized[1:]
+            if len(hex_value) == 3:
+                hex_value = "".join(ch * 2 for ch in hex_value)
+                normalized = f"#{hex_value}"
+            if len(hex_value) == 6:
+                try:
+                    alpha_byte = int(max(0, min(255, round(alpha * 255))))
+                    candidate = f"#{hex_value}{alpha_byte:02x}"
+                    self.root.winfo_rgb(candidate)
+                    return candidate
+                except tk.TclError:
+                    pass
+        return self._blend_color(normalized, background, max(0.0, min(1.0, alpha)))
+
+    def _safe_destroy_checkmark_overlay(self) -> None:
+        overlay = getattr(self, "_checkmark_overlay", None)
+        if overlay is None:
+            return
+        try:
+            overlay.destroy()
+        except tk.TclError:
+            pass
+        self._checkmark_overlay = None
+
+    def show_big_checkmark(self, duration_ms: int = 1500) -> None:
+        if not getattr(self, "root", None):
+            return
+        self._safe_destroy_checkmark_overlay()
+        theme = ThemeManager.current()
+        background = theme.get("background", self.root.cget("background"))
+        accent = theme.get("accent", "#2ecc71")
+        label = tk.Label(
+            self.root,
+            text="✓",
+            font=(FONT_BASE[0], max(int(FONT_BASE[1] * 6), 96), "bold"),
+            foreground=self._color_with_optional_alpha(accent, background, 0.8),
+            background=self._color_with_optional_alpha(background, background, 0.35),
+            borderwidth=0,
+            highlightthickness=0,
+            takefocus=0,
+        )
+        label.place(relx=0.5, rely=0.5, anchor="center")
+        label.lift()
+        self._checkmark_overlay = label
+
+        steps = 6
+        interval = max(40, duration_ms // steps)
+
+        def _fade(step: int = 0):
+            if not label.winfo_exists():
+                self._checkmark_overlay = None
+                return
+            if step >= steps:
+                self._safe_destroy_checkmark_overlay()
+                return
+            fade_ratio = max(0.0, 1 - step / float(steps))
+            label.configure(
+                foreground=self._color_with_optional_alpha(
+                    accent, background, 0.3 + 0.5 * fade_ratio
+                ),
+                background=self._color_with_optional_alpha(
+                    background, background, 0.2 * fade_ratio
+                ),
+            )
+            try:
+                label.after(interval, lambda: _fade(step + 1))
+            except tk.TclError:
+                self._checkmark_overlay = None
+
+        _fade(0)
 
     def clipboard_get(self):
         """Proxy para ``Tk.clipboard_get`` que simplifica las pruebas unitarias."""
@@ -6226,6 +6323,25 @@ class FraudCaseApp:
             dataset = self._summary_pending_dataset
         self.refresh_summary_tables(data=dataset, sections=targets)
         self._summary_pending_dataset = None
+        self._handle_validation_success_transition()
+
+    def _handle_validation_success_transition(self) -> None:
+        if not getattr(self, "_validation_feedback_initialized", False):
+            return
+        validators = getattr(self, "validators", []) or []
+        if not validators:
+            return
+        all_valid = all(
+            getattr(validator, "last_error", None) in {None, ""}
+            for validator in validators
+        )
+        if not self._validity_initialized:
+            self._validity_initialized = True
+            self._last_all_valid = all_valid
+            return
+        if all_valid and not getattr(self, "_last_all_valid", False):
+            self.show_big_checkmark()
+        self._last_all_valid = all_valid
 
     def _refresh_inline_section_tables(self, sections=None, data=None):
         if sections is None:
