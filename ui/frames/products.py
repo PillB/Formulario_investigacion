@@ -454,6 +454,9 @@ class ProductFrame:
         self.id_change_callback = id_change_callback
         self._last_tracked_id = ''
         self._suppress_change_notifications = False
+        self._badge_styles = {}
+        self.amount_badge = None
+        self.date_badge = None
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -489,6 +492,7 @@ class ProductFrame:
             self.frame.columnconfigure(1, weight=1)
         if hasattr(self.owner, "_set_active_product_frame"):
             self.frame.bind("<FocusIn>", lambda _e: self.owner._set_active_product_frame(self), add="+")
+        self._configure_badge_styles()
 
         ttk.Label(self.frame, text="ID del producto:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -629,7 +633,7 @@ class ProductFrame:
         )
         fdesc_entry = ttk.Entry(self.frame, textvariable=self.fecha_desc_var, width=15)
         fdesc_entry.grid(row=10, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=10, column=2, padx=COL_PADX, pady=ROW_PADY)
+        self.date_badge = self._create_badge_label(row=10)
         self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")
 
         ttk.Label(self.frame, text="Monto investigado:").grid(
@@ -637,7 +641,7 @@ class ProductFrame:
         )
         inv_entry = ttk.Entry(self.frame, textvariable=self.monto_inv_var, width=15)
         inv_entry.grid(row=11, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=11, column=2, padx=COL_PADX, pady=ROW_PADY)
+        self.amount_badge = self._create_badge_label(row=11)
         self.tooltip_register(inv_entry, "Monto total bajo investigación.")
 
         ttk.Label(self.frame, text="Moneda:").grid(
@@ -1150,7 +1154,7 @@ class ProductFrame:
         for key, (widget, label) in widget_map.items():
             validator = FieldValidator(
                 widget,
-                lambda key=key: self._validate_montos_consistentes(key),
+                lambda key=key: self._validate_amount_consistency_for_field(key),
                 self.logs,
                 f"Producto {self.idx+1} - Consistencia de montos ({label})",
                 variables=variables,
@@ -1161,6 +1165,72 @@ class ProductFrame:
                         validator.add_widget(extra_widget)
             self.validators.append(validator)
 
+    def _configure_badge_styles(self):
+        style = None
+        try:
+            style = ThemeManager.build_style(self.frame)
+        except Exception:
+            if hasattr(ttk, "Style"):
+                try:
+                    style = ttk.Style(master=self.frame)
+                except Exception:
+                    style = None
+        if not style or not hasattr(style, "configure"):
+            self._badge_styles = {"success": "TLabel", "warning": "TLabel"}
+            return
+        palette = ThemeManager.current()
+        success_style = "SuccessBadge.TLabel"
+        warning_style = "WarningBadge.TLabel"
+        style.configure(
+            success_style,
+            background=palette.get("accent", "#2e7d32"),
+            foreground=palette.get("select_foreground", "#ffffff"),
+            padding=(6, 2),
+            borderwidth=1,
+            relief="solid",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        style.configure(
+            warning_style,
+            background="#f0ad4e",
+            foreground=palette.get("foreground", "#000000"),
+            padding=(6, 2),
+            borderwidth=1,
+            relief="solid",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self._badge_styles = {"success": success_style, "warning": warning_style}
+
+    def _create_badge_label(self, row: int):
+        styles = self._badge_styles or {"warning": "TLabel"}
+        badge = ttk.Label(
+            self.frame,
+            text="Pendiente",
+            style=styles.get("warning", "TLabel"),
+            anchor="w",
+        )
+        badge.grid(row=row, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+        return badge
+
+    def _set_badge_state(self, badge, is_ok: bool, message: str | None):
+        if badge is None:
+            return
+        styles = self._badge_styles or {"success": "TLabel", "warning": "TLabel"}
+        style_name = styles["success"] if is_ok else styles["warning"]
+        text = "Cuadra" if is_ok else (message or "Revisa la información")
+        badge.configure(text=text, style=style_name)
+
+    def _update_date_badge(self, message: str | None, is_valid: bool):
+        self._set_badge_state(self.date_badge, is_valid, message)
+
+    def _update_amount_badge(self, message: str | None, is_valid: bool):
+        self._set_badge_state(self.amount_badge, is_valid, message)
+
+    def _refresh_badges(self) -> None:
+        pair_message, pair_ok = self._validate_product_date_pair()
+        self._update_date_badge(pair_message, pair_ok)
+        self._validate_montos_consistentes()
+
     def _register_duplicate_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", self._handle_duplicate_check_event, add="+")
         if isinstance(widget, ttk.Combobox):
@@ -1168,6 +1238,7 @@ class ProductFrame:
 
     def _handle_duplicate_check_event(self, *_args):
         self.trigger_duplicate_check()
+        self._refresh_badges()
 
     def _register_claim_requirement_triggers(self, cont_entry, falla_entry, perdida_entry):
         for entry in (cont_entry, falla_entry, perdida_entry):
@@ -1531,13 +1602,14 @@ class ProductFrame:
         fecha_oc = (self.fecha_oc_var.get() or "").strip()
         fecha_desc = (self.fecha_desc_var.get() or "").strip()
         if not (fecha_oc and fecha_desc):
-            return None
+            return ("Ingresa ambas fechas para validar la secuencia.", False)
         producto_label = self.id_var.get().strip() or f"Producto {self.idx+1}"
-        return validate_product_dates(
+        message = validate_product_dates(
             producto_label,
             fecha_oc,
             fecha_desc,
         )
+        return (message, message is None)
 
     def _validate_fecha_ocurrencia(self):
         message = validate_date_text(
@@ -1551,8 +1623,12 @@ class ProductFrame:
             ),
         )
         if message:
+            self._update_date_badge(message, False)
             return message
-        return self._validate_product_date_pair()
+        pair_message, pair_ok = self._validate_product_date_pair()
+        final_message = message or pair_message
+        self._update_date_badge(final_message, pair_ok and message is None)
+        return final_message
 
     def _validate_fecha_descubrimiento(self):
         msg = validate_date_text(
@@ -1563,8 +1639,12 @@ class ProductFrame:
             must_be_after=(self.fecha_oc_var.get(), "la fecha de ocurrencia"),
         )
         if msg:
+            self._update_date_badge(msg, False)
             return msg
-        return self._validate_product_date_pair()
+        pair_message, pair_ok = self._validate_product_date_pair()
+        final_message = msg or pair_message
+        self._update_date_badge(final_message, pair_ok and msg is None)
+        return final_message
 
     def _validate_amount_field(self, var, label, allow_blank):
         raw_value = var.get()
@@ -1600,7 +1680,8 @@ class ProductFrame:
     def _validate_montos_consistentes(self, target_key: str | None = None):
         values = self._collect_amount_values()
         if values is None:
-            return None
+            self._update_amount_badge("Corrige los montos individuales para validar.", False)
+            return (None, False)
         errors = {}
         inv = values.get('inv')
         componentes_dict = {
@@ -1628,8 +1709,15 @@ class ProductFrame:
                 errors['contingencia'] = (
                     "El monto de contingencia debe ser igual al monto investigado para créditos o tarjetas."
                 )
+        badge_message = next(iter(errors.values()), None)
+        is_consistent = not errors
+        self._update_amount_badge(badge_message, is_consistent)
         target = target_key or 'inv'
-        return errors.get(target)
+        return (errors.get(target), is_consistent)
+
+    def _validate_amount_consistency_for_field(self, target_key: str):
+        message, _is_valid = self._validate_montos_consistentes(target_key)
+        return message
 
     def _validate_catalog_selection(self, value, label, catalog, catalog_label):
         message = validate_required_text(value, label)
