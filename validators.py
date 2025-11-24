@@ -347,6 +347,15 @@ class FieldValidator:
     """Vincula un widget con una función de validación en tiempo real."""
 
     modal_notifications_enabled = True
+    status_consumer: Optional[Callable[[str, Optional[str], object], None]] = None
+
+    @classmethod
+    def set_status_consumer(
+        cls, consumer: Optional[Callable[[str, Optional[str], object], None]]
+    ) -> None:
+        """Permite publicar los resultados de validación en un panel externo."""
+
+        cls.status_consumer = consumer
 
     def __init__(
         self,
@@ -451,12 +460,17 @@ class FieldValidator:
     def _display_error(self, error: Optional[str], *, allow_modal: bool = True) -> None:
         if error == self.last_error:
             return
+        consumer = self.__class__.status_consumer
         if error:
-            if allow_modal:
+            if consumer:
+                consumer(self.field_name, error, self.widget)
+            elif allow_modal:
                 self._notify_modal_error(error)
             self.tooltip.show(error)
             log_event("validacion", f"{self.field_name}: {error}", self.logs)
         else:
+            if consumer:
+                consumer(self.field_name, None, self.widget)
             self.tooltip.hide()
         self.last_error = error
 

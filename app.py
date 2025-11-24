@@ -153,6 +153,145 @@ CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 
+class ValidationPanel(ttk.Frame):
+    """Panel compacto para mostrar errores y advertencias de validación."""
+
+    ICONS = {
+        "ok": "✅",
+        "error": "⚠️",
+        "warning": "⚠️",
+    }
+
+    def __init__(self, parent, *, on_focus_request=None):
+        super().__init__(parent)
+        self.on_focus_request = on_focus_request
+        self._entries: dict[str, str] = {}
+        self._targets: dict[str, tk.Widget] = {}
+        self._placeholder_id: Optional[str] = None
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        self.columnconfigure(0, weight=1)
+        title = ttk.Label(self, text="Panel de validación", font=("TkDefaultFont", 10, "bold"))
+        title.grid(row=0, column=0, sticky="w", padx=5, pady=(5, 0))
+        columns = ("mensaje", "origen")
+        self.tree = ttk.Treeview(
+            self,
+            columns=columns,
+            show="tree headings",
+            height=16,
+        )
+        self.tree.heading("#0", text="Estado")
+        self.tree.heading("mensaje", text="Detalle")
+        self.tree.heading("origen", text="Origen")
+        self.tree.column("#0", width=60, anchor="center")
+        self.tree.column("mensaje", width=280, anchor="w")
+        self.tree.column("origen", width=140, anchor="w")
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        self.tree.grid(row=1, column=0, sticky="nsew", padx=(5, 0), pady=5)
+        scrollbar.grid(row=1, column=1, sticky="ns", pady=5)
+        self.rowconfigure(1, weight=1)
+        self.tree.bind("<Double-1>", lambda _e: self.focus_selected())
+        self._ensure_placeholder()
+        fix_button = ttk.Button(self, text="Corregir ahora", command=self.focus_selected)
+        fix_button.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 5))
+
+    def _ensure_placeholder(self) -> None:
+        if self._entries or self._placeholder_id:
+            return
+        self._placeholder_id = self.tree.insert(
+            "", "end", text=self.ICONS["ok"], values=("Sin validaciones registradas", ""),
+        )
+
+    def _remove_placeholder(self) -> None:
+        if self._placeholder_id:
+            self.tree.delete(self._placeholder_id)
+            self._placeholder_id = None
+
+    def _icon_for(self, status: str) -> str:
+        return self.ICONS.get(status, self.ICONS["error"])
+
+    def update_entry(
+        self,
+        key: str,
+        message: Optional[str],
+        *,
+        severity: str = "error",
+        origin: str | None = None,
+        widget: tk.Widget | None = None,
+    ) -> None:
+        """Inserta o actualiza una fila en la tabla de validación."""
+
+        status = "ok" if not message else severity
+        display_message = message or "Sin errores"
+        item_id = self._entries.get(key)
+        if item_id:
+            self.tree.item(item_id, text=self._icon_for(status), values=(display_message, origin or ""))
+        else:
+            self._remove_placeholder()
+            item_id = self.tree.insert(
+                "",
+                "end",
+                text=self._icon_for(status),
+                values=(display_message, origin or ""),
+            )
+            self._entries[key] = item_id
+        if widget:
+            self._targets[item_id] = widget
+        elif item_id in self._targets:
+            self._targets.pop(item_id, None)
+        if not self._entries:
+            self._ensure_placeholder()
+
+    def focus_selected(self) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            return
+        widget = self._targets.get(selection[0])
+        if widget and self.on_focus_request:
+            self.on_focus_request(widget)
+
+    def _clear_batch_entries(self) -> None:
+        to_delete = [key for key in self._entries if key.startswith("batch:")]
+        for key in to_delete:
+            item_id = self._entries.pop(key, None)
+            if item_id:
+                self.tree.delete(item_id)
+                self._targets.pop(item_id, None)
+
+    def show_batch_results(
+        self,
+        errors: list[str],
+        warnings: list[str],
+        focus_map: Optional[dict[str, tk.Widget]] = None,
+        origin: str = "Validación integral",
+    ) -> None:
+        """Reemplaza el bloque de validaciones globales con los nuevos resultados."""
+
+        self._clear_batch_entries()
+        focus_map = focus_map or {}
+
+        def _match_widget(message: str) -> Optional[tk.Widget]:
+            lowered = message.lower()
+            for hint, widget in focus_map.items():
+                if hint.lower() in lowered:
+                    return widget
+            return None
+
+        for index, message in enumerate(errors):
+            widget = _match_widget(message)
+            self.update_entry(
+                f"batch:error:{index}", message, severity="error", origin=origin, widget=widget
+            )
+        for index, message in enumerate(warnings):
+            widget = _match_widget(message)
+            self.update_entry(
+                f"batch:warning:{index}", message, severity="warning", origin=origin, widget=widget
+            )
+        if not errors and not warnings:
+            self._ensure_placeholder()
+
 class FraudCaseApp:
     AUTOSAVE_DELAY_MS = 4000
     SUMMARY_REFRESH_DELAY_MS = 250
@@ -164,6 +303,7 @@ class FraudCaseApp:
     _external_drive_path: Optional[Path] = None
     _external_log_file_initialized: bool = False
     _extended_sections_enabled: bool = ENABLE_EXTENDED_ANALYSIS_SECTIONS
+    _validation_panel: Optional[ValidationPanel] = None
 
     """Clase que encapsula la aplicación de gestión de casos de fraude."""
 
@@ -199,6 +339,7 @@ class FraudCaseApp:
         self._catalog_dependent_widgets = []
         self.catalog_load_button = None
         self.catalog_skip_button = None
+        self._validation_panel: Optional[ValidationPanel] = None
         self.catalog_progress = None
         self.detail_catalogs = {}
         self.detail_lookup_by_id = {}
@@ -840,10 +981,22 @@ class FraudCaseApp:
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
-        self.notebook = ttk.Notebook(self.root)
+        main_container = ttk.Frame(self.root)
+        main_container.grid(row=0, column=0, sticky="nsew")
+        main_container.grid_columnconfigure(0, weight=1)
+        main_container.grid_rowconfigure(0, weight=1)
+
+        self.notebook = ttk.Notebook(main_container)
         self.notebook.grid(row=0, column=0, sticky="nsew")
         self.notebook.bind("<<NotebookTabChanged>>", self._handle_notebook_tab_change)
         self._register_navigation_bindings()
+
+        self._validation_panel = ValidationPanel(
+            main_container, on_focus_request=self._focus_widget_from_validation_panel
+        )
+        FieldValidator.set_status_consumer(self._publish_field_validation)
+        main_container.grid_columnconfigure(1, weight=0)
+        self._validation_panel.grid(row=0, column=1, sticky="ns")
 
         # --- Pestaña principal: caso y participantes ---
         self.main_tab = ttk.Frame(self.notebook)
@@ -875,6 +1028,56 @@ class FraudCaseApp:
         self.notebook.add(summary_tab, text="Resumen")
         self.build_summary_tab(summary_tab)
         self._current_tab_id = self.notebook.select()
+
+    def _focus_widget_from_validation_panel(self, widget) -> None:
+        try:
+            widget.focus_set()
+            widget.event_generate("<<ValidationFocusRequest>>")
+        except Exception:
+            return
+
+    def _publish_field_validation(
+        self, field_name: str, message: Optional[str], widget
+    ) -> None:
+        if not self._validation_panel:
+            return
+        target_widget = widget if hasattr(widget, "focus_set") else None
+        target_id = id(target_widget) if target_widget is not None else field_name
+        key = f"field:{field_name}:{target_id}"
+        severity = "error" if message else "ok"
+        self._validation_panel.update_entry(
+            key,
+            message,
+            severity=severity,
+            origin=field_name,
+            widget=target_widget,
+        )
+
+    def _build_validation_focus_map(self) -> dict[str, tk.Widget]:
+        focus_map: dict[str, tk.Widget] = {}
+        case_inputs = getattr(self, "_case_inputs", {}) or {}
+        focus_map.update(
+            {
+                "número de caso": case_inputs.get("id_entry"),
+                "tipo de informe": case_inputs.get("tipo_cb"),
+                "categoría 1": case_inputs.get("cat1_cb"),
+                "categoría 2": case_inputs.get("case_cat2_cb"),
+                "modalidad": case_inputs.get("case_mod_cb"),
+                "canal": case_inputs.get("canal_cb"),
+                "proceso": case_inputs.get("proc_cb"),
+                "investigador": case_inputs.get("investigator_entry"),
+                "ocurrencia": case_inputs.get("fecha_case_entry"),
+                "descubrimiento": case_inputs.get("fecha_desc_entry"),
+                "centro de costos": case_inputs.get("centro_costo_entry"),
+            }
+        )
+        return {hint: widget for hint, widget in focus_map.items() if widget}
+
+    def _publish_validation_summary(self, errors: list[str], warnings: list[str]) -> None:
+        if self._validation_panel:
+            self._validation_panel.show_batch_results(
+                errors, warnings, self._build_validation_focus_map()
+            )
 
     def clipboard_get(self):
         """Proxy para ``Tk.clipboard_get`` que simplifica las pruebas unitarias."""
@@ -8158,6 +8361,7 @@ class FraudCaseApp:
                 fv = datetime.strptime(fvig, "%Y-%m-%d")
                 if fv > datetime.now():
                     errors.append(f"Fecha de vigencia futura en norma {nid or 'sin ID'}")
+        self._publish_validation_summary(errors, warnings)
         return errors, warnings
 
     # ---------------------------------------------------------------------
