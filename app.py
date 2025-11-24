@@ -219,6 +219,9 @@ class FraudCaseApp:
         self._operation_vars: dict[str, tk.StringVar] = {}
         self._anexo_vars: dict[str, tk.StringVar] = {}
         self._recommendation_widgets: dict[str, scrolledtext.ScrolledText] = {}
+        self._analysis_tab_container: Optional[ttk.Frame] = None
+        self._extended_analysis_group: Optional[ttk.LabelFrame] = None
+        self._extended_sections_toggle_var: Optional[tk.BooleanVar] = None
         self._suppress_post_edit_validation = False
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
         self.import_progress = None
@@ -2075,7 +2078,25 @@ class FraudCaseApp:
     def build_analysis_tab(self, parent):
         scrollable_tab, tab_container = create_scrollable_container(parent)
         scrollable_tab.pack(fill="both", expand=True)
+        self._analysis_tab_container = tab_container
         tab_container.columnconfigure(0, weight=1)
+
+        controls = ttk.Frame(tab_container)
+        controls.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY, 0))
+        self._extended_sections_toggle_var = tk.BooleanVar(
+            value=self._extended_sections_enabled
+        )
+        extended_toggle = ttk.Checkbutton(
+            controls,
+            text="Mostrar secciones extendidas del informe",
+            variable=self._extended_sections_toggle_var,
+            command=self._handle_extended_sections_toggle,
+        )
+        extended_toggle.pack(side="left")
+        self.register_tooltip(
+            extended_toggle,
+            "Activa o desactiva las secciones extendidas para completar el informe.",
+        )
 
         analysis_group = ttk.LabelFrame(tab_container, text="Análisis narrativo")
         analysis_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
@@ -2181,6 +2202,9 @@ class FraudCaseApp:
             self._build_extended_analysis_sections(tab_container)
 
     def _build_extended_analysis_sections(self, parent):
+        if self._extended_analysis_group is not None:
+            return self._extended_analysis_group
+
         extended_group = ttk.LabelFrame(parent, text="Secciones extendidas del informe")
         extended_group.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
         extended_group.columnconfigure(0, weight=1)
@@ -2199,6 +2223,32 @@ class FraudCaseApp:
         self._build_signature_fields(header_tab)
         self._build_operations_section(tables_tab)
         self._build_anexos_section(tables_tab)
+
+        self._extended_analysis_group = extended_group
+        return extended_group
+
+    def _handle_extended_sections_toggle(self):
+        enabled = bool(self._extended_sections_toggle_var.get()) if self._extended_sections_toggle_var else False
+        self._extended_sections_enabled = enabled
+        if enabled:
+            if self._analysis_tab_container is None:
+                return
+            self._build_extended_analysis_sections(self._analysis_tab_container)
+            self._sync_extended_sections_to_ui()
+        else:
+            self._destroy_extended_analysis_sections()
+        self._notify_dataset_changed()
+
+    def _destroy_extended_analysis_sections(self):
+        if self._extended_analysis_group is None:
+            return
+        try:
+            self._extended_analysis_group.destroy()
+        finally:
+            self._extended_analysis_group = None
+            for attr in ("operations_tree", "anexos_tree"):
+                if hasattr(self, attr):
+                    setattr(self, attr, None)
 
     def _build_header_fields(self, parent):
         header_group = ttk.LabelFrame(parent, text="Encabezado extendido")
@@ -2664,18 +2714,19 @@ class FraudCaseApp:
     def _clear_operation_form(self):
         for var in self._operation_vars.values():
             var.set("")
-        if hasattr(self, "operations_tree"):
+        if getattr(self, "operations_tree", None) and self.operations_tree.winfo_exists():
             self.operations_tree.selection_remove(self.operations_tree.selection())
 
     def _refresh_operations_tree(self):
-        if not hasattr(self, "operations_tree"):
+        tree = getattr(self, "operations_tree", None)
+        if not tree or not tree.winfo_exists():
             return
-        for item in self.operations_tree.get_children():
-            self.operations_tree.delete(item)
+        for item in tree.get_children():
+            tree.delete(item)
         for op in getattr(self, "_operaciones_data", []):
-            values = [op.get(col, "") for col in self.operations_tree["columns"]]
-            self._insert_themed_row(self.operations_tree, values)
-        self._apply_treeview_theme(self.operations_tree)
+            values = [op.get(col, "") for col in tree["columns"]]
+            self._insert_themed_row(tree, values)
+        self._apply_treeview_theme(tree)
 
     def _load_selected_operation(self):
         selection = self.operations_tree.selection()
@@ -2721,19 +2772,18 @@ class FraudCaseApp:
     def _clear_anexo_form(self):
         for var in self._anexo_vars.values():
             var.set("")
-        if hasattr(self, "anexos_tree"):
+        if getattr(self, "anexos_tree", None) and self.anexos_tree.winfo_exists():
             self.anexos_tree.selection_remove(self.anexos_tree.selection())
 
     def _refresh_anexos_tree(self):
-        if not hasattr(self, "anexos_tree"):
+        tree = getattr(self, "anexos_tree", None)
+        if not tree or not tree.winfo_exists():
             return
-        for item in self.anexos_tree.get_children():
-            self.anexos_tree.delete(item)
+        for item in tree.get_children():
+            tree.delete(item)
         for row in getattr(self, "_anexos_data", []):
-            self._insert_themed_row(
-                self.anexos_tree, (row.get("titulo", ""), row.get("descripcion", ""))
-            )
-        self._apply_treeview_theme(self.anexos_tree)
+            self._insert_themed_row(tree, (row.get("titulo", ""), row.get("descripcion", "")))
+        self._apply_treeview_theme(tree)
 
     def _load_selected_anexo(self):
         selection = self.anexos_tree.selection()
@@ -2749,7 +2799,7 @@ class FraudCaseApp:
             self._suppress_post_edit_validation = False
 
     def _sync_extended_sections_to_ui(self) -> None:
-        if not self._extended_sections_enabled:
+        if not (self._extended_sections_enabled and self._extended_analysis_group):
             return
         self._suppress_post_edit_validation = True
         try:
