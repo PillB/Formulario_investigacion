@@ -7642,13 +7642,22 @@ class FraudCaseApp:
         # Guardar CSVs
         created_files = []
 
+        def _sanitize_csv_value(value):
+            sanitized = sanitize_rich_text("" if value is None else value, max_chars=None)
+            if sanitized.startswith(("=", "+", "-", "@")):
+                return f"'{sanitized}"
+            return sanitized
+
         def write_csv(file_name, rows, header):
             path = folder / f"{report_prefix}_{file_name}"
             with path.open('w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=header)
                 writer.writeheader()
                 for row in rows:
-                    writer.writerow(row)
+                    sanitized_row = {
+                        field: _sanitize_csv_value(row.get(field, "")) for field in header
+                    }
+                    writer.writerow(sanitized_row)
             created_files.append(path)
         # CASOS
         write_csv(

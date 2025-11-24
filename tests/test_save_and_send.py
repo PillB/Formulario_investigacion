@@ -473,3 +473,46 @@ def test_save_and_send_normalizes_blank_optional_amounts(tmp_path, messagebox_sp
     ]
     for field in optional_fields:
         assert exported_row[field] == '0.00'
+
+
+def test_save_and_send_sanitizes_csv_fields(tmp_path, messagebox_spy):
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+
+    app = _make_minimal_app()
+    app._export_base_path = export_dir
+
+    case_id = '2024-0112'
+    data = _build_case_data(case_id)
+    data['clientes'] = [
+        {
+            'id_cliente': '=CLI-001',
+            'id_caso': '',
+            'nombres': 'Alice\r\nExample',
+            'apellidos': 'Bell\x07Name',
+            'tipo_id': 'DNI',
+            'flag': '-flag',
+            'telefonos': '+123',
+            'correos': 'a@example.com',
+            'direcciones': 'Street\nLine2',
+            'accionado': '@attack',
+        }
+    ]
+    app._current_case_data = data
+
+    app.save_and_send()
+
+    report_prefix = Path(build_report_filename(TIPO_INFORME_LIST[0], case_id, 'csv')).stem
+    clientes_csv = export_dir / f'{report_prefix}_clientes.csv'
+    with clientes_csv.open('r', encoding='utf-8') as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert rows, 'Expected a client row in the export'
+    exported_row = rows[0]
+    assert exported_row['id_cliente'].startswith("'=")
+    assert exported_row['accionado'].startswith("'@")
+    assert exported_row['telefonos'].startswith("'+")
+    assert exported_row['flag'].startswith("'-")
+    assert exported_row['nombres'] == 'Alice\nExample'
+    assert '\r' not in exported_row['nombres']
+    assert all(ch.isprintable() for ch in exported_row['apellidos'])
