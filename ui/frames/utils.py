@@ -118,6 +118,12 @@ def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
     def _sync_children(_event=None):  # noqa: ANN001
         _bind_widget(target)
 
+    def _bind_global_events():
+        canvas.bind_all("<MouseWheel>", _on_mousewheel, add="+")
+        canvas.bind_all("<Button-4>", _on_mousewheel, add="+")
+        canvas.bind_all("<Button-5>", _on_mousewheel, add="+")
+
     _bind_widget(canvas)
     _bind_widget(target)
+    _bind_global_events()
     target.bind("<Configure>", _sync_children, add="+")
