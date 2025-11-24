@@ -17,6 +17,25 @@ _LOG_QUEUE: List[dict] = []
 LOG_FIELDNAMES = ["timestamp", "tipo", "subtipo", "widget_id", "coords", "mensaje"]
 
 
+def _scrub_control_characters(text: str) -> str:
+    return "".join(
+        ch for ch in text if ch == "\n" or unicodedata.category(ch) != "Cc"
+    )
+
+
+def _sanitize_log_value(
+    value, *, neutralize_formulas: bool = False, collapse_newlines: bool = True
+) -> str:
+    normalized = "" if value is None else str(value)
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
+    sanitized = _scrub_control_characters(normalized)
+    if collapse_newlines:
+        sanitized = re.sub(r"\n+", " ", sanitized)
+    if neutralize_formulas and sanitized.startswith(("=", "+", "-", "@")):
+        sanitized = "'" + sanitized
+    return sanitized
+
+
 def validate_required_text(value: str, label: str) -> Optional[str]:
     if not value.strip():
         return f"Debe ingresar {label}."
@@ -512,12 +531,16 @@ def _serialize_coords(coords) -> str:
 
 def normalize_log_row(row: dict) -> dict:
     return {
-        "timestamp": row.get("timestamp", ""),
-        "tipo": row.get("tipo", ""),
-        "subtipo": row.get("subtipo", ""),
-        "widget_id": row.get("widget_id", ""),
-        "coords": _serialize_coords(row.get("coords")),
-        "mensaje": row.get("mensaje", ""),
+        "timestamp": _sanitize_log_value(row.get("timestamp", "")),
+        "tipo": _sanitize_log_value(row.get("tipo", "")),
+        "subtipo": _sanitize_log_value(row.get("subtipo", "")),
+        "widget_id": _sanitize_log_value(
+            row.get("widget_id", ""), neutralize_formulas=True
+        ),
+        "coords": _sanitize_log_value(_serialize_coords(row.get("coords"))),
+        "mensaje": _sanitize_log_value(
+            row.get("mensaje", ""), neutralize_formulas=True
+        ),
     }
 
 
