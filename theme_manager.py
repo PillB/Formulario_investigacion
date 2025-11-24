@@ -46,6 +46,7 @@ class ThemeManager:
 
     PREFERENCE_FILE = Path(__file__).with_name(".theme_preference")
     CHECKBUTTON_STYLE = "Themed.TCheckbutton"
+    FRAME_STYLE = "Card.TFrame"
     ENTRY_STYLE = "Modern.TEntry"
     COMBOBOX_STYLE = "Modern.TCombobox"
     SPINBOX_STYLE = "Modern.TSpinbox"
@@ -104,6 +105,7 @@ class ThemeManager:
 
         cls._current = theme
         cls._configure_palette(ttk_style, theme)
+        cls._refresh_collapsible_styles()
         cls._refresh_content_widgets()
         cls._persist_theme(theme["name"])
         cls.refresh_all_widgets()
@@ -258,6 +260,27 @@ class ThemeManager:
                 continue
 
     @classmethod
+    def _register_window_menu(cls, widget: tk.Misc) -> None:
+        """Register a menu attached to ``widget`` so it refreshes with the theme."""
+
+        try:
+            menu_ref = widget.cget("menu")
+        except tk.TclError:
+            return
+        if not menu_ref:
+            return
+        menu_obj = None
+        if isinstance(menu_ref, tk.Menu):
+            menu_obj = menu_ref
+        elif isinstance(menu_ref, str):
+            try:
+                menu_obj = widget.nametowidget(menu_ref)
+            except tk.TclError:
+                menu_obj = None
+        if isinstance(menu_obj, tk.Menu):
+            cls.register_menu(menu_obj)
+
+    @classmethod
     def _refresh_content_widgets(cls) -> None:
         """Reapply tag colors for text and tree widgets after palette updates."""
 
@@ -275,6 +298,19 @@ class ThemeManager:
                     cls._reapply_text_tags(text_area or widget, theme)
                 elif isinstance(widget, tk.Text):
                     cls._reapply_text_tags(widget, theme)
+
+    @classmethod
+    def _refresh_collapsible_styles(cls) -> None:
+        """Ensure accordion/collapsible styles track the active palette."""
+
+        try:
+            from ui.layout.accordion import register_styles
+        except Exception:
+            return
+        try:
+            register_styles()
+        except Exception:
+            return
 
     @classmethod
     def _reapply_treeview_tags(cls, widget: ttk.Treeview, theme: Dict[str, str]) -> None:
@@ -420,6 +456,8 @@ class ThemeManager:
                 widget.configure(background=background, foreground=foreground, **focus_outline)
             elif isinstance(widget, (tk.Frame, tk.Toplevel, tk.Tk, tk.Canvas)):
                 widget.configure(background=background, **focus_outline)
+                if isinstance(widget, (tk.Toplevel, tk.Tk)):
+                    cls._register_window_menu(widget)
             elif isinstance(widget, (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton)):
                 widget.configure(
                     background=background,
@@ -446,7 +484,7 @@ class ThemeManager:
                     relief=tk.SOLID,
                 )
             elif isinstance(widget, ttk.Frame):
-                widget.configure(style="TFrame")
+                widget.configure(style=cls.FRAME_STYLE)
             elif isinstance(widget, ttk.Notebook):
                 widget.configure(style="TNotebook")
             elif isinstance(widget, ttk.Panedwindow):
@@ -573,6 +611,7 @@ class ThemeManager:
         )
 
         ttk_style.configure("TFrame", background=background)
+        ttk_style.configure(cls.FRAME_STYLE, background=background, padding=(12, 10))
         ttk_style.configure(
             "TPanedwindow",
             background=background,
@@ -809,6 +848,16 @@ class ThemeManager:
         glow = cls._shade_color(accent, 0.12)
 
         element_names = set(ttk_style.element_names())
+        if "Modern.Card.border" not in element_names:
+            ttk_style.element_create(
+                "Modern.Card.border",
+                "border",
+                border=12,
+                borderwidth=1,
+                relief="flat",
+                padding=10,
+                sticky="nswe",
+            )
         if "Modern.Entry.border" not in element_names:
             ttk_style.element_create(
                 "Modern.Entry.border",
@@ -830,6 +879,26 @@ class ThemeManager:
                 sticky="nswe",
             )
 
+        ttk_style.layout(
+            cls.FRAME_STYLE,
+            [
+                (
+                    "Modern.Card.border",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            (
+                                "Frame.padding",
+                                {
+                                    "sticky": "nswe",
+                                    "children": [("Frame.background", {"sticky": "nswe"})],
+                                },
+                            )
+                        ],
+                    },
+                )
+            ],
+        )
         ttk_style.layout(
             cls.ENTRY_STYLE,
             [
@@ -1047,6 +1116,20 @@ class ThemeManager:
                 ("!disabled", foreground),
             ],
             bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+        )
+
+        ttk_style.configure(
+            cls.FRAME_STYLE,
+            background=background,
+            bordercolor=shadow,
+            lightcolor=shadow,
+            darkcolor=shadow,
+            relief="flat",
+        )
+        ttk_style.map(
+            cls.FRAME_STYLE,
+            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+            background=[("active", background), ("!active", background)],
         )
 
     @staticmethod
