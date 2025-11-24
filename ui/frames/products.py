@@ -457,6 +457,10 @@ class ProductFrame:
         self._badge_styles = {}
         self.amount_badge = None
         self.date_badge = None
+        self._last_duplicate_result = "Pendiente"
+        self._duplicate_status_var = tk.StringVar()
+        self._duplicate_status_style = None
+        self.duplicate_status_label = None
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -705,9 +709,11 @@ class ProductFrame:
         ttk.Label(self.frame, text="").grid(row=17, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(pago_entry, "Pago realizado por deuda vinculada.")
 
+        self._build_duplicate_status_label(row=18)
+
         self.claims_frame = ttk.LabelFrame(self.frame, text="Reclamos asociados")
         ensure_grid_support(self.claims_frame)
-        self.claims_frame.grid(row=18, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.claims_frame.grid(row=19, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.claims_frame, "columnconfigure"):
             self.claims_frame.columnconfigure(1, weight=1)
         claim_add_btn = ttk.Button(self.claims_frame, text="Añadir reclamo", command=self.add_claim)
@@ -716,7 +722,7 @@ class ProductFrame:
 
         self.invol_frame = ttk.LabelFrame(self.frame, text="Involucramiento de colaboradores")
         ensure_grid_support(self.invol_frame)
-        self.invol_frame.grid(row=19, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.invol_frame.grid(row=20, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.invol_frame, "columnconfigure"):
             self.invol_frame.columnconfigure(1, weight=1)
         inv_add_btn = ttk.Button(self.invol_frame, text="Añadir involucrado", command=self.add_involvement)
@@ -1201,6 +1207,26 @@ class ProductFrame:
         )
         self._badge_styles = {"success": success_style, "warning": warning_style}
 
+    def _configure_duplicate_status_style(self):
+        if self._duplicate_status_style:
+            return self._duplicate_status_style
+        style = None
+        try:
+            style = ThemeManager.build_style(self.frame)
+        except Exception:
+            style = None
+        palette = ThemeManager.current()
+        style_name = "DuplicateStatus.TLabel"
+        if style and hasattr(style, "configure"):
+            style.configure(
+                style_name,
+                background=palette.get("background", "#f5f5f5"),
+                foreground=palette.get("foreground", "#1f1f1f"),
+                padding=(6, 4),
+            )
+        self._duplicate_status_style = style_name
+        return style_name
+
     def _create_badge_label(self, row: int):
         styles = self._badge_styles or {"warning": "TLabel"}
         badge = ttk.Label(
@@ -1219,6 +1245,77 @@ class ProductFrame:
         style_name = styles["success"] if is_ok else styles["warning"]
         text = "Cuadra" if is_ok else (message or "Revisa la información")
         badge.configure(text=text, style=style_name)
+
+    def _build_duplicate_status_label(self, row: int):
+        style_name = self._configure_duplicate_status_style()
+        self._duplicate_status_var.set(self._format_duplicate_status_text())
+        label = ttk.Label(
+            self.frame,
+            textvariable=self._duplicate_status_var,
+            style=style_name,
+            justify="left",
+            anchor="w",
+            wraplength=520,
+        )
+        label.grid(row=row, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        tooltip_text = (
+            "Si el sistema marca un duplicado, ajusta cualquiera de los campos de la "
+            "clave técnica (caso, producto, cliente, colaborador, fecha de ocurrencia "
+            "o reclamo) hasta que la combinación sea única y vuelve a editar un campo "
+            "para revalidar."
+        )
+        self.tooltip_register(label, tooltip_text)
+        self.duplicate_status_label = label
+
+    def _compose_duplicate_key_tuple(self) -> str:
+        case_var = getattr(self.owner, "id_caso_var", None)
+        case_id = (case_var.get().strip() if case_var else "")
+        product_id = self.id_var.get().strip()
+        client_id = self.client_var.get().strip()
+        collaborator_id = self._get_primary_collaborator()
+        occ_date = self.fecha_oc_var.get().strip()
+        desc_date = self.fecha_desc_var.get().strip()
+        date_block = f"{occ_date or '—'} / {desc_date or '—'}"
+        claim_id = self._get_primary_claim_id()
+        tuple_parts = (
+            case_id or "—",
+            product_id or "—",
+            client_id or "—",
+            collaborator_id or "—",
+            date_block,
+            claim_id or "—",
+        )
+        return f"({', '.join(tuple_parts)})"
+
+    def _get_primary_collaborator(self) -> str:
+        for inv in self.involvements:
+            collaborator_id = (inv.team_var.get() if hasattr(inv, "team_var") else "").strip()
+            if collaborator_id:
+                return collaborator_id
+        team_options = self.get_team_options() or []
+        for team_id in team_options:
+            if team_id:
+                return str(team_id).strip()
+        return ""
+
+    def _get_primary_claim_id(self) -> str:
+        for claim in self.claims:
+            data = claim.get_data()
+            claim_id = (data.get("id_reclamo") or "").strip()
+            if claim_id:
+                return claim_id
+        return ""
+
+    def _format_duplicate_status_text(self, result_text: str | None = None) -> str:
+        if result_text:
+            self._last_duplicate_result = result_text
+        status = self._last_duplicate_result or "Pendiente"
+        key_tuple = self._compose_duplicate_key_tuple()
+        return f"Clave técnica: {key_tuple}\nÚltimo chequeo: {status}"
+
+    def _update_duplicate_status_label(self, result_text: str | None = None):
+        new_text = self._format_duplicate_status_text(result_text)
+        self._duplicate_status_var.set(new_text)
 
     def _update_date_badge(self, message: str | None, is_valid: bool):
         self._set_badge_state(self.date_badge, is_valid, message)
@@ -1588,8 +1685,11 @@ class ProductFrame:
             self.id_change_callback(self, previous, new_id)
 
     def trigger_duplicate_check(self):
+        result = None
         if callable(self.duplicate_key_checker):
-            self.duplicate_key_checker(armed=True)
+            result = self.duplicate_key_checker(armed=True)
+        self._update_duplicate_status_label(result)
+        return result
 
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
