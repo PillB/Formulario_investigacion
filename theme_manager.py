@@ -431,6 +431,7 @@ class ThemeManager:
                     foreground=foreground,
                     activebackground=theme["select_background"],
                     activeforeground=theme["select_foreground"],
+                    selectcolor=theme["select_background"],
                     borderwidth=1,
                     relief=tk.SOLID,
                 )
@@ -484,16 +485,6 @@ class ThemeManager:
                         widget.heading(column, background=heading_background, foreground=foreground)
                     except tk.TclError:
                         continue
-            elif isinstance(widget, tk.Menu):
-                widget.configure(
-                    background=background,
-                    foreground=foreground,
-                    activebackground=theme["select_background"],
-                    activeforeground=theme["select_foreground"],
-                    selectcolor=theme["select_background"],
-                    borderwidth=1,
-                    relief="solid",
-                )
         except tk.TclError:
             return
 
