@@ -8087,7 +8087,14 @@ class FraudCaseApp:
             # For each involvement; require collaborator IDs to validate clave técnica
             claim_rows = prod_data['reclamos'] or [{'id_reclamo': ''}]
             product_occurrence_date = prod_data['producto'].get('fecha_ocurrencia')
-            if not prod_data['asignaciones']:
+            assignments = prod_data['asignaciones'] or []
+            enforce_assignations = (
+                hasattr(self, "_duplicate_checks_armed")
+                and getattr(self, "_duplicate_checks_armed", False)
+                and not getattr(self, "_suppress_messagebox", False)
+            )
+            product_has_involvements = hasattr(p, "involvements")
+            if enforce_assignations and product_has_involvements and not assignments:
                 errors.append(
                     (
                         f"Producto {producto_label}: agrega al menos un colaborador en"
@@ -8095,7 +8102,7 @@ class FraudCaseApp:
                     )
                 )
                 continue
-            for inv_idx, inv in enumerate(prod_data['asignaciones'], start=1):
+            for inv_idx, inv in enumerate(assignments, start=1):
                 collaborator_id = (inv.get('id_colaborador') or '').strip()
                 collaborator_norm = self._normalize_identifier(collaborator_id)
                 amount_value = (inv.get('monto_asignado') or '').strip()

@@ -226,6 +226,7 @@ class ClaimRow:
             self.frame, textvariable=self.id_var, width=15, style=ENTRY_STYLE
         )
         id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.id_entry = id_entry
         ttk.Label(self.frame, text="").grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
         self._bind_identifier_triggers(id_entry)
@@ -237,6 +238,7 @@ class ClaimRow:
             self.frame, textvariable=self.name_var, width=20, style=ENTRY_STYLE
         )
         name_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.name_entry = name_entry
         ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
 
@@ -247,6 +249,7 @@ class ClaimRow:
             self.frame, textvariable=self.code_var, width=12, style=ENTRY_STYLE
         )
         code_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.code_entry = code_entry
         ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
 
@@ -308,6 +311,9 @@ class ClaimRow:
         self.code_var.set((data.get("codigo_analitica") or "").strip())
         self.on_id_change(preserve_existing=True, silent=True)
         self.set_claim_requirement(getattr(self.product_frame, "claim_fields_required", self._claims_required))
+        refresher = getattr(self.product_frame, "refresh_claim_guidance", None)
+        if callable(refresher):
+            refresher()
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         rid = self.id_var.get().strip()
@@ -346,6 +352,9 @@ class ClaimRow:
         self.product_frame.persist_lookup_snapshot()
         if from_focus:
             self.product_frame.trigger_duplicate_check()
+        refresher = getattr(self.product_frame, "refresh_claim_guidance", None)
+        if callable(refresher):
+            refresher()
 
     def is_empty(self):
         snapshot = self.get_data()
@@ -398,6 +407,16 @@ class ClaimRow:
             if validator:
                 validator.show_custom_error(checker(value))
 
+    def first_missing_widget(self):
+        data = self.get_data()
+        if not data.get("id_reclamo"):
+            return self.id_entry
+        if not data.get("nombre_analitica"):
+            return self.name_entry
+        if not data.get("codigo_analitica"):
+            return self.code_entry
+        return None
+
 
 PRODUCT_MONEY_SPECS = (
     ("monto_investigado", "monto_inv_var", "Monto investigado", False, "inv"),
@@ -449,6 +468,7 @@ class ProductFrame:
         self.claims = []
         self._last_missing_lookup_id = None
         self._claim_requirement_active = False
+        self._claim_nudge_shown = False
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
@@ -483,6 +503,9 @@ class ProductFrame:
         self.monto_rec_var = tk.StringVar()
         self.monto_pago_var = tk.StringVar()
         self.tipo_prod_var = tk.StringVar()
+        self.claim_hint_var = tk.StringVar(value="")
+        self.claim_hint_frame = None
+        self.claim_template_btn = None
 
         self.section = self._create_section(parent)
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
@@ -669,7 +692,13 @@ class ProductFrame:
         perdida_entry = ttk.Entry(self.frame, textvariable=self.monto_perdida_var, width=12)
         perdida_entry.grid(row=13, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=13, column=2, padx=COL_PADX, pady=ROW_PADY)
-        self.tooltip_register(perdida_entry, "Monto directo perdido por fraude.")
+        self.tooltip_register(
+            perdida_entry,
+            (
+                "Relaciónalo con un reclamo para visibilizar el impacto y acelerar el flujo de aprobación. "
+                "Si falta un dato, usa “Ir al primer faltante” para saltar directo a la fila incompleta."
+            ),
+        )
 
         ttk.Label(self.frame, text="Monto falla procesos:").grid(
             row=14, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -677,7 +706,13 @@ class ProductFrame:
         falla_entry = ttk.Entry(self.frame, textvariable=self.monto_falla_var, width=12)
         falla_entry.grid(row=14, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=14, column=2, padx=COL_PADX, pady=ROW_PADY)
-        self.tooltip_register(falla_entry, "Monto asociado a fallas de proceso.")
+        self.tooltip_register(
+            falla_entry,
+            (
+                "Al vincularlo con un reclamo mantenemos trazabilidad de recuperación y hallazgos. "
+                "Pulsa “Ir al primer faltante” si necesitas llegar al reclamo pendiente."
+            ),
+        )
 
         ttk.Label(self.frame, text="Monto contingencia:").grid(
             row=15, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -685,7 +720,13 @@ class ProductFrame:
         cont_entry = ttk.Entry(self.frame, textvariable=self.monto_cont_var, width=12)
         cont_entry.grid(row=15, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         ttk.Label(self.frame, text="").grid(row=15, column=2, padx=COL_PADX, pady=ROW_PADY)
-        self.tooltip_register(cont_entry, "Monto reservado por contingencias.")
+        self.tooltip_register(
+            cont_entry,
+            (
+                "Completar el reclamo asociado permite priorizar recuperos y evidencias. "
+                "Apóyate en “Ir al primer faltante” para navegar al reclamo incompleto."
+            ),
+        )
 
         self._register_claim_requirement_triggers(
             cont_entry,
@@ -709,20 +750,28 @@ class ProductFrame:
         ttk.Label(self.frame, text="").grid(row=17, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(pago_entry, "Pago realizado por deuda vinculada.")
 
-        self._build_duplicate_status_label(row=18)
+        self._build_claim_guidance_banner(row=18)
+
+        self._build_duplicate_status_label(row=19)
 
         self.claims_frame = ttk.LabelFrame(self.frame, text="Reclamos asociados")
         ensure_grid_support(self.claims_frame)
-        self.claims_frame.grid(row=19, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.claims_frame.grid(row=20, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.claims_frame, "columnconfigure"):
             self.claims_frame.columnconfigure(1, weight=1)
         claim_add_btn = ttk.Button(self.claims_frame, text="Añadir reclamo", command=self.add_claim)
         claim_add_btn.grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
-        self.tooltip_register(claim_add_btn, "Agrega un reclamo adicional al producto.")
+        self.tooltip_register(
+            claim_add_btn,
+            (
+                "Añade reclamos para ligar los montos a evidencias y reducir reprocesos. "
+                "Si ya existe un faltante puedes usar “Ir al primer faltante” para llegar directo."
+            ),
+        )
 
         self.invol_frame = ttk.LabelFrame(self.frame, text="Involucramiento de colaboradores")
         ensure_grid_support(self.invol_frame)
-        self.invol_frame.grid(row=20, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.invol_frame.grid(row=21, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.invol_frame, "columnconfigure"):
             self.invol_frame.columnconfigure(1, weight=1)
         inv_add_btn = ttk.Button(self.invol_frame, text="Añadir involucrado", command=self.add_involvement)
@@ -1125,6 +1174,7 @@ class ProductFrame:
         self.claims.append(row)
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
+        self.refresh_claim_guidance()
         return row
 
     def remove_claim(self, row):
@@ -1134,6 +1184,7 @@ class ProductFrame:
             self.add_claim()
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
+        self.refresh_claim_guidance()
 
     def clear_claims(self):
         for claim in self.claims:
@@ -1350,6 +1401,41 @@ class ProductFrame:
                 trace_add("write", lambda *_: self._handle_claim_requirement_change())
         self._handle_claim_requirement_change(initial=True)
 
+    def _build_claim_guidance_banner(self, row: int):
+        frame = ttk.Frame(self.frame)
+        ensure_grid_support(frame)
+        frame.grid(row=row, column=0, columnspan=3, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY), sticky="we")
+        hide_fn = getattr(frame, "grid_remove", None) or getattr(frame, "grid_forget", None)
+        if callable(hide_fn):
+            hide_fn()
+        label = ttk.Label(
+            frame,
+            textvariable=self.claim_hint_var,
+            wraplength=520,
+            justify="left",
+            anchor="w",
+        )
+        label.grid(row=0, column=0, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY // 4), sticky="w")
+        actions = ttk.Frame(frame)
+        ensure_grid_support(actions)
+        actions.grid(row=0, column=1, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY // 4), sticky="e")
+        ttk.Button(
+            actions,
+            text="Ir al primer faltante",
+            command=self._focus_first_incomplete_claim,
+            style=BUTTON_STYLE,
+        ).grid(row=0, column=0, padx=(0, COL_PADX // 2), sticky="e")
+        template_btn = ttk.Button(
+            actions,
+            text="Autocompletar analítica",
+            command=self._apply_claim_template,
+            style=BUTTON_STYLE,
+        )
+        template_btn.grid(row=0, column=1, sticky="e")
+        self.claim_template_btn = template_btn
+        self.claim_hint_frame = frame
+        self._refresh_claim_template_button_state()
+
     def _handle_claim_requirement_change(self, *_args, initial=False, source_is_user=False):
         required = self._claim_fields_required()
         required_changed = required != self._claim_requirement_active
@@ -1358,8 +1444,168 @@ class ProductFrame:
             for claim in self.claims:
                 claim.set_claim_requirement(required)
             self.schedule_summary_refresh({'reclamos'})
-        if required and source_is_user and (required_changed or not self._has_complete_claim()):
-            self._enforce_claim_completion_if_required()
+            if not required:
+                self._claim_nudge_shown = False
+        self.refresh_claim_guidance()
+        if initial:
+            return
+        has_complete = self._has_complete_claim()
+        if required and source_is_user and (required_changed or not has_complete):
+            if self.claims:
+                self._apply_inline_claim_feedback()
+                log_event(
+                    "nudges",
+                    f"Producto {self.idx+1}: aviso inline de reclamo requerido",
+                    self.logs,
+                )
+            if (self._claim_nudge_shown or required_changed) and not has_complete:
+                self._show_claim_requirement_error()
+            self._claim_nudge_shown = True
+        elif not required:
+            self._claim_nudge_shown = False
+
+    def _refresh_claim_template_button_state(self):
+        if not self.claim_template_btn:
+            return
+        state_fn = getattr(self.claim_template_btn, "state", None)
+        if not callable(state_fn):
+            return
+        if self.claim_lookup:
+            state_fn(["!disabled"])
+        else:
+            state_fn(["disabled"])
+
+    def refresh_claim_guidance(self):
+        self._refresh_claim_template_button_state()
+        self._update_claim_hint_banner()
+
+    def _update_claim_hint_banner(self):
+        if not self.claim_hint_frame:
+            return
+        required = self._claim_fields_required()
+        claim, missing = self._first_incomplete_claim()
+        has_complete = self._has_complete_claim()
+        if required and not has_complete and claim:
+            missing_text = ", ".join(missing) if missing else "datos del reclamo"
+            self.claim_hint_var.set(
+                (
+                    f"Falta registrar {missing_text} para enlazar los montos con su reclamo y "
+                    "destrabar el proceso. Puedes usar la plantilla de analítica cuando haya catálogo disponible."
+                )
+            )
+            self.claim_hint_frame.grid()
+        else:
+            hide_fn = getattr(self.claim_hint_frame, "grid_remove", None) or getattr(
+                self.claim_hint_frame, "grid_forget", None
+            )
+            if callable(hide_fn):
+                hide_fn()
+
+    def _first_incomplete_claim(self):
+        labels = {
+            "id_reclamo": "ID de reclamo",
+            "nombre_analitica": "nombre de analítica",
+            "codigo_analitica": "código de analítica",
+        }
+        for claim in self.claims:
+            data = claim.get_data()
+            missing = [label for key, label in labels.items() if not data.get(key)]
+            if missing:
+                return claim, missing
+        return None, []
+
+    def _focus_first_incomplete_claim(self):
+        claim, missing = self._first_incomplete_claim()
+        target_widget = claim.first_missing_widget() if claim else None
+        if not claim or target_widget is None:
+            return
+        self._scroll_to_widget(target_widget)
+        try:
+            target_widget.focus_set()
+        except tk.TclError:
+            pass
+        log_event(
+            "nudges",
+            f"Producto {self.idx+1}: navegación al reclamo pendiente ({', '.join(missing)})",
+            self.logs,
+        )
+        self.refresh_claim_guidance()
+
+    def _scroll_to_widget(self, widget):
+        if widget is None:
+            return False
+        try:
+            widget.update_idletasks()
+        except tk.TclError:
+            return False
+        parent = getattr(widget, "master", None)
+        canvas = None
+        while parent is not None:
+            if isinstance(parent, tk.Canvas):
+                canvas = parent
+                break
+            parent = getattr(parent, "master", None)
+        if canvas is None:
+            return False
+        try:
+            inner_frames = [child for child in canvas.winfo_children() if isinstance(child, (tk.Frame, ttk.Frame))]
+            inner = inner_frames[0] if inner_frames else None
+            if inner is None or inner.winfo_height() == 0:
+                return False
+            widget_y = widget.winfo_rooty()
+            inner_y = inner.winfo_rooty()
+            offset = max(0, widget_y - inner_y - 20)
+            fraction = offset / max(1, inner.winfo_height())
+            canvas.yview_moveto(min(1.0, fraction))
+            return True
+        except tk.TclError:
+            return False
+
+    def _apply_claim_template(self):
+        claim, missing = self._first_incomplete_claim()
+        if not claim:
+            return
+        lookup = self.claim_lookup or {}
+        claim_id = claim.id_var.get().strip()
+        template_data = lookup.get(claim_id) if claim_id else None
+        if template_data is None and lookup:
+            template_id, template_data = next(iter(lookup.items()))
+            if template_data is None:
+                template_data = {}
+            template_data = dict(template_data)
+            template_data.setdefault("id_reclamo", template_id)
+        if not template_data:
+            log_event("nudges", f"Producto {self.idx+1}: plantilla de reclamo no disponible", self.logs)
+            return
+
+        def _set_if_present(var, key):
+            value = template_data.get(key)
+            if value in (None, ""):
+                return
+            text_value = str(value).strip()
+            if should_autofill_field(var.get(), preserve_existing=True):
+                var.set(text_value)
+
+        _set_if_present(claim.id_var, "id_reclamo")
+        _set_if_present(claim.name_var, "nombre_analitica")
+        _set_if_present(claim.code_var, "codigo_analitica")
+        self.refresh_claim_guidance()
+        self._apply_inline_claim_feedback()
+        log_event(
+            "nudges",
+            f"Producto {self.idx+1}: aplicó plantilla de reclamo ({', '.join(missing)})",
+            self.logs,
+        )
+
+    def _show_claim_requirement_error(self):
+        messagebox.showerror(
+            "Reclamo requerido",
+            (
+                "Debe ingresar al menos un reclamo completo en "
+                f"{self._get_product_label()} porque hay montos de pérdida, falla o contingencia."
+            ),
+        )
+        log_event("nudges", f"Producto {self.idx+1}: modal de reclamo requerido", self.logs)
 
     def _has_complete_claim(self) -> bool:
         return any(all(data.values()) for data in (claim.get_data() for claim in self.claims))
@@ -1372,19 +1618,6 @@ class ProductFrame:
                 claim.show_completion_feedback()
         finally:
             FieldValidator.modal_notifications_enabled = previous_modal_setting
-
-    def _enforce_claim_completion_if_required(self):
-        if self._has_complete_claim():
-            return
-        if self.claims:
-            self._apply_inline_claim_feedback()
-        messagebox.showerror(
-            "Reclamo requerido",
-            (
-                "Debe ingresar al menos un reclamo completo en "
-                f"{self._get_product_label()} porque hay montos de pérdida, falla o contingencia."
-            ),
-        )
 
     def _claim_fields_required(self) -> bool:
         return any(
@@ -1602,6 +1835,7 @@ class ProductFrame:
         self.claim_lookup = lookup or {}
         for claim in self.claims:
             claim.on_id_change(preserve_existing=True, silent=True)
+        self.refresh_claim_guidance()
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         pid = self.id_var.get().strip()
