@@ -1,0 +1,174 @@
+{
+  "caso": {
+    "id_caso": "dsvxcv",
+    "tipo_informe": "Credicorp",
+    "categoria1": "Riesgo de Fraude",
+    "categoria2": "Fraude Interno",
+    "modalidad": "",
+    "canal": "Agentes BCP",
+    "proceso": "Activación de Tarjeta de crédito",
+    "fecha_de_ocurrencia": "",
+    "matricula_investigador": "T12345",
+    "investigador": {
+      "matricula": "T12345",
+      "nombre": "María Acuña",
+      "cargo": "Investigador Principal"
+    }
+  },
+  "clientes": [
+    {
+      "id_cliente": "C00000001",
+      "id_caso": "",
+      "nombres": "Comercial",
+      "apellidos": "SAC",
+      "tipo_id": "RUC",
+      "flag": "Afectado",
+      "telefonos": "999999999",
+      "correos": "cliente2@ejemplo.pe",
+      "direcciones": "Calle Falsa 123, Lima",
+      "accionado": "Centro de Contacto"
+    },
+    {
+      "id_cliente": "87654321",
+      "id_caso": "",
+      "nombres": "Carlos",
+      "apellidos": "Ramos",
+      "tipo_id": "DNI",
+      "flag": "Involucrado",
+      "telefonos": "912345680",
+      "correos": "cliente3@ejemplo.pe",
+      "direcciones": "Av Javier Prado 200, San Borja",
+      "accionado": "Tribu Canal Impactado"
+    },
+    {
+      "id_cliente": "12345678",
+      "id_caso": "",
+      "nombres": "María",
+      "apellidos": "Lopez",
+      "tipo_id": "DNI",
+      "flag": "Involucrado",
+      "telefonos": "987654321;912345678",
+      "correos": "cliente1@example.com",
+      "direcciones": "Av La Paz 123, Miraflores, Lima",
+      "accionado": "Tribu Producto Afectado"
+    },
+    {
+      "id_cliente": "",
+      "id_caso": "",
+      "nombres": "",
+      "apellidos": "",
+      "tipo_id": "",
+      "flag": "",
+      "telefonos": "",
+      "correos": "",
+      "direcciones": "",
+      "accionado": ""
+    }
+  ],
+  "colaboradores": [
+    {
+      "id_colaborador": "",
+      "id_caso": "",
+      "flag": "",
+      "nombres": "",
+      "apellidos": "",
+      "division": "",
+      "area": "",
+      "servicio": "",
+      "puesto": "",
+      "fecha_carta_inmediatez": "",
+      "fecha_carta_renuncia": "",
+      "nombre_agencia": "",
+      "codigo_agencia": "",
+      "tipo_falta": "",
+      "tipo_sancion": ""
+    }
+  ],
+  "productos": [
+    {
+      "id_producto": "",
+      "id_caso": "",
+      "id_cliente": "",
+      "categoria1": "Riesgo de Fraude",
+      "categoria2": "Fraude Interno",
+      "modalidad": "Apropiación de fondos",
+      "canal": "",
+      "proceso": "",
+      "fecha_ocurrencia": "",
+      "fecha_descubrimiento": "",
+      "monto_investigado": "",
+      "tipo_moneda": "",
+      "monto_perdida_fraude": "",
+      "monto_falla_procesos": "",
+      "monto_contingencia": "",
+      "monto_recuperado": "",
+      "monto_pago_deuda": "",
+      "tipo_producto": ""
+    }
+  ],
+  "reclamos": [],
+  "involucramientos": [],
+  "riesgos": [
+    {
+      "id_riesgo": "RSK-000001",
+      "lider": "",
+      "descripcion": "",
+      "criticidad": "",
+      "exposicion_residual": "",
+      "planes_accion": ""
+    }
+  ],
+  "normas": [],
+  "analisis": {
+    "antecedentes": {
+      "text": "",
+      "tags": [],
+      "images": []
+    },
+    "modus_operandi": {
+      "text": "",
+      "tags": [],
+      "images": []
+    },
+    "hallazgos": {
+      "text": "",
+      "tags": [],
+      "images": []
+    },
+    "descargos": {
+      "text": "",
+      "tags": [],
+      "images": []
+    },
+    "conclusiones": {
+      "text": "",
+      "tags": [],
+      "images": []
+    },
+    "recomendaciones": {
+      "text": "",
+      "tags": [],
+      "images": []
+    }
+  },
+  "encabezado": {
+    "dirigido_a": "",
+    "referencia": "",
+    "area_reporte": "",
+    "fecha_reporte": "",
+    "tipologia_evento": "",
+    "centro_costos": "",
+    "procesos_impactados": "",
+    "numero_reclamos": "",
+    "analitica_contable": "",
+    "producto": ""
+  },
+  "operaciones": [],
+  "anexos": [],
+  "firmas": [],
+  "recomendaciones_categorias": {
+    "laboral": [],
+    "operativo": [],
+    "legal": []
+  }
+}

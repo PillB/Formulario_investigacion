@@ -435,11 +435,15 @@ class FraudCaseApp:
             return None
         bucket = self.HEATMAP_BUCKET_SIZE
         # FIX: Tkinter sometimes passes coords as strings → convert safely
+        # Totalmente defensivo contra None, str, o valores inválidos
+        if not coords or coords[0] is None or coords[1] is None:
+            return None
         try:
             x = float(coords[0])
             y = float(coords[1])
-        except (ValueError, TypeError):
-            return None  # Invalid coords
+        except (TypeError, ValueError):
+            return None
+
         x_bucket = int(x // bucket * bucket)
         y_bucket = int(y // bucket * bucket)
         return (x_bucket, y_bucket)
@@ -451,6 +455,8 @@ class FraudCaseApp:
         if widget_id:
             self._widget_event_counts[widget_id] += 1
         zone = self._bucket_heatmap_coords(coords)
+        if zone is None:
+            return  # Ignorar coordenadas inválidas (muy común en macOS)
         if zone:
             self._heatmap_counts[zone] += 1
 
@@ -479,26 +485,43 @@ class FraudCaseApp:
 
     def _handle_global_navigation_event(self, event: tk.Event, subtype: str) -> None:
         try:
-            if self.root.focus_displayof() is None:
+            # FIX 2: focus_displayof() falla en macOS con widgets temporales (popdown, tooltips, etc.)
+            try:
+                focused = self.root.focus_get()
+                if focused is None:
+                    return
+            except tk.TclError:
                 return
         except tk.TclError:
             return
-        widget = getattr(event, "widget", None)
+        # FIX 3: event.widget a veces es str (!) en ciertos eventos sintetizados
+        widget = event.widget if hasattr(event, "widget") else None
+        if not hasattr(widget, "winfo_class"):
+            # Puede ser None, str, o widget destruido → ignorar silenciosamente
+            return
         if widget is None:
             return
         coords = (
             getattr(event, "x_root", None),
             getattr(event, "y_root", None),
         )
+        # FIX 1: x_root/y_root pueden ser strings en macOS (sí, es un bug real de Tk)
+        try:
+            x_coord = float(coords[0]) if coords[0] is not None else None
+            y_coord = float(coords[1]) if coords[1] is not None else None
+        except (TypeError, ValueError):
+            x_coord = y_coord = None
+
+        safe_coords = (x_coord, y_coord)
         log_event(
             "navegacion",
             f"Evento {subtype} en {widget.winfo_class()}",
             self.logs,
             widget_id=widget.winfo_name(),
-            coords=coords,
+            coords=safe_coords,
             event_subtipo=subtype,
         )
-        self._accumulate_navigation_metrics(widget.winfo_name(), coords)
+        self._accumulate_navigation_metrics(widget.winfo_name(), safe_coords)
 
     def _register_navigation_bindings(self) -> None:
         if getattr(self, "_navigation_bindings_registered", False):
