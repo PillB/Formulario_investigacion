@@ -1638,7 +1638,7 @@ class FraudCaseApp:
             text="Crear producto heredando del caso",
             command=self.add_product_inheriting_case,
         )
-        inherit_btn.pack(side="left", padx=5)
+        inherit_btn.grid(row=0, column=1, sticky="w", padx=5)
         self.register_tooltip(
             inherit_btn, "Crea un producto precargado con los datos del caso actual."
         )
