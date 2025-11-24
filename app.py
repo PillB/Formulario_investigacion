@@ -166,6 +166,8 @@ class FraudCaseApp:
 
     def __init__(self, root):
         self.root = root
+        # FIX: Initialize autosave timestamp tracker
++       self._last_temp_saved_at = None
         self.root.title("Gestión de Casos de Fraude (App de escritorio)")
         self._suppress_messagebox = False
         # Lista para logs de navegación y validación
