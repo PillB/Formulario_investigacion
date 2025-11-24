@@ -2086,15 +2086,13 @@ class FraudCaseApp:
         )
         self.norm_frames.append(norm)
         for i, n in enumerate(self.norm_frames):
-            n.idx = i
-            n.frame.config(text=f"Norma {i+1}")
+            n.update_title(i)
         self._schedule_summary_refresh('normas')
 
     def remove_norm(self, norm_frame):
         self.norm_frames.remove(norm_frame)
         for i, n in enumerate(self.norm_frames):
-            n.idx = i
-            n.frame.config(text=f"Norma {i+1}")
+            n.update_title(i)
         self._schedule_summary_refresh('normas')
 
     def build_analysis_tab(self, parent):
