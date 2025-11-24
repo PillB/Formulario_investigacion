@@ -5564,27 +5564,46 @@ class FraudCaseApp:
 
         seen_keys = {}
         duplicate_messages: list[str] = []
+        missing_association_messages: list[str] = []
         for product in self.product_frames:
             pid_norm = self._normalize_identifier(product.id_var.get())
             client_norm = self._normalize_identifier(product.client_var.get())
             occ_date = (product.fecha_oc_var.get() or '').strip()
-            if not (pid_norm and client_norm and occ_date):
+            if not (pid_norm and occ_date):
                 continue
 
             product_label = product._get_product_label()
             claim_rows = [claim.get_data() for claim in product.claims if any(claim.get_data().values())]
             if not claim_rows:
                 claim_rows = [{'id_reclamo': ''}]
+
             assignment_rows = [inv.get_data() for inv in product.involvements if any(inv.get_data().values())]
-            if not assignment_rows:
-                assignment_rows = [{'id_colaborador': ''}]
+            collaborator_ids = [
+                self._normalize_identifier(assignment.get('id_colaborador'))
+                for assignment in assignment_rows
+                if (assignment.get('id_colaborador') or '').strip()
+            ]
+
+            if not collaborator_ids:
+                collaborator_ids = [
+                    self._normalize_identifier(team.id_var.get())
+                    for team in self.team_frames
+                    if team.id_var.get().strip()
+                ]
+
+            if not collaborator_ids and not client_norm:
+                missing_association_messages.append(
+                    f"{product_label}: debe registrar un cliente o al menos un ID de colaborador en Asignaciones o en Team Members."
+                )
+                continue
+
+            if not collaborator_ids:
+                collaborator_ids = ['']
 
             for claim in claim_rows:
                 claim_id_raw = (claim.get('id_reclamo') or '').strip()
                 claim_norm = self._normalize_identifier(claim_id_raw)
-                for assignment in assignment_rows:
-                    collaborator_raw = (assignment.get('id_colaborador') or '').strip()
-                    collaborator_norm = self._normalize_identifier(collaborator_raw)
+                for collaborator_norm in collaborator_ids:
                     key = (
                         normalized_case_id,
                         pid_norm,
@@ -5596,8 +5615,7 @@ class FraudCaseApp:
                     if key in seen_keys:
                         base_message = f"Registro duplicado de clave técnica (producto {product_label}"
                         if collaborator_norm:
-                            collaborator_label = collaborator_raw or collaborator_norm
-                            base_message += f", colaborador {collaborator_label}"
+                            base_message += f", colaborador {collaborator_norm}"
                         if claim_id_raw:
                             base_message += f", reclamo {claim_id_raw}"
                         base_message += ")"
@@ -5606,11 +5624,17 @@ class FraudCaseApp:
                     else:
                         seen_keys[key] = True
 
+        error_messages = []
         if duplicate_messages:
-            message = "\n".join(duplicate_messages)
+            error_messages.append("\n".join(duplicate_messages))
+        if missing_association_messages:
+            error_messages.append("\n".join(missing_association_messages))
+
+        if error_messages:
+            message = "\n\n".join(error_messages)
             log_event("validacion", message, self.logs)
             try:
-                messagebox.showerror("Registro duplicado", message)
+                messagebox.showerror("Validación de clave técnica", message)
             except tk.TclError:
                 return
 
