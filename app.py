@@ -2919,22 +2919,25 @@ class FraudCaseApp:
             return None
         return None
 
-    def _validate_image_file(self, image_path: Path) -> Optional[tuple[int, int]]:
+    def _validate_image_file(self, image_path: Path) -> tuple[Optional[tuple[int, int]], Optional[str]]:
         ext = image_path.suffix.lower()
         if not self._validate_image_extension(ext):
-            return None
+            return None, f"extensión no soportada ({ext})"
         try:
             file_size = image_path.stat().st_size
         except OSError as exc:  # pragma: no cover - depende del sistema de archivos
             messagebox.showerror("Imagen inválida", f"No se pudo leer el archivo: {exc}")
             log_event("validacion", f"No se pudo leer la imagen: {exc}", self.logs)
-            return None
+            return None, f"error al obtener tamaño ({exc})"
         if not self._validate_image_size(file_size):
-            return None
+            return None, f"tamaño excedido ({file_size} bytes)"
         dimensions = self._probe_image_dimensions(image_path, ext)
         if not self._validate_image_dimensions(dimensions):
-            return None
-        return dimensions
+            if not dimensions:
+                return None, "dimensiones no legibles"
+            width, height = dimensions
+            return None, f"dimensiones excedidas ({width}x{height})"
+        return dimensions, None
 
     def _get_clipboard_photo(self):
         format_extensions = {
@@ -2970,7 +2973,13 @@ class FraudCaseApp:
             if text_data:
                 path = Path(text_data.strip())
                 if path.exists():
-                    dimensions = self._validate_image_file(path)
+                    dimensions, rejection_reason = self._validate_image_file(path)
+                    if rejection_reason:
+                        log_event(
+                            "validacion",
+                            f"Imagen del portapapeles rechazada ({rejection_reason}) en {path}",
+                            self.logs,
+                        )
                     if not dimensions:
                         return None, None
                     width, height = dimensions
@@ -3094,7 +3103,13 @@ class FraudCaseApp:
         if not filepath:
             return
         image_path = Path(filepath)
-        dimensions = self._validate_image_file(image_path)
+        dimensions, rejection_reason = self._validate_image_file(image_path)
+        if rejection_reason:
+            log_event(
+                "validacion",
+                f"Imagen rechazada ({rejection_reason}) en {image_path}",
+                self.logs,
+            )
         if not dimensions:
             return
         width, height = dimensions
@@ -3105,6 +3120,7 @@ class FraudCaseApp:
         except Exception as exc:  # pragma: no cover - fallos dependen del archivo del usuario
             self._cleanup_failed_image_insertion(text_widget, photo)
             messagebox.showerror("Imagen inválida", f"No se pudo cargar la imagen: {exc}")
+            log_event("validacion", f"Error al cargar imagen {image_path}: {exc}", self.logs)
             return
         self._mark_rich_text_modified(text_widget)
 
