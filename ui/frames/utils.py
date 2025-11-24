@@ -67,9 +67,15 @@ def create_scrollable_container(parent: Any) -> Tuple[ttk.Frame, ttk.Frame]:
 
 
 def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
-    """Permite desplazar el canvas usando la rueda del ratón o trackpad."""
+    """Permite desplazar el canvas usando la rueda del ratón o trackpad.
+
+    Además de enlazar los eventos con el propio canvas y el frame interno,
+    se registran los widgets hijos (como ``ttk.Treeview``) para que el
+    desplazamiento funcione sin importar el widget que tenga el foco del ratón.
+    """
 
     is_active = {"value": False}
+    bound_widgets: set[int] = set()
 
     def _activate(_event):
         is_active["value"] = True
@@ -92,9 +98,26 @@ def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
             canvas.yview_scroll(steps, "units")
             return "break"
 
-    for widget in (canvas, target):
+    def _bind_widget(widget):
+        if widget is None:
+            return
+        widget_id = id(widget)
+        if widget_id in bound_widgets:
+            return
+        bound_widgets.add(widget_id)
         widget.bind("<Enter>", _activate, add="+")
         widget.bind("<Leave>", _deactivate, add="+")
-    canvas.bind_all("<MouseWheel>", _on_mousewheel, add="+")
-    canvas.bind_all("<Button-4>", _on_mousewheel, add="+")
-    canvas.bind_all("<Button-5>", _on_mousewheel, add="+")
+        widget.bind("<MouseWheel>", _on_mousewheel, add="+")
+        widget.bind("<Button-4>", _on_mousewheel, add="+")
+        widget.bind("<Button-5>", _on_mousewheel, add="+")
+        children_fn = getattr(widget, "winfo_children", None)
+        if callable(children_fn):
+            for child in children_fn():
+                _bind_widget(child)
+
+    def _sync_children(_event=None):  # noqa: ANN001
+        _bind_widget(target)
+
+    _bind_widget(canvas)
+    _bind_widget(target)
+    target.bind("<Configure>", _sync_children, add="+")
