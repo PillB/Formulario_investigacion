@@ -20,8 +20,12 @@ class ActionBar(ttk.Frame):
         Widget parent that will contain the action bar.
     commands:
         Optional mapping of command keys (``add``, ``edit``, ``delete``,
-        ``export``) to callback callables. Missing commands default to a
-        no-op.
+        ``export`` or custom keys) to callback callables. Missing commands
+        default to a no-op.
+    buttons:
+        Optional iterable of ``(label, key)`` tuples to customize the
+        buttons rendered. Use ``None`` as the label to insert a separator.
+        Defaults to :attr:`_BUTTONS`.
     pack_kwargs:
         Optional ``pack`` options to customize placement. Defaults to
         ``{"side": "bottom", "fill": "x"}``.
@@ -40,6 +44,7 @@ class ActionBar(ttk.Frame):
         parent: tk.Misc,
         *,
         commands: Mapping[str, Callable[[], None]] | None = None,
+        buttons: tuple[tuple[str | None, str | None], ...] | None = None,
         pack_kwargs: Mapping[str, object] | None = None,
         **kwargs,
     ) -> None:
@@ -51,8 +56,10 @@ class ActionBar(ttk.Frame):
         self.pack(**merged_pack)
 
         self._button_commands = dict(commands or {})
+        self.buttons: dict[str, ttk.Button] = {}
+        self._buttons = buttons or self._BUTTONS
 
-        for label, key in self._BUTTONS:
+        for label, key in self._buttons:
             if label is None:
                 separator = ttk.Separator(self, orient=tk.VERTICAL, style="ActionBar.TSeparator")
                 separator.pack(side="left", fill="y", padx=(6, 6), pady=4)
@@ -60,6 +67,8 @@ class ActionBar(ttk.Frame):
             command = self._button_commands.get(key, lambda: None)
             button = ttk.Button(self, text=label, command=command, style="ActionBar.TButton")
             button.pack(side="left", padx=(0, 8), pady=6)
+            if key:
+                self.buttons[key] = button
 
 
 def register_action_bar_styles() -> None:

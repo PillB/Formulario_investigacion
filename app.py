@@ -107,6 +107,7 @@ from ui.config import COL_PADX, FONT_BASE, ROW_PADY
 from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.frames.utils import create_scrollable_container, ensure_grid_support
+from ui.layout import ActionBar
 from ui.tooltips import HoverTooltip
 from validators import (
     LOG_FIELDNAMES,
@@ -1486,7 +1487,7 @@ class FraudCaseApp:
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
-        frame.rowconfigure(2, weight=1)
+        frame.rowconfigure(1, weight=1)
 
         summary_section = ttk.LabelFrame(frame, text="Resumen de clientes")
         summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
@@ -1494,25 +1495,9 @@ class FraudCaseApp:
         summary_section.rowconfigure(0, weight=1)
         self.clients_summary_section = summary_section
 
-        controls = ttk.Frame(frame)
-        controls.grid(row=1, column=0, sticky="ew", padx=5, pady=2)
-        controls.columnconfigure(0, weight=1)
-        add_btn = ttk.Button(controls, text="Agregar cliente", command=self._on_new_client)
-        add_btn.grid(row=0, column=0, sticky="w", padx=5, pady=ROW_PADY)
-        self.register_tooltip(add_btn, "Añade un nuevo cliente implicado en el caso.")
-        edit_btn = ttk.Button(controls, text="Editar seleccionado", command=self._edit_selected_client)
-        edit_btn.grid(row=0, column=1, sticky="w", padx=5, pady=ROW_PADY)
-        self.register_tooltip(edit_btn, "Abre el formulario del cliente resaltado en el listado.")
-        self.clients_toggle_btn = ttk.Button(
-            controls,
-            text="Mostrar formulario",
-            command=self.toggle_clients_detail,
-        )
-        self.clients_toggle_btn.grid(row=0, column=2, sticky="e", padx=5, pady=ROW_PADY)
-
         self.clients_detail_wrapper = ttk.LabelFrame(frame, text="Detalle de clientes")
         ensure_grid_support(self.clients_detail_wrapper)
-        self.clients_detail_wrapper.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+        self.clients_detail_wrapper.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.clients_detail_wrapper.columnconfigure(0, weight=1)
         self.clients_detail_wrapper.rowconfigure(0, weight=1)
         scrollable, inner = create_scrollable_container(self.clients_detail_wrapper)
@@ -1521,6 +1506,50 @@ class FraudCaseApp:
         # Inicialmente un cliente en blanco
         self.add_client()
         self.hide_clients_detail()
+        actions_container = ttk.Frame(frame)
+        actions_container.grid(row=2, column=0, sticky="ew")
+        actions_container.columnconfigure(0, weight=1)
+
+        toggle_row = ttk.Frame(actions_container)
+        toggle_row.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, ROW_PADY // 2))
+        toggle_row.columnconfigure(0, weight=1)
+        self.clients_toggle_btn = ttk.Button(
+            toggle_row,
+            text="Mostrar formulario",
+            command=self.toggle_clients_detail,
+        )
+        self.clients_toggle_btn.grid(row=0, column=1, sticky="e", padx=5)
+
+        client_actions = (
+            ("Agregar cliente", "add"),
+            ("Editar seleccionado", "edit"),
+            ("Eliminar seleccionado", "delete"),
+        )
+        client_commands = {
+            "add": self._on_new_client,
+            "edit": self._edit_selected_client,
+            "delete": self._remove_selected_client,
+        }
+        client_action_parent = ttk.Frame(actions_container)
+        client_action_parent.grid(row=1, column=0, sticky="ew")
+        self.clients_action_bar = ActionBar(
+            client_action_parent,
+            commands=client_commands,
+            buttons=client_actions,
+            pack_kwargs={"side": "top", "fill": "x"},
+        )
+        self.register_tooltip(
+            self.clients_action_bar.buttons.get("add"), "Añade un nuevo cliente implicado en el caso."
+        )
+        self.register_tooltip(
+            self.clients_action_bar.buttons.get("edit"),
+            "Abre el formulario del cliente resaltado en el listado.",
+        )
+        self.register_tooltip(
+            self.clients_action_bar.buttons.get("delete"),
+            "Elimina el cliente seleccionado del resumen.",
+        )
+
         self._refresh_client_summary()
 
     def _on_new_client(self):
@@ -1631,6 +1660,19 @@ class FraudCaseApp:
                 frame.frame.focus_set()
             except tk.TclError:
                 pass
+
+    def _remove_selected_client(self):
+        table = self.clients_summary_tree
+        if not table:
+            return
+        selection = table.selection()
+        if not selection:
+            return
+        values = table.item(selection[0], "values")
+        client_id = values[0] if values else ""
+        frame = self._find_client_frame(client_id)
+        if frame:
+            self.remove_client(frame)
 
     def _on_client_selected(self, _event=None):
         table = self.clients_summary_tree
@@ -1816,23 +1858,33 @@ class FraudCaseApp:
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
-        button_row = ttk.Frame(frame)
-        button_row.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=ROW_PADY)
-        add_btn = ttk.Button(button_row, text="Crear producto nuevo (vacío)", command=self.add_product)
-        add_btn.grid(row=0, column=0, sticky="w", padx=5)
-        self.register_tooltip(add_btn, "Registra un nuevo producto investigado.")
+        frame.rowconfigure(0, weight=1)
         scrollable, inner = create_scrollable_container(frame)
-        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        scrollable.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.product_container = inner
-        inherit_btn = ttk.Button(
-            button_row,
-            text="Crear producto heredando del caso",
-            command=self.add_product_inheriting_case,
+
+        product_actions = (
+            ("Crear producto nuevo (vacío)", "add_empty"),
+            ("Crear producto heredando del caso", "inherit_case"),
         )
-        inherit_btn.grid(row=0, column=1, sticky="w", padx=5)
+        product_commands = {
+            "add_empty": self.add_product,
+            "inherit_case": self.add_product_inheriting_case,
+        }
+        product_action_parent = ttk.Frame(frame)
+        product_action_parent.grid(row=1, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.product_action_bar = ActionBar(
+            product_action_parent,
+            commands=product_commands,
+            buttons=product_actions,
+            pack_kwargs={"side": "top", "fill": "x"},
+        )
         self.register_tooltip(
-            inherit_btn, "Crea un producto precargado con los datos del caso actual."
+            self.product_action_bar.buttons.get("add_empty"), "Registra un nuevo producto investigado."
+        )
+        self.register_tooltip(
+            self.product_action_bar.buttons.get("inherit_case"),
+            "Crea un producto precargado con los datos del caso actual.",
         )
         # No añadimos automáticamente un producto porque los productos están asociados a clientes
 
@@ -3430,72 +3482,73 @@ class FraudCaseApp:
 
         action_group = ttk.LabelFrame(frame, text="Guardar, cargar y reportes")
         action_group.grid(row=3, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
-        action_group.columnconfigure(0, weight=0)
-        action_group.columnconfigure(1, weight=1)
+        action_group.columnconfigure(0, weight=1)
 
-        btn_save = ttk.Button(
-            action_group,
-            text="Guardar y enviar",
-            command=self.save_and_send,
-            padding=PRIMARY_PADDING,
-        )
-        btn_save.grid(row=0, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         ttk.Label(
             action_group,
-            text="Valida el formulario, previene duplicados y genera los archivos obligatorios.",
-            wraplength=360,
+            text=(
+                "Ejecuta las acciones principales de guardado, carga y exportación. "
+                "Estas opciones se mantienen visibles aunque el resto del contenido se desplace."
+            ),
+            wraplength=520,
             justify="left",
-        ).grid(row=0, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
-        self.register_tooltip(btn_save, "Valida y exporta todos los archivos requeridos.")
+        ).grid(row=0, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
 
-        btn_load = ttk.Button(action_group, text="Cargar versión", command=self.load_version_dialog)
-        btn_load.grid(row=1, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
-        ttk.Label(
-            action_group,
-            text="Restaura una versión previa desde JSON para continuar el registro.",
-            wraplength=360,
-            justify="left",
-        ).grid(row=1, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
-        self.register_tooltip(btn_load, "Restaura una versión previa en formato JSON.")
-
-        btn_clear = ttk.Button(
-            action_group,
-            text="Borrar todos los datos",
-            command=lambda: self.clear_all(notify=True),
+        action_buttons = (
+            ("Guardar y enviar", "save_send"),
+            ("Cargar versión", "load"),
+            ("Borrar todos los datos", "clear"),
+            (None, None),
+            ("Generar Word (.docx)", "docx"),
+            ("Generar informe (.md)", "md"),
         )
-        btn_clear.grid(row=2, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
-        ttk.Label(
-            action_group,
-            text="Limpia el formulario completo cuando se requiera iniciar un caso nuevo.",
-            wraplength=360,
-            justify="left",
-        ).grid(row=2, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
-        self.register_tooltip(btn_clear, "Limpia el formulario completo para iniciar desde cero.")
-
-        self.btn_docx = ttk.Button(
-            action_group,
-            text="Generar Word (.docx)",
-            command=self.generate_docx_report,
-            default="active" if self._docx_available else "normal",
-            state=("disabled" if not self._docx_available else "normal"),
+        action_commands = {
+            "save_send": self.save_and_send,
+            "load": self.load_version_dialog,
+            "clear": lambda: self.clear_all(notify=True),
+            "docx": self.generate_docx_report,
+            "md": self.generate_md_report,
+        }
+        action_bar_parent = ttk.Frame(action_group)
+        action_bar_parent.grid(row=1, column=0, sticky="ew", padx=COL_PADX)
+        self.actions_action_bar = ActionBar(
+            action_bar_parent,
+            commands=action_commands,
+            buttons=action_buttons,
+            pack_kwargs={"side": "top", "fill": "x"},
         )
-        self.btn_docx.grid(row=3, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
+        self.register_tooltip(
+            self.actions_action_bar.buttons.get("save_send"),
+            "Valida el formulario, previene duplicados y genera los archivos obligatorios.",
+        )
+        self.register_tooltip(
+            self.actions_action_bar.buttons.get("load"),
+            "Restaura una versión previa en formato JSON.",
+        )
+        self.register_tooltip(
+            self.actions_action_bar.buttons.get("clear"),
+            "Limpia el formulario completo para iniciar desde cero.",
+        )
+
+        self.btn_docx = self.actions_action_bar.buttons.get("docx")
         docx_tooltip = (
             "Genera el informe principal en Word utilizando los datos validados."
             if self._docx_available
             else f"{DOCX_MISSING_MESSAGE} Usa el informe Markdown como respaldo."
         )
-        self.register_tooltip(self.btn_docx, docx_tooltip)
-        docx_help = ttk.Label(
-            action_group,
-            text=(
-                "Produce el informe formal en Word; usa Markdown si falta la dependencia."
-            ),
-            wraplength=360,
-            justify="left",
+        if self.btn_docx:
+            try:
+                self.btn_docx.state(["!disabled"] if self._docx_available else ["disabled"])
+            except tk.TclError:
+                pass
+            self.register_tooltip(self.btn_docx, docx_tooltip)
+
+        md_button = self.actions_action_bar.buttons.get("md")
+        self.register_tooltip(
+            md_button,
+            "Crea una copia del informe en Markdown como respaldo manual.",
         )
-        docx_help.grid(row=3, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
-        md_row = 4
+
         if not self._docx_available:
             ttk.Label(
                 action_group,
@@ -3507,32 +3560,14 @@ class FraudCaseApp:
                 foreground="#b26a00",
                 wraplength=520,
                 justify="left",
-            ).grid(row=4, column=0, columnspan=2, sticky="w", padx=COL_PADX, pady=(0, ROW_PADY))
-            md_row = 5
-
-        btn_md = ttk.Button(
-            action_group,
-            text="Generar informe (.md)",
-            command=self.generate_md_report,
-        )
-        btn_md.grid(row=md_row, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
-        ttk.Label(
-            action_group,
-            text="Genera el respaldo en Markdown para compartir de forma ligera.",
-            wraplength=360,
-            justify="left",
-        ).grid(row=md_row, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
-        self.register_tooltip(
-            btn_md,
-            "Crea una copia del informe en Markdown como respaldo manual.",
-        )
+            ).grid(row=2, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
 
         ttk.Label(
             action_group,
             text="El auto‑guardado se realiza automáticamente en un archivo JSON",
             wraplength=520,
             justify="left",
-        ).grid(row=md_row + 1, column=0, columnspan=2, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
+        ).grid(row=3, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
 
     def _toggle_theme(self):
