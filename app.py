@@ -57,6 +57,7 @@ correos, direcciones y planes de acción).
 
 import base64
 import csv
+import io
 import json
 import math
 import os
@@ -2836,7 +2837,116 @@ class FraudCaseApp:
         self._mark_rich_text_modified(widget)
         return "break"
 
+    def _validate_image_extension(self, ext: str) -> bool:
+        allowed_exts = {".png", ".gif", ".ppm", ".pgm"}
+        if ext not in allowed_exts:
+            messagebox.showerror(
+                "Formato no soportado", "Solo se permiten archivos PNG, GIF, PPM o PGM."
+            )
+            log_event(
+                "validacion",
+                f"Formato de imagen no permitido: {ext}",
+                self.logs,
+            )
+            return False
+        return True
+
+    def _validate_image_size(self, byte_size: int) -> bool:
+        if byte_size <= self.IMAGE_MAX_BYTES:
+            return True
+        limit_mb = self.IMAGE_MAX_BYTES // (1024 * 1024)
+        message = f"El archivo supera el límite de {limit_mb} MB permitido para imágenes."
+        messagebox.showerror("Imagen demasiado grande", message)
+        log_event(
+            "validacion",
+            f"Imagen rechazada por exceder {self.IMAGE_MAX_BYTES} bytes (tamaño: {byte_size}).",
+            self.logs,
+        )
+        return False
+
+    def _validate_image_dimensions(self, dimensions: Optional[tuple[int, int]]) -> bool:
+        if not dimensions:
+            messagebox.showerror(
+                "Imagen inválida", "No se pudieron leer las dimensiones de la imagen seleccionada."
+            )
+            log_event("validacion", "Dimensiones de imagen no legibles.", self.logs)
+            return False
+        width, height = dimensions
+        if width > self.IMAGE_MAX_DIMENSION or height > self.IMAGE_MAX_DIMENSION:
+            messagebox.showerror(
+                "Imagen demasiado grande",
+                (
+                    f"Las dimensiones {width}x{height} px superan el máximo permitido de "
+                    f"{self.IMAGE_MAX_DIMENSION}px por lado."
+                ),
+            )
+            log_event(
+                "validacion",
+                (
+                    f"Dimensiones de imagen excedidas: {width}x{height} (máximo "
+                    f"{self.IMAGE_MAX_DIMENSION})."
+                ),
+                self.logs,
+            )
+            return False
+        return True
+
+    def _probe_image_dimensions_from_bytes(self, data: bytes, ext: str) -> Optional[tuple[int, int]]:
+        if Image is not None:
+            try:
+                with Image.open(io.BytesIO(data)) as img:
+                    return img.width, img.height
+            except Exception:
+                pass
+        try:
+            if ext == ".png" and len(data) >= 24 and data.startswith(b"\x89PNG\r\n\x1a\n"):
+                return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+            if ext == ".gif" and len(data) >= 10 and data[:6] in {b"GIF87a", b"GIF89a"}:
+                return int.from_bytes(data[6:8], "little"), int.from_bytes(data[8:10], "little")
+            if ext in {".pgm", ".ppm"}:
+                header = data[:1024].decode("ascii", errors="ignore")
+                tokens = []
+                for line in header.splitlines():
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith("#"):
+                        continue
+                    tokens.extend(stripped.split())
+                    if len(tokens) >= 3:
+                        break
+                if tokens and tokens[0] in {"P2", "P3", "P5", "P6"} and len(tokens) >= 3:
+                    return int(tokens[1]), int(tokens[2])
+        except (OSError, ValueError):
+            return None
+        return None
+
+    def _validate_image_file(self, image_path: Path) -> Optional[tuple[int, int]]:
+        ext = image_path.suffix.lower()
+        if not self._validate_image_extension(ext):
+            return None
+        try:
+            file_size = image_path.stat().st_size
+        except OSError as exc:  # pragma: no cover - depende del sistema de archivos
+            messagebox.showerror("Imagen inválida", f"No se pudo leer el archivo: {exc}")
+            log_event("validacion", f"No se pudo leer la imagen: {exc}", self.logs)
+            return None
+        if not self._validate_image_size(file_size):
+            return None
+        dimensions = self._probe_image_dimensions(image_path, ext)
+        if not self._validate_image_dimensions(dimensions):
+            return None
+        return dimensions
+
     def _get_clipboard_photo(self):
+        format_extensions = {
+            "image/png": ".png",
+            "png": ".png",
+            "image/gif": ".gif",
+            "gif": ".gif",
+            "image/ppm": ".ppm",
+            "ppm": ".ppm",
+            "image/pgm": ".pgm",
+            "pgm": ".pgm",
+        }
         formats = (
             "image/png",
             "PNG",
@@ -2850,7 +2960,8 @@ class FraudCaseApp:
         for fmt in formats:
             with suppress(tk.TclError):
                 data = self.root.clipboard_get(type=fmt)
-                photo, stored_data = self._create_photo_from_data(data)
+                ext = format_extensions.get(fmt.lower())
+                photo, stored_data = self._create_photo_from_data(data, ext)
                 if photo is not None:
                     return photo, {"data": stored_data or data, "format": fmt}
 
@@ -2858,32 +2969,53 @@ class FraudCaseApp:
             text_data = self.root.clipboard_get()
             if text_data:
                 path = Path(text_data.strip())
-                if path.exists() and path.suffix.lower() in {".png", ".gif", ".pgm", ".ppm"}:
+                if path.exists():
+                    dimensions = self._validate_image_file(path)
+                    if not dimensions:
+                        return None, None
+                    width, height = dimensions
                     try:
-                        photo = tk.PhotoImage(file=path)
+                        photo = self._load_photo_image(path, width, height)
                         return photo, str(path)
-                    except tk.TclError:
+                    except Exception as exc:  # pragma: no cover - fallos dependen del archivo del usuario
+                        messagebox.showerror("Imagen inválida", f"No se pudo cargar la imagen: {exc}")
+                        log_event("validacion", f"No se pudo cargar imagen del portapapeles: {exc}", self.logs)
                         return None, None
         return None, None
 
-    def _create_photo_from_data(self, data):
+    def _create_photo_from_data(self, data, ext: Optional[str] = None):
         if data is None:
             return None, None
+        if ext and not self._validate_image_extension(ext):
+            return None, None
+        raw_bytes: Optional[bytes] = None
+        if isinstance(data, bytes):
+            raw_bytes = data
+        elif isinstance(data, str):
+            try:
+                raw_bytes = data.encode("latin1")
+            except UnicodeEncodeError:
+                raw_bytes = data.encode("utf-8", errors="ignore")
+        if raw_bytes is not None and not self._validate_image_size(len(raw_bytes)):
+            return None, None
+        if ext and raw_bytes is not None:
+            dimensions = self._probe_image_dimensions_from_bytes(raw_bytes, ext)
+            if not self._validate_image_dimensions(dimensions):
+                return None, None
         attempts = []
         if isinstance(data, bytes):
             attempts.append(base64.b64encode(data).decode("ascii"))
         if isinstance(data, str):
             attempts.append(data)
-            try:
-                attempts.append(base64.b64encode(data.encode("latin1")).decode("ascii"))
-            except UnicodeEncodeError:
-                pass
+            if raw_bytes is not None:
+                attempts.append(base64.b64encode(raw_bytes).decode("ascii"))
         for payload in attempts:
             try:
                 photo = tk.PhotoImage(data=payload)
                 return photo, payload
             except tk.TclError:
                 continue
+        log_event("validacion", "No se pudo crear imagen desde el portapapeles.", self.logs)
         return None, None
 
     def _probe_image_dimensions(self, path: Path, ext: str) -> Optional[tuple[int, int]]:
@@ -2957,42 +3089,15 @@ class FraudCaseApp:
         self._mark_rich_text_modified(text_widget)
 
     def _insert_image(self, text_widget):
-        allowed_exts = {".png", ".gif", ".ppm", ".pgm"}
         filetypes = [("Imágenes PNG, GIF, PPM o PGM", "*.png *.gif *.ppm *.pgm")]
         filepath = filedialog.askopenfilename(title="Selecciona una imagen", filetypes=filetypes)
         if not filepath:
             return
         image_path = Path(filepath)
-        ext = image_path.suffix.lower()
-        if ext not in allowed_exts:
-            messagebox.showerror("Formato no soportado", "Solo se permiten archivos PNG, GIF, PPM o PGM.")
-            return
-        try:
-            file_size = image_path.stat().st_size
-        except OSError as exc:  # pragma: no cover - depende del sistema de archivos
-            messagebox.showerror("Imagen inválida", f"No se pudo leer el archivo: {exc}")
-            return
-        if file_size > self.IMAGE_MAX_BYTES:
-            limit_mb = self.IMAGE_MAX_BYTES // (1024 * 1024)
-            messagebox.showerror(
-                "Imagen demasiado grande",
-                f"El archivo supera el límite de {limit_mb} MB permitido para imágenes.",
-            )
-            return
-        dimensions = self._probe_image_dimensions(image_path, ext)
+        dimensions = self._validate_image_file(image_path)
         if not dimensions:
-            messagebox.showerror("Imagen inválida", "No se pudieron leer las dimensiones de la imagen seleccionada.")
             return
         width, height = dimensions
-        if width > self.IMAGE_MAX_DIMENSION or height > self.IMAGE_MAX_DIMENSION:
-            messagebox.showerror(
-                "Imagen demasiado grande",
-                (
-                    f"Las dimensiones {width}x{height} px superan el máximo permitido de "
-                    f"{self.IMAGE_MAX_DIMENSION}px por lado."
-                ),
-            )
-            return
         photo: Optional[tk.PhotoImage] = None
         try:
             photo = self._load_photo_image(image_path, width, height)
