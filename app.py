@@ -2094,6 +2094,7 @@ class FraudCaseApp:
             text="Mostrar secciones extendidas del informe",
             variable=self._extended_sections_toggle_var,
             command=self._handle_extended_sections_toggle,
+            style=ThemeManager.CHECKBUTTON_STYLE,
         )
         extended_toggle.pack(side="left")
         self.register_tooltip(
