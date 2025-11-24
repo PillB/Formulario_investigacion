@@ -105,7 +105,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY
 from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
-from ui.frames.utils import create_scrollable_container
+from ui.frames.utils import create_scrollable_container, ensure_grid_support
 from ui.tooltips import HoverTooltip
 from validators import (
     LOG_FIELDNAMES,
