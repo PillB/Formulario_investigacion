@@ -328,6 +328,11 @@ class FraudCaseApp:
             EXTERNAL_LOGS_FILE and os.path.exists(EXTERNAL_LOGS_FILE)
         )
         self._export_base_path: Optional[Path] = None
+        self._walkthrough_state_file = Path(AUTOSAVE_FILE).with_name("walkthrough_flags.json")
+        self._walkthrough_state: dict[str, object] = self._load_walkthrough_state()
+        self._walkthrough_overlay: Optional[tk.Toplevel] = None
+        self._walkthrough_steps: list[dict[str, object]] = []
+        self._walkthrough_step_index = 0
         self.catalog_status_var = tk.StringVar(
             value="Catálogos de detalle pendientes. Usa 'Cargar catálogos' para habilitar el autopoblado."
         )
@@ -448,6 +453,7 @@ class FraudCaseApp:
         # Cargar autosave si existe
         self.load_autosave()
         self._trim_all_temp_versions()
+        self._schedule_walkthrough()
         self.root.after(250, self._prompt_initial_catalog_loading)
 
     class _PostEditValidator:
@@ -1147,6 +1153,203 @@ class FraudCaseApp:
         except tk.TclError:
             pass
 
+    def _load_walkthrough_state(self) -> dict[str, object]:
+        try:
+            with open(self._walkthrough_state_file, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            return data if isinstance(data, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _persist_walkthrough_state(self) -> None:
+        try:
+            self._walkthrough_state_file.parent.mkdir(parents=True, exist_ok=True)
+            self._walkthrough_state_file.write_text(
+                json.dumps(self._walkthrough_state), encoding="utf-8"
+            )
+        except OSError as ex:
+            log_event("validacion", f"No se pudo guardar la guía: {ex}", self.logs)
+
+    def _schedule_walkthrough(self) -> None:
+        if self._walkthrough_state.get("dismissed"):
+            return
+        try:
+            self.root.after(800, self._launch_walkthrough_if_needed)
+        except tk.TclError:
+            self._launch_walkthrough_if_needed()
+
+    def _launch_walkthrough_if_needed(self) -> None:
+        if self._walkthrough_state.get("dismissed"):
+            return
+        self._walkthrough_steps = self._build_walkthrough_steps()
+        if not self._walkthrough_steps:
+            return
+        self._walkthrough_step_index = 0
+        self._show_walkthrough_step()
+
+    def _build_walkthrough_steps(self) -> list[dict[str, object]]:
+        headline = "3 pasos para documentar tu caso y exportar sin errores."
+        steps = [
+            {
+                "id": "case",
+                "title": "Paso 1 de 3: Datos del caso",
+                "message": "Empieza con los datos generales del expediente para habilitar herencias y controles posteriores.",
+                "anchor_getter": lambda key="case": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
+                "id": "clients",
+                "title": "Paso 2 de 3: Clientes implicados",
+                "message": "Relaciona a los clientes afectados o vinculados; aquí se valida unicidad y puedes autocompletar con catálogos.",
+                "anchor_getter": lambda key="clients": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
+                "id": "products",
+                "title": "Paso 3 de 3: Productos investigados",
+                "message": "Registra los productos asociados al caso para consolidar montos y exportar sin errores.",
+                "anchor_getter": lambda key="products": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+        ]
+        return steps
+
+    def _get_walkthrough_anchor(self, key: str) -> Optional[tk.Widget]:
+        candidates: list[Optional[tk.Widget]] = []
+        if key == "case":
+            candidates = [getattr(self, "_case_anchor_widget", None)]
+        elif key == "clients":
+            candidates = [
+                getattr(self, "_client_anchor_widget", None),
+                getattr(self, "_client_action_anchor", None),
+            ]
+        elif key == "products":
+            candidates = [
+                getattr(self, "_product_anchor_widget", None),
+                getattr(self, "_product_action_anchor", None),
+            ]
+        for widget in candidates:
+            if widget is None:
+                continue
+            if self._is_widget_mapped(widget):
+                return widget
+        return None
+
+    def _is_widget_mapped(self, widget: tk.Widget) -> bool:
+        try:
+            return bool(widget.winfo_ismapped())
+        except tk.TclError:
+            return False
+
+    def _show_walkthrough_step(self) -> None:
+        if not self._walkthrough_steps:
+            return
+        step = self._walkthrough_steps[self._walkthrough_step_index]
+        anchor_getter: Optional[Callable[[], Optional[tk.Widget]]] = step.get("anchor_getter")  # type: ignore[assignment]
+        anchor = anchor_getter() if callable(anchor_getter) else None
+        if anchor is None:
+            if self._walkthrough_step_index + 1 < len(self._walkthrough_steps):
+                self._walkthrough_step_index += 1
+                self._show_walkthrough_step()
+            else:
+                self._dismiss_walkthrough()
+            return
+
+        palette = ThemeManager.current()
+        background = palette.get("background", "#1f1f1f")
+        foreground = palette.get("foreground", "#ffffff")
+        accent = palette.get("accent", "#7a8aa6")
+
+        if not self._walkthrough_overlay or not self._walkthrough_overlay.winfo_exists():
+            self._walkthrough_overlay = tk.Toplevel(self.root)
+            self._walkthrough_overlay.title("Guía rápida")
+            self._walkthrough_overlay.configure(
+                bg=background, highlightbackground=accent, highlightthickness=1
+            )
+            self._walkthrough_overlay.attributes("-topmost", True)
+            self._walkthrough_overlay.resizable(False, False)
+            ThemeManager.register_toplevel(self._walkthrough_overlay)
+            container = ttk.Frame(self._walkthrough_overlay, padding=10)
+            container.pack(fill="both", expand=True)
+            self._walkthrough_headline = ttk.Label(
+                container, text="", wraplength=340, justify="left", font=(FONT_BASE, 11, "bold")
+            )
+            self._walkthrough_headline.pack(anchor="w", pady=(0, 4))
+            self._walkthrough_title_label = ttk.Label(
+                container, text="", wraplength=340, justify="left", font=(FONT_BASE, 10, "bold")
+            )
+            self._walkthrough_title_label.pack(anchor="w", pady=(0, 2))
+            self._walkthrough_body_label = ttk.Label(
+                container, text="", wraplength=340, justify="left", foreground=foreground
+            )
+            self._walkthrough_body_label.pack(anchor="w", pady=(0, 6))
+            buttons = ttk.Frame(container)
+            buttons.pack(fill="x", pady=(4, 0))
+            self._walkthrough_next_btn = ttk.Button(
+                buttons, text="Siguiente", command=self._advance_walkthrough
+            )
+            self._walkthrough_next_btn.pack(side="right", padx=(4, 0))
+            skip_btn = ttk.Button(buttons, text="Saltar guía", command=self._skip_walkthrough)
+            skip_btn.pack(side="right")
+
+        headline_text = step.get("headline", "")
+        self._walkthrough_headline.configure(text=headline_text)
+        self._walkthrough_title_label.configure(text=step.get("title", ""))
+        self._walkthrough_body_label.configure(text=step.get("message", ""))
+        is_last = self._walkthrough_step_index == len(self._walkthrough_steps) - 1
+        self._walkthrough_next_btn.configure(text="Listo" if is_last else "Siguiente")
+
+        self._safe_update_idletasks()
+        self._position_walkthrough(anchor)
+
+    def _position_walkthrough(self, anchor: tk.Widget) -> None:
+        try:
+            anchor_x = anchor.winfo_rootx()
+            anchor_y = anchor.winfo_rooty()
+            anchor_width = anchor.winfo_width()
+            anchor_height = anchor.winfo_height()
+        except tk.TclError:
+            return
+        if not self._walkthrough_overlay or not self._walkthrough_overlay.winfo_exists():
+            return
+        self._safe_update_idletasks()
+        width = self._walkthrough_overlay.winfo_width()
+        height = self._walkthrough_overlay.winfo_height()
+        x = anchor_x + anchor_width + 12
+        y = anchor_y
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        if x + width > screen_width - 10:
+            x = max(10, anchor_x - width - 12)
+        if y + height > screen_height - 10:
+            y = max(10, screen_height - height - 10)
+        self._walkthrough_overlay.geometry(f"+{x}+{y}")
+
+    def _advance_walkthrough(self) -> None:
+        if self._walkthrough_step_index + 1 >= len(self._walkthrough_steps):
+            self._dismiss_walkthrough()
+            return
+        self._walkthrough_step_index += 1
+        self._show_walkthrough_step()
+
+    def _skip_walkthrough(self) -> None:
+        self._dismiss_walkthrough()
+
+    def _dismiss_walkthrough(self) -> None:
+        self._walkthrough_state["dismissed"] = True
+        self._walkthrough_state["dismissed_at"] = datetime.utcnow().isoformat()
+        self._persist_walkthrough_state()
+        self._destroy_walkthrough()
+
+    def _destroy_walkthrough(self) -> None:
+        if self._walkthrough_overlay is None:
+            return
+        try:
+            self._walkthrough_overlay.destroy()
+        except tk.TclError:
+            pass
+        self._walkthrough_overlay = None
+
     @classmethod
     def _sanitize_import_value(cls, value, column_name: str | None = None, row_number: int | None = None) -> str:
         """Normaliza valores provenientes de CSV para evitar inyección o caracteres de control."""
@@ -1465,6 +1668,22 @@ class FraudCaseApp:
             "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
         )
 
+        self._case_inputs = {
+            "container": frame,
+            "id_entry": id_entry,
+            "tipo_cb": tipo_cb,
+            "cat1_cb": cat1_cb,
+            "case_cat2_cb": self.case_cat2_cb,
+            "case_mod_cb": self.case_mod_cb,
+            "canal_cb": canal_cb,
+            "proc_cb": proc_cb,
+            "investigator_entry": investigator_entry,
+            "fecha_case_entry": fecha_case_entry,
+            "fecha_desc_entry": fecha_desc_entry,
+            "centro_costo_entry": centro_costo_entry,
+        }
+        self._case_anchor_widget = id_entry
+
         # Validaciones del caso
         self.validators.append(
             FieldValidator(
@@ -1741,6 +1960,7 @@ class FraudCaseApp:
             commands=client_commands,
             buttons=client_actions,
         )
+        self._client_action_anchor = self.clients_action_bar.buttons.get("add")
         self.register_tooltip(
             self.clients_action_bar.buttons.get("add"), "Añade un nuevo cliente implicado en el caso."
         )
@@ -1817,6 +2037,10 @@ class FraudCaseApp:
             change_notifier=self._log_navigation_change,
             id_change_callback=self._handle_client_id_change,
         )
+        if getattr(self, "_client_anchor_widget", None) is None:
+            anchor = getattr(client, "section", None)
+            header = getattr(anchor, "header", None)
+            self._client_anchor_widget = header or anchor
         self.client_frames.append(client)
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
@@ -2085,6 +2309,7 @@ class FraudCaseApp:
             commands=product_commands,
             buttons=product_actions,
         )
+        self._product_action_anchor = self.product_action_bar.buttons.get("add_empty")
         self.register_tooltip(
             self.product_action_bar.buttons.get("add_empty"), "Registra un nuevo producto investigado."
         )
@@ -2207,6 +2432,10 @@ class FraudCaseApp:
             duplicate_key_checker=self._check_duplicate_technical_keys_realtime,
             owner=self,
         )
+        if getattr(self, "_product_anchor_widget", None) is None:
+            anchor = getattr(prod, "section", None)
+            header = getattr(anchor, "header", None)
+            self._product_anchor_widget = header or anchor
         self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
         self._set_active_product_frame(prod)
