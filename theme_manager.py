@@ -411,6 +411,8 @@ class ThemeManager:
                 widget.configure(style="TLabelframe")
             elif isinstance(widget, ttk.Checkbutton):
                 widget.configure(style=cls.CHECKBUTTON_STYLE)
+            elif isinstance(widget, ttk.Radiobutton):
+                widget.configure(style="TRadiobutton")
             elif isinstance(widget, ttk.Treeview):
                 widget.configure(style="Treeview")
                 collected_tags = {""}
@@ -514,8 +516,23 @@ class ThemeManager:
             background=background,
             foreground=foreground,
         )
+        ttk_style.configure(
+            "TRadiobutton",
+            background=background,
+            foreground=foreground,
+        )
         ttk_style.map(
             cls.CHECKBUTTON_STYLE,
+            background=[("active", select_background), ("selected", background)],
+            foreground=[("active", select_foreground), ("selected", foreground)],
+            indicatorcolor=[
+                ("selected", select_background),
+                ("active", select_background),
+                ("!selected", border),
+            ],
+        )
+        ttk_style.map(
+            "TRadiobutton",
             background=[("active", select_background), ("selected", background)],
             foreground=[("active", select_foreground), ("selected", foreground)],
             indicatorcolor=[
