@@ -109,6 +109,7 @@ from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.frames.utils import create_scrollable_container, ensure_grid_support
 from ui.layout import ActionBar
+from ui.effects.confetti import ConfettiBurst
 from ui.tooltips import HoverTooltip
 from validators import (
     LOG_FIELDNAMES,
@@ -9194,6 +9195,12 @@ class FraudCaseApp:
             log_event("validacion", warning, self.logs)
             if not getattr(self, '_suppress_messagebox', False):
                 messagebox.showwarning("Informe Word no disponible", warning)
+        if hasattr(self, "root") and self.root:
+            ConfettiBurst(
+                self.root,
+                self.root.winfo_pointerx(),
+                self.root.winfo_pointery(),
+            )
         self._mirror_exports_to_external_drive(created_files, case_id)
         reports = [md_path.name]
         if docx_path:
