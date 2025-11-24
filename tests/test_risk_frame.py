@@ -16,9 +16,83 @@ def patch_risk_widgets(monkeypatch):
         Entry = DummyWidget
         Button = DummyWidget
         Combobox = DummyWidget
+        Scrollbar = DummyWidget
+
+        class Treeview(DummyWidget):
+            def __init__(self, *args, columns=(), show=None, height=None, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._columns = list(columns)
+                self._items = {}
+                self._order = []
+                self._selection = []
+
+            def heading(self, column, text=None, command=None):
+                self._config.setdefault("headings", {})[column] = {"text": text, "command": command}
+
+            def column(self, column, anchor=None, width=None):
+                self._config.setdefault("columns_cfg", {})[column] = {"anchor": anchor, "width": width}
+
+            def insert(self, parent, index, iid=None, values=None, tags=None):
+                iid = str(iid) if iid is not None else str(len(self._order))
+                self._items[iid] = {"values": tuple(values or ()), "tags": tuple(tags or ())}
+                self._order.append(iid)
+                return iid
+
+            def get_children(self, _item=""):
+                return tuple(self._order)
+
+            def delete(self, item):
+                targets = item if isinstance(item, (list, tuple)) else [item]
+                for target in list(targets):
+                    if target in self._items:
+                        self._order = [i for i in self._order if i != target]
+                        self._items.pop(target, None)
+
+            def item(self, iid, option=None):
+                data = self._items.get(iid, {})
+                if option:
+                    return data.get(option)
+                return data
+
+            def move(self, item, parent, index):
+                self._order = [i for i in self._order if i != item]
+                self._order.insert(index, item)
+
+            def selection(self):
+                return tuple(self._selection)
+
+            def selection_set(self, items):
+                self._selection = list(items if isinstance(items, (list, tuple)) else [items])
+
+            def tag_configure(self, tagname, **_kwargs):
+                self._config.setdefault("tags", {})[tagname] = _kwargs
+
+            def configure(self, **kwargs):
+                super().configure(**kwargs)
+
+            def yview(self, *args, **_kwargs):
+                return args
+
+            def __getitem__(self, key):
+                if key == "columns":
+                    return tuple(self._columns)
+                return super().__getitem__(key)
+
+    class _CollapsibleSection(DummyWidget):
+        def __init__(self, parent=None, title="", open=True, **_kwargs):
+            super().__init__(parent=parent)
+            self.title = title
+            self._is_open = open
+            self.header = DummyWidget()
+            self.title_label = DummyWidget()
+            self.content = DummyWidget()
+
+        def pack_content(self, widget, **_kwargs):
+            return widget
 
     monkeypatch.setattr(risk, "tk", _TkStub())
     monkeypatch.setattr(risk, "ttk", _TtkStub())
+    monkeypatch.setattr(risk, "CollapsibleSection", _CollapsibleSection)
     RecordingValidator.instances.clear()
     monkeypatch.setattr(risk, "FieldValidator", RecordingValidator)
     yield
