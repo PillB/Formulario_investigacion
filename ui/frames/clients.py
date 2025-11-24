@@ -18,7 +18,6 @@ from theme_manager import ThemeManager
 
 ENTRY_STYLE = ThemeManager.ENTRY_STYLE
 COMBOBOX_STYLE = ThemeManager.COMBOBOX_STYLE
-BUTTON_STYLE = ThemeManager.BUTTON_STYLE
 
 
 class ClientFrame:
@@ -233,18 +232,6 @@ class ClientFrame:
         ttk.Label(self.frame, text="").grid(row=8, column=2, padx=COL_PADX, pady=ROW_PADY)
         dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
         self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
-
-        action_row = ttk.Frame(self.frame)
-        ensure_grid_support(action_row)
-        action_row.grid(row=9, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
-        if hasattr(action_row, "columnconfigure"):
-            action_row.columnconfigure(0, weight=1)
-            action_row.columnconfigure(1, weight=0)
-        remove_btn = ttk.Button(
-            action_row, text="Eliminar cliente", command=self.remove, style=BUTTON_STYLE
-        )
-        remove_btn.grid(row=0, column=1, sticky="e", padx=COL_PADX)
-        self.tooltip_register(remove_btn, "Quita por completo al cliente de la lista.")
 
         self.validators.append(
             FieldValidator(

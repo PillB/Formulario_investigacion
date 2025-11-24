@@ -247,6 +247,7 @@ class FraudCaseApp:
         self.client_frames = []
         self.team_frames = []
         self.product_frames = []
+        self._active_product_frame = None
         self.risk_frames = []
         self.norm_frames = []
         self._client_frames_by_id = {}
@@ -1536,7 +1537,6 @@ class FraudCaseApp:
             client_action_parent,
             commands=client_commands,
             buttons=client_actions,
-            pack_kwargs={"side": "top", "fill": "x"},
         )
         self.register_tooltip(
             self.clients_action_bar.buttons.get("add"), "Añade un nuevo cliente implicado en el caso."
@@ -1866,10 +1866,14 @@ class FraudCaseApp:
         product_actions = (
             ("Crear producto nuevo (vacío)", "add_empty"),
             ("Crear producto heredando del caso", "inherit_case"),
+            ("Editar producto activo", "edit"),
+            ("Eliminar producto activo", "delete"),
         )
         product_commands = {
             "add_empty": self.add_product,
             "inherit_case": self.add_product_inheriting_case,
+            "edit": self._focus_active_product,
+            "delete": self._remove_active_product,
         }
         product_action_parent = ttk.Frame(frame)
         product_action_parent.grid(row=1, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
@@ -1877,7 +1881,6 @@ class FraudCaseApp:
             product_action_parent,
             commands=product_commands,
             buttons=product_actions,
-            pack_kwargs={"side": "top", "fill": "x"},
         )
         self.register_tooltip(
             self.product_action_bar.buttons.get("add_empty"), "Registra un nuevo producto investigado."
@@ -1885,6 +1888,14 @@ class FraudCaseApp:
         self.register_tooltip(
             self.product_action_bar.buttons.get("inherit_case"),
             "Crea un producto precargado con los datos del caso actual.",
+        )
+        self.register_tooltip(
+            self.product_action_bar.buttons.get("edit"),
+            "Lleva el foco al producto que estás editando actualmente.",
+        )
+        self.register_tooltip(
+            self.product_action_bar.buttons.get("delete"),
+            "Elimina el producto activo tras confirmar la acción.",
         )
         # No añadimos automáticamente un producto porque los productos están asociados a clientes
 
@@ -1991,9 +2002,11 @@ class FraudCaseApp:
             id_change_callback=self._handle_product_id_change,
             initialize_rows=initialize_rows,
             duplicate_key_checker=self._check_duplicate_technical_keys_realtime,
+            owner=self,
         )
         self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
+        self._set_active_product_frame(prod)
         # Renombrar
         for i, p in enumerate(self.product_frames):
             p.idx = i
@@ -2008,7 +2021,27 @@ class FraudCaseApp:
         for i, p in enumerate(self.product_frames):
             p.idx = i
             p.frame.config(text=f"Producto {i+1}")
+        if getattr(self, "_active_product_frame", None) is prod_frame:
+            self._active_product_frame = self.product_frames[-1] if self.product_frames else None
         self._schedule_summary_refresh({'productos', 'reclamos'})
+
+    def _set_active_product_frame(self, frame):
+        self._active_product_frame = frame
+
+    def _focus_active_product(self):
+        frame = getattr(self, "_active_product_frame", None) or (self.product_frames[0] if self.product_frames else None)
+        if frame:
+            self.show_tab(self.products_tab)
+            self.show_products_tab()
+            try:
+                frame.focus_first_field()
+            except Exception:
+                pass
+
+    def _remove_active_product(self):
+        frame = getattr(self, "_active_product_frame", None) or (self.product_frames[-1] if self.product_frames else None)
+        if frame:
+            frame.remove()
 
     def get_client_ids(self):
         return [c.id_var.get().strip() for c in self.client_frames if c.id_var.get().strip()]
@@ -3515,7 +3548,6 @@ class FraudCaseApp:
             action_bar_parent,
             commands=action_commands,
             buttons=action_buttons,
-            pack_kwargs={"side": "top", "fill": "x"},
         )
         self.register_tooltip(
             self.actions_action_bar.buttons.get("save_send"),
