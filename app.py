@@ -72,7 +72,7 @@ from decimal import Decimal
 from importlib import util as importlib_util
 from pathlib import Path
 from contextlib import suppress
-from typing import Optional
+from typing import Callable, Optional
 
 import tkinter as tk
 from tkinter import filedialog, font as tkfont, messagebox, scrolledtext, ttk
