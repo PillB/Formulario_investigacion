@@ -5901,7 +5901,18 @@ class FraudCaseApp:
         failed = False
         captured_error = None
         try:
-            ui_callback(payload)
+            if not payload:
+                message = f"Importación de {task_label} cancelada: no se encontraron datos."
+                if not getattr(self, "_suppress_messagebox", False):
+                    try:
+                        messagebox.showwarning(
+                            "Importación cancelada",
+                            f"{error_prefix}: no se encontraron registros para importar.",
+                        )
+                    except tk.TclError:
+                        pass
+            else:
+                ui_callback(payload)
         except Exception as exc:
             failed = True
             message = f"Importación de {task_label} con errores."
