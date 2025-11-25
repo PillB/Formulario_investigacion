@@ -580,6 +580,7 @@ class ProductFrame:
             width=20,
         )
         cat1_cb.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.cat1_cb = cat1_cb
         ttk.Label(self.frame, text="").grid(row=3, column=2, padx=COL_PADX, pady=ROW_PADY)
         cat1_cb.set('')
         cat1_cb.bind("<FocusOut>", lambda e: self.on_cat1_change())
@@ -659,6 +660,7 @@ class ProductFrame:
             width=25,
         )
         tipo_prod_cb.grid(row=8, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.tipo_prod_cb = tipo_prod_cb
         ttk.Label(self.frame, text="").grid(row=8, column=2, padx=COL_PADX, pady=ROW_PADY)
         tipo_prod_cb.set('')
         self.tooltip_register(tipo_prod_cb, "Clasificación comercial del producto.")
@@ -668,6 +670,7 @@ class ProductFrame:
         )
         focc_entry = ttk.Entry(self.frame, textvariable=self.fecha_oc_var, width=15)
         focc_entry.grid(row=9, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.focc_entry = focc_entry
         ttk.Label(self.frame, text="").grid(row=9, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(focc_entry, "Fecha exacta del evento.")
         self._register_duplicate_triggers(focc_entry)
@@ -677,6 +680,7 @@ class ProductFrame:
         )
         fdesc_entry = ttk.Entry(self.frame, textvariable=self.fecha_desc_var, width=15)
         fdesc_entry.grid(row=10, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.fdesc_entry = fdesc_entry
         self.date_badge = self._create_badge_label(row=10)
         self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")
 
@@ -685,6 +689,7 @@ class ProductFrame:
         )
         inv_entry = ttk.Entry(self.frame, textvariable=self.monto_inv_var, width=15)
         inv_entry.grid(row=11, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.inv_entry = inv_entry
         self.amount_badge = self._create_badge_label(row=11)
         self.tooltip_register(inv_entry, "Monto total bajo investigación.")
 
@@ -708,6 +713,7 @@ class ProductFrame:
         )
         perdida_entry = ttk.Entry(self.frame, textvariable=self.monto_perdida_var, width=12)
         perdida_entry.grid(row=13, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.perdida_entry = perdida_entry
         ttk.Label(self.frame, text="").grid(row=13, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(
             perdida_entry,
@@ -722,6 +728,7 @@ class ProductFrame:
         )
         falla_entry = ttk.Entry(self.frame, textvariable=self.monto_falla_var, width=12)
         falla_entry.grid(row=14, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.falla_entry = falla_entry
         ttk.Label(self.frame, text="").grid(row=14, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(
             falla_entry,
@@ -736,6 +743,7 @@ class ProductFrame:
         )
         cont_entry = ttk.Entry(self.frame, textvariable=self.monto_cont_var, width=12)
         cont_entry.grid(row=15, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.cont_entry = cont_entry
         ttk.Label(self.frame, text="").grid(row=15, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(
             cont_entry,
@@ -756,6 +764,7 @@ class ProductFrame:
         )
         rec_entry = ttk.Entry(self.frame, textvariable=self.monto_rec_var, width=12)
         rec_entry.grid(row=16, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.rec_entry = rec_entry
         ttk.Label(self.frame, text="").grid(row=16, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(rec_entry, "Monto efectivamente recuperado.")
 
@@ -764,6 +773,7 @@ class ProductFrame:
         )
         pago_entry = ttk.Entry(self.frame, textvariable=self.monto_pago_var, width=12)
         pago_entry.grid(row=17, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.pago_entry = pago_entry
         ttk.Label(self.frame, text="").grid(row=17, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(pago_entry, "Pago realizado por deuda vinculada.")
 
