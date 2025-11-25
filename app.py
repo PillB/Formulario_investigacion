@@ -899,10 +899,13 @@ class FraudCaseApp:
         }
 
     def _normalize_analysis_texts(self, analysis_payload):
-        def _get_text(value):
-            if isinstance(value, Mapping):
-                return str(value.get("text") or "")
-            return str(value or "")
+        def _build_entry(value):
+            text, tags, images = self._deserialize_rich_text_payload(value)
+            sanitized = sanitize_rich_text(text, RICH_TEXT_MAX_CHARS)
+            entry = {"text": sanitized, "tags": tags}
+            if images:
+                entry["images"] = images
+            return entry
 
         sections = [
             "antecedentes",
@@ -913,14 +916,11 @@ class FraudCaseApp:
             "recomendaciones",
         ]
         payload = analysis_payload or {}
-        normalized = {
-            name: sanitize_rich_text(_get_text(payload.get(name)), RICH_TEXT_MAX_CHARS)
-            for name in sections
-        }
+        normalized = {name: _build_entry(payload.get(name)) for name in sections}
         for name, value in payload.items():
             if name in normalized:
                 continue
-            normalized[name] = sanitize_rich_text(_get_text(value), RICH_TEXT_MAX_CHARS)
+            normalized[name] = _build_entry(value)
         return normalized
 
     def _get_exports_folder(self) -> Optional[Path]:
@@ -8416,6 +8416,17 @@ class FraudCaseApp:
             payload.get("recomendaciones_categorias", {})
         )
         analysis = self._normalize_analysis_texts(payload.get("analisis", {}))
+        analysis_signature = tuple(
+            (
+                name,
+                value.get("text") if isinstance(value, Mapping) else "",
+                tuple(
+                    (tag.get("tag"), tag.get("start"), tag.get("end"))
+                    for tag in (value.get("tags") if isinstance(value, Mapping) else [])
+                ),
+            )
+            for name, value in sorted(analysis.items())
+        )
         total_investigated = self._sum_investigated_amounts(products)
         return (
             str(case.get("id_caso", "")).strip(),
@@ -8432,7 +8443,7 @@ class FraudCaseApp:
             tuple(tuple(sorted(row.items())) for row in anexos),
             tuple(sorted(investigador.items())),
             tuple((key, tuple(values)) for key, values in sorted(recomendaciones.items())),
-            tuple(sorted(analysis.items())),
+            analysis_signature,
         )
 
     def _sum_investigated_amounts(self, products: list[dict]) -> Decimal:
@@ -9990,7 +10001,14 @@ class FraudCaseApp:
         write_csv('detalles_norma.csv', data['normas'], ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia'])
         # ANALISIS
         analysis_texts = self._normalize_analysis_texts(data['analisis'])
-        write_csv('analisis.csv', [dict({'id_caso': data['caso']['id_caso']}, **analysis_texts)], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
+        analysis_row = {
+            "id_caso": data['caso']['id_caso'],
+            **{
+                key: (value.get("text") if isinstance(value, Mapping) else "")
+                for key, value in analysis_texts.items()
+            },
+        }
+        write_csv('analisis.csv', [analysis_row], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
         # LOGS
         if self.logs:
             write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES)
