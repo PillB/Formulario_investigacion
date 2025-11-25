@@ -6,6 +6,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any, Tuple
 
+from theme_manager import ThemeManager
+
 
 def ensure_grid_support(widget: Any) -> None:
     """Garantiza que el widget exponga un método grid incluso en stubs de prueba.
@@ -43,6 +45,60 @@ def ensure_grid_support(widget: Any) -> None:
         return None
 
     setattr(widget.__class__, "grid", _grid_proxy)
+
+
+def build_required_label(
+    parent: Any,
+    text: str,
+    tooltip_register=None,
+    tooltip_message: str | None = None,
+):
+    """Return a label with a red asterisk for required fields.
+
+    The helper keeps layout untouched by returning a compact frame that can be
+    used anywhere a label would normally be gridded or packed. It reuses
+    ``ThemeManager`` styles so the asterisk and background adapt to the active
+    palette without duplicating style definitions.
+    """
+
+    try:
+        container = ttk.Frame(parent, style="TFrame")
+        label = ttk.Label(
+            container, text=text, style=ThemeManager.REQUIRED_LABEL_STYLE
+        )
+        label.pack(side="left", fill="y")
+        ttk.Label(
+            container,
+            text=" *",
+            style=ThemeManager.REQUIRED_ASTERISK_STYLE,
+        ).pack(side="left", fill="y")
+    except Exception:
+        class _StubLabel:
+            def pack(self, *_args, **_kwargs):  # noqa: D401, ANN001
+                """Stub pack method for headless tests."""
+
+        class _StubContainer:
+            def __init__(self):
+                self._children = []
+
+            def pack(self, *_args, **_kwargs):
+                return None
+
+            def winfo_children(self):
+                return list(self._children)
+
+        container = _StubContainer()
+        ensure_grid_support(container)
+        container._children.extend([_StubLabel(), _StubLabel()])
+
+    if callable(tooltip_register):
+        tooltip_register(
+            container,
+            tooltip_message
+            or "Campo obligatorio según Design document CM.pdf",
+        )
+
+    return container
 
 
 def create_scrollable_container(parent: Any) -> Tuple[ttk.Frame, ttk.Frame]:

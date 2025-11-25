@@ -7,7 +7,7 @@ from tkinter import ttk
 
 from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import build_required_label, ensure_grid_support
 from ui.layout import responsive_grid
 from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
@@ -45,7 +45,11 @@ class CaseFrame:
     def _build_header_fields(self):
         owner = self.owner
         frame = self.frame
-        case_id_label = ttk.Label(frame, text="Número de caso (AAAA-XXXX):")
+        case_id_label = build_required_label(
+            frame,
+            "Número de caso (AAAA-XXXX):",
+            tooltip_register=owner.register_tooltip,
+        )
         id_entry = ttk.Entry(
             frame, textvariable=owner.id_caso_var, width=20, style=ENTRY_STYLE
         )
@@ -53,7 +57,11 @@ class CaseFrame:
             id_entry, "Formato AAAA-XXXX. Se usa para detectar duplicados."
         )
 
-        tipo_label = ttk.Label(frame, text="Tipo de informe:")
+        tipo_label = build_required_label(
+            frame,
+            "Tipo de informe:",
+            tooltip_register=owner.register_tooltip,
+        )
         tipo_cb = ttk.Combobox(
             frame,
             textvariable=owner.tipo_informe_var,
@@ -82,7 +90,12 @@ class CaseFrame:
             taxonomy_container.columnconfigure(1, weight=1)
             taxonomy_container.columnconfigure(3, weight=1)
 
-        ttk.Label(taxonomy_container, text="Categoría nivel 1:").grid(
+        cat1_label = build_required_label(
+            taxonomy_container,
+            "Categoría nivel 1:",
+            tooltip_register=owner.register_tooltip,
+        )
+        cat1_label.grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         cat1_cb = ttk.Combobox(
@@ -99,7 +112,12 @@ class CaseFrame:
         cat1_cb.bind("<FocusOut>", lambda _e: owner.on_case_cat1_change())
         cat1_cb.set('')
 
-        ttk.Label(taxonomy_container, text="Categoría nivel 2:").grid(
+        cat2_label = build_required_label(
+            taxonomy_container,
+            "Categoría nivel 2:",
+            tooltip_register=owner.register_tooltip,
+        )
+        cat2_label.grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         case_cat2_cb = ttk.Combobox(
@@ -117,7 +135,12 @@ class CaseFrame:
         owner.case_cat2_cb = case_cat2_cb
         case_cat2_cb.set('')
 
-        ttk.Label(taxonomy_container, text="Modalidad:").grid(
+        modalidad_label = build_required_label(
+            taxonomy_container,
+            "Modalidad:",
+            tooltip_register=owner.register_tooltip,
+        )
+        modalidad_label.grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         case_mod_cb = ttk.Combobox(
@@ -138,7 +161,12 @@ class CaseFrame:
         canal_proc_container.grid(row=2, column=0, columnspan=4, sticky="we")
         canal_proc_container.columnconfigure(1, weight=1)
         canal_proc_container.columnconfigure(3, weight=1)
-        ttk.Label(canal_proc_container, text="Canal:").grid(
+        canal_label = build_required_label(
+            canal_proc_container,
+            "Canal:",
+            tooltip_register=owner.register_tooltip,
+        )
+        canal_label.grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         canal_cb = ttk.Combobox(
@@ -153,7 +181,12 @@ class CaseFrame:
         owner.register_tooltip(canal_cb, "Canal donde se originó el evento.")
         canal_cb.set('')
 
-        ttk.Label(canal_proc_container, text="Proceso impactado:").grid(
+        proc_label = build_required_label(
+            canal_proc_container,
+            "Proceso impactado:",
+            tooltip_register=owner.register_tooltip,
+        )
+        proc_label.grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         proc_cb = ttk.Combobox(
@@ -251,7 +284,12 @@ class CaseFrame:
         ensure_grid_support(dates_container)
         dates_container.columnconfigure(1, weight=1)
         dates_container.columnconfigure(3, weight=1)
-        ttk.Label(dates_container, text="Ocurrencia (YYYY-MM-DD):").grid(
+        occurrence_label = build_required_label(
+            dates_container,
+            "Ocurrencia (YYYY-MM-DD):",
+            tooltip_register=owner.register_tooltip,
+        )
+        occurrence_label.grid(
             row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
         fecha_case_entry = ttk.Entry(
@@ -263,7 +301,12 @@ class CaseFrame:
         owner.register_tooltip(
             fecha_case_entry, "Fecha en que se originó el caso a nivel general."
         )
-        ttk.Label(dates_container, text="Descubrimiento (YYYY-MM-DD):").grid(
+        discovery_label = build_required_label(
+            dates_container,
+            "Descubrimiento (YYYY-MM-DD):",
+            tooltip_register=owner.register_tooltip,
+        )
+        discovery_label.grid(
             row=0, column=2, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
         fecha_desc_entry = ttk.Entry(

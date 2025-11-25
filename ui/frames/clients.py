@@ -10,7 +10,7 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_client_id, validate_email_list,
                         validate_multi_selection, validate_phone_list,
                         validate_required_text)
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import build_required_label, ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 from theme_manager import ThemeManager
@@ -87,7 +87,12 @@ class ClientFrame:
             self.frame.columnconfigure(1, weight=1)
             self.frame.columnconfigure(2, weight=0)
 
-        ttk.Label(self.frame, text="Tipo de ID:").grid(
+        tipo_id_label = build_required_label(
+            self.frame,
+            "Tipo de ID:",
+            tooltip_register=self.tooltip_register,
+        )
+        tipo_id_label.grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         tipo_id_cb = ttk.Combobox(
@@ -103,7 +108,12 @@ class ClientFrame:
         tipo_id_cb.set('')
         self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
 
-        ttk.Label(self.frame, text="ID del cliente:").grid(
+        client_id_label = build_required_label(
+            self.frame,
+            "ID del cliente:",
+            tooltip_register=self.tooltip_register,
+        )
+        client_id_label.grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20, style=ENTRY_STYLE)
@@ -112,7 +122,12 @@ class ClientFrame:
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
-        ttk.Label(self.frame, text="Nombres:").grid(
+        nombres_label = build_required_label(
+            self.frame,
+            "Nombres:",
+            tooltip_register=self.tooltip_register,
+        )
+        nombres_label.grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         nombres_entry = ttk.Entry(
@@ -124,7 +139,12 @@ class ClientFrame:
         )
         self.tooltip_register(nombres_entry, "Ingresa los nombres del cliente.")
 
-        ttk.Label(self.frame, text="Apellidos:").grid(
+        apellidos_label = build_required_label(
+            self.frame,
+            "Apellidos:",
+            tooltip_register=self.tooltip_register,
+        )
+        apellidos_label.grid(
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         apellidos_entry = ttk.Entry(
@@ -136,7 +156,12 @@ class ClientFrame:
         )
         self.tooltip_register(apellidos_entry, "Ingresa los apellidos del cliente.")
 
-        ttk.Label(self.frame, text="Flag:").grid(
+        flag_label = build_required_label(
+            self.frame,
+            "Flag:",
+            tooltip_register=self.tooltip_register,
+        )
+        flag_label.grid(
             row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         flag_cb = ttk.Combobox(
@@ -152,7 +177,12 @@ class ClientFrame:
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
 
-        ttk.Label(self.frame, text="Accionado (seleccione uno o varios):").grid(
+        accionado_label = build_required_label(
+            self.frame,
+            "Accionado (seleccione uno o varios):",
+            tooltip_register=self.tooltip_register,
+        )
+        accionado_label.grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         accionado_list_container = ttk.Frame(self.frame)
@@ -194,7 +224,12 @@ class ClientFrame:
             "Marca las tribus o equipos accionados por la alerta. Puedes escoger varias opciones.",
         )
 
-        ttk.Label(self.frame, text="Teléfonos (separados por ;):").grid(
+        tel_label = build_required_label(
+            self.frame,
+            "Teléfonos (separados por ;):",
+            tooltip_register=self.tooltip_register,
+        )
+        tel_label.grid(
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         tel_entry = ttk.Entry(
@@ -208,7 +243,12 @@ class ClientFrame:
             "Campo obligatorio. Ingresa al menos un número telefónico separado por ; sin guiones.",
         )
 
-        ttk.Label(self.frame, text="Correos (separados por ;):").grid(
+        correo_label = build_required_label(
+            self.frame,
+            "Correos (separados por ;):",
+            tooltip_register=self.tooltip_register,
+        )
+        correo_label.grid(
             row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         cor_entry = ttk.Entry(
