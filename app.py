@@ -9698,7 +9698,7 @@ class FraudCaseApp:
                 if catalog_error:
                     errors.append(catalog_error)
             # For each involvement; require collaborator IDs to validate clave técnica
-            claim_rows = prod_data['reclamos'] or [{'id_reclamo': ''}]
+            claim_rows = prod_data['reclamos'] or []
             product_occurrence_date = prod_data['producto'].get('fecha_ocurrencia')
             assignments = prod_data['asignaciones'] or []
             enforce_assignations = (
@@ -9751,6 +9751,22 @@ class FraudCaseApp:
                         )
                     )
                     continue
+                collaborator_label = collaborator_norm or collaborator_id or 'sin ID'
+                if not claim_rows:
+                    key = (
+                        normalized_case_id,
+                        pid_norm,
+                        cid_norm,
+                        collaborator_norm,
+                        product_occurrence_date,
+                        "",
+                    )
+                    if key in key_set:
+                        errors.append(
+                            f"Registro duplicado de clave técnica (producto {producto_label}, colaborador {collaborator_label})"
+                        )
+                    key_set.add(key)
+                    continue
                 for claim in claim_rows:
                     claim_id = (claim.get('id_reclamo') or '').strip()
                     key = (
@@ -9762,7 +9778,6 @@ class FraudCaseApp:
                         self._normalize_identifier(claim_id),
                     )
                     if key in key_set:
-                        collaborator_label = collaborator_norm or collaborator_id or 'sin ID'
                         errors.append(
                             f"Registro duplicado de clave técnica (producto {producto_label}, colaborador {collaborator_label})"
                         )

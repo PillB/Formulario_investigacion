@@ -1591,6 +1591,34 @@ def test_validate_data_detects_case_insensitive_technical_keys():
     )
 
 
+def test_validate_data_detects_duplicate_technical_keys_without_claims():
+    product_configs = [
+        {
+            "tipo_producto": "Crédito personal",
+            "reclamos": [],
+            "asignaciones": [
+                {"id_colaborador": "T12345", "monto_asignado": "10.00"},
+            ],
+        },
+        {
+            "tipo_producto": "Crédito personal",
+            "reclamos": [],
+            "asignaciones": [
+                {"id_colaborador": "T12345", "monto_asignado": "5.00"},
+            ],
+        },
+    ]
+
+    app = build_headless_app("Crédito personal", product_configs=product_configs)
+
+    errors, _ = app.validate_data()
+
+    assert (
+        f"Registro duplicado de clave técnica (producto {DEFAULT_PRODUCT_ID}, colaborador T12345)"
+        in errors
+    )
+
+
 def test_validate_data_detects_case_insensitive_product_duplicates():
     product_configs = [
         {"tipo_producto": "Fondos mutuos", "producto_overrides": {"id_producto": "ABCD1234"}},
