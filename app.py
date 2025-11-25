@@ -8693,17 +8693,86 @@ class FraudCaseApp:
 
     def load_autosave(self):
         """Carga el estado guardado automáticamente si el archivo existe."""
-        if os.path.exists(AUTOSAVE_FILE):
+
+        def _iter_candidates():
+            seen: set[Path] = set()
+            search_roots = [Path(BASE_DIR)]
+            external_base = self._get_external_drive_path()
+            if external_base:
+                search_roots.append(Path(external_base))
+            patterns = ("autosave.json", "*autosave*.json", "*_temp_*.json")
+
+            def _yield_matches(root: Path):
+                for pattern in patterns:
+                    yield from root.glob(pattern)
+
+            for root in search_roots:
+                try:
+                    for path in _yield_matches(root):
+                        try:
+                            resolved = path.resolve()
+                        except OSError:
+                            continue
+                        if resolved in seen or not path.is_file():
+                            continue
+                        seen.add(resolved)
+                        yield path
+                    for child in root.iterdir():
+                        if not child.is_dir():
+                            continue
+                        for path in _yield_matches(child):
+                            try:
+                                resolved = path.resolve()
+                            except OSError:
+                                continue
+                            if resolved in seen or not path.is_file():
+                                continue
+                            seen.add(resolved)
+                            yield path
+                except OSError:
+                    continue
+
+        candidates: list[tuple[float, Path]] = []
+        for path in _iter_candidates():
             try:
-                with open(AUTOSAVE_FILE, 'r', encoding="utf-8") as f:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            candidates.append((mtime, path))
+        if not candidates:
+            return
+        candidates.sort(key=lambda item: item[0], reverse=True)
+
+        def _warn_user(title: str, message: str) -> None:
+            log_event("validacion", message, self.logs)
+            if getattr(self, "_suppress_messagebox", False):
+                return
+            try:
+                messagebox.showwarning(title, message)
+            except tk.TclError:
+                return
+
+        for _mtime, path in candidates:
+            try:
+                with path.open('r', encoding="utf-8") as f:
                     data = json.load(f)
                 dataset = self._ensure_case_data(data)
                 self.populate_from_data(dataset)
-                log_event("navegacion", "Se cargó el autosave", self.logs)
                 case_id = (dataset.get("caso", {}) or {}).get("id_caso")
                 self._update_window_title(case_id=case_id)
+                self._schedule_summary_refresh(sections=self.summary_tables.keys(), data=dataset)
+                self._flush_summary_refresh(sections=self.summary_tables.keys(), data=dataset)
+                source_msg = f"Se cargó el autosave desde {path}"
+                self._last_autosave_source = str(path)
+                log_event("navegacion", source_msg, self.logs)
+                self._display_toast(self.root, source_msg, duration_ms=2200)
+                return
             except Exception as ex:
-                log_event("validacion", f"Error cargando autosave: {ex}", self.logs)
+                _warn_user("Autosave inválido", f"No se pudo cargar {path.name}: {ex}")
+                continue
+
+        self._clear_case_state(save_autosave=False)
+        _warn_user("Autosave no disponible", "No se pudo cargar ningún autosave válido; se restauró el formulario vacío.")
 
     def _handle_window_close(self):
         self.flush_autosave()
