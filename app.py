@@ -180,16 +180,37 @@ class ValidationPanel(ttk.Frame):
         self.on_focus_request = on_focus_request
         self._entries: dict[str, str] = {}
         self._targets: dict[str, tk.Widget] = {}
+        self._entry_status: dict[str, str] = {}
         self._placeholder_id: Optional[str] = None
+        self._collapsed = False
+        self._issue_count_var = tk.StringVar(value="⚠️ 0")
         self._init_ui()
 
     def _init_ui(self) -> None:
         self.columnconfigure(0, weight=1)
-        title = ttk.Label(self, text="Panel de validación", font=("TkDefaultFont", 10, "bold"))
-        title.grid(row=0, column=0, sticky="w", padx=5, pady=(5, 0))
+        self.rowconfigure(0, weight=1)
+
+        self._content_container = ttk.Frame(self)
+        self._content_container.grid(row=0, column=0, sticky="nsew")
+        self._content_container.columnconfigure(0, weight=1)
+        self._content_container.rowconfigure(1, weight=1)
+
+        header = ttk.Frame(self._content_container)
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=5, pady=(5, 0))
+        header.columnconfigure(1, weight=1)
+        title = ttk.Label(
+            header, text="Panel de validación", font=("TkDefaultFont", 10, "bold")
+        )
+        title.grid(row=0, column=0, sticky="w")
+
+        self._issue_badge = ttk.Label(header, textvariable=self._issue_count_var)
+        self._issue_badge.grid(row=0, column=1, sticky="e", padx=(4, 0))
+        self._toggle_button = ttk.Button(header, width=3, text="⇤", command=self.toggle)
+        self._toggle_button.grid(row=0, column=2, sticky="e")
+
         columns = ("mensaje", "origen")
         self.tree = ttk.Treeview(
-            self,
+            self._content_container,
             columns=columns,
             show="tree headings",
             height=16,
@@ -197,18 +218,33 @@ class ValidationPanel(ttk.Frame):
         self.tree.heading("#0", text="Estado")
         self.tree.heading("mensaje", text="Detalle")
         self.tree.heading("origen", text="Origen")
-        self.tree.column("#0", width=60, anchor="center")
-        self.tree.column("mensaje", width=280, anchor="w")
-        self.tree.column("origen", width=140, anchor="w")
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.tree.column("#0", width=48, minwidth=36, anchor="center", stretch=True)
+        self.tree.column("mensaje", width=240, minwidth=160, anchor="w", stretch=True)
+        self.tree.column("origen", width=120, minwidth=96, anchor="w", stretch=True)
+        scrollbar = ttk.Scrollbar(self._content_container, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         self.tree.grid(row=1, column=0, sticky="nsew", padx=(5, 0), pady=5)
         scrollbar.grid(row=1, column=1, sticky="ns", pady=5)
-        self.rowconfigure(1, weight=1)
         self.tree.bind("<Double-1>", lambda _e: self.focus_selected())
         self._ensure_placeholder()
-        fix_button = ttk.Button(self, text="Corregir ahora", command=self.focus_selected)
+        fix_button = ttk.Button(
+            self._content_container, text="Corregir ahora", command=self.focus_selected
+        )
         fix_button.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 5))
+
+        self._collapsed_strip = ttk.Frame(self)
+        self._collapsed_strip.grid_rowconfigure(0, weight=1)
+        self._collapsed_strip.grid_propagate(False)
+        self._collapsed_strip.configure(width=90)
+        strip_label = ttk.Label(
+            self._collapsed_strip, textvariable=self._issue_count_var, anchor="center"
+        )
+        strip_label.grid(row=0, column=0, padx=6, pady=5, sticky="n")
+        expand_button = ttk.Button(
+            self._collapsed_strip, width=3, text="⇥", command=self.expand
+        )
+        expand_button.grid(row=1, column=0, padx=6, pady=5, sticky="s")
+        self._collapsed_strip.grid_remove()
 
     def _ensure_placeholder(self) -> None:
         if self._entries or self._placeholder_id:
@@ -216,6 +252,7 @@ class ValidationPanel(ttk.Frame):
         self._placeholder_id = self.tree.insert(
             "", "end", text=self.ICONS["ok"], values=("Sin validaciones registradas", ""),
         )
+        self._refresh_issue_count()
 
     def _remove_placeholder(self) -> None:
         if self._placeholder_id:
@@ -224,6 +261,33 @@ class ValidationPanel(ttk.Frame):
 
     def _icon_for(self, status: str) -> str:
         return self.ICONS.get(status, self.ICONS["error"])
+
+    def _refresh_issue_count(self) -> None:
+        issue_count = sum(1 for status in self._entry_status.values() if status != "ok")
+        icon = "⚠️" if issue_count else self.ICONS["ok"]
+        self._issue_count_var.set(f"{icon} {issue_count}")
+
+    def toggle(self) -> None:
+        if self._collapsed:
+            self.expand()
+        else:
+            self.collapse()
+
+    def collapse(self) -> None:
+        if self._collapsed:
+            return
+        self._collapsed = True
+        self._content_container.grid_remove()
+        self._collapsed_strip.grid(row=0, column=0, sticky="ns")
+        self._toggle_button.configure(text="⇥")
+
+    def expand(self) -> None:
+        if not self._collapsed:
+            return
+        self._collapsed = False
+        self._collapsed_strip.grid_remove()
+        self._content_container.grid(row=0, column=0, sticky="nsew")
+        self._toggle_button.configure(text="⇤")
 
     def update_entry(
         self,
@@ -250,12 +314,14 @@ class ValidationPanel(ttk.Frame):
                 values=(display_message, origin or ""),
             )
             self._entries[key] = item_id
+        self._entry_status[key] = status
         if widget:
             self._targets[item_id] = widget
         elif item_id in self._targets:
             self._targets.pop(item_id, None)
         if not self._entries:
             self._ensure_placeholder()
+        self._refresh_issue_count()
 
     def focus_selected(self) -> None:
         selection = self.tree.selection()
@@ -272,6 +338,8 @@ class ValidationPanel(ttk.Frame):
             if item_id:
                 self.tree.delete(item_id)
                 self._targets.pop(item_id, None)
+            self._entry_status.pop(key, None)
+        self._refresh_issue_count()
 
     def show_batch_results(
         self,
