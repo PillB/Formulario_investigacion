@@ -43,7 +43,7 @@ class TeamMemberFrame:
         self.idx = idx
         self.remove_callback = remove_callback
         self.update_team_options = update_team_options
-        self.team_lookup = self._normalize_lookup(team_lookup)
+        self.team_lookup = team_lookup or {}
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
@@ -58,7 +58,6 @@ class TeamMemberFrame:
         self.case_date_getter = case_date_getter
         self._future_snapshot_warnings: set[str] = set()
         self._fallback_message_var = tk.StringVar(value="")
-        self._tree_sort_state: dict[str, bool] = {}
         self.summary_tree = None
         self._summary_tree_sort_state: dict[str, bool] = {}
 
@@ -86,8 +85,6 @@ class TeamMemberFrame:
             owner._team_summary_owner = self
         else:
             self.summary_tree = getattr(owner, "team_summary_tree", None)
-        self._build_header_table()
-
         self.frame = ttk.LabelFrame(self.section.content, text=f"Colaborador {self.idx+1}")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
@@ -353,8 +350,6 @@ class TeamMemberFrame:
                 )
             )
 
-        self._populate_header_tree()
-
     def _create_section(self, parent):
         try:
             return CollapsibleSection(parent, title=f"Colaborador {self.idx+1}")
@@ -376,140 +371,6 @@ class TeamMemberFrame:
 
             fallback.pack_content = _pack_content  # type: ignore[attr-defined]
             return fallback
-
-    def _build_header_table(self):
-        container = ttk.Frame(self.section.content)
-        self.section.pack_content(container, fill="x", expand=False)
-        ensure_grid_support(container)
-        if hasattr(container, "columnconfigure"):
-            container.columnconfigure(0, weight=1)
-
-        columns = (
-            ("id_colaborador", "ID"),
-            ("flag", "Flag"),
-            ("division", "División"),
-            ("area", "Área"),
-            ("puesto", "Puesto"),
-        )
-        tree_columns = [c[0] for c in columns]
-        self.header_tree = self._create_treeview(container, tree_columns)
-        if hasattr(self.header_tree, "grid"):
-            self.header_tree.grid(
-                row=0,
-                column=0,
-                sticky="nsew",
-                padx=COL_PADX,
-                pady=(ROW_PADY, ROW_PADY // 2),
-            )
-        if hasattr(ttk, "Scrollbar"):
-            try:
-                scrollbar = ttk.Scrollbar(
-                    container, orient="vertical", command=getattr(self.header_tree, "yview", None)
-                )
-                if hasattr(scrollbar, "grid"):
-                    scrollbar.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
-                if hasattr(self.header_tree, "configure") and hasattr(scrollbar, "set"):
-                    self.header_tree.configure(yscrollcommand=scrollbar.set)
-            except Exception as exc:
-                log_event(
-                    "validacion",
-                    f"No se pudo crear scrollbar para colaborador {self.idx+1}: {exc}",
-                    self.logs,
-                )
-
-        for col_id, text in columns:
-            if hasattr(self.header_tree, "heading"):
-                self.header_tree.heading(col_id, text=text, command=lambda c=col_id: self._sort_treeview(c))
-            if hasattr(self.header_tree, "column"):
-                self.header_tree.column(col_id, anchor="w", width=150)
-
-        if hasattr(self.header_tree, "tag_configure"):
-            self.header_tree.tag_configure("even", background="#f7f7f7")
-            self.header_tree.tag_configure("odd", background="#ffffff")
-        if hasattr(self.header_tree, "bind"):
-            self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
-            self.header_tree.bind("<Double-1>", self._on_tree_double_click)
-
-    def _create_treeview(self, container, columns):
-        class _DummyTree:
-            def __init__(self, cols):
-                self._columns = list(cols)
-                self._items: list[str] = []
-                self._values: dict[str, tuple] = {}
-
-            def grid(self, *args, **kwargs):
-                return None
-
-            def configure(self, **kwargs):
-                if "columns" in kwargs:
-                    self._columns = list(kwargs["columns"])
-                return None
-
-            def heading(self, *_args, **_kwargs):
-                return None
-
-            def column(self, *_args, **_kwargs):
-                return None
-
-            def tag_configure(self, *_args, **_kwargs):
-                return None
-
-            def bind(self, *_args, **_kwargs):
-                return None
-
-            def get_children(self, _item=""):
-                return list(self._items)
-
-            def delete(self, item):
-                if item == "":
-                    self._items.clear()
-                    self._values.clear()
-                    return None
-                if item in self._items:
-                    self._items.remove(item)
-                    self._values.pop(item, None)
-                return None
-
-            def insert(self, _parent, _index, iid=None, values=None, tags=None):  # noqa: ARG002
-                key = iid or str(len(self._items))
-                self._items.append(key)
-                self._values[key] = tuple(values or ())
-                return key
-
-            def move(self, item, _parent, index):  # noqa: ARG002
-                if item in self._items:
-                    self._items.remove(item)
-                    self._items.insert(index, item)
-                return None
-
-            def item(self, item, option=None):
-                if option == "values":
-                    return self._values.get(item, ())
-                return {}
-
-            def selection(self):
-                return tuple(self._items[:1])
-
-            def yview(self, *_args, **_kwargs):
-                return None
-
-            def __getitem__(self, key):
-                if key == "columns":
-                    return tuple(self._columns)
-                return ()
-
-        tree_cls = getattr(ttk, "Treeview", None)
-        if tree_cls is None:
-            return _DummyTree(columns)
-        try:
-            return tree_cls(container, columns=columns, show="headings", height=4)
-        except Exception as exc:  # pragma: no cover - defensive for headless environments
-            log_event(
-                "validacion",
-                f"No se pudo crear tabla de colaboradores {self.idx+1}: {exc}",
-                self.logs,
-            )
-            return _DummyTree(columns)
 
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
@@ -667,17 +528,8 @@ class TeamMemberFrame:
                 var.set(value)
 
     def set_lookup(self, lookup):
-        self.team_lookup = self._normalize_lookup(lookup)
+        self.team_lookup = lookup or {}
         self._last_missing_lookup_id = None
-        self._populate_header_tree()
-
-    def _normalize_lookup(self, lookup):
-        normalized = {}
-        for key, value in (lookup or {}).items():
-            normalized_key = normalize_team_member_identifier(key)
-            if normalized_key:
-                normalized[normalized_key] = value
-        return normalized
 
     def _requires_agency_details(self) -> bool:
         division_norm = normalize_without_accents(self.division_var.get()).lower()
@@ -829,38 +681,6 @@ class TeamMemberFrame:
                 pass
         return message
 
-    def _populate_header_tree(self):
-        if not hasattr(self, "header_tree"):
-            return
-
-        for child in self.header_tree.get_children(""):
-            self.header_tree.delete(child)
-
-        for row_index, (cid, data) in enumerate(sorted(self.team_lookup.items())):
-            values = (
-                str(cid),
-                str(data.get("flag", "")),
-                str(data.get("division", "")),
-                str(data.get("area", "")),
-                str(data.get("puesto", "")),
-            )
-            tag = "even" if row_index % 2 == 0 else "odd"
-            self.header_tree.insert("", "end", iid=str(cid), values=values, tags=(tag,))
-
-    def _sort_treeview(self, column):
-        if not hasattr(self, "header_tree"):
-            return
-
-        reverse = self._tree_sort_state.get(column, False)
-        items = list(self.header_tree.get_children(""))
-        column_index = self.header_tree["columns"].index(column)
-        items.sort(key=lambda item: self.header_tree.item(item, "values")[column_index], reverse=reverse)
-        for new_index, item in enumerate(items):
-            self.header_tree.move(item, "", new_index)
-            tag = "even" if new_index % 2 == 0 else "odd"
-            self.header_tree.item(item, tags=(tag,))
-        self._tree_sort_state[column] = not reverse
-
     # ------------------------------------------------------------------
     # Resumen de colaboradores
     # ------------------------------------------------------------------
@@ -999,30 +819,6 @@ class TeamMemberFrame:
         if hasattr(tree, "tag_configure"):
             tree.tag_configure("even", background=palette.get("heading_background", palette.get("background")), foreground=palette.get("foreground"))
             tree.tag_configure("odd", background=palette.get("background"), foreground=palette.get("foreground"))
-
-    def _on_tree_select(self, _event=None):
-        item = self._first_selected_item()
-        if not item:
-            return
-        values = self.header_tree.item(item, "values")
-        if not values:
-            return
-        self.id_var.set(values[0])
-        self.on_id_change(preserve_existing=True, silent=True)
-
-    def _on_tree_double_click(self, _event=None):
-        item = self._first_selected_item()
-        if not item:
-            return
-        values = self.header_tree.item(item, "values")
-        if not values:
-            return
-        self.id_var.set(values[0])
-        self.on_id_change(from_focus=True)
-
-    def _first_selected_item(self):
-        selection = self.header_tree.selection()
-        return selection[0] if selection else None
 
     def get_data(self):
         normalized_id = normalize_team_member_identifier(self.id_var.get())
