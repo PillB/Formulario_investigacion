@@ -9,17 +9,16 @@ from tkinter import messagebox, ttk
 
 from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
+from theme_manager import ThemeManager
+from ui.config import COL_PADX, ROW_PADY
+from ui.frames.utils import ensure_grid_support
+from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
                         validate_codigo_analitica, validate_date_text,
-                        validate_money_bounds,
-                        validate_product_dates, validate_product_id,
-                        validate_reclamo_id, validate_required_text)
-from ui.frames.utils import ensure_grid_support
-from ui.config import COL_PADX, ROW_PADY
-from ui.layout import CollapsibleSection
-from theme_manager import ThemeManager
-
+                        validate_money_bounds, validate_product_dates,
+                        validate_product_id, validate_reclamo_id,
+                        validate_required_text)
 
 ENTRY_STYLE = ThemeManager.ENTRY_STYLE
 COMBOBOX_STYLE = ThemeManager.COMBOBOX_STYLE
@@ -241,6 +240,7 @@ class ClaimRow:
         self.name_entry = name_entry
         ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
+        self._bind_claim_field_triggers(name_entry)
 
         ttk.Label(self.frame, text="Código:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -252,6 +252,7 @@ class ClaimRow:
         self.code_entry = code_entry
         ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
+        self._bind_claim_field_triggers(code_entry)
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -290,6 +291,7 @@ class ClaimRow:
         self.validators.append(self.code_validator)
 
         self._last_missing_lookup_id = None
+        self._last_summary_snapshot = self.get_data()
 
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
@@ -297,6 +299,19 @@ class ClaimRow:
         widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
+
+    def _bind_claim_field_triggers(self, widget) -> None:
+        for event_name in ("<FocusOut>", "<KeyRelease>", "<<Paste>>", "<<Cut>>"):
+            widget.bind(event_name, lambda _e: self._refresh_claim_summary(), add="+")
+
+    def _refresh_claim_summary(self):
+        snapshot = self.get_data()
+        if snapshot == getattr(self, "_last_summary_snapshot", None):
+            return
+        self._last_summary_snapshot = snapshot
+        refresher = getattr(self.product_frame, "schedule_summary_refresh", None)
+        if callable(refresher):
+            refresher('reclamos')
 
     def get_data(self):
         return {
@@ -314,11 +329,13 @@ class ClaimRow:
         refresher = getattr(self.product_frame, "refresh_claim_guidance", None)
         if callable(refresher):
             refresher()
+        self._refresh_claim_summary()
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
         rid = self.id_var.get().strip()
         if not rid:
             self._last_missing_lookup_id = None
+            self._refresh_claim_summary()
             return
         lookup = getattr(self.product_frame, "claim_lookup", None) or {}
         data = lookup.get(rid)
@@ -332,6 +349,7 @@ class ClaimRow:
                     ),
                 )
                 self._last_missing_lookup_id = rid
+            self._refresh_claim_summary()
             return
 
         def set_if_present(var, key):
@@ -355,6 +373,7 @@ class ClaimRow:
         refresher = getattr(self.product_frame, "refresh_claim_guidance", None)
         if callable(refresher):
             refresher()
+        self._refresh_claim_summary()
 
     def is_empty(self):
         snapshot = self.get_data()
