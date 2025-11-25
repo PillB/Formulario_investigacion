@@ -3692,22 +3692,29 @@ class FraudCaseApp:
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(2, weight=1)
+        frame.rowconfigure(1, weight=1)
 
-        controls = ttk.Frame(frame)
-        controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
-        controls.columnconfigure(0, weight=1)
-
-        add_btn = ttk.Button(controls, text="Agregar riesgo", command=self._on_add_risk)
-        add_btn.grid(row=0, column=0, sticky="w")
-        self.register_tooltip(add_btn, "Registra un nuevo riesgo identificado.")
+        header_row = ttk.Frame(frame)
+        header_row.grid(row=0, column=0, sticky="nsew")
+        header_row.columnconfigure(0, weight=1)
+        header_row.rowconfigure(0, weight=1)
 
         self.risk_header_tree, self.risk_header_container = self._build_shared_header_tree(
-            frame, 1, RiskFrame.build_header_tree
+            header_row, 0, RiskFrame.build_header_tree
         )
 
+        add_btn = ttk.Button(header_row, text="Agregar riesgo", command=self._on_add_risk)
+        add_btn.grid(
+            row=0,
+            column=1,
+            sticky="nw",
+            padx=(0, COL_PADX),
+            pady=(ROW_PADY, ROW_PADY // 2),
+        )
+        self.register_tooltip(add_btn, "Registra un nuevo riesgo identificado.")
+
         scrollable, inner = create_scrollable_container(frame)
-        scrollable.grid(row=2, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.risk_container = inner
         self.add_risk()
 
@@ -3734,7 +3741,7 @@ class FraudCaseApp:
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
         self._refresh_risk_auto_ids()
-        self._schedule_summary_refresh('riesgos')
+        self._refresh_shared_risk_tree()
 
     def remove_risk(self, risk_frame):
         self.risk_frames.remove(risk_frame)
@@ -3838,6 +3845,27 @@ class FraudCaseApp:
         tree.configure(yscrollcommand=scrollbar.set)
 
         return tree, container
+
+    def _refresh_shared_risk_tree(self):
+        if not getattr(self, "risk_header_tree", None):
+            return
+
+        for child in self.risk_header_tree.get_children(""):
+            self.risk_header_tree.delete(child)
+
+        for idx, risk_frame in enumerate(self.risk_frames):
+            data = risk_frame.get_data()
+            values = (
+                data.get("id_riesgo", ""),
+                data.get("criticidad", ""),
+                data.get("exposicion_residual", ""),
+                data.get("lider", ""),
+                data.get("descripcion", ""),
+            )
+            tag = "even" if idx % 2 == 0 else "odd"
+            self.risk_header_tree.insert("", "end", values=values, tags=(tag,))
+
+        self._schedule_summary_refresh('riesgos')
 
     def build_analysis_tab(self, parent):
         scrollable_tab, tab_container = create_scrollable_container(parent)
