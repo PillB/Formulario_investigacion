@@ -179,7 +179,7 @@ class ValidationPanel(ttk.Frame):
         super().__init__(parent)
         self.on_focus_request = on_focus_request
         self._entries: dict[str, str] = {}
-        self._targets: dict[str, tk.Widget] = {}
+        self._targets: dict[str, dict[str, object] | tk.Widget] = {}
         self._entry_status: dict[str, str] = {}
         self._placeholder_id: Optional[str] = None
         self._collapsed = False
@@ -327,8 +327,8 @@ class ValidationPanel(ttk.Frame):
             self._entries[key] = item_id
             created = True
         self._entry_status[key] = status
-        if widget:
-            self._targets[item_id] = widget
+        if widget or origin is not None:
+            self._targets[item_id] = {"widget": widget, "origin": origin}
         elif item_id in self._targets:
             self._targets.pop(item_id, None)
         if not self._entries:
@@ -345,9 +345,19 @@ class ValidationPanel(ttk.Frame):
             selection = self.tree.selection()
             if not selection:
                 return
-        widget = self._targets.get(selection[0])
+        target_info = self._targets.get(selection[0])
+        widget = None
+        origin = None
+        if isinstance(target_info, dict):
+            widget = target_info.get("widget")
+            origin = target_info.get("origin")
+        else:
+            widget = target_info
         if widget and self.on_focus_request:
-            self.on_focus_request(widget)
+            try:
+                self.on_focus_request(widget, origin)
+            except TypeError:
+                self.on_focus_request(widget)
 
     def _select_first_actionable(self) -> None:
         for item_id in self.tree.get_children(""):
@@ -1226,30 +1236,190 @@ class FraudCaseApp:
         self.build_summary_tab(summary_tab)
         self._current_tab_id = self.notebook.select()
 
-    def _focus_widget_from_validation_panel(self, widget) -> None:
-        try:
-            tab_to_select = None
-            for tab_id in self.notebook.tabs():
-                tab_widget = self.notebook.nametowidget(tab_id)
-                current = widget
-                while current is not None:
-                    if current is tab_widget:
-                        tab_to_select = tab_id
-                        break
-                    parent_name = current.winfo_parent()
-                    if not parent_name:
-                        current = None
-                        break
-                    current = current.nametowidget(parent_name)
-                if tab_to_select:
-                    break
+    def _focus_widget_from_validation_panel(self, widget, origin: str | None = None) -> None:
+        target_widget = self._resolve_focus_target(widget, origin)
+        if not target_widget:
+            return
 
-            if tab_to_select:
+        tab_to_select = self._locate_tab_for_widget(target_widget)
+        if tab_to_select:
+            try:
                 self.notebook.select(tab_to_select)
-            widget.focus_set()
-            widget.event_generate("<<ValidationFocusRequest>>")
+            except Exception:
+                pass
+
+        try:
+            target_widget.focus_set()
+            target_widget.event_generate("<<ValidationFocusRequest>>")
         except Exception:
             return
+
+    @staticmethod
+    def _widget_is_focusable(widget) -> bool:
+        if widget is None:
+            return False
+        try:
+            return bool(widget.winfo_exists())
+        except Exception:
+            return False
+
+    def _resolve_focus_target(self, widget, origin: str | None = None):
+        if self._widget_is_focusable(widget):
+            return widget
+        revived = self._revive_focus_widget(widget, origin)
+        if self._widget_is_focusable(revived):
+            return revived
+        return None
+
+    def _locate_tab_for_widget(self, widget) -> str | None:
+        notebook = getattr(self, "notebook", None)
+        if not notebook or not self._widget_is_focusable(widget):
+            return None
+        try:
+            tabs = notebook.tabs()
+        except Exception:
+            return None
+        for tab_id in tabs:
+            try:
+                tab_widget = notebook.nametowidget(tab_id)
+            except Exception:
+                continue
+            current = widget
+            while current is not None:
+                if current is tab_widget:
+                    return tab_id
+                try:
+                    parent_name = current.winfo_parent()
+                except Exception:
+                    current = None
+                    break
+                if not parent_name:
+                    current = None
+                    break
+                try:
+                    current = current.nametowidget(parent_name)
+                except Exception:
+                    current = None
+                    break
+        return None
+
+    def _revive_focus_widget(self, widget, origin: str | None = None):
+        origin_hint = origin or getattr(widget, "_validation_origin", None) or ""
+        product_match = re.search(r"Producto\s+(\d+)", origin_hint, flags=re.IGNORECASE)
+        if product_match:
+            target_index = int(product_match.group(1)) - 1
+            product_frame = self._ensure_product_frame_for_focus(target_index)
+            if not product_frame:
+                return None
+            claim_match = re.search(r"Reclamo\s+(\d+)", origin_hint, flags=re.IGNORECASE)
+            if claim_match:
+                claim_index = int(claim_match.group(1)) - 1
+                claim_row = self._ensure_claim_row_for_focus(product_frame, claim_index)
+                if claim_row:
+                    return self._map_claim_origin_to_widget(claim_row, origin_hint) or getattr(
+                        claim_row, "id_entry", None
+                    )
+                return None
+            return self._map_product_origin_to_widget(product_frame, origin_hint) or getattr(
+                product_frame, "id_entry", None
+            )
+        return None
+
+    def _ensure_product_frame_for_focus(self, index: int):
+        if index < 0:
+            return None
+        while len(self.product_frames) <= index:
+            self.add_product(initialize_rows=False)
+        frame = self.product_frames[index]
+        self._expand_product_section(frame)
+        return frame
+
+    def _expand_product_section(self, frame) -> None:
+        section = getattr(frame, "section", None)
+        expand = getattr(section, "expand", None)
+        if callable(expand):
+            try:
+                expand()
+            except Exception:
+                pass
+
+    def _ensure_claim_row_for_focus(self, product_frame, claim_index: int):
+        if product_frame is None:
+            return None
+        claims = getattr(product_frame, "claims", None)
+        if claims is None:
+            return None
+        if not claims:
+            product_frame.add_claim()
+        while len(product_frame.claims) <= claim_index:
+            product_frame.add_claim()
+        safe_index = min(max(claim_index, 0), len(product_frame.claims) - 1)
+        claim_row = product_frame.claims[safe_index]
+        self._clear_claim_row_values(claim_row)
+        return claim_row
+
+    def _clear_claim_row_values(self, claim_row) -> None:
+        if claim_row is None:
+            return
+
+        def _reset():
+            for attr in ("id_var", "name_var", "code_var"):
+                var = getattr(claim_row, attr, None)
+                setter = getattr(var, "set", None)
+                if callable(setter):
+                    setter("")
+
+        validators = getattr(claim_row, "validators", []) or []
+        managed = False
+        for validator in validators:
+            suppress = getattr(validator, "suppress_during", None)
+            if callable(suppress):
+                suppress(_reset)
+                managed = True
+                break
+        if not managed:
+            _reset()
+
+    def _map_product_origin_to_widget(self, product_frame, origin: str):
+        origin_lower = (origin or "").lower()
+        candidates = [
+            ("cliente", getattr(product_frame, "client_cb", None)),
+            ("categoría 1", getattr(product_frame, "cat1_cb", None)),
+            ("categoria 1", getattr(product_frame, "cat1_cb", None)),
+            ("categoría 2", getattr(product_frame, "cat2_cb", None)),
+            ("categoria 2", getattr(product_frame, "cat2_cb", None)),
+            ("modalidad", getattr(product_frame, "mod_cb", None)),
+            ("tipo de producto", getattr(product_frame, "tipo_prod_cb", None)),
+            ("ocurrencia", getattr(product_frame, "focc_entry", None)),
+            ("descubrimiento", getattr(product_frame, "fdesc_entry", None)),
+            ("investigado", getattr(product_frame, "inv_entry", None)),
+            ("pérdida", getattr(product_frame, "perdida_entry", None)),
+            ("falla", getattr(product_frame, "falla_entry", None)),
+            ("contingencia", getattr(product_frame, "cont_entry", None)),
+            ("recuperado", getattr(product_frame, "rec_entry", None)),
+            ("pago", getattr(product_frame, "pago_entry", None)),
+        ]
+        for token, candidate in candidates:
+            if token in origin_lower and candidate is not None:
+                return candidate
+        fallback = getattr(product_frame, "id_entry", None)
+        return fallback
+
+    def _map_claim_origin_to_widget(self, claim_row, origin: str):
+        origin_lower = (origin or "").lower()
+        candidates = [
+            ("código", getattr(claim_row, "code_entry", None)),
+            ("nombre", getattr(claim_row, "name_entry", None)),
+            ("id", getattr(claim_row, "id_entry", None)),
+        ]
+        for token, candidate in candidates:
+            if token in origin_lower and candidate is not None:
+                return candidate
+        fallback = None
+        first_missing = getattr(claim_row, "first_missing_widget", None)
+        if callable(first_missing):
+            fallback = first_missing()
+        return fallback or getattr(claim_row, "id_entry", None)
 
     def _publish_field_validation(
         self, field_name: str, message: Optional[str], widget
@@ -1257,6 +1427,11 @@ class FraudCaseApp:
         if not self._validation_panel:
             return
         target_widget = widget if hasattr(widget, "focus_set") else None
+        if target_widget is not None:
+            try:
+                setattr(target_widget, "_validation_origin", field_name)
+            except Exception:
+                pass
         target_id = id(target_widget) if target_widget is not None else field_name
         key = f"field:{field_name}:{target_id}"
         severity = "error" if message else "ok"
