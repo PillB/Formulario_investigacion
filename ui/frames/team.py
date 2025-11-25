@@ -909,10 +909,25 @@ class TeamMemberFrame:
         if not tree or not hasattr(tree, "get_children"):
             return
         try:
-            tree.delete(*tree.get_children())
-        except Exception:
+            existing_rows = tree.get_children()
+            if existing_rows:
+                tree.delete(*existing_rows)
+        except Exception as exc:
+            log_event("validacion", f"No se pudo limpiar el resumen de colaboradores: {exc}", self.logs)
             return
         team_frames = getattr(self.owner, "team_frames", []) if self.owner else []
+
+        def build_unique_iid(base: str, used: set[str]) -> str:
+            normalized = (base or "").strip() or "colaborador"
+            candidate = normalized
+            suffix = 1
+            while candidate in used:
+                candidate = f"{normalized}-{suffix}"
+                suffix += 1
+            return candidate
+
+        seen_iids: set[str] = set()
+        inserted_count = 0
         for idx, member in enumerate(team_frames):
             data = member.get_data()
             values = (
@@ -927,8 +942,23 @@ class TeamMemberFrame:
                 data.get("fecha_carta_inmediatez", ""),
                 data.get("fecha_carta_renuncia", ""),
             )
-            tags = ("even",) if idx % 2 == 0 else ("odd",)
-            tree.insert("", "end", iid=data.get("id_colaborador", f"colaborador-{idx}"), values=values, tags=tags)
+            base_iid = data.get("id_colaborador", f"colaborador-{idx+1}")
+            iid = build_unique_iid(base_iid, seen_iids)
+            tag = "even" if inserted_count % 2 == 0 else "odd"
+            try:
+                tree.insert("", "end", iid=iid, values=values, tags=(tag,))
+                seen_iids.add(iid)
+                inserted_count += 1
+            except Exception as exc:
+                log_event("validacion", f"IID duplicado o inválido '{iid}' para colaborador: {exc}", self.logs)
+                retry_iid = build_unique_iid(base_iid, seen_iids | {iid})
+                try:
+                    tree.insert("", "end", iid=retry_iid, values=values, tags=(tag,))
+                    seen_iids.add(retry_iid)
+                    inserted_count += 1
+                    log_event("validacion", f"Reintento exitoso con IID '{retry_iid}'", self.logs)
+                except Exception as retry_exc:
+                    log_event("validacion", f"Omitido colaborador con IID '{iid}': {retry_exc}", self.logs)
         self._apply_summary_theme(tree)
         self._on_summary_select()
 
