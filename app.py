@@ -1556,9 +1556,126 @@ class FraudCaseApp:
         if dataset and isinstance(dataset, Mapping):
             case_id = (dataset.get("caso", {}) or {}).get("id_caso")
         self._update_window_title(case_id=case_id, streak_days=streak)
+        self._play_save_particles()
 
     def _mark_user_edited(self) -> None:
         self._user_has_edited = True
+
+    def _get_save_anchor_widget(self) -> Optional[tk.Widget]:
+        bar = getattr(self, "actions_action_bar", None)
+        if not bar:
+            return None
+        try:
+            return bar.buttons.get("save_send")
+        except Exception:
+            return None
+
+    def _play_save_particles(self, target_widget: Optional[tk.Widget] = None) -> None:
+        """Muestra una animación ligera de partículas junto al botón de guardado."""
+
+        if not hasattr(self, "root") or self.root is None:
+            return
+
+        widget = target_widget or self._get_save_anchor_widget()
+        if widget is None:
+            return
+
+        try:
+            self._safe_update_idletasks()
+            root_x = self.root.winfo_rootx()
+            root_y = self.root.winfo_rooty()
+            widget_x = widget.winfo_rootx()
+            widget_y = widget.winfo_rooty()
+            width = max(widget.winfo_width(), widget.winfo_reqwidth(), 24)
+            height = max(widget.winfo_height(), widget.winfo_reqheight(), 12)
+        except tk.TclError:
+            return
+
+        offset_x = widget_x - root_x
+        offset_y = widget_y - root_y
+        canvas_height = height + 20
+
+        try:
+            canvas = tk.Canvas(
+                self.root,
+                width=width,
+                height=canvas_height,
+                highlightthickness=0,
+                bd=0,
+                bg=self.root.cget("background"),
+            )
+        except tk.TclError:
+            return
+
+        canvas.place(x=offset_x, y=max(0, offset_y - 10))
+
+        palette = ThemeManager.current()
+        base_color = palette.get("accent", "#1d4ed8")
+        background = palette.get("background", "#ffffff")
+
+        def _blend(color: str, target: str, factor: float) -> str:
+            color = color.lstrip("#")
+            target = target.lstrip("#")
+            try:
+                cr, cg, cb = int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
+                tr, tg, tb = int(target[0:2], 16), int(target[2:4], 16), int(target[4:6], 16)
+            except ValueError:
+                return color if color else "#1d4ed8"
+            mix = lambda c1, c2: int(c1 + (c2 - c1) * factor)
+            return f"#{mix(cr, tr):02x}{mix(cg, tg):02x}{mix(cb, tb):02x}"
+
+        particles = [
+            {
+                "x": random.uniform(6, max(width - 6, 6)),
+                "y": canvas_height - random.uniform(6, 12),
+                "vy": random.uniform(1.4, 2.6),
+                "size": random.uniform(4, 9),
+                "fade": random.uniform(0.08, 0.14),
+                "alpha": 1.0,
+            }
+            for _ in range(10)
+        ]
+
+        def _step():
+            try:
+                canvas.delete("particle")
+            except tk.TclError:
+                return
+            alive = False
+            for particle in particles:
+                if particle["alpha"] <= 0:
+                    continue
+                particle["y"] -= particle["vy"]
+                particle["alpha"] -= particle["fade"]
+                if particle["alpha"] <= 0:
+                    continue
+                alive = True
+                fade_factor = min(1.0, 1.0 - particle["alpha"])
+                color = _blend(base_color, background, fade_factor)
+                size = particle["size"] * (0.5 + 0.5 * particle["alpha"])
+                canvas.create_oval(
+                    particle["x"],
+                    particle["y"],
+                    particle["x"] + size,
+                    particle["y"] + size,
+                    fill=color,
+                    outline="",
+                    tags="particle",
+                )
+
+            if alive:
+                try:
+                    self.root.after(40, _step)
+                except tk.TclError:
+                    pass
+            else:
+                try:
+                    canvas.destroy()
+                except tk.TclError:
+                    pass
+
+        canvas.after(1200, lambda: canvas.destroy() if canvas.winfo_exists() else None)
+        _step()
 
     def _update_sound_preference(self) -> None:
         self._user_settings["sound_enabled"] = bool(self.sound_enabled_var.get())
