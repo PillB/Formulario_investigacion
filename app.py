@@ -227,10 +227,10 @@ class ValidationPanel(ttk.Frame):
         scrollbar.grid(row=1, column=1, sticky="ns", pady=5)
         self.tree.bind("<Double-1>", lambda _e: self.focus_selected())
         self._ensure_placeholder()
-        fix_button = ttk.Button(
+        self._focus_button = ttk.Button(
             self._content_container, text="Corregir ahora", command=self.focus_selected
         )
-        fix_button.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 5))
+        self._focus_button.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 5))
 
         self._collapsed_strip = ttk.Frame(self)
         self._collapsed_strip.grid_rowconfigure(0, weight=1)
@@ -253,11 +253,21 @@ class ValidationPanel(ttk.Frame):
             "", "end", text=self.ICONS["ok"], values=("Sin validaciones registradas", ""),
         )
         self._refresh_issue_count()
+        self._update_focus_button_state()
 
     def _remove_placeholder(self) -> None:
         if self._placeholder_id:
             self.tree.delete(self._placeholder_id)
             self._placeholder_id = None
+            self._update_focus_button_state()
+
+    def _update_focus_button_state(self) -> None:
+        if not hasattr(self, "_focus_button"):
+            return
+        if self._entries:
+            self._focus_button.state(["!disabled"])
+        else:
+            self._focus_button.state(["disabled"])
 
     def _icon_for(self, status: str) -> str:
         return self.ICONS.get(status, self.ICONS["error"])
@@ -303,6 +313,7 @@ class ValidationPanel(ttk.Frame):
         status = "ok" if not message else severity
         display_message = message or "Sin errores"
         item_id = self._entries.get(key)
+        created = False
         if item_id:
             self.tree.item(item_id, text=self._icon_for(status), values=(display_message, origin or ""))
         else:
@@ -314,6 +325,7 @@ class ValidationPanel(ttk.Frame):
                 values=(display_message, origin or ""),
             )
             self._entries[key] = item_id
+            created = True
         self._entry_status[key] = status
         if widget:
             self._targets[item_id] = widget
@@ -322,14 +334,28 @@ class ValidationPanel(ttk.Frame):
         if not self._entries:
             self._ensure_placeholder()
         self._refresh_issue_count()
+        self._update_focus_button_state()
+        if created and (not self.tree.selection() or self.tree.selection() == (self._placeholder_id,)):
+            self._select_first_actionable()
 
     def focus_selected(self) -> None:
         selection = self.tree.selection()
         if not selection:
-            return
+            self._select_first_actionable()
+            selection = self.tree.selection()
+            if not selection:
+                return
         widget = self._targets.get(selection[0])
         if widget and self.on_focus_request:
             self.on_focus_request(widget)
+
+    def _select_first_actionable(self) -> None:
+        for item_id in self.tree.get_children(""):
+            if item_id != self._placeholder_id:
+                self.tree.selection_set(item_id)
+                self.tree.focus(item_id)
+                return
+        self.tree.selection_remove(self.tree.selection())
 
     def _clear_batch_entries(self) -> None:
         to_delete = [key for key in self._entries if key.startswith("batch:")]
