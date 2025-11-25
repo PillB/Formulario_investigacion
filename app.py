@@ -1232,6 +1232,24 @@ class FraudCaseApp:
 
     def _focus_widget_from_validation_panel(self, widget) -> None:
         try:
+            tab_to_select = None
+            for tab_id in self.notebook.tabs():
+                tab_widget = self.notebook.nametowidget(tab_id)
+                current = widget
+                while current is not None:
+                    if current is tab_widget:
+                        tab_to_select = tab_id
+                        break
+                    parent_name = current.winfo_parent()
+                    if not parent_name:
+                        current = None
+                        break
+                    current = current.nametowidget(parent_name)
+                if tab_to_select:
+                    break
+
+            if tab_to_select:
+                self.notebook.select(tab_to_select)
             widget.focus_set()
             widget.event_generate("<<ValidationFocusRequest>>")
         except Exception:
