@@ -16,6 +16,14 @@ from ui.layout import CollapsibleSection
 class RiskFrame:
     """Representa un riesgo identificado en la sección de riesgos."""
 
+    HEADER_COLUMNS = (
+        ("id_riesgo", "ID"),
+        ("criticidad", "Criticidad"),
+        ("exposicion_residual", "Exposición"),
+        ("lider", "Líder"),
+        ("descripcion", "Descripción"),
+    )
+
     def __init__(
         self,
         parent,
@@ -25,6 +33,7 @@ class RiskFrame:
         tooltip_register,
         change_notifier=None,
         default_risk_id: str | None = None,
+        header_tree=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -36,6 +45,7 @@ class RiskFrame:
         self.risk_lookup = {}
         self._last_missing_lookup_id = None
         self.change_notifier = change_notifier
+        self.header_tree = None
 
         self.id_var = tk.StringVar()
         self._auto_id_value = ""
@@ -51,7 +61,6 @@ class RiskFrame:
 
         self.section = CollapsibleSection(parent, title=f"Riesgo {self.idx+1}")
         self.section.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
-        self._build_header_table()
 
         self.frame = ttk.LabelFrame(self.section.content, text=f"Riesgo {self.idx+1}")
         self.section.pack_content(self.frame, fill="x", expand=True)
@@ -159,37 +168,47 @@ class RiskFrame:
             )
         )
 
-    def _build_header_table(self):
-        container = ttk.Frame(self.section.content)
-        self.section.pack_content(container, fill="x", expand=False)
-        ensure_grid_support(container)
-        if hasattr(container, "columnconfigure"):
-            container.columnconfigure(0, weight=1)
-
-        columns = (
-            ("id_riesgo", "ID"),
-            ("criticidad", "Criticidad"),
-            ("exposicion_residual", "Exposición"),
-            ("lider", "Líder"),
-            ("descripcion", "Descripción"),
+        self.attach_header_tree(header_tree)
+        self._register_header_tree_focus(
+            id_entry,
+            lider_entry,
+            crit_cb,
+            desc_entry,
+            expos_entry,
+            planes_entry,
         )
-        self.header_tree = ttk.Treeview(
-            container, columns=[c[0] for c in columns], show="headings", height=4
+
+    @staticmethod
+    def build_header_tree(parent):
+        header_tree = ttk.Treeview(
+            parent,
+            columns=[c[0] for c in RiskFrame.HEADER_COLUMNS],
+            show="headings",
+            height=4,
         )
-        self.header_tree.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.header_tree.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
-        self.header_tree.configure(yscrollcommand=scrollbar.set)
 
-        for col_id, text in columns:
-            self.header_tree.heading(col_id, text=text, command=lambda c=col_id: self._sort_treeview(c))
-            self.header_tree.column(col_id, anchor="w", width=140)
+        for col_id, text in RiskFrame.HEADER_COLUMNS:
+            header_tree.heading(col_id, text=text)
+            header_tree.column(col_id, anchor="w", width=140)
 
-        self.header_tree.tag_configure("even", background="#f7f7f7")
-        self.header_tree.tag_configure("odd", background="#ffffff")
-        self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
-        self.header_tree.bind("<Double-1>", self._on_tree_double_click)
-        self._tree_sort_state = {}
+        header_tree.tag_configure("even", background="#f7f7f7")
+        header_tree.tag_configure("odd", background="#ffffff")
+        header_tree._tree_sort_state = {}
+        return header_tree
+
+    def attach_header_tree(self, header_tree):
+        self.header_tree = header_tree
+        if not self.header_tree:
+            return
+        tree_sort_state = getattr(self.header_tree, "_tree_sort_state", {})
+        setattr(self.header_tree, "_tree_sort_state", tree_sort_state)
+        self._tree_sort_state = tree_sort_state
+        for col_id, text in self.HEADER_COLUMNS:
+            self.header_tree.heading(
+                col_id, text=text, command=lambda _c=col_id: self._sort_treeview(_c)
+            )
+        self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select, add=False)
+        self.header_tree.bind("<Double-1>", self._on_tree_double_click, add=False)
 
     def get_data(self):
         _, normalized_text = self._normalize_exposure_amount()
@@ -249,7 +268,7 @@ class RiskFrame:
             self._log_change(f"Riesgo {self.idx+1}: autopoblado desde catálogo")
 
     def _populate_header_tree(self):
-        if not hasattr(self, "header_tree"):
+        if not self.header_tree:
             return
 
         for child in self.header_tree.get_children(""):
@@ -267,10 +286,9 @@ class RiskFrame:
             self.header_tree.insert("", "end", iid=str(risk_id), values=values, tags=(tag,))
 
     def _sort_treeview(self, column):
-        if not hasattr(self, "header_tree"):
+        if not self.header_tree:
             return
-
-        reverse = self._tree_sort_state.get(column, False)
+        reverse = self._tree_sort_state.get(column, False) if hasattr(self, "_tree_sort_state") else False
         items = list(self.header_tree.get_children(""))
         column_index = self.header_tree["columns"].index(column)
         items.sort(key=lambda item: self.header_tree.item(item, "values")[column_index], reverse=reverse)
@@ -301,7 +319,7 @@ class RiskFrame:
         self.on_id_change(from_focus=True)
 
     def _first_selected_item(self):
-        selection = self.header_tree.selection()
+        selection = self.header_tree.selection() if self.header_tree else []
         return selection[0] if selection else None
 
     def _normalize_exposure_amount(self):
@@ -369,6 +387,21 @@ class RiskFrame:
         """Indica si el usuario cambió manualmente el identificador."""
 
         return self._id_user_modified
+
+    def _activate_header_tree(self, *_):
+        if self.header_tree:
+            self.attach_header_tree(self.header_tree)
+
+    def _register_header_tree_focus(self, *widgets):
+        for widget in widgets:
+            try:
+                widget.bind("<FocusIn>", self._activate_header_tree, add="+")
+            except Exception:
+                continue
+        try:
+            self.section.bind("<FocusIn>", self._activate_header_tree, add="+")
+        except Exception:
+            pass
 
 
 __all__ = ["RiskFrame"]
