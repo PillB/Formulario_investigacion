@@ -61,6 +61,7 @@ import io
 import json
 import math
 import os
+import random
 import re
 import shutil
 import zipfile
@@ -72,7 +73,7 @@ from decimal import Decimal
 from importlib import util as importlib_util
 from pathlib import Path
 from contextlib import suppress
-from typing import Optional
+from typing import Iterable, Optional
 import wave
 
 import tkinter as tk
@@ -152,6 +153,13 @@ else:  # pragma: no cover - entorno sin Pillow
 
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+POSITIVE_PHRASES = (
+    "¡Excelente!",
+    "Caso impecable",
+    "Listo para avanzar",
+    "Buen trabajo",
+    "Validación completada",
+)
 CONFIRMATION_WAV_B64 = (
     "UklGRiQFAABXQVZFZm10IBAAAAABAAEAgD4AAIA+AAABAAgAZGF0YQAFAACAlai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tKWRfGZUR0FCSllsgZept76+tqiVf2pXSUFBSFZofpOmtb2+uKuZg25aS0JARlNkeo+js7y/uq6ch3JdTUNARFBhdougsLu/u7Cgi3ZhUERAQ01dcoecrrq/vLOjj3pkU0ZAQktaboOZq7i+vbWmk35oVkhBQUlXaoCVqLa+vrepl4FsWUpCQUdUZnyRpbS9v7msm4VwXExDQEVRY3iNorK8v7uvnol0X09EQERPX3SJnq+7v7yyoo14Y1FFQENMXHCFm6y5v720pZF8ZlRHQUJKWWyBl6m3vr62qJWAaldJQUFIVmh+k6a1vb64q5mDblpLQkBGU2R6j6OzvL+6rpyHcl1NQ0BEUGF2i6Cwu7+7sKCLdmFQREBDTV1yh5yuur+8s6OPemRTRkBCS1pug5mruL69taaTfmhWSEFBSVdqgJWotr6+t6mXgWxZSkJBR1RmfJGltL2/uaybhXBcTENARVFjeI2isry/u6+eiXRfT0RARE9fdImer7u/vLKijXhjUUVAQ0xccIWbrLm/vbSlkXxmVEdBQkpZbIGXqbe+vraolX9qV0lBQUhWaH6TprW9vrirmYNuWktCQEZTZHqPo7O8v7qunIdyXU1DQERQYXaLoLC7v7uwoIt2YVBEQENNXXKHnK66v7yzo496ZFNGQEJLWm6Dmau4vr21ppN+aFZIQUFJV2p/lai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tKWRfGZUR0FCSllsgZept76+tqiVgGpXSUFBSFZofpOmtb2+uKuZg25aS0JARlNkeo+js7y/uq6ch3JdTUNARFBhdougsLu/u7Cgi3ZhUERAQ01dcoecrrq/vLOjj3pkU0ZAQktaboOZq7i+vbWmk35oVkhBQUlXaoCVqLa+vrepl4FsWUpCQUdUZnyRpbS9v7msm4VwXExDQEVRY3iNorK8v7uvnol0X09EQERPX3SJnq+7v7yyoo14Y1FFQENMXHCFm6y5v720pZF8ZlRHQUJKWWyBl6m3vr62qJV/aldJQUFIVmh+k6a1vb64q5mDblpLQkBGU2R6j6OzvL+6rpyHcl1NQ0BEUGF2i6Cwu7+7sKCLdmFQREBDTV1yh5yuur+8s6OPemRTRkBCS1pug5mruL69taaTfmhWSEFBSVdqgJWotr6+t6mXgWxZSkJBR1RmfJGltL2/uaybhXBcTENARVFjeI2isry/u6+eiXRfT0RARE9fdImer7u/vLKijXhjUUVAQ0xccIWbrLm/vbSlkXxmVEdBQkpZbIGXqbe+vraolX9qV0lBQUhWaH6TprW9vrirmYNuWktCQEZTZHqPo7O8v7qunIdyXU1DQERQYXaLoLC7v7uwoIt2YVBEQENNXXKHnK66v7yzo496ZFNGQEJLWm6Dmau4vr21ppN+aFZIQUFJV2p/lai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tA=="
 )
@@ -405,6 +413,8 @@ class FraudCaseApp:
             )
         except Exception:
             self._base_highlight_color = "#000000"
+        self._gold_shine_states: dict[int, dict[str, object]] = {}
+        self._gold_shine_jobs: dict[int, str] = {}
         self._sound_bytes: Optional[bytes] = None
         self._user_has_edited = False
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
@@ -454,6 +464,8 @@ class FraudCaseApp:
         self._rich_text_images = defaultdict(list)
         self._rich_text_image_sources = {}
         self._rich_text_fonts = {}
+        self._toast_window: Optional[tk.Toplevel] = None
+        self._toast_after_id: Optional[str] = None
         self.clients_detail_wrapper = None
         self.team_detail_wrapper = None
         self.clients_summary_tree = None
@@ -1158,10 +1170,14 @@ class FraudCaseApp:
         return {hint: widget for hint, widget in focus_map.items() if widget}
 
     def _publish_validation_summary(self, errors: list[str], warnings: list[str]) -> None:
+        focus_map = self._build_validation_focus_map()
         if self._validation_panel:
             self._validation_panel.show_batch_results(
-                errors, warnings, self._build_validation_focus_map()
+                errors, warnings, focus_map
             )
+        if not errors and not warnings:
+            self._shine_validated_fields(focus_map.values())
+            self._show_success_toast(self._validation_panel)
 
     def _activate_progress_tracking(self) -> None:
         """Habilita el cálculo de avance tras la primera interacción del usuario."""
@@ -1674,6 +1690,250 @@ class FraudCaseApp:
 
         self._badge_window = badge
         self._badge_destroy_after_id = badge.after(2000, lambda win=badge: self._destroy_badge(win))
+
+    def _destroy_toast(self, toast: Optional[tk.Toplevel]) -> None:
+        if toast is None:
+            return
+        try:
+            toast.destroy()
+        except tk.TclError:
+            pass
+        if toast is self._toast_window:
+            self._toast_window = None
+            self._toast_after_id = None
+
+    def _choose_praise(self) -> str:
+        return random.choice(POSITIVE_PHRASES)
+
+    def _show_success_toast(
+        self,
+        widget: Optional[tk.Widget],
+        message: str | None = None,
+        *,
+        duration_ms: int = 1600,
+    ) -> None:
+        if not getattr(self, "_user_has_edited", False):
+            return
+        self._display_toast(widget, message or self._choose_praise(), duration_ms=duration_ms)
+
+    def _display_toast(
+        self, widget: Optional[tk.Widget], message: str, *, duration_ms: int = 1600
+    ) -> None:
+        if not getattr(self, "root", None):
+            return
+        try:
+            if self._toast_after_id:
+                self.root.after_cancel(self._toast_after_id)
+        except tk.TclError:
+            self._toast_after_id = None
+        self._destroy_toast(self._toast_window)
+
+        palette = ThemeManager.current()
+        background = palette.get("heading_background", palette.get("background", "#1f1f1f"))
+        foreground = palette.get("foreground", "#ffffff")
+        border = palette.get("border", palette.get("accent", "#7a8aa6"))
+
+        toast = tk.Toplevel(self.root)
+        toast.transient(self.root)
+        with suppress(tk.TclError):
+            toast.overrideredirect(True)
+            toast.attributes("-topmost", True)
+        container = ttk.Frame(toast, padding=(10, 6))
+        container.pack(fill="both", expand=True)
+        try:
+            style = ThemeManager._ensure_style()  # type: ignore[attr-defined]
+            style.configure(
+                "SuccessToast.TFrame",
+                background=background,
+                bordercolor=border,
+                relief=tk.SOLID,
+                borderwidth=1,
+            )
+            style.configure(
+                "SuccessToast.TLabel",
+                background=background,
+                foreground=foreground,
+                font=(FONT_BASE, 10, "bold"),
+            )
+            container.configure(style="SuccessToast.TFrame")
+        except Exception:
+            container.configure(background=background, highlightbackground=border, highlightthickness=1)
+        label = ttk.Label(container, text=message, style="SuccessToast.TLabel")
+        label.pack()
+
+        try:
+            target = widget if widget is not None else self.root
+            target.update_idletasks()
+            base_x = target.winfo_rootx()
+            base_y = target.winfo_rooty()
+            target_w = target.winfo_width() or 240
+            target_h = target.winfo_height() or 40
+        except tk.TclError:
+            base_x = base_y = 0
+            target_w = 260
+            target_h = 40
+        toast.update_idletasks()
+        width = toast.winfo_width() or 160
+        height = toast.winfo_height() or 30
+        x = base_x + max((target_w - width) // 2, 0)
+        y = base_y + target_h + 8
+        toast.geometry(f"{width}x{height}+{x}+{y}")
+        ThemeManager.register_toplevel(toast)
+
+        self._toast_window = toast
+        try:
+            self._toast_after_id = self.root.after(
+                duration_ms, lambda win=toast: self._destroy_toast(win)
+            )
+        except tk.TclError:
+            self._toast_after_id = None
+            self._destroy_toast(toast)
+
+    def _capture_widget_shine_state(self, widget: tk.Widget) -> dict[str, object]:
+        state: dict[str, object] = {}
+        for option in ("style", "highlightbackground", "highlightcolor", "highlightthickness"):
+            try:
+                state[option] = widget.cget(option)
+            except Exception:
+                continue
+        return state
+
+    def _restore_gold_shine(self, widget: tk.Widget) -> None:
+        widget_id = id(widget)
+        previous = self._gold_shine_states.pop(widget_id, None)
+        if not previous:
+            return
+        style = previous.pop("style", None)
+        with suppress(tk.TclError):
+            if previous:
+                widget.configure(**previous)
+            if style is not None:
+                widget.configure(style=style)
+
+    def _cancel_gold_shine(self, widget: tk.Widget) -> None:
+        widget_id = id(widget)
+        job = self._gold_shine_jobs.pop(widget_id, None)
+        if job and getattr(self, "root", None):
+            with suppress(tk.TclError):
+                self.root.after_cancel(job)
+        self._restore_gold_shine(widget)
+
+    def _apply_gold_style(
+        self,
+        widget: tk.Widget,
+        *,
+        border: str,
+        glow: str,
+        thickness: int,
+        style_name: Optional[str],
+    ) -> None:
+        with suppress(Exception):
+            if style_name:
+                style = ThemeManager._ensure_style()  # type: ignore[attr-defined]
+                style.configure(
+                    style_name,
+                    bordercolor=border,
+                    lightcolor=glow,
+                    darkcolor=border,
+                    focusthickness=thickness,
+                    focuscolor=border,
+                )
+        with suppress(tk.TclError):
+            widget.configure(
+                highlightbackground=border,
+                highlightcolor=glow,
+                highlightthickness=thickness,
+            )
+
+    def _schedule_gold_shimmer(
+        self,
+        widget: tk.Widget,
+        *,
+        border: str,
+        glow: str,
+        duration_ms: int,
+        thickness: int,
+        style_name: Optional[str],
+        phase: int = 0,
+    ) -> None:
+        if not getattr(widget, "winfo_exists", lambda: False)():
+            self._cancel_gold_shine(widget)
+            return
+        if duration_ms <= 0:
+            self._cancel_gold_shine(widget)
+            return
+        shade = glow if phase % 2 == 0 else border
+        self._apply_gold_style(widget, border=shade, glow=glow, thickness=thickness, style_name=style_name)
+        interval = 180
+        try:
+            job = self.root.after(
+                min(interval, duration_ms),
+                lambda: self._schedule_gold_shimmer(
+                    widget,
+                    border=border,
+                    glow=glow,
+                    duration_ms=duration_ms - interval,
+                    thickness=thickness,
+                    style_name=style_name,
+                    phase=phase + 1,
+                ),
+            )
+            self._gold_shine_jobs[id(widget)] = job
+        except tk.TclError:
+            self._cancel_gold_shine(widget)
+
+    def _apply_gold_chrome_shine(
+        self, widgets: Iterable[tk.Widget], *, duration_ms: int = 1400
+    ) -> None:
+        if not getattr(self, "_user_has_edited", False):
+            return
+        palette = ThemeManager.current()
+        glow = palette.get("accent", "#f6d365")
+        border = "#d4af37"
+        thickness = max(self._base_highlight_thickness, 2)
+        seen: set[int] = set()
+        for widget in widgets:
+            if not widget or not getattr(widget, "winfo_exists", lambda: False)():
+                continue
+            widget_id = id(widget)
+            if widget_id in seen:
+                continue
+            seen.add(widget_id)
+            self._cancel_gold_shine(widget)
+            self._gold_shine_states[widget_id] = self._capture_widget_shine_state(widget)
+            style_name = None
+            try:
+                style = ThemeManager._ensure_style()  # type: ignore[attr-defined]
+                base_style = widget.cget("style") or widget.winfo_class()
+                style_name = f"{base_style}.GoldShine.{widget_id}"
+                style.configure(
+                    style_name,
+                    bordercolor=border,
+                    lightcolor=glow,
+                    darkcolor=border,
+                    focusthickness=thickness,
+                    focuscolor=border,
+                )
+                with suppress(tk.TclError):
+                    widget.configure(style=style_name)
+            except Exception:
+                style_name = None
+            self._apply_gold_style(
+                widget, border=border, glow=glow, thickness=thickness, style_name=style_name
+            )
+            self._schedule_gold_shimmer(
+                widget,
+                border=border,
+                glow=glow,
+                duration_ms=duration_ms,
+                thickness=thickness,
+                style_name=style_name,
+            )
+
+    def _shine_validated_fields(
+        self, widgets: Iterable[tk.Widget], *, duration_ms: int = 1400
+    ) -> None:
+        self._apply_gold_chrome_shine(widgets, duration_ms=duration_ms)
 
     def _maybe_show_milestone_badge(
         self, count: int, label: str, *, user_initiated: bool, stride: int = 5
@@ -7732,6 +7992,7 @@ class FraudCaseApp:
             with open(AUTOSAVE_FILE, 'w', encoding="utf-8") as f:
                 json.dump(dataset.as_dict(), f, ensure_ascii=False, indent=2)
             self._handle_session_saved(dataset)
+            self._show_success_toast(self._progress_bar, "Autoguardado listo")
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
         self._schedule_summary_refresh(data=dataset)
@@ -9305,7 +9566,9 @@ class FraudCaseApp:
             build_report_filename(case.get("tipo_informe"), case.get("id_caso"), "csv")
         ).stem
 
-    def _generate_report_file(self, extension: str, builder, description: str) -> None:
+    def _generate_report_file(
+        self, extension: str, builder, description: str, *, source_widget: Optional[tk.Widget] = None
+    ) -> None:
         data, folder, case_id = self._prepare_case_data_for_export()
         if not data or not folder or not case_id:
             return
@@ -9332,12 +9595,18 @@ class FraudCaseApp:
         log_event("navegacion", f"Informe {extension} generado", self.logs)
         self.flush_logs_now()
         self._play_feedback_sound()
+        self._show_success_toast(source_widget)
 
     def generate_docx_report(self):
-        self._generate_report_file("docx", build_docx, "Word (.docx)")
+        self._generate_report_file(
+            "docx", build_docx, "Word (.docx)", source_widget=self.btn_docx
+        )
 
     def generate_md_report(self):
-        self._generate_report_file("md", save_md, "Markdown (.md)")
+        md_button = self.actions_action_bar.buttons.get("md") if hasattr(self, "actions_action_bar") else None
+        self._generate_report_file(
+            "md", save_md, "Markdown (.md)", source_widget=md_button
+        )
 
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
@@ -9482,6 +9751,8 @@ class FraudCaseApp:
         self.flush_logs_now()
         self._play_feedback_sound()
         self._handle_session_saved(data)
+        save_button = self.actions_action_bar.buttons.get("save_send") if hasattr(self, "actions_action_bar") else None
+        self._show_success_toast(save_button)
 
     def _mirror_exports_to_external_drive(self, file_paths, case_id: str) -> None:
         normalized_sources = [Path(path) for path in file_paths or [] if path]
