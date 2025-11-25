@@ -83,16 +83,18 @@ class ValidationTooltip:
     def __init__(self, widget: tk.Widget) -> None:
         self.widget = widget
         self.tipwindow = None
+        self._auto_hide_id = None
         widget.bind("<Destroy>", self._on_destroy)
 
-    def show(self, text: str) -> None:
+    def show(self, text: str, *, auto_hide_ms: int | None = None) -> None:
         if not text:
             self.hide()
             return
         self.hide()
+        self._cancel_auto_hide()
         try:
             x = self.widget.winfo_rootx()
-            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 2
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
         except tk.TclError:
             return
         palette = ThemeManager.current()
@@ -117,14 +119,32 @@ class ValidationTooltip:
         )
         label.pack()
         self.tipwindow.wm_geometry(f"+{x}+{y}")
+        if auto_hide_ms:
+            try:
+                self._auto_hide_id = self.widget.after(auto_hide_ms, self.hide)
+            except tk.TclError:
+                self._auto_hide_id = None
 
     def hide(self):
+        self._cancel_auto_hide()
         if self.tipwindow is not None:
             try:
                 self.tipwindow.destroy()
             except tk.TclError:
                 pass
             self.tipwindow = None
+
+    @property
+    def is_visible(self) -> bool:
+        return self.tipwindow is not None
+
+    def _cancel_auto_hide(self) -> None:
+        if self._auto_hide_id:
+            try:
+                self.widget.after_cancel(self._auto_hide_id)
+            except tk.TclError:
+                pass
+            self._auto_hide_id = None
 
     def _on_destroy(self, _event=None):
         self.hide()

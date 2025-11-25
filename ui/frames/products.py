@@ -493,6 +493,7 @@ class ProductFrame:
         self._badge_styles = {}
         self.amount_badge = None
         self.date_badge = None
+        self._amount_validation_ready = False
         self._last_duplicate_result = "Pendiente"
         self._duplicate_status_var = tk.StringVar()
         self._duplicate_status_style = None
@@ -927,6 +928,8 @@ class ProductFrame:
             rec_entry,
             pago_entry,
         ]
+        self._attach_amount_listeners(amount_vars, amount_widgets)
+        self._sync_amount_validation_state()
         self._create_amount_consistency_validators(
             shared_amount_vars,
             {
@@ -943,6 +946,36 @@ class ProductFrame:
             self.add_involvement()
 
         self._populate_header_tree()
+
+    def _iter_amount_vars(self):
+        return (
+            self.monto_inv_var,
+            self.monto_perdida_var,
+            self.monto_falla_var,
+            self.monto_cont_var,
+            self.monto_rec_var,
+            self.monto_pago_var,
+        )
+
+    def _sync_amount_validation_state(self, *_args):
+        if self._amount_validation_ready:
+            return
+        if any((var.get() or "").strip() for var in self._iter_amount_vars()):
+            self._amount_validation_ready = True
+
+    def _enable_amount_validation(self, *_args):
+        if not self._amount_validation_ready:
+            self._amount_validation_ready = True
+
+    def _attach_amount_listeners(self, amount_vars, amount_widgets):
+        for var in amount_vars:
+            trace_add = getattr(var, "trace_add", None)
+            if callable(trace_add):
+                trace_add("write", self._sync_amount_validation_state)
+        for widget in amount_widgets:
+            widget.bind("<KeyRelease>", self._enable_amount_validation, add="+")
+            widget.bind("<<Paste>>", self._enable_amount_validation, add="+")
+            widget.bind("<<Cut>>", self._enable_amount_validation, add="+")
 
     def _create_section(self, parent):
         try:
@@ -2039,6 +2072,9 @@ class ProductFrame:
         return values
 
     def _validate_montos_consistentes(self, target_key: str | None = None):
+        self._sync_amount_validation_state()
+        if not self._amount_validation_ready:
+            return (None, False)
         values = self._collect_amount_values()
         if values is None:
             self._update_amount_badge("Corrige los montos individuales para validar.", False)

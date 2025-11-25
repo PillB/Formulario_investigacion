@@ -429,7 +429,11 @@ class FieldValidator:
             return
 
         error = self.validate_callback()
-        self._display_error(error, allow_modal=allow_modal_notifications)
+        self._display_error(
+            error,
+            allow_modal=allow_modal_notifications,
+            transient=is_focus_out,
+        )
         self._last_validated_value = current_value
         if not is_focus_out:
             self._validation_armed = False
@@ -457,8 +461,20 @@ class FieldValidator:
             pass
         return str(event_type) == "FocusOut" or event_type == "9"
 
-    def _display_error(self, error: Optional[str], *, allow_modal: bool = True) -> None:
-        if error == self.last_error:
+    def _display_error(
+        self,
+        error: Optional[str],
+        *,
+        allow_modal: bool = True,
+        transient: bool = False,
+    ) -> None:
+        tooltip_visible = getattr(self.tooltip, "is_visible", True)
+        if callable(tooltip_visible):
+            try:
+                tooltip_visible = tooltip_visible()
+            except Exception:
+                tooltip_visible = True
+        if error == self.last_error and tooltip_visible:
             return
         consumer = self.__class__.status_consumer
         if error:
@@ -466,7 +482,11 @@ class FieldValidator:
                 consumer(self.field_name, error, self.widget)
             elif allow_modal:
                 self._notify_modal_error(error)
-            self.tooltip.show(error)
+            auto_hide_ms = 1500 if transient else None
+            try:
+                self.tooltip.show(error, auto_hide_ms=auto_hide_ms)
+            except TypeError:
+                self.tooltip.show(error)
             log_event("validacion", f"{self.field_name}: {error}", self.logs)
         else:
             if consumer:
