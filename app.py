@@ -3692,7 +3692,7 @@ class FraudCaseApp:
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
+        frame.rowconfigure(2, weight=1)
 
         controls = ttk.Frame(frame)
         controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
@@ -3702,8 +3702,12 @@ class FraudCaseApp:
         add_btn.grid(row=0, column=0, sticky="w")
         self.register_tooltip(add_btn, "Registra un nuevo riesgo identificado.")
 
+        self.risk_header_tree, self.risk_header_container = self._build_shared_header_tree(
+            frame, 1, RiskFrame.build_header_tree
+        )
+
         scrollable, inner = create_scrollable_container(frame)
-        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        scrollable.grid(row=2, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.risk_container = inner
         self.add_risk()
 
@@ -3722,6 +3726,7 @@ class FraudCaseApp:
             self.register_tooltip,
             change_notifier=self._log_navigation_change,
             default_risk_id=default_risk_id,
+            header_tree=self.risk_header_tree,
         )
         self.risk_frames.append(risk)
         self._maybe_show_milestone_badge(len(self.risk_frames), "Riesgos", user_initiated=user_initiated)
@@ -3775,7 +3780,7 @@ class FraudCaseApp:
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
+        frame.rowconfigure(2, weight=1)
 
         controls = ttk.Frame(frame)
         controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
@@ -3785,8 +3790,12 @@ class FraudCaseApp:
         add_btn.grid(row=0, column=0, sticky="w")
         self.register_tooltip(add_btn, "Agrega otra norma transgredida.")
 
+        self.norm_header_tree, self.norm_header_container = self._build_shared_header_tree(
+            frame, 1, NormFrame.build_header_tree
+        )
+
         scrollable, inner = create_scrollable_container(frame)
-        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        scrollable.grid(row=2, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.norm_container = inner
         self.add_norm()
 
@@ -3803,6 +3812,7 @@ class FraudCaseApp:
             self.logs,
             self.register_tooltip,
             change_notifier=self._log_navigation_change,
+            header_tree=self.norm_header_tree,
         )
         self.norm_frames.append(norm)
         for i, n in enumerate(self.norm_frames):
@@ -3814,6 +3824,20 @@ class FraudCaseApp:
         for i, n in enumerate(self.norm_frames):
             n.update_title(i)
         self._schedule_summary_refresh('normas')
+
+    def _build_shared_header_tree(self, parent, row_index, tree_builder):
+        container = ttk.Frame(parent)
+        container.grid(row=row_index, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY // 2))
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
+
+        tree = tree_builder(container)
+        tree.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
+        tree.configure(yscrollcommand=scrollbar.set)
+
+        return tree, container
 
     def build_analysis_tab(self, parent):
         scrollable_tab, tab_container = create_scrollable_container(parent)
