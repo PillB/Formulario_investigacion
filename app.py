@@ -391,6 +391,20 @@ class FraudCaseApp:
         self._progress_tracking_started = False
         self._progress_animation_job: Optional[str] = None
         self._progress_target_value = 0.0
+        self._completion_highlight_active = False
+        self._completion_highlight_color: Optional[str] = None
+        try:
+            self._base_highlight_thickness = int(self.root.cget("highlightthickness") or 0)
+        except Exception:
+            self._base_highlight_thickness = 0
+        try:
+            self._base_highlight_color = (
+                str(self.root.cget("highlightbackground"))
+                or str(self.root.cget("background"))
+                or "#000000"
+            )
+        except Exception:
+            self._base_highlight_color = "#000000"
         self._sound_bytes: Optional[bytes] = None
         self._user_has_edited = False
         self.import_status_var = tk.StringVar(value="Listo para importar datos masivos.")
@@ -1170,9 +1184,11 @@ class FraudCaseApp:
         if not (self._progress_tracking_started or force):
             value_var.set(0.0)
             label_var.set("0 %")
+            self._apply_completion_highlight(0.0)
             return
 
         completion = self._compute_completion_percentage()
+        self._apply_completion_highlight(completion)
         self._start_progress_animation(completion)
 
     def _compute_completion_percentage(self) -> float:
@@ -1270,6 +1286,41 @@ class FraudCaseApp:
                 except tk.TclError:
                     pass
         return self._blend_color(normalized, background, max(0.0, min(1.0, alpha)))
+
+    def _apply_completion_highlight(self, completion: float) -> None:
+        root = getattr(self, "root", None)
+        if root is None:
+            return
+
+        palette = ThemeManager.current()
+        background = palette.get("background", root.cget("background"))
+        accent = palette.get("accent", "#d4af37")
+        gold_base = "#d4af37"
+        blended_gold = self._blend_color(gold_base, background, 0.78)
+        accent_hint = self._blend_color(accent, background, 0.45)
+        highlight_color = self._blend_color(blended_gold, accent_hint, 0.65)
+
+        active = completion >= 90.0
+        thickness = max(self._base_highlight_thickness, 4) if active else self._base_highlight_thickness
+        target_color = highlight_color if active else self._base_highlight_color
+
+        if (
+            active == self._completion_highlight_active
+            and target_color == self._completion_highlight_color
+        ):
+            return
+
+        try:
+            root.configure(
+                highlightthickness=thickness,
+                highlightbackground=target_color,
+                highlightcolor=target_color,
+            )
+        except tk.TclError:
+            return
+
+        self._completion_highlight_active = active
+        self._completion_highlight_color = target_color
 
     def _safe_destroy_checkmark_overlay(self) -> None:
         overlay = getattr(self, "_checkmark_overlay", None)
