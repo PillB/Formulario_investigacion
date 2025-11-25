@@ -401,6 +401,9 @@ class FraudCaseApp:
         self._progress_target_value = 0.0
         self._completion_highlight_active = False
         self._completion_highlight_color: Optional[str] = None
+        self.quality_var = tk.IntVar(value=0)
+        self._quality_text_var = tk.StringVar(value="Calidad 0%")
+        self._quality_style = None
         try:
             self._base_highlight_thickness = int(self.root.cget("highlightthickness") or 0)
         except Exception:
@@ -1079,6 +1082,14 @@ class FraudCaseApp:
         ttk.Label(progress_container, textvariable=self._progress_label_var).grid(
             row=0, column=2, padx=(8, 0), pady=(5, 0), sticky="e"
         )
+        progress_container.columnconfigure(3, weight=0)
+        self._quality_badge = ttk.Label(
+            progress_container,
+            textvariable=self._quality_text_var,
+            style="Badge.TLabel",
+        )
+        self._quality_badge.grid(row=0, column=3, padx=(8, 0), pady=(5, 0), sticky="e")
+        self._apply_quality_style(self.quality_var.get())
 
         self.notebook = ttk.Notebook(main_container)
         self.notebook.grid(row=0, column=0, sticky="nsew")
@@ -1148,6 +1159,7 @@ class FraudCaseApp:
         )
         self._validation_feedback_initialized = True
         self._update_completion_progress()
+        self.recalculate_quality()
 
     def _build_validation_focus_map(self) -> dict[str, tk.Widget]:
         focus_map: dict[str, tk.Widget] = {}
@@ -1337,6 +1349,124 @@ class FraudCaseApp:
 
         self._completion_highlight_active = active
         self._completion_highlight_color = target_color
+
+    def _iter_all_validators(self):
+        for validator in getattr(self, "validators", []) or []:
+            yield validator
+        for collection_name in (
+            "client_frames",
+            "team_frames",
+            "product_frames",
+            "risk_frames",
+            "norm_frames",
+        ):
+            for frame in getattr(self, collection_name, []) or []:
+                for validator in getattr(frame, "validators", []) or []:
+                    yield validator
+
+    @staticmethod
+    def _validators_successful(validators) -> bool:
+        items = list(validators)
+        if not items:
+            return False
+        return all(getattr(validator, "last_error", None) in {None, ""} for validator in items)
+
+    def _apply_quality_style(self, score: int) -> None:
+        if self._quality_style is None:
+            try:
+                self._quality_style = ttk.Style(master=self.root)
+            except Exception:
+                self._quality_style = None
+        style = self._quality_style
+        if not style or not hasattr(style, "configure"):
+            return
+        palette = ThemeManager.current()
+        if score < 50:
+            background = "#dc2626"
+            foreground = palette.get("select_foreground", "#ffffff")
+        elif score < 80:
+            background = "#f97316"
+            foreground = palette.get("foreground", "#111827")
+        else:
+            background = "#16a34a"
+            foreground = palette.get("select_foreground", "#ffffff")
+        style.configure(
+            "Badge.TLabel",
+            background=background,
+            foreground=foreground,
+            padding=(8, 2),
+            borderwidth=1,
+            relief="solid",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+
+    def recalculate_quality(self, data=None) -> None:
+        if not getattr(self, "_quality_badge", None):
+            return
+        if not (
+            getattr(self, "_user_has_edited", False)
+            or getattr(self, "_validation_feedback_initialized", False)
+        ):
+            return
+
+        dataset = data if isinstance(data, Mapping) else None
+        validators = list(self._iter_all_validators())
+
+        def _filter_validators(predicate):
+            return [v for v in validators if predicate(getattr(v, "field_name", ""))]
+
+        case_id_valid = self._validators_successful(
+            _filter_validators(lambda name: name.lower().startswith("caso - id"))
+        )
+        case_dates_valid = self._validators_successful(
+            _filter_validators(lambda name: name.lower().startswith("caso - fecha"))
+        )
+        product_date_validators = _filter_validators(
+            lambda name: name.lower().startswith("producto") and "fecha" in name.lower()
+        )
+        product_dates_valid = self._validators_successful(product_date_validators)
+
+        amount_validators = _filter_validators(
+            lambda name: name.lower().startswith("producto")
+            and ("monto" in name.lower() or "consistencia de montos" in name.lower())
+        )
+        amounts_consistent = (
+            self._validators_successful(amount_validators)
+            if amount_validators
+            else False
+        )
+
+        client_rows = dataset.get("clientes") if dataset else None
+        product_rows = dataset.get("productos") if dataset else None
+        risk_rows = dataset.get("riesgos") if dataset else None
+        norm_rows = dataset.get("normas") if dataset else None
+
+        counts = {
+            "clientes": len(client_rows) if client_rows is not None else len(self.client_frames),
+            "productos": len(product_rows) if product_rows is not None else len(self.product_frames),
+            "riesgos": len(risk_rows) if risk_rows is not None else len(self.risk_frames),
+            "normas": len(norm_rows) if norm_rows is not None else len(self.norm_frames),
+        }
+
+        checks = [
+            case_id_valid,
+            counts["clientes"] > 0,
+            counts["productos"] > 0,
+            counts["riesgos"] > 0,
+            counts["normas"] > 0,
+            case_dates_valid and (product_dates_valid or counts["productos"] == 0),
+        ]
+
+        if counts["productos"] > 0:
+            checks.append(amounts_consistent)
+
+        successful = sum(1 for check in checks if check)
+        total = len(checks) if checks else 1
+        score = round(successful / total * 100)
+
+        self.quality_var.set(score)
+        self._quality_text_var.set(f"Calidad {score}%")
+        self._apply_quality_style(score)
 
     def _safe_destroy_checkmark_overlay(self) -> None:
         overlay = getattr(self, "_checkmark_overlay", None)
@@ -6845,6 +6975,7 @@ class FraudCaseApp:
         for key in ordered_sections:
             rows = self._build_summary_rows(key, dataset)
             self._render_summary_rows(key, rows)
+        self.recalculate_quality(data=dataset)
 
     def _build_summary_rows(self, section, dataset):
         if section == "clientes":
