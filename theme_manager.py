@@ -55,6 +55,8 @@ class ThemeManager:
     ENTRY_FOCUS_STYLE = "ModernFocus.TEntry"
     COMBOBOX_FOCUS_STYLE = "ModernFocus.TCombobox"
     SPINBOX_FOCUS_STYLE = "ModernFocus.TSpinbox"
+    REQUIRED_LABEL_STYLE = "Required.TLabel"
+    REQUIRED_ASTERISK_STYLE = "RequiredAsterisk.TLabel"
 
     _style: Optional[ttk.Style] = None
     _root: Optional[tk.Misc] = None
@@ -666,6 +668,10 @@ class ThemeManager:
         tab_padding = (12, 8)
 
         ttk_style.configure("TLabel", font=FONT_BASE, padding=text_padding)
+        ttk_style.configure(cls.REQUIRED_LABEL_STYLE, font=FONT_BASE, padding=text_padding)
+        ttk_style.configure(
+            cls.REQUIRED_ASTERISK_STYLE, font=FONT_BASE, padding=text_padding
+        )
         ttk_style.configure("TEntry", font=FONT_BASE, padding=input_padding)
         ttk_style.configure("TCombobox", font=FONT_BASE, padding=input_padding)
         ttk_style.configure("TSpinbox", font=FONT_BASE, padding=input_padding)
@@ -737,6 +743,14 @@ class ThemeManager:
             bordercolor=border,
         )
         ttk_style.configure("TLabel", background=background, foreground=foreground)
+        ttk_style.configure(
+            cls.REQUIRED_LABEL_STYLE, background=background, foreground=foreground
+        )
+        ttk_style.configure(
+            cls.REQUIRED_ASTERISK_STYLE,
+            background=background,
+            foreground="#d32f2f",
+        )
         ttk_style.configure(
             "TEntry",
             fieldbackground=input_background,
