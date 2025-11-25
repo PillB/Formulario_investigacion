@@ -330,6 +330,7 @@ class FraudCaseApp:
         self._streak_info: dict[str, object] = self._load_streak_info()
         self.root.title(self._build_window_title())
         self._suppress_messagebox = False
+        self._startup_complete = False
         self._reset_navigation_metrics()
         self._hover_tooltips = []
         self.validators = []
@@ -510,6 +511,7 @@ class FraudCaseApp:
         self._trim_all_temp_versions()
         self._schedule_walkthrough()
         self.root.after(250, self._prompt_initial_catalog_loading)
+        self._startup_complete = True
 
     class _PostEditValidator:
         def __init__(
@@ -4550,13 +4552,46 @@ class FraudCaseApp:
                 self.register_tooltip(child[0], tip)
 
     def _apply_text_tag(self, text_widget, tag_name):
+        if not getattr(self, "_startup_complete", True):
+            return
+
+        bold_font, header_font, mono_font = self._get_rich_text_fonts()
+        self._configure_rich_text_tags(text_widget, bold_font, header_font, mono_font)
+
+        insert_index = text_widget.index("insert")
         try:
             start = text_widget.index("sel.first")
             end = text_widget.index("sel.last")
         except tk.TclError:
             start = text_widget.index("insert linestart")
             end = text_widget.index("insert lineend")
-        text_widget.tag_add(tag_name, start, end)
+
+        if text_widget.compare(start, "==", end):
+            if not getattr(self, "_suppress_messagebox", False):
+                try:
+                    messagebox.showinfo(
+                        "Selecciona texto",
+                        "Selecciona un fragmento de texto para aplicar formato.",
+                    )
+                except tk.TclError:
+                    pass
+            return
+
+        tag_ranges = text_widget.tag_ranges(tag_name)
+        paired_ranges = list(zip(tag_ranges[0::2], tag_ranges[1::2]))
+        toggle_off = any(
+            text_widget.compare(start, ">=", r_start)
+            and text_widget.compare(end, "<=", r_end)
+            for r_start, r_end in paired_ranges
+        )
+
+        text_widget.edit_separator()
+        if toggle_off:
+            text_widget.tag_remove(tag_name, start, end)
+        else:
+            text_widget.tag_add(tag_name, start, end)
+
+        text_widget.mark_set("insert", insert_index)
         text_widget.focus_set()
         self._mark_rich_text_modified(text_widget)
 
