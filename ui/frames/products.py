@@ -136,19 +136,16 @@ class InvolvementRow:
         self.product_frame.log_change(
             f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto"
         )
-        self._notify_summary_change()
         self.product_frame.trigger_duplicate_check()
 
     def _handle_team_focus_out(self):
         self.product_frame.log_change(
             f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó colaborador"
         )
-        self._notify_summary_change()
         self.product_frame.trigger_duplicate_check()
 
     def _notify_summary_change(self):
-        if hasattr(self.product_frame, 'schedule_summary_refresh'):
-            self.product_frame.schedule_summary_refresh('involucramientos')
+        self.product_frame._schedule_product_summary_refresh()
 
     def _get_known_team_ids(self):
         return {option.strip() for option in self.team_getter() if option and option.strip()}
@@ -1870,7 +1867,8 @@ class ProductFrame:
             self.log_change(f"Producto {self.idx+1}: modificó ID a {pid}")
         if not pid:
             self._last_missing_lookup_id = None
-            self.schedule_summary_refresh({'productos', 'reclamos'})
+            if silent:
+                self._schedule_product_summary_refresh()
             return
         data = self.product_lookup.get(pid)
         if not data:
@@ -1883,7 +1881,8 @@ class ProductFrame:
                     ),
                 )
                 self._last_missing_lookup_id = pid
-            self.schedule_summary_refresh({'productos', 'reclamos'})
+            if silent:
+                self._schedule_product_summary_refresh()
             return
 
         def set_if_present(var, key):
@@ -1932,8 +1931,10 @@ class ProductFrame:
             if not (preserve_existing and self.claims_have_content()):
                 self.set_claims_from_data(claims_payload)
         self._last_missing_lookup_id = None
-        self.log_change(f"Producto {self.idx+1}: autopoblado desde catálogo")
-        self.schedule_summary_refresh({'productos', 'reclamos'})
+        if not silent:
+            self.log_change(f"Producto {self.idx+1}: autopoblado desde catálogo")
+        else:
+            self._schedule_product_summary_refresh()
         self.persist_lookup_snapshot()
 
     def _notify_id_change(self, new_id):
@@ -2143,6 +2144,10 @@ class ProductFrame:
         self.log_change(f"Producto {self.idx+1}: seleccionó cliente")
         self.trigger_duplicate_check()
 
+    def _schedule_product_summary_refresh(self):
+        if hasattr(self, 'schedule_summary_refresh'):
+            self.schedule_summary_refresh({'productos', 'reclamos', 'involucramientos'})
+
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el producto {self.idx+1}?"):
             self.log_change(f"Se eliminó producto {self.idx+1}")
@@ -2156,6 +2161,7 @@ class ProductFrame:
             self.change_notifier(message)
         else:
             log_event("navegacion", message, self.logs)
+        self._schedule_product_summary_refresh()
 
 
 __all__ = [
