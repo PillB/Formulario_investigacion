@@ -517,10 +517,14 @@ class ClientFrame:
         if not tree or not hasattr(tree, "get_children"):
             return
         try:
-            tree.delete(*tree.get_children())
+            children = tree.get_children()
+            if children:
+                tree.delete(*children)
         except Exception:
             return
         clients = getattr(self.owner, "client_frames", []) if self.owner else []
+        seen_iids: set[str] = set()
+        base_counters: dict[str, int] = {}
         for idx, client in enumerate(clients):
             data = client.get_data()
             values = (
@@ -535,7 +539,50 @@ class ClientFrame:
                 data.get("accionado", ""),
             )
             tags = ("even",) if idx % 2 == 0 else ("odd",)
-            tree.insert("", "end", iid=data.get("id_cliente", f"cliente-{idx}"), values=values, tags=tags)
+            base_iid = str(data.get("id_cliente") or f"cliente-{idx}")
+            base_counters.setdefault(base_iid, 0)
+            candidate_iid = base_iid
+            if candidate_iid in seen_iids:
+                base_counters[base_iid] += 1
+                candidate_iid = f"{base_iid}-{base_counters[base_iid]}"
+                while candidate_iid in seen_iids:
+                    base_counters[base_iid] += 1
+                    candidate_iid = f"{base_iid}-{base_counters[base_iid]}"
+                log_event(
+                    "validacion",
+                    f"IID de cliente duplicado '{base_iid}' detectado, usando '{candidate_iid}'",
+                    self.logs,
+                )
+            try:
+                tree.insert("", "end", iid=candidate_iid, values=values, tags=tags)
+                seen_iids.add(candidate_iid)
+            except Exception:
+                fallback_suffix = base_counters[base_iid] + 1
+                fallback_iid = f"{base_iid}-{fallback_suffix}"
+                while fallback_iid in seen_iids:
+                    fallback_suffix += 1
+                    fallback_iid = f"{base_iid}-{fallback_suffix}"
+                log_event(
+                    "validacion",
+                    (
+                        f"No se pudo insertar el IID '{candidate_iid}'. "
+                        f"Reintentando con '{fallback_iid}'"
+                    ),
+                    self.logs,
+                )
+                try:
+                    tree.insert("", "end", iid=fallback_iid, values=values, tags=tags)
+                    seen_iids.add(fallback_iid)
+                    base_counters[base_iid] = fallback_suffix
+                except Exception:
+                    log_event(
+                        "validacion",
+                        (
+                            f"Se omitió el cliente con IID '{candidate_iid}' al fallar los intentos "
+                            f"de inserción inclusive con '{fallback_iid}'"
+                        ),
+                        self.logs,
+                    )
         self._apply_summary_theme(tree)
         self._on_summary_select()
 
