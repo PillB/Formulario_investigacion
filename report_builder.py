@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
@@ -109,6 +109,96 @@ def _extract_analysis_text(value: Any) -> str:
     return str(value or "")
 
 
+@dataclass
+class TagRange:
+    tag: str
+    start: int
+    end: int
+
+
+@dataclass
+class RichTextLine:
+    text: str
+    block_tags: Set[str]
+    inline_tags: List[TagRange]
+
+
+def _tk_index_to_offset(index: Any, text: str) -> Optional[int]:
+    try:
+        line_str, col_str = str(index).split(".")
+        line = int(line_str)
+        column = int(col_str)
+    except (ValueError, AttributeError):
+        return None
+
+    if line < 1 or column < 0:
+        return None
+
+    segments = text.splitlines(True)
+    if line > len(segments):
+        return None
+
+    offset = sum(len(segment) for segment in segments[: line - 1]) + column
+    if offset > len(text):
+        return None
+    return offset
+
+
+def _normalize_tag_ranges(tags: Iterable[Mapping[str, Any]], text: str) -> List[TagRange]:
+    normalized: List[TagRange] = []
+    for tag_data in tags:
+        tag_name = tag_data.get("tag") if isinstance(tag_data, Mapping) else None
+        start = _tk_index_to_offset(tag_data.get("start"), text) if isinstance(tag_data, Mapping) else None
+        end = _tk_index_to_offset(tag_data.get("end"), text) if isinstance(tag_data, Mapping) else None
+        if not tag_name or start is None or end is None or end <= start:
+            continue
+        normalized.append(TagRange(tag_name, start, end))
+    return normalized
+
+
+def _parse_rich_text_entry(entry: Any) -> tuple[str, List[TagRange]]:
+    if isinstance(entry, Mapping):
+        text = sanitize_rich_text(entry.get("text"), RICH_TEXT_MAX_CHARS)
+        tags = _normalize_tag_ranges(entry.get("tags") or [], text)
+    else:
+        text = sanitize_rich_text(_extract_analysis_text(entry), RICH_TEXT_MAX_CHARS)
+        tags = []
+    return text, tags
+
+
+def _split_rich_text_lines(entry: Any) -> List[RichTextLine]:
+    text, tag_ranges = _parse_rich_text_entry(entry)
+    if not text and not tag_ranges:
+        return []
+
+    lines_with_breaks = text.splitlines(True) or [""]
+    line_spans: List[tuple[str, int, int]] = []
+    offset = 0
+    for raw_line in lines_with_breaks:
+        line_text = raw_line.rstrip("\n")
+        line_length = len(line_text)
+        line_spans.append((line_text, offset, offset + line_length))
+        offset += len(raw_line)
+
+    rich_lines: List[RichTextLine] = [RichTextLine(text=span[0], block_tags=set(), inline_tags=[]) for span in line_spans]
+
+    for tag in tag_ranges:
+        for idx, (_, start, end) in enumerate(line_spans):
+            if tag.end <= start or tag.start >= end:
+                continue
+            if tag.tag in {"header", "list", "table"}:
+                rich_lines[idx].block_tags.add(tag.tag)
+            elif tag.tag == "bold":
+                relative_start = max(tag.start - start, 0)
+                relative_end = min(tag.end, end) - start
+                if relative_end > relative_start:
+                    rich_lines[idx].inline_tags.append(
+                        TagRange(tag.tag, relative_start, relative_end)
+                    )
+
+    return rich_lines
+
+
 def normalize_analysis_texts(analysis: Mapping[str, Any] | None) -> Dict[str, str]:
     keys = [
         "antecedentes",
@@ -120,17 +210,13 @@ def normalize_analysis_texts(analysis: Mapping[str, Any] | None) -> Dict[str, st
     ]
     payload = analysis or {}
     normalized = {
-        name: sanitize_rich_text(
-            _extract_analysis_text(payload.get(name)), RICH_TEXT_MAX_CHARS
-        )
+        name: _parse_rich_text_entry(payload.get(name))[0]
         for name in keys
     }
     for name, value in payload.items():
         if name in normalized:
             continue
-        normalized[name] = sanitize_rich_text(
-            _extract_analysis_text(value), RICH_TEXT_MAX_CHARS
-        )
+        normalized[name] = _parse_rich_text_entry(value)[0]
     return normalized
 
 
@@ -138,6 +224,130 @@ def _safe_text(value: Any, *, placeholder: str = PLACEHOLDER) -> str:
     text = str(value or "").strip()
     return text or placeholder
 
+
+def _inline_markdown(text: str, inline_tags: List[TagRange]) -> str:
+    if not inline_tags:
+        return text
+    events = []
+    for tag in inline_tags:
+        if tag.tag != "bold":
+            continue
+        events.append((tag.start, "start"))
+        events.append((tag.end, "end"))
+    events.sort(key=lambda item: (item[0], 0 if item[1] == "end" else 1))
+
+    chunks: List[str] = []
+    cursor = 0
+    for position, kind in events:
+        if position > cursor:
+            chunks.append(text[cursor:position])
+        marker = "**"
+        chunks.append(marker)
+        cursor = position
+
+    chunks.append(text[cursor:])
+    return "".join(chunks)
+
+
+def _markdown_from_rich_text(entry: Any) -> str:
+    lines = _split_rich_text_lines(entry)
+    if not lines:
+        return ""
+
+    output: List[str] = []
+    table_buffer: List[str] = []
+
+    def flush_table_buffer():
+        if not table_buffer:
+            return
+        output.append("```")
+        output.extend(table_buffer)
+        output.append("```")
+        table_buffer.clear()
+
+    for line in lines:
+        rendered_line = _inline_markdown(line.text, line.inline_tags)
+        if "table" in line.block_tags:
+            table_buffer.append(rendered_line)
+            continue
+
+        flush_table_buffer()
+
+        if "header" in line.block_tags:
+            rendered_line = f"### {rendered_line}".rstrip()
+        if "list" in line.block_tags:
+            rendered_line = f"- {rendered_line}".rstrip()
+
+        output.append(rendered_line)
+
+    flush_table_buffer()
+    return "\n".join(output)
+
+
+def _inline_segments(text: str, inline_tags: List[TagRange]) -> List[tuple[str, bool]]:
+    if not inline_tags:
+        return [(text, False)]
+
+    points: List[tuple[int, str]] = []
+    for tag in inline_tags:
+        if tag.tag != "bold":
+            continue
+        points.append((tag.start, "start"))
+        points.append((tag.end, "end"))
+
+    points.sort()
+    segments: List[tuple[str, bool]] = []
+    last_index = 0
+    depth = 0
+    for index, action in points:
+        if index > last_index:
+            segments.append((text[last_index:index], depth > 0))
+        depth += 1 if action == "start" else -1
+        last_index = index
+    if last_index < len(text):
+        segments.append((text[last_index:], depth > 0))
+    return segments or [(text, False)]
+
+
+def _add_rich_text_paragraphs(document, entry: Any) -> None:
+    lines = _split_rich_text_lines(entry)
+    if not lines:
+        document.add_paragraph(PLACEHOLDER)
+        return
+
+    table_buffer: List[str] = []
+
+    def flush_table_buffer():
+        if not table_buffer:
+            return
+        paragraph = document.add_paragraph()
+        run = paragraph.add_run("\n".join(table_buffer))
+        run.font.name = "Courier New"
+        table_buffer.clear()
+
+    for line in lines:
+        segments = _inline_segments(line.text, line.inline_tags)
+        rendered_line = "".join(segment for segment, _ in segments)
+
+        if "table" in line.block_tags:
+            table_buffer.append(rendered_line)
+            continue
+
+        flush_table_buffer()
+
+        if "header" in line.block_tags:
+            paragraph = document.add_heading(level=3)
+        elif "list" in line.block_tags:
+            paragraph = document.add_paragraph(style="List Bullet")
+        else:
+            paragraph = document.add_paragraph()
+
+        for text_segment, is_bold in segments:
+            run = paragraph.add_run(text_segment)
+            if is_bold:
+                run.bold = True
+
+    flush_table_buffer()
 
 def _format_decimal_value(value: Optional[Decimal]) -> str:
     if value is None:
@@ -518,6 +728,17 @@ def build_md(case_data: CaseData) -> str:
     context = _build_report_context(case_data)
     case = context["case"]
     analysis = context["analysis"]
+    raw_analysis = case_data.analisis or {}
+    analysis_markdown = {
+        name: _markdown_from_rich_text(raw_analysis.get(name))
+        for name in [
+            "antecedentes",
+            "modus_operandi",
+            "hallazgos",
+            "descargos",
+            "conclusiones",
+        ]
+    }
 
     header_lines = [
         "**BANCO DE CRÉDITO – BCP**",
@@ -535,7 +756,7 @@ def build_md(case_data: CaseData) -> str:
         [
             "",
             "## Antecedentes",
-            analysis.get("antecedentes") or PLACEHOLDER,
+            analysis_markdown.get("antecedentes") or PLACEHOLDER,
             "",
             "## Detalle de los Colaboradores Involucrados",
         ]
@@ -557,7 +778,7 @@ def build_md(case_data: CaseData) -> str:
         [
             "",
             "## Modus operandi",
-            analysis.get("modus_operandi") or PLACEHOLDER,
+            analysis_markdown.get("modus_operandi") or PLACEHOLDER,
             "",
             "## Principales Hallazgos",
         ]
@@ -583,10 +804,10 @@ def build_md(case_data: CaseData) -> str:
     lines.extend(
         [
             "",
-            analysis.get("hallazgos") or PLACEHOLDER,
+            analysis_markdown.get("hallazgos") or PLACEHOLDER,
             "",
             "## Descargos",
-            analysis.get("descargos") or PLACEHOLDER,
+            analysis_markdown.get("descargos") or PLACEHOLDER,
             "",
             "## Riesgos identificados y debilidades de los controles",
         ]
@@ -615,7 +836,7 @@ def build_md(case_data: CaseData) -> str:
         [
             "",
             "## Conclusiones",
-            analysis.get("conclusiones") or PLACEHOLDER,
+            analysis_markdown.get("conclusiones") or PLACEHOLDER,
             "",
             "## Recomendaciones y Mejoras de Procesos",
             "### De carácter laboral",
@@ -645,6 +866,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     context = _build_report_context(case_data)
     case = context["case"]
     analysis = context["analysis"]
+    raw_analysis = case_data.analisis or {}
 
     def add_paragraphs(lines: List[str]) -> None:
         for line in lines:
@@ -682,7 +904,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     document.add_heading("Encabezado Institucional", level=2)
     append_table(context["header_headers"], [context["header_row"]])
     document.add_heading("Antecedentes", level=2)
-    add_paragraphs([analysis.get("antecedentes") or PLACEHOLDER])
+    _add_rich_text_paragraphs(document, raw_analysis.get("antecedentes"))
     document.add_heading("Detalle de los Colaboradores Involucrados", level=2)
     append_table(
         [
@@ -696,7 +918,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         context["collaborator_rows"],
     )
     document.add_heading("Modus operandi", level=2)
-    add_paragraphs([analysis.get("modus_operandi") or PLACEHOLDER])
+    _add_rich_text_paragraphs(document, raw_analysis.get("modus_operandi"))
     document.add_heading("Principales Hallazgos", level=2)
     append_table(
         [
@@ -714,9 +936,9 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         ],
         context["operation_rows"],
     )
-    add_paragraphs([analysis.get("hallazgos") or PLACEHOLDER])
+    _add_rich_text_paragraphs(document, raw_analysis.get("hallazgos"))
     document.add_heading("Descargos", level=2)
-    add_paragraphs([analysis.get("descargos") or PLACEHOLDER])
+    _add_rich_text_paragraphs(document, raw_analysis.get("descargos"))
     document.add_heading("Riesgos identificados y debilidades de los controles", level=2)
     append_table(
         [
@@ -732,7 +954,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     document.add_heading("Normas transgredidas", level=2)
     append_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"])
     document.add_heading("Conclusiones", level=2)
-    add_paragraphs([analysis.get("conclusiones") or PLACEHOLDER])
+    _add_rich_text_paragraphs(document, raw_analysis.get("conclusiones"))
     document.add_heading("Recomendaciones y Mejoras de Procesos", level=2)
     document.add_heading("De carácter laboral", level=3)
     add_list(context["recomendaciones"]["laboral"])

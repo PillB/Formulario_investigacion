@@ -191,10 +191,59 @@ def test_md_handles_rich_text_analysis_payload(sample_case_data):
 
     md = report_builder.build_md(sample_case_data)
 
-    assert "Hallazgo con formato" in md
+    assert "**Hallazgo** con formato" in md
     assert "Nota adicional con encabezado" not in md
     assert "bold" not in md
     assert "diagrama.png" not in md
+
+
+def test_md_renders_analysis_tags_into_markdown():
+    tagged_case = CaseData.from_mapping(
+        {
+            "caso": {"id_caso": "2024-0099", "tipo_informe": "Inicial"},
+            "encabezado": {},
+            "clientes": [],
+            "colaboradores": [],
+            "productos": [],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {
+                "antecedentes": {
+                    "text": "Titulo\nDetalle en negrita",
+                    "tags": [
+                        {"tag": "header", "start": "1.0", "end": "1.6"},
+                        {"tag": "bold", "start": "2.0", "end": "2.18"},
+                    ],
+                },
+                "modus_operandi": {
+                    "text": "Primer punto\nSegundo punto",
+                    "tags": [
+                        {"tag": "list", "start": "1.0", "end": "2.13"},
+                    ],
+                },
+                "hallazgos": {
+                    "text": "Celda A\nCelda B",
+                    "tags": [
+                        {"tag": "table", "start": "1.0", "end": "2.7"},
+                    ],
+                },
+            },
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+
+    md = report_builder.build_md(tagged_case)
+
+    assert "### Titulo" in md
+    assert "**Detalle en negrita**" in md
+    assert "- Primer punto" in md
+    assert "- Segundo punto" in md
+    assert "```\nCelda A\nCelda B\n```" in md
 
 
 def test_report_filename_normalization():
