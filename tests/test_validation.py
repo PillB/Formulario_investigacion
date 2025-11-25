@@ -1703,6 +1703,23 @@ def test_validate_data_only_flags_required_agency_collaborator():
     )
 
 
+def test_validate_data_does_not_require_agency_for_division_substring():
+    team_config = {
+        "team_id": "T12345",
+        "division": "Educación",
+        "area": "Área Comercial Lima",
+    }
+    app = build_headless_app("Crédito personal", team_configs=[team_config])
+
+    errors, _ = app.validate_data()
+
+    unexpected_message = (
+        "El colaborador 1 debe registrar nombre y código de agencia por pertenecer a canales comerciales."
+    )
+
+    assert unexpected_message not in errors
+
+
 def test_team_frame_inline_agency_validation_triggers_on_location(monkeypatch):
     team_module, RecordingValidator = _patch_team_module(monkeypatch)
     frame = team_module.TeamMemberFrame(
