@@ -261,6 +261,23 @@ class NormFrame:
         selection = self.header_tree.selection() if self.header_tree else []
         return selection[0] if selection else None
 
+    def clear_values(self):
+        """Vacía los datos manteniendo visibles las entradas."""
+
+        def _reset():
+            for var in (self.id_var, self.fecha_var, self.descripcion_var):
+                var.set("")
+
+        managed = False
+        for validator in self.validators:
+            suppress = getattr(validator, "suppress_during", None)
+            if callable(suppress):
+                suppress(_reset)
+                managed = True
+                break
+        if not managed:
+            _reset()
+
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar la norma {self.idx+1}?"):
             self._log_change(f"Se eliminó norma {self.idx+1}")

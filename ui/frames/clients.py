@@ -463,6 +463,37 @@ class ClientFrame:
                 self.section.destroy()
             self.remove_callback(self)
 
+    def clear_values(self):
+        """Vacía los valores capturados manteniendo visibles los widgets."""
+
+        def _reset():
+            for var in (
+                self.tipo_id_var,
+                self.id_var,
+                self.nombres_var,
+                self.apellidos_var,
+                self.flag_var,
+                self.telefonos_var,
+                self.correos_var,
+                self.direcciones_var,
+                self.accionado_var,
+            ):
+                var.set("")
+            try:
+                self.accionado_listbox.selection_clear(0, tk.END)
+            except Exception:
+                pass
+
+        managed = False
+        for validator in self.validators:
+            suppress = getattr(validator, "suppress_during", None)
+            if callable(suppress):
+                suppress(_reset)
+                managed = True
+                break
+        if not managed:
+            _reset()
+
     def _log_change(self, message: str):
         if callable(self.change_notifier):
             self.change_notifier(message)

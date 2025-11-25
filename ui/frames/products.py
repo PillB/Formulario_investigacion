@@ -191,6 +191,27 @@ class InvolvementRow:
             self.monto_var.set(normalized_text)
         return message
 
+    def clear_values(self):
+        """Limpia las variables asociadas sin eliminar el UI."""
+
+        def _reset():
+            self.team_var.set("")
+            self.monto_var.set("")
+            try:
+                self.team_cb.set("")
+            except Exception:
+                pass
+
+        managed = False
+        for validator in self.validators:
+            suppress = getattr(validator, "suppress_during", None)
+            if callable(suppress):
+                suppress(_reset)
+                managed = True
+                break
+        if not managed:
+            _reset()
+
 
 class ClaimRow:
     """Fila dinámica que captura los reclamos asociados a un producto."""
@@ -408,6 +429,28 @@ class ClaimRow:
         if not value.strip():
             return validate_codigo_analitica(value) if self._claims_required else None
         return validate_codigo_analitica(value)
+
+    def clear_values(self):
+        """Restablece los campos del reclamo sin quitarlo del layout."""
+
+        def _reset():
+            self.id_var.set("")
+            self.name_var.set("")
+            self.code_var.set("")
+            try:
+                self.id_cb.set("")
+            except Exception:
+                pass
+
+        managed = False
+        for validator in self.validators:
+            suppress = getattr(validator, "suppress_during", None)
+            if callable(suppress):
+                suppress(_reset)
+                managed = True
+                break
+        if not managed:
+            _reset()
 
     def show_completion_feedback(self):
         validation_matrix = [
@@ -2137,6 +2180,51 @@ class ProductFrame:
 
     def _get_product_label(self) -> str:
         return self.id_var.get().strip() or f"Producto {self.idx+1}"
+
+    def clear_values(self):
+        """Limpia los valores del producto y sus filas dinámicas sin eliminar widgets."""
+
+        def _reset():
+            for var in (
+                self.id_var,
+                self.client_var,
+                self.cat1_var,
+                self.cat2_var,
+                self.mod_var,
+                self.canal_var,
+                self.proceso_var,
+                self.fecha_oc_var,
+                self.fecha_desc_var,
+                self.monto_inv_var,
+                self.moneda_var,
+                self.monto_perdida_var,
+                self.monto_falla_var,
+                self.monto_cont_var,
+                self.monto_rec_var,
+                self.monto_pago_var,
+                self.tipo_prod_var,
+            ):
+                var.set("")
+            try:
+                self.client_cb.set("")
+            except Exception:
+                pass
+            for claim in self.claims:
+                if hasattr(claim, "clear_values"):
+                    claim.clear_values()
+            for involvement in self.involvements:
+                if hasattr(involvement, "clear_values"):
+                    involvement.clear_values()
+
+        managed = False
+        for validator in self.validators:
+            suppress = getattr(validator, "suppress_during", None)
+            if callable(suppress):
+                suppress(_reset)
+                managed = True
+                break
+        if not managed:
+            _reset()
 
     def get_data(self):
         producto_data = {

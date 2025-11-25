@@ -842,6 +842,38 @@ class TeamMemberFrame:
             "tipo_sancion": self.tipo_sancion_var.get(),
         }
 
+    def clear_values(self):
+        """Vacía los valores sin eliminar el contenedor del colaborador."""
+
+        def _reset():
+            for var in (
+                self.id_var,
+                self.nombres_var,
+                self.apellidos_var,
+                self.flag_var,
+                self.division_var,
+                self.area_var,
+                self.servicio_var,
+                self.puesto_var,
+                self.fecha_carta_inmediatez_var,
+                self.fecha_carta_renuncia_var,
+                self.nombre_agencia_var,
+                self.codigo_agencia_var,
+                self.tipo_falta_var,
+                self.tipo_sancion_var,
+            ):
+                var.set("")
+
+        managed = False
+        for validator in self.validators:
+            suppress = getattr(validator, "suppress_during", None)
+            if callable(suppress):
+                suppress(_reset)
+                managed = True
+                break
+        if not managed:
+            _reset()
+
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el colaborador {self.idx+1}?"):
             self._log_change(f"Se eliminó colaborador {self.idx+1}")

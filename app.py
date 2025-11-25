@@ -1323,6 +1323,34 @@ class FraudCaseApp:
             return self._map_product_origin_to_widget(product_frame, origin_hint) or getattr(
                 product_frame, "id_entry", None
             )
+        risk_match = re.search(r"Riesgo\s+(\d+)", origin_hint, flags=re.IGNORECASE)
+        if risk_match:
+            risk_index = int(risk_match.group(1)) - 1
+            risk_frame = self._ensure_risk_frame_for_focus(risk_index)
+            if risk_frame:
+                return getattr(risk_frame, "frame", None)
+            return None
+        norm_match = re.search(r"Norma\s+(\d+)", origin_hint, flags=re.IGNORECASE)
+        if norm_match:
+            norm_index = int(norm_match.group(1)) - 1
+            norm_frame = self._ensure_norm_frame_for_focus(norm_index)
+            if norm_frame:
+                return getattr(norm_frame, "frame", None)
+            return None
+        client_match = re.search(r"Cliente\s+(\d+)", origin_hint, flags=re.IGNORECASE)
+        if client_match:
+            client_index = int(client_match.group(1)) - 1
+            client_frame = self._ensure_client_frame_for_focus(client_index)
+            if client_frame:
+                return getattr(client_frame, "frame", None)
+            return None
+        team_match = re.search(r"Colaborador\s+(\d+)", origin_hint, flags=re.IGNORECASE)
+        if team_match:
+            team_index = int(team_match.group(1)) - 1
+            team_frame = self._ensure_team_frame_for_focus(team_index)
+            if team_frame:
+                return getattr(team_frame, "frame", None)
+            return None
         return None
 
     def _ensure_product_frame_for_focus(self, index: int):
@@ -1332,6 +1360,50 @@ class FraudCaseApp:
             self.add_product(initialize_rows=False)
         frame = self.product_frames[index]
         self._expand_product_section(frame)
+        return frame
+
+    def _ensure_risk_frame_for_focus(self, index: int):
+        if index < 0:
+            return None
+        while len(self.risk_frames) <= index:
+            self.add_risk()
+        frame = self.risk_frames[index]
+        clear = getattr(frame, "clear_values", None)
+        if callable(clear):
+            clear()
+        return frame
+
+    def _ensure_norm_frame_for_focus(self, index: int):
+        if index < 0:
+            return None
+        while len(self.norm_frames) <= index:
+            self.add_norm()
+        frame = self.norm_frames[index]
+        clear = getattr(frame, "clear_values", None)
+        if callable(clear):
+            clear()
+        return frame
+
+    def _ensure_client_frame_for_focus(self, index: int):
+        if index < 0:
+            return None
+        while len(self.client_frames) <= index:
+            self.add_client()
+        frame = self.client_frames[index]
+        clear = getattr(frame, "clear_values", None)
+        if callable(clear):
+            clear()
+        return frame
+
+    def _ensure_team_frame_for_focus(self, index: int):
+        if index < 0:
+            return None
+        while len(self.team_frames) <= index:
+            self.add_team_member()
+        frame = self.team_frames[index]
+        clear = getattr(frame, "clear_values", None)
+        if callable(clear):
+            clear()
         return frame
 
     def _expand_product_section(self, frame) -> None:
@@ -1355,30 +1427,14 @@ class FraudCaseApp:
             product_frame.add_claim()
         safe_index = min(max(claim_index, 0), len(product_frame.claims) - 1)
         claim_row = product_frame.claims[safe_index]
-        self._clear_claim_row_values(claim_row)
+        frame_exists = getattr(getattr(claim_row, "frame", None), "winfo_exists", lambda: False)()
+        if not frame_exists:
+            replacement = product_frame.add_claim()
+            claim_row = replacement
+        clear = getattr(claim_row, "clear_values", None)
+        if callable(clear):
+            clear()
         return claim_row
-
-    def _clear_claim_row_values(self, claim_row) -> None:
-        if claim_row is None:
-            return
-
-        def _reset():
-            for attr in ("id_var", "name_var", "code_var"):
-                var = getattr(claim_row, attr, None)
-                setter = getattr(var, "set", None)
-                if callable(setter):
-                    setter("")
-
-        validators = getattr(claim_row, "validators", []) or []
-        managed = False
-        for validator in validators:
-            suppress = getattr(validator, "suppress_during", None)
-            if callable(suppress):
-                suppress(_reset)
-                managed = True
-                break
-        if not managed:
-            _reset()
 
     def _map_product_origin_to_widget(self, product_frame, origin: str):
         origin_lower = (origin or "").lower()
