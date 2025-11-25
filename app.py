@@ -1036,7 +1036,6 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar datos combinados", self.logs)
         filename = filename or self._select_csv_file("combinado", "Seleccionar CSV combinado")
         if not filename:
-            messagebox.showwarning("Sin archivo", "No hay CSV combinado disponible para importar.")
             return
         log_event("navegacion", "Inició importación de datos combinados", self.logs)
         def worker():
@@ -1078,7 +1077,6 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar riesgos", self.logs)
         filename = filename or self._select_csv_file("riesgos", "Seleccionar CSV de riesgos")
         if not filename:
-            messagebox.showwarning("Sin archivo", "No se encontró CSV de riesgos para importar.")
             return
         log_event("navegacion", "Inició importación de riesgos", self.logs)
         def worker():
@@ -1103,7 +1101,6 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar normas", self.logs)
         filename = filename or self._select_csv_file("normas", "Seleccionar CSV de normas")
         if not filename:
-            messagebox.showwarning("Sin archivo", "No se encontró CSV de normas.")
             return
         log_event("navegacion", "Inició importación de normas", self.logs)
         def worker():
@@ -1128,7 +1125,6 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar reclamos", self.logs)
         filename = filename or self._select_csv_file("reclamos", "Seleccionar CSV de reclamos")
         if not filename:
-            messagebox.showwarning("Sin archivo", "No se encontró CSV de reclamos.")
             return
         log_event("navegacion", "Inició importación de reclamos", self.logs)
         def worker():
@@ -7311,7 +7307,7 @@ class FraudCaseApp:
     # Importación desde CSV
 
     def _select_csv_file(self, sample_key, dialog_title):
-        """Obtiene un CSV desde diálogo o usa el archivo masivo de ejemplo."""
+        """Obtiene un CSV desde diálogo y registra cancelaciones explícitas."""
 
         filename = None
         try:
@@ -7319,14 +7315,11 @@ class FraudCaseApp:
         except tk.TclError:
             filename = None
         if not filename:
-            sample_path = MASSIVE_SAMPLE_FILES.get(sample_key)
-            if sample_path and os.path.exists(sample_path):
-                filename = sample_path
-                log_event(
-                    "navegacion",
-                    f"Se usó el archivo masivo de ejemplo {os.path.basename(sample_path)} para {sample_key}.",
-                    self.logs,
-                )
+            message = f"Importación cancelada: no se seleccionó un archivo CSV para {sample_key}."
+            log_event("cancelado", message, self.logs)
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showinfo("Importación cancelada", message)
+            return None
         return filename
 
     def _get_detail_lookup(self, id_column):
@@ -8378,7 +8371,6 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar clientes", self.logs)
         filename = filename or self._select_csv_file("clientes", "Seleccionar CSV de clientes")
         if not filename:
-            messagebox.showwarning("Sin archivo", "No se seleccionó un CSV para clientes ni se encontró el ejemplo.")
             return
         log_event("navegacion", "Inició importación de clientes", self.logs)
         def worker():
@@ -8405,7 +8397,6 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar colaboradores", self.logs)
         filename = filename or self._select_csv_file("colaboradores", "Seleccionar CSV de colaboradores")
         if not filename:
-            messagebox.showwarning("Sin archivo", "No hay CSV para colaboradores disponible.")
             return
         log_event("navegacion", "Inició importación de colaboradores", self.logs)
         def worker():
@@ -8432,7 +8423,6 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar productos", self.logs)
         filename = filename or self._select_csv_file("productos", "Seleccionar CSV de productos")
         if not filename:
-            messagebox.showwarning("Sin archivo", "No se seleccionó CSV de productos ni se encontró el ejemplo.")
             return
         log_event("navegacion", "Inició importación de productos", self.logs)
         def worker():
