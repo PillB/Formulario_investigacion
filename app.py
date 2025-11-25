@@ -3787,22 +3787,22 @@ class FraudCaseApp:
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(2, weight=1)
+        frame.rowconfigure(1, weight=1)
 
-        controls = ttk.Frame(frame)
-        controls.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
-        controls.columnconfigure(0, weight=1)
-
-        add_btn = ttk.Button(controls, text="Agregar norma", command=self._on_add_norm)
-        add_btn.grid(row=0, column=0, sticky="w")
-        self.register_tooltip(add_btn, "Agrega otra norma transgredida.")
+        header_row = ttk.Frame(frame)
+        header_row.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+        header_row.columnconfigure(0, weight=1)
 
         self.norm_header_tree, self.norm_header_container = self._build_shared_header_tree(
-            frame, 1, NormFrame.build_header_tree
+            header_row, 0, NormFrame.build_header_tree
         )
 
+        add_btn = ttk.Button(header_row, text="Agregar norma", command=self._on_add_norm)
+        add_btn.grid(row=0, column=1, sticky="n", padx=(COL_PADX, 0), pady=(ROW_PADY, ROW_PADY // 2))
+        self.register_tooltip(add_btn, "Agrega otra norma transgredida.")
+
         scrollable, inner = create_scrollable_container(frame)
-        scrollable.grid(row=2, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.norm_container = inner
         self.add_norm()
 
@@ -3824,13 +3824,13 @@ class FraudCaseApp:
         self.norm_frames.append(norm)
         for i, n in enumerate(self.norm_frames):
             n.update_title(i)
-        self._schedule_summary_refresh('normas')
+        self._refresh_shared_norm_tree()
 
     def remove_norm(self, norm_frame):
         self.norm_frames.remove(norm_frame)
         for i, n in enumerate(self.norm_frames):
             n.update_title(i)
-        self._schedule_summary_refresh('normas')
+        self._refresh_shared_norm_tree()
 
     def _build_shared_header_tree(self, parent, row_index, tree_builder):
         container = ttk.Frame(parent)
@@ -3845,6 +3845,29 @@ class FraudCaseApp:
         tree.configure(yscrollcommand=scrollbar.set)
 
         return tree, container
+
+    def _refresh_shared_norm_tree(self):
+        if not getattr(self, "norm_header_tree", None):
+            return
+
+        for child in self.norm_header_tree.get_children(""):
+            self.norm_header_tree.delete(child)
+
+        row_index = 0
+        for norm_frame in self.norm_frames:
+            data = norm_frame.get_data()
+            if not data:
+                continue
+            values = (
+                data.get("id_norma", ""),
+                data.get("fecha_vigencia", ""),
+                data.get("descripcion", ""),
+            )
+            tag = "even" if row_index % 2 == 0 else "odd"
+            self.norm_header_tree.insert("", "end", values=values, tags=(tag,))
+            row_index += 1
+
+        self._schedule_summary_refresh('normas')
 
     def _refresh_shared_risk_tree(self):
         if not getattr(self, "risk_header_tree", None):
@@ -7017,6 +7040,7 @@ class FraudCaseApp:
                     "Se ignoraron las siguientes normas ya existentes:\n" + ", ".join(duplicate_ids),
                 )
             if processed:
+                self._refresh_shared_norm_tree()
                 self._notify_dataset_changed(summary_sections="normas")
                 self.sync_main_form_after_import("normas", stay_on_summary=stay_on_summary)
             return processed
@@ -8288,6 +8312,7 @@ class FraudCaseApp:
             nf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
             nf.fecha_var.set((hydrated.get('fecha_vigencia') or '').strip())
             imported += 1
+        self._refresh_shared_norm_tree()
         self._notify_dataset_changed(summary_sections="normas")
         log_event("navegacion", "Normas importadas desde CSV", self.logs)
         if imported:
@@ -9257,6 +9282,7 @@ class FraudCaseApp:
             nf.id_var.set(norm.get('id_norma', ''))
             nf.descripcion_var.set(norm.get('descripcion', ''))
             nf.fecha_var.set(norm.get('fecha_vigencia', ''))
+        self._refresh_shared_norm_tree()
         # Analisis
         analisis = data.get('analisis', {})
         analysis_widgets = self._analysis_text_widgets()
