@@ -351,6 +351,30 @@ class RiskFrame:
             return f"La criticidad '{value}' no está en el catálogo CM."
         return None
 
+    def clear_values(self):
+        """Limpia los valores capturados manteniendo visibles los widgets."""
+
+        def _reset():
+            for var in (
+                self.id_var,
+                self.lider_var,
+                self.descripcion_var,
+                self.criticidad_var,
+                self.exposicion_var,
+                self.planes_var,
+            ):
+                var.set("")
+
+        managed = False
+        for validator in self.validators:
+            suppress = getattr(validator, "suppress_during", None)
+            if callable(suppress):
+                suppress(_reset)
+                managed = True
+                break
+        if not managed:
+            _reset()
+
     def _log_change(self, message: str):
         if callable(self.change_notifier):
             self.change_notifier(message)
