@@ -30,21 +30,31 @@ class CaseFrame:
         self.owner = owner
         self.frame = ttk.Frame(parent)
         self.frame.pack(fill="both", expand=True, padx=5, pady=5)
-        self._fields_list: list[tuple[ttk.Widget, ttk.Widget]] = []
+        self._left_fields: list[tuple[ttk.Widget, ttk.Widget]] = []
+        self._right_fields: list[tuple[ttk.Widget, ttk.Widget]] = []
+        self._paned = ttk.Panedwindow(self.frame, orient="horizontal")
+        self._paned.pack(fill="both", expand=True)
+        self._left_column = ttk.Frame(self._paned)
+        self._right_column = ttk.Frame(self._paned)
+        ensure_grid_support(self._left_column)
+        ensure_grid_support(self._right_column)
+        self._paned.add(self._left_column, weight=1)
+        self._paned.add(self._right_column, weight=1)
         owner._case_inputs = {}
-        self._build_header_fields()
-        self._build_taxonomy_fields()
-        self._build_investigator_block()
-        self._build_dates_block()
-        self._build_cost_center_field()
-        self.frame.bind(
-            "<Configure>", lambda _e: responsive_grid(self.frame, self._fields_list)
-        )
+        self._build_header_fields(self._left_column, self._left_fields)
+        self._build_taxonomy_fields(self._left_column, self._left_fields)
+        self._build_investigator_block(self._right_column, self._right_fields)
+        self._build_dates_block(self._right_column, self._right_fields)
+        self._build_cost_center_field(self._right_column, self._right_fields)
+        self.frame.bind("<Configure>", lambda _e: self._layout_columns())
         self._register_validators()
 
-    def _build_header_fields(self):
+    def _layout_columns(self) -> None:
+        responsive_grid(self._left_column, self._left_fields)
+        responsive_grid(self._right_column, self._right_fields)
+
+    def _build_header_fields(self, frame, collector):
         owner = self.owner
-        frame = self.frame
         case_id_label = build_required_label(
             frame,
             "Número de caso (AAAA-XXXX):",
@@ -73,16 +83,15 @@ class CaseFrame:
         owner.register_tooltip(tipo_cb, "Selecciona el tipo de reporte a generar.")
         tipo_cb.set('')
         owner._case_inputs.update({"id_entry": id_entry, "tipo_cb": tipo_cb})
-        self._fields_list.extend(
+        collector.extend(
             [
                 (case_id_label, id_entry),
                 (tipo_label, tipo_cb),
             ]
         )
 
-    def _build_taxonomy_fields(self):
+    def _build_taxonomy_fields(self, frame, collector):
         owner = self.owner
-        frame = self.frame
         taxonomy_label = ttk.Label(frame, text="Taxonomía del caso:")
         taxonomy_container = ttk.Frame(frame)
         ensure_grid_support(taxonomy_container)
@@ -209,11 +218,10 @@ class CaseFrame:
                 "proc_cb": proc_cb,
             }
         )
-        self._fields_list.append((taxonomy_label, taxonomy_container))
+        collector.append((taxonomy_label, taxonomy_container))
 
-    def _build_investigator_block(self):
+    def _build_investigator_block(self, frame, collector):
         owner = self.owner
-        frame = self.frame
         investigator_label = ttk.Label(frame, text="Investigador principal:")
         investigator_container = ttk.Frame(frame)
         ensure_grid_support(investigator_container)
@@ -274,11 +282,10 @@ class CaseFrame:
                 "investigator_role": investigator_role,
             }
         )
-        self._fields_list.append((investigator_label, investigator_container))
+        collector.append((investigator_label, investigator_container))
 
-    def _build_dates_block(self):
+    def _build_dates_block(self, frame, collector):
         owner = self.owner
-        frame = self.frame
         dates_label = ttk.Label(frame, text="Fechas del caso:")
         dates_container = ttk.Frame(frame)
         ensure_grid_support(dates_container)
@@ -328,11 +335,10 @@ class CaseFrame:
                 "fecha_desc_entry": fecha_desc_entry,
             }
         )
-        self._fields_list.append((dates_label, dates_container))
+        collector.append((dates_label, dates_container))
 
-    def _build_cost_center_field(self):
+    def _build_cost_center_field(self, frame, collector):
         owner = self.owner
-        frame = self.frame
         cost_center_label = ttk.Label(
             frame, text="Centro de costos del caso (; separados):"
         )
@@ -344,7 +350,7 @@ class CaseFrame:
             "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
         )
         owner._case_inputs["centro_costo_entry"] = centro_costo_entry
-        self._fields_list.append((cost_center_label, centro_costo_entry))
+        collector.append((cost_center_label, centro_costo_entry))
 
     def _register_validators(self):
         owner = self.owner
