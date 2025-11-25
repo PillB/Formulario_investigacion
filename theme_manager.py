@@ -3,7 +3,11 @@
 El administrador mantiene los temas claro y oscuro, aplica los colores
 mediante ``ttk.Style`` y actualiza de forma recursiva los árboles de widgets
 existentes, incluyendo ventanas ``Toplevel`` registradas. También expone
-persistencia simple para recordar la preferencia activa entre sesiones.
+persistencia simple para recordar la preferencia activa entre sesiones. Si la
+plataforma no soporta la creación de elementos personalizados ``border``, el
+administrador recurre automáticamente a una paleta de respaldo basada en Azure
+definida en código y remapea los estilos modernos para conservar las
+asignaciones utilizadas en la aplicación sin depender de activos externos.
 """
 
 from __future__ import annotations
@@ -64,6 +68,8 @@ class ThemeManager:
     _base_style_configured: bool = False
     _tracked_toplevels: Set[tk.Toplevel] = set()
     _tracked_menus: Set[tk.Menu] = set()
+    _use_azure_fallback: bool = False
+    _azure_theme_loaded: bool = False
 
     THEMES: Dict[str, Dict[str, str]] = {
         LIGHT_THEME["name"]: LIGHT_THEME,
@@ -980,210 +986,428 @@ class ThemeManager:
         shadow = cls._shade_color(theme["border"], -0.18)
         glow = cls._shade_color(accent, 0.12)
 
-        element_names = set(ttk_style.element_names())
-        if "Modern.Card.border" not in element_names:
-            ttk_style.element_create(
-                "Modern.Card.border",
-                "border",
-                border=12,
-                borderwidth=1,
-                relief="flat",
-                padding=10,
-                sticky="nswe",
-            )
-        if "Modern.Entry.border" not in element_names:
-            ttk_style.element_create(
-                "Modern.Entry.border",
-                "border",
-                border=8,
-                borderwidth=1,
-                relief="flat",
-                padding=6,
-                sticky="nswe",
-            )
-        if "Modern.Button.border" not in element_names:
-            ttk_style.element_create(
-                "Modern.Button.border",
-                "border",
-                border=10,
-                borderwidth=1,
-                relief="flat",
-                padding=8,
-                sticky="nswe",
-            )
+        if cls._use_azure_fallback:
+            cls._apply_azure_fallback(ttk_style, theme)
+            return
 
-        ttk_style.layout(
-            cls.FRAME_STYLE,
-            [
-                (
+        try:
+            element_names = set(ttk_style.element_names())
+            if "Modern.Card.border" not in element_names:
+                ttk_style.element_create(
                     "Modern.Card.border",
-                    {
-                        "sticky": "nswe",
-                        "children": [
-                            (
-                                "Frame.padding",
-                                {
-                                    "sticky": "nswe",
-                                    "children": [("Frame.background", {"sticky": "nswe"})],
-                                },
-                            )
-                        ],
-                    },
+                    "border",
+                    border=12,
+                    borderwidth=1,
+                    relief="flat",
+                    padding=10,
+                    sticky="nswe",
                 )
-            ],
-        )
-        ttk_style.layout(
-            cls.ENTRY_STYLE,
-            [
-                (
+            if "Modern.Entry.border" not in element_names:
+                ttk_style.element_create(
                     "Modern.Entry.border",
-                    {
-                        "sticky": "nswe",
-                        "children": [
-                            (
-                                "Entry.padding",
-                                {
-                                    "sticky": "nswe",
-                                    "children": [
-                                        (
-                                            "Entry.background",
-                                            {
-                                                "sticky": "nswe",
-                                                "children": [("Entry.textarea", {"sticky": "nswe"})],
-                                            },
-                                        )
-                                    ],
-                                },
-                            )
-                        ],
-                    },
+                    "border",
+                    border=8,
+                    borderwidth=1,
+                    relief="flat",
+                    padding=6,
+                    sticky="nswe",
                 )
-            ],
-        )
-        ttk_style.layout(
-            cls.COMBOBOX_STYLE,
-            [
-                (
-                    "Modern.Entry.border",
-                    {
-                        "sticky": "nswe",
-                        "children": [
-                            (
-                                "Combobox.padding",
-                                {
-                                    "sticky": "nswe",
-                                    "children": [
-                                        ("Combobox.textarea", {"sticky": "nswe"}),
-                                        ("Combobox.downarrow", {"side": "right", "sticky": ""}),
-                                    ],
-                                },
-                            )
-                        ],
-                    },
-                )
-            ],
-        )
-        ttk_style.layout(
-            cls.SPINBOX_STYLE,
-            [
-                (
-                    "Modern.Entry.border",
-                    {
-                        "sticky": "nswe",
-                        "children": [
-                            (
-                                "Spinbox.field",
-                                {
-                                    "side": "left",
-                                    "sticky": "nswe",
-                                    "children": [
-                                        (
-                                            "Spinbox.padding",
-                                            {
-                                                "sticky": "nswe",
-                                                "children": [("Spinbox.textarea", {"sticky": "nswe"})],
-                                            },
-                                        )
-                                    ],
-                                },
-                            ),
-                            ("Spinbox.uparrow", {"side": "top", "sticky": "e"}),
-                            ("Spinbox.downarrow", {"side": "bottom", "sticky": "e"}),
-                        ],
-                    },
-                )
-            ],
-        )
-        ttk_style.layout(
-            cls.BUTTON_STYLE,
-            [
-                (
+            if "Modern.Button.border" not in element_names:
+                ttk_style.element_create(
                     "Modern.Button.border",
-                    {
-                        "sticky": "nswe",
-                        "children": [
-                            (
-                                "Button.focus",
-                                {
-                                    "sticky": "nswe",
-                                    "children": [
-                                        (
-                                            "Button.padding",
-                                            {
-                                                "sticky": "nswe",
-                                                "children": [("Button.label", {"sticky": "nswe"})],
-                                            },
-                                        )
-                                    ],
-                                },
-                            )
-                        ],
-                    },
+                    "border",
+                    border=10,
+                    borderwidth=1,
+                    relief="flat",
+                    padding=8,
+                    sticky="nswe",
                 )
-            ],
-        )
+
+            ttk_style.layout(
+                cls.FRAME_STYLE,
+                [
+                    (
+                        "Modern.Card.border",
+                        {
+                            "sticky": "nswe",
+                            "children": [
+                                (
+                                    "Frame.padding",
+                                    {
+                                        "sticky": "nswe",
+                                        "children": [("Frame.background", {"sticky": "nswe"})],
+                                    },
+                                )
+                            ],
+                        },
+                    )
+                ],
+            )
+            ttk_style.layout(
+                cls.ENTRY_STYLE,
+                [
+                    (
+                        "Modern.Entry.border",
+                        {
+                            "sticky": "nswe",
+                            "children": [
+                                (
+                                    "Entry.padding",
+                                    {
+                                        "sticky": "nswe",
+                                        "children": [
+                                            (
+                                                "Entry.background",
+                                                {
+                                                    "sticky": "nswe",
+                                                    "children": [("Entry.textarea", {"sticky": "nswe"})],
+                                                },
+                                            )
+                                        ],
+                                    },
+                                )
+                            ],
+                        },
+                    )
+                ],
+            )
+            ttk_style.layout(
+                cls.COMBOBOX_STYLE,
+                [
+                    (
+                        "Modern.Entry.border",
+                        {
+                            "sticky": "nswe",
+                            "children": [
+                                (
+                                    "Combobox.padding",
+                                    {
+                                        "sticky": "nswe",
+                                        "children": [
+                                            ("Combobox.textarea", {"sticky": "nswe"}),
+                                            ("Combobox.downarrow", {"side": "right", "sticky": ""}),
+                                        ],
+                                    },
+                                )
+                            ],
+                        },
+                    )
+                ],
+            )
+            ttk_style.layout(
+                cls.SPINBOX_STYLE,
+                [
+                    (
+                        "Modern.Entry.border",
+                        {
+                            "sticky": "nswe",
+                            "children": [
+                                (
+                                    "Spinbox.field",
+                                    {
+                                        "side": "left",
+                                        "sticky": "nswe",
+                                        "children": [
+                                            (
+                                                "Spinbox.padding",
+                                                {
+                                                    "sticky": "nswe",
+                                                    "children": [("Spinbox.textarea", {"sticky": "nswe"})],
+                                                },
+                                            )
+                                        ],
+                                    },
+                                ),
+                                ("Spinbox.uparrow", {"side": "top", "sticky": "e"}),
+                                ("Spinbox.downarrow", {"side": "bottom", "sticky": "e"}),
+                            ],
+                        },
+                    )
+                ],
+            )
+            ttk_style.layout(
+                cls.BUTTON_STYLE,
+                [
+                    (
+                        "Modern.Button.border",
+                        {
+                            "sticky": "nswe",
+                            "children": [
+                                (
+                                    "Button.focus",
+                                    {
+                                        "sticky": "nswe",
+                                        "children": [
+                                            (
+                                                "Button.padding",
+                                                {
+                                                    "sticky": "nswe",
+                                                    "children": [("Button.label", {"sticky": "nswe"})],
+                                                },
+                                            )
+                                        ],
+                                    },
+                                )
+                            ],
+                        },
+                    )
+                ],
+            )
+
+            ttk_style.configure(
+                cls.ENTRY_STYLE,
+                fieldbackground=input_background,
+                background=input_background,
+                foreground=input_foreground,
+                bordercolor=shadow,
+                lightcolor=shadow,
+                darkcolor=shadow,
+                insertcolor=accent,
+            )
+            ttk_style.map(
+                cls.ENTRY_STYLE,
+                fieldbackground=input_background_map,
+                foreground=input_foreground_map,
+                bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+            )
+
+            ttk_style.configure(
+                cls.COMBOBOX_STYLE,
+                fieldbackground=input_background,
+                background=input_background,
+                foreground=input_foreground,
+                bordercolor=shadow,
+                lightcolor=shadow,
+                darkcolor=shadow,
+                selectbackground=select_background,
+                selectforeground=select_foreground,
+            )
+            ttk_style.map(
+                cls.COMBOBOX_STYLE,
+                fieldbackground=input_background_map,
+                foreground=input_foreground_map,
+                bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+                background=[
+                    ("disabled", disabled_background),
+                    ("readonly", theme["heading_background"]),
+                    ("pressed", select_background),
+                    ("active", input_background),
+                    ("focus", input_background),
+                    ("!disabled", input_background),
+                ],
+                arrowcolor=[
+                    ("disabled", disabled_foreground),
+                    ("readonly", foreground),
+                    ("active", select_foreground),
+                    ("pressed", select_foreground),
+                    ("!disabled", foreground),
+                ],
+            )
+
+            ttk_style.configure(
+                cls.SPINBOX_STYLE,
+                fieldbackground=input_background,
+                background=input_background,
+                foreground=input_foreground,
+                bordercolor=shadow,
+                lightcolor=shadow,
+                darkcolor=shadow,
+                insertcolor=accent,
+            )
+            ttk_style.map(
+                cls.SPINBOX_STYLE,
+                fieldbackground=input_background_map,
+                foreground=input_foreground_map,
+                bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+                arrowcolor=[
+                    ("disabled", disabled_foreground),
+                    ("readonly", foreground),
+                    ("active", select_foreground),
+                    ("pressed", select_foreground),
+                    ("!disabled", foreground),
+                ],
+                background=[
+                    ("disabled", disabled_background),
+                    ("readonly", theme["heading_background"]),
+                    ("pressed", select_background),
+                    ("active", input_background),
+                    ("focus", input_background),
+                    ("!disabled", input_background),
+                ],
+            )
+
+            ttk_style.configure(
+                cls.BUTTON_STYLE,
+                background=accent,
+                foreground=foreground,
+                bordercolor=shadow,
+                lightcolor=shadow,
+                darkcolor=shadow,
+            )
+            ttk_style.map(
+                cls.BUTTON_STYLE,
+                background=[
+                    ("disabled", disabled_background),
+                    ("pressed", select_background),
+                    ("active", glow),
+                    ("focus", glow),
+                    ("!disabled", accent),
+                ],
+                foreground=[
+                    ("disabled", disabled_foreground),
+                    ("pressed", select_foreground),
+                    ("active", select_foreground),
+                    ("!disabled", foreground),
+                ],
+                bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+            )
+
+            ttk_style.configure(
+                cls.FRAME_STYLE,
+                background=background,
+                bordercolor=shadow,
+                lightcolor=shadow,
+                darkcolor=shadow,
+                relief="flat",
+            )
+            ttk_style.map(
+                cls.FRAME_STYLE,
+                bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+                background=[("active", background), ("!active", background)],
+            )
+
+            cls._configure_interaction_variants(
+                ttk_style,
+                theme,
+                glow,
+                shadow,
+                disabled_background,
+                disabled_foreground,
+                select_background,
+                select_foreground,
+            )
+        except tk.TclError as exc:  # pragma: no cover - branch exercised in dedicated fallback test
+            message = str(exc).lower()
+            if "border" in message:
+                cls._activate_azure_fallback(ttk_style, theme, exc)
+                return
+            raise
+
+    @classmethod
+    def _activate_azure_fallback(
+        cls, ttk_style: ttk.Style, theme: Dict[str, str], exc: tk.TclError
+    ) -> None:
+        """Log and initialize the Azure ttk theme when native borders are missing."""
+
+        if not cls._use_azure_fallback:
+            print(
+                "ThemeManager: custom border element unavailable; switching to Azure fallback."
+            )
+            print(f"ThemeManager: original ttk error: {exc}")
+        cls._use_azure_fallback = True
+        cls._apply_azure_fallback(ttk_style, theme)
+
+    @classmethod
+    def _apply_azure_fallback(cls, ttk_style: ttk.Style, theme: Dict[str, str]) -> None:
+        """Configure an Azure-inspired fallback palette without external assets."""
+
+        background = theme["background"]
+        foreground = theme["foreground"]
+        input_background = theme["input_background"]
+        input_foreground = theme["input_foreground"]
+        heading_background = theme["heading_background"]
+        select_background = theme["select_background"]
+        select_foreground = theme["select_foreground"]
+        disabled_background = theme["border"]
+        disabled_foreground = select_foreground
+        accent = theme["accent"]
+        shadow = cls._shade_color(theme["border"], -0.18)
+        glow = cls._shade_color(accent, 0.12)
+
+        input_background_map = [
+            ("disabled", disabled_background),
+            ("readonly", heading_background),
+            ("pressed", select_background),
+            ("active", input_background),
+            ("focus", input_background),
+            ("!disabled", input_background),
+        ]
+        input_foreground_map = [
+            ("disabled", disabled_foreground),
+            ("readonly", foreground),
+            ("pressed", select_foreground),
+            ("active", input_foreground),
+            ("focus", input_foreground),
+            ("!disabled", input_foreground),
+        ]
+        focus_border_map = [("focus", glow), ("active", glow), ("!focus", shadow)]
+
+        if not cls._azure_theme_loaded:
+            try:
+                ttk_style.theme_use("clam")
+            except tk.TclError:
+                pass
+            cls._azure_theme_loaded = True
 
         ttk_style.configure(
-            cls.ENTRY_STYLE,
+            ".",
+            background=background,
+            foreground=foreground,
             fieldbackground=input_background,
-            background=input_background,
-            foreground=input_foreground,
-            bordercolor=shadow,
-            lightcolor=shadow,
-            darkcolor=shadow,
-            insertcolor=accent,
-        )
-        ttk_style.map(
-            cls.ENTRY_STYLE,
-            fieldbackground=input_background_map,
-            foreground=input_foreground_map,
-            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
-        )
-
-        ttk_style.configure(
-            cls.COMBOBOX_STYLE,
-            fieldbackground=input_background,
-            background=input_background,
-            foreground=input_foreground,
-            bordercolor=shadow,
-            lightcolor=shadow,
-            darkcolor=shadow,
             selectbackground=select_background,
             selectforeground=select_foreground,
         )
+
+        ttk_style.configure("TFrame", background=background)
+        ttk_style.configure(
+            cls.FRAME_STYLE,
+            background=background,
+            bordercolor=shadow,
+            relief="flat",
+            borderwidth=1,
+            padding=(12, 10),
+        )
+        ttk_style.map(cls.FRAME_STYLE, bordercolor=focus_border_map)
+
+        for style_name in ("TLabel", cls.REQUIRED_LABEL_STYLE, cls.REQUIRED_ASTERISK_STYLE):
+            ttk_style.configure(style_name, background=background, foreground=foreground)
+
+        ttk_style.configure(
+            cls.ENTRY_STYLE,
+            fieldbackground=input_background,
+            foreground=input_foreground,
+            bordercolor=shadow,
+            lightcolor=shadow,
+            darkcolor=shadow,
+            insertcolor=accent,
+        )
+        ttk_style.map(
+            cls.ENTRY_STYLE,
+            fieldbackground=input_background_map,
+            foreground=input_foreground_map,
+            bordercolor=focus_border_map,
+        )
+        cls._clone_style(
+            ttk_style,
+            cls.ENTRY_STYLE,
+            cls.ENTRY_FOCUS_STYLE,
+            map_overrides={"bordercolor": focus_border_map},
+        )
+
+        ttk_style.configure(
+            cls.COMBOBOX_STYLE,
+            fieldbackground=input_background,
+            foreground=input_foreground,
+            bordercolor=shadow,
+            lightcolor=shadow,
+            darkcolor=shadow,
+            arrowsize=12,
+        )
         ttk_style.map(
             cls.COMBOBOX_STYLE,
             fieldbackground=input_background_map,
             foreground=input_foreground_map,
-            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
-            background=[
-                ("disabled", disabled_background),
-                ("readonly", theme["heading_background"]),
-                ("pressed", select_background),
-                ("active", input_background),
-                ("focus", input_background),
-                ("!disabled", input_background),
-            ],
+            bordercolor=focus_border_map,
             arrowcolor=[
                 ("disabled", disabled_foreground),
                 ("readonly", foreground),
@@ -1192,11 +1416,16 @@ class ThemeManager:
                 ("!disabled", foreground),
             ],
         )
+        cls._clone_style(
+            ttk_style,
+            cls.COMBOBOX_STYLE,
+            cls.COMBOBOX_FOCUS_STYLE,
+            map_overrides={"bordercolor": focus_border_map},
+        )
 
         ttk_style.configure(
             cls.SPINBOX_STYLE,
             fieldbackground=input_background,
-            background=input_background,
             foreground=input_foreground,
             bordercolor=shadow,
             lightcolor=shadow,
@@ -1207,7 +1436,7 @@ class ThemeManager:
             cls.SPINBOX_STYLE,
             fieldbackground=input_background_map,
             foreground=input_foreground_map,
-            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+            bordercolor=focus_border_map,
             arrowcolor=[
                 ("disabled", disabled_foreground),
                 ("readonly", foreground),
@@ -1215,14 +1444,12 @@ class ThemeManager:
                 ("pressed", select_foreground),
                 ("!disabled", foreground),
             ],
-            background=[
-                ("disabled", disabled_background),
-                ("readonly", theme["heading_background"]),
-                ("pressed", select_background),
-                ("active", input_background),
-                ("focus", input_background),
-                ("!disabled", input_background),
-            ],
+        )
+        cls._clone_style(
+            ttk_style,
+            cls.SPINBOX_STYLE,
+            cls.SPINBOX_FOCUS_STYLE,
+            map_overrides={"bordercolor": focus_border_map},
         )
 
         ttk_style.configure(
@@ -1248,21 +1475,14 @@ class ThemeManager:
                 ("active", select_foreground),
                 ("!disabled", foreground),
             ],
-            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
+            bordercolor=focus_border_map,
         )
 
         ttk_style.configure(
-            cls.FRAME_STYLE,
+            cls.CHECKBUTTON_STYLE,
             background=background,
-            bordercolor=shadow,
-            lightcolor=shadow,
-            darkcolor=shadow,
-            relief="flat",
-        )
-        ttk_style.map(
-            cls.FRAME_STYLE,
-            bordercolor=[("focus", glow), ("active", glow), ("!focus", shadow)],
-            background=[("active", background), ("!active", background)],
+            foreground=foreground,
+            focuscolor=glow,
         )
 
         cls._configure_interaction_variants(
