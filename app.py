@@ -2699,39 +2699,50 @@ class FraudCaseApp:
         self._show_walkthrough_step()
 
     def _build_walkthrough_steps(self) -> list[dict[str, object]]:
-        headline = "5 pasos para documentar tu caso y exportar sin errores."
+        headline = "6 pasos para documentar tu caso y exportar sin errores."
         steps = [
             {
                 "id": "case",
-                "title": "Paso 1 de 5: Datos del caso",
+                "title": "Paso 1 de 6: Datos del caso",
                 "message": "Empieza con los datos generales del expediente para habilitar herencias y controles posteriores.",
                 "anchor_getter": lambda key="case": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "clients",
-                "title": "Paso 2 de 5: Clientes implicados",
+                "title": "Paso 2 de 6: Clientes implicados",
                 "message": "Relaciona a los clientes afectados o vinculados; aquí se valida unicidad y puedes autocompletar con catálogos.",
                 "anchor_getter": lambda key="clients": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "products",
-                "title": "Paso 3 de 5: Productos investigados",
+                "title": "Paso 3 de 6: Productos investigados",
                 "message": "Registra los productos asociados al caso para consolidar montos y exportar sin errores.",
                 "anchor_getter": lambda key="products": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "team",
-                "title": "Paso 4 de 5: Colaboradores involucrados",
+                "title": "Paso 4 de 6: Colaboradores involucrados",
                 "message": "Agrega colaboradores con el botón superior y despliega el formulario si está oculto para documentar su detalle.",
                 "anchor_getter": lambda key="team": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
+                "id": "actions",
+                "title": "Paso 5 de 6: Acciones e importaciones",
+                "message": (
+                    "En la pestaña Acciones puedes importar CSV. Usa \"Cargar combinado\" "
+                    "para clientes, productos y colaboradores en un solo archivo; requiere "
+                    "tener los catálogos cargados para validar correctamente."
+                ),
+                "anchor_getter": lambda key="actions": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
                 "id": "validation",
-                "title": "Paso 5 de 5: Panel de validación",
+                "title": "Paso 6 de 6: Panel de validación",
                 "message": "Consulta el panel para ver errores y advertencias, lee el contador y usa el botón lateral para contraer o expandirlo según necesites.",
                 "anchor_getter": lambda key="validation": self._get_walkthrough_anchor(key),
                 "headline": headline,
@@ -2765,6 +2776,11 @@ class FraudCaseApp:
                 getattr(self, "_team_anchor_widget", None),
                 detail,
             ]
+        elif key == "actions":
+            candidates = [
+                getattr(self, "import_combined_button", None),
+                getattr(self, "import_group_frame", None),
+            ]
         elif key == "validation":
             panel = getattr(self, "_validation_panel", None)
             anchor_getter = getattr(panel, "get_anchor_widget", None)
@@ -2775,9 +2791,24 @@ class FraudCaseApp:
         for widget in candidates:
             if widget is None:
                 continue
+            if not self._is_widget_mapped(widget):
+                self._revive_walkthrough_widget(widget)
             if self._is_widget_mapped(widget):
                 return widget
         return None
+
+    def _revive_walkthrough_widget(self, widget: tk.Widget) -> None:
+        tab_id = self._locate_tab_for_widget(widget)
+        notebook = getattr(self, "notebook", None)
+        if not tab_id or notebook is None:
+            return
+        try:
+            notebook.select(tab_id)
+            if hasattr(self, "_scroll_binder"):
+                self._scroll_binder.activate_tab(tab_id)
+        except Exception:
+            return
+        self._safe_update_idletasks()
 
     def _is_widget_mapped(self, widget: tk.Widget) -> bool:
         try:
@@ -5619,6 +5650,7 @@ class FraudCaseApp:
         import_group.grid(row=1, column=1, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
         import_group.columnconfigure(0, weight=0)
         import_group.columnconfigure(1, weight=1)
+        self.import_group_frame = import_group
 
         btn_clientes = ttk.Button(import_group, text="Cargar clientes", command=self.import_clients)
         btn_clientes.grid(row=0, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
