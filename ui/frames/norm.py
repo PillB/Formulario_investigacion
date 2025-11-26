@@ -127,7 +127,7 @@ class NormFrame:
         self._register_header_tree_focus(id_entry, fecha_entry, desc_entry)
 
     @staticmethod
-    def build_header_tree(parent):
+    def build_header_tree(parent, xscrollcommand=None):
         header_tree = ttk.Treeview(
             parent,
             columns=[c[0] for c in NormFrame.HEADER_COLUMNS],
@@ -135,9 +135,24 @@ class NormFrame:
             height=4,
         )
 
+        column_widths = {
+            "id_norma": 200,
+            "fecha_vigencia": 160,
+            "descripcion": 380,
+        }
+
         for col_id, text in NormFrame.HEADER_COLUMNS:
             header_tree.heading(col_id, text=text)
-            header_tree.column(col_id, anchor="w", width=140)
+            header_tree.column(
+                col_id,
+                anchor="w",
+                width=column_widths.get(col_id, 140),
+                minwidth=column_widths.get(col_id, 140),
+                stretch=True,
+            )
+
+        if xscrollcommand:
+            header_tree.configure(xscrollcommand=xscrollcommand)
 
         header_tree.tag_configure("even", background="#f7f7f7")
         header_tree.tag_configure("odd", background="#ffffff")

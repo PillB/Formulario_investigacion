@@ -4043,11 +4043,18 @@ class FraudCaseApp:
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
 
-        tree = tree_builder(container)
+        xscrollbar = ttk.Scrollbar(container, orient="horizontal")
+
+        tree = tree_builder(container, xscrollcommand=xscrollbar.set)
         tree.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
-        tree.configure(yscrollcommand=scrollbar.set)
+
+        yscrollbar = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
+        yscrollbar.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
+
+        xscrollbar.configure(command=tree.xview)
+        xscrollbar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY // 2))
+
+        tree.configure(yscrollcommand=yscrollbar.set, xscrollcommand=xscrollbar.set)
 
         return tree, container
 
