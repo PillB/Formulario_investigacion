@@ -10077,18 +10077,12 @@ class FraudCaseApp:
             )
             division_value = (tm.division_var.get() if hasattr(tm, 'division_var') else '').strip()
             area_value = (tm.area_var.get() if hasattr(tm, 'area_var') else '').strip()
-            division_norm = (
-                division_value.lower()
-                .replace('á', 'a')
-                .replace('é', 'e')
-                .replace('í', 'i')
-                .replace('ó', 'o')
-                .replace('ú', 'u')
-            )
-            area_norm = area_value.lower().replace('á', 'a').replace('é', 'e').replace('ó', 'o')
+            division_norm = normalize_without_accents(division_value).lower()
+            area_norm = normalize_without_accents(area_value).lower()
             needs_agency = (
-                division_norm == 'dca' or division_norm == 'canales de atencion'
-            ) and ('area comercial' in area_norm)
+                ('dca' in division_norm or 'canales de atencion' in division_norm)
+                and ('area comercial' in area_norm)
+            )
             if needs_agency:
                 nombre_agencia = (
                     tm.nombre_agencia_var.get().strip()
