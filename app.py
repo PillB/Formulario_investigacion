@@ -2699,39 +2699,39 @@ class FraudCaseApp:
         self._show_walkthrough_step()
 
     def _build_walkthrough_steps(self) -> list[dict[str, object]]:
-        headline = "7 pasos para documentar tu caso y exportar sin errores."
+        headline = "8 pasos para documentar tu caso y exportar sin errores."
         steps = [
             {
                 "id": "case",
-                "title": "Paso 1 de 7: Datos del caso",
+                "title": "Paso 1 de 8: Datos del caso",
                 "message": "Empieza con los datos generales del expediente para habilitar herencias y controles posteriores.",
                 "anchor_getter": lambda key="case": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "clients",
-                "title": "Paso 2 de 7: Clientes implicados",
+                "title": "Paso 2 de 8: Clientes implicados",
                 "message": "Relaciona a los clientes afectados o vinculados; aquí se valida unicidad y puedes autocompletar con catálogos.",
                 "anchor_getter": lambda key="clients": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "products",
-                "title": "Paso 3 de 7: Productos investigados",
+                "title": "Paso 3 de 8: Productos investigados",
                 "message": "Registra los productos asociados al caso para consolidar montos y exportar sin errores.",
                 "anchor_getter": lambda key="products": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "team",
-                "title": "Paso 4 de 7: Colaboradores involucrados",
+                "title": "Paso 4 de 8: Colaboradores involucrados",
                 "message": "Agrega colaboradores con el botón superior y despliega el formulario si está oculto para documentar su detalle.",
                 "anchor_getter": lambda key="team": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "actions",
-                "title": "Paso 5 de 7: Acciones e importaciones",
+                "title": "Paso 5 de 8: Acciones e importaciones",
                 "message": (
                     "En la pestaña Acciones puedes importar CSV. Usa \"Cargar combinado\" "
                     "para clientes, productos y colaboradores en un solo archivo; requiere "
@@ -2742,7 +2742,7 @@ class FraudCaseApp:
             },
             {
                 "id": "actions_bar",
-                "title": "Paso 6 de 7: Barra de acciones fijas",
+                "title": "Paso 6 de 8: Barra de acciones fijas",
                 "message": (
                     "En la sección Guardar, cargar y reportes tienes los botones clave: "
                     "\"Guardar y enviar\" valida todo y genera anexos, \"Generar Word\" crea el informe "
@@ -2753,9 +2753,16 @@ class FraudCaseApp:
             },
             {
                 "id": "validation",
-                "title": "Paso 7 de 7: Panel de validación",
+                "title": "Paso 7 de 8: Panel de validación",
                 "message": "Consulta el panel para ver errores y advertencias, lee el contador y usa el botón lateral para contraer o expandirlo según necesites.",
                 "anchor_getter": lambda key="validation": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
+                "id": "summary",
+                "title": "Paso 8 de 8: Resumen",
+                "message": "Revisa la pestaña Resumen para ver tablas compactas de clientes, productos y más. Selecciona la sección para validar que tus datos consolidados estén completos antes de exportar.",
+                "anchor_getter": lambda key="summary": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
         ]
@@ -2806,6 +2813,12 @@ class FraudCaseApp:
             candidates = [
                 anchor_getter() if callable(anchor_getter) else None,
                 panel,
+            ]
+        elif key == "summary":
+            candidates = [
+                getattr(self, "summary_first_section", None),
+                getattr(self, "summary_intro_label", None),
+                getattr(self, "summary_tab", None),
             ]
         for widget in candidates:
             if widget is None:
@@ -2897,6 +2910,7 @@ class FraudCaseApp:
         self._walkthrough_next_btn.configure(text="Listo" if is_last else "Siguiente")
 
         self._safe_update_idletasks()
+        self._revalidate_walkthrough_anchor_geometry(anchor)
         self._position_walkthrough(anchor)
 
     def _position_walkthrough(self, anchor: tk.Widget) -> None:
@@ -2930,6 +2944,13 @@ class FraudCaseApp:
             )
         except tk.TclError:
             return None
+
+    def _revalidate_walkthrough_anchor_geometry(self, anchor: tk.Widget) -> None:
+        try:
+            anchor.update_idletasks()
+        except Exception:
+            pass
+        self._safe_update_idletasks()
 
     def _advance_walkthrough(self) -> None:
         if self._walkthrough_step_index + 1 >= len(self._walkthrough_steps):
@@ -6524,10 +6545,11 @@ class FraudCaseApp:
         scrollable_tab.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         container.columnconfigure(0, weight=1)
 
-        ttk.Label(
+        self.summary_intro_label = ttk.Label(
             container,
             text="Resumen compacto de los datos capturados. Las tablas se actualizan tras cada guardado o importación.",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 5))
+        )
+        self.summary_intro_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
 
         config = [
             (
@@ -6633,6 +6655,8 @@ class FraudCaseApp:
             section = ttk.LabelFrame(container, text=title)
             section.grid(row=row_idx, column=0, sticky="nsew", pady=5)
             container.rowconfigure(row_idx, weight=1)
+            if getattr(self, "summary_first_section", None) is None:
+                self.summary_first_section = section
             section.columnconfigure(0, weight=1)
             column_width = 130 if key == "colaboradores" else 150
             tree, frame = self._build_compact_table(
