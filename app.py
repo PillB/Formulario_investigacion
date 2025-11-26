@@ -2699,32 +2699,39 @@ class FraudCaseApp:
         self._show_walkthrough_step()
 
     def _build_walkthrough_steps(self) -> list[dict[str, object]]:
-        headline = "4 pasos para documentar tu caso y exportar sin errores."
+        headline = "5 pasos para documentar tu caso y exportar sin errores."
         steps = [
             {
                 "id": "case",
-                "title": "Paso 1 de 4: Datos del caso",
+                "title": "Paso 1 de 5: Datos del caso",
                 "message": "Empieza con los datos generales del expediente para habilitar herencias y controles posteriores.",
                 "anchor_getter": lambda key="case": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "clients",
-                "title": "Paso 2 de 4: Clientes implicados",
+                "title": "Paso 2 de 5: Clientes implicados",
                 "message": "Relaciona a los clientes afectados o vinculados; aquí se valida unicidad y puedes autocompletar con catálogos.",
                 "anchor_getter": lambda key="clients": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "products",
-                "title": "Paso 3 de 4: Productos investigados",
+                "title": "Paso 3 de 5: Productos investigados",
                 "message": "Registra los productos asociados al caso para consolidar montos y exportar sin errores.",
                 "anchor_getter": lambda key="products": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
+                "id": "team",
+                "title": "Paso 4 de 5: Colaboradores involucrados",
+                "message": "Agrega colaboradores con el botón superior y despliega el formulario si está oculto para documentar su detalle.",
+                "anchor_getter": lambda key="team": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
                 "id": "validation",
-                "title": "Paso 4 de 4: Panel de validación",
+                "title": "Paso 5 de 5: Panel de validación",
                 "message": "Consulta el panel para ver errores y advertencias, lee el contador y usa el botón lateral para contraer o expandirlo según necesites.",
                 "anchor_getter": lambda key="validation": self._get_walkthrough_anchor(key),
                 "headline": headline,
@@ -2745,6 +2752,18 @@ class FraudCaseApp:
             candidates = [
                 getattr(self, "_product_anchor_widget", None),
                 getattr(self, "_product_action_anchor", None),
+            ]
+        elif key == "team":
+            detail = getattr(self, "team_detail_wrapper", None)
+            if detail is not None and not self._is_widget_mapped(detail):
+                try:
+                    self.show_team_detail()
+                except Exception:
+                    pass
+                self._safe_update_idletasks()
+            candidates = [
+                getattr(self, "_team_anchor_widget", None),
+                detail,
             ]
         elif key == "validation":
             panel = getattr(self, "_validation_panel", None)
@@ -2781,6 +2800,7 @@ class FraudCaseApp:
             return
 
         self._ensure_walkthrough_anchor_visible(anchor)
+        self._safe_update_idletasks()
 
         palette = ThemeManager.current()
         background = palette.get("background", "#1f1f1f")
@@ -3677,6 +3697,8 @@ class FraudCaseApp:
         controls.columnconfigure(0, weight=1)
         add_btn = ttk.Button(controls, text="Agregar colaborador", command=self._on_new_team_member)
         add_btn.grid(row=0, column=0, sticky="w", padx=5, pady=ROW_PADY)
+        if getattr(self, "_team_anchor_widget", None) is None:
+            self._team_anchor_widget = add_btn
         self.register_tooltip(add_btn, "Crea un registro para otro colaborador investigado.")
         self.team_toggle_btn = ttk.Button(
             controls,
@@ -3693,6 +3715,9 @@ class FraudCaseApp:
         scrollable, inner = create_scrollable_container(self.team_detail_wrapper)
         scrollable.grid(row=0, column=0, sticky="nsew")
         self.team_container = inner
+        if getattr(self, "_team_anchor_widget", None) is None:
+            header = getattr(self.team_detail_wrapper, "header", None)
+            self._team_anchor_widget = header or self.team_detail_wrapper
         self.add_team()
         self.hide_team_detail()
         self._refresh_team_summary()
