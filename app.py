@@ -1332,7 +1332,9 @@ class FraudCaseApp:
                     break
         return None
 
-    def _ensure_walkthrough_anchor_visible(self, anchor: tk.Widget) -> None:
+    def _ensure_walkthrough_anchor_visible(
+        self, anchor: tk.Widget
+    ) -> tuple[int, int, int, int] | None:
         tab_id = self._locate_tab_for_widget(anchor)
         if tab_id:
             try:
@@ -1342,18 +1344,54 @@ class FraudCaseApp:
             except Exception:
                 pass
         self._safe_update_idletasks()
-        self._scroll_widget_into_view(anchor)
+        scrolled = self._scroll_widget_into_view(anchor)
+        if not scrolled:
+            self._scroll_to_widget(anchor)
         self._safe_update_idletasks()
+        return self._get_widget_geometry(anchor)
 
-    def _scroll_widget_into_view(self, widget: tk.Widget) -> None:
+    def _scroll_widget_into_view(self, widget: tk.Widget) -> bool:
         if widget is None:
-            return
+            return False
         if self._scroll_with_see(widget):
-            return
+            return True
         canvas, inner = self._find_scrollable_canvas(widget)
         if canvas is None or inner is None:
-            return
+            return False
         self._scroll_with_canvas(canvas, inner, widget)
+        return True
+
+    def _scroll_to_widget(self, widget: tk.Widget) -> bool:
+        if widget is None:
+            return False
+        try:
+            widget.update_idletasks()
+        except tk.TclError:
+            return False
+        parent = getattr(widget, "master", None)
+        canvas = None
+        while parent is not None:
+            if isinstance(parent, tk.Canvas):
+                canvas = parent
+                break
+            parent = getattr(parent, "master", None)
+        if canvas is None:
+            return False
+        try:
+            inner_frames = [
+                child for child in canvas.winfo_children() if isinstance(child, (tk.Frame, ttk.Frame))
+            ]
+            inner = inner_frames[0] if inner_frames else None
+            if inner is None or inner.winfo_height() == 0:
+                return False
+            widget_y = widget.winfo_rooty()
+            inner_y = inner.winfo_rooty()
+            offset = max(0, widget_y - inner_y - 20)
+            fraction = offset / max(1, inner.winfo_height())
+            canvas.yview_moveto(min(1.0, fraction))
+            return True
+        except tk.TclError:
+            return False
 
     def _scroll_with_see(self, widget: tk.Widget) -> bool:
         for ancestor in self._iter_widget_ancestors(widget):
@@ -2946,15 +2984,13 @@ class FraudCaseApp:
         anchor_getter: Optional[Callable[[], Optional[tk.Widget]]] = step.get("anchor_getter")  # type: ignore[assignment]
         anchor = anchor_getter() if callable(anchor_getter) else None
         if anchor is None:
-            if self._walkthrough_step_index + 1 < len(self._walkthrough_steps):
-                self._walkthrough_step_index += 1
-                self._show_walkthrough_step()
-            else:
-                self._dismiss_walkthrough()
+            self._advance_walkthrough_on_missing_anchor()
             return
 
-        self._ensure_walkthrough_anchor_visible(anchor)
-        self._safe_update_idletasks()
+        geometry = self._ensure_walkthrough_anchor_visible(anchor)
+        if geometry is None:
+            self._advance_walkthrough_on_missing_anchor()
+            return
 
         palette = ThemeManager.current()
         background = palette.get("background", "#1f1f1f")
@@ -3002,10 +3038,19 @@ class FraudCaseApp:
 
         self._safe_update_idletasks()
         self._revalidate_walkthrough_anchor_geometry(anchor)
-        self._position_walkthrough(anchor)
+        self._position_walkthrough(anchor, geometry)
 
-    def _position_walkthrough(self, anchor: tk.Widget) -> None:
-        geometry = self._get_widget_geometry(anchor)
+    def _advance_walkthrough_on_missing_anchor(self) -> None:
+        if self._walkthrough_step_index + 1 < len(self._walkthrough_steps):
+            self._walkthrough_step_index += 1
+            self._show_walkthrough_step()
+        else:
+            self._dismiss_walkthrough()
+
+    def _position_walkthrough(
+        self, anchor: tk.Widget, geometry: tuple[int, int, int, int] | None = None
+    ) -> None:
+        geometry = geometry or self._get_widget_geometry(anchor)
         if geometry is None:
             return
         anchor_x, anchor_y, anchor_width, anchor_height = geometry
@@ -3058,6 +3103,7 @@ class FraudCaseApp:
         self._walkthrough_state["dismissed_at"] = datetime.utcnow().isoformat()
         self._persist_walkthrough_state()
         self._destroy_walkthrough()
+        self._return_to_main_screen()
 
     def _destroy_walkthrough(self) -> None:
         if self._walkthrough_overlay is None:
@@ -3067,6 +3113,18 @@ class FraudCaseApp:
         except tk.TclError:
             pass
         self._walkthrough_overlay = None
+
+    def _return_to_main_screen(self) -> None:
+        notebook = getattr(self, "notebook", None)
+        main_tab = getattr(self, "main_tab", None)
+        if notebook is None or main_tab is None:
+            return
+        try:
+            notebook.select(main_tab)
+            if hasattr(self, "_scroll_binder"):
+                self._scroll_binder.activate_tab(notebook.select())
+        except Exception:
+            return
 
     @classmethod
     def _sanitize_import_value(cls, value, column_name: str | None = None, row_number: int | None = None) -> str:
