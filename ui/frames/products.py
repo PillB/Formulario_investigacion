@@ -46,6 +46,7 @@ class InvolvementRow:
         self.monto_var = tk.StringVar()
 
         self.section = self._create_section(parent)
+        self._sync_section_title()
         self.section.grid(
             row=idx + 1, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
@@ -394,6 +395,7 @@ class ClaimRow:
         self._claim_field_errors: dict[str, str | None] = {}
 
         self.section = self._create_section(parent)
+        self._sync_section_title()
         self.section.grid(
             row=idx + 1, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
@@ -880,6 +882,7 @@ class ProductFrame:
         self.claim_template_btn = None
 
         self.section = self._create_section(parent)
+        self._sync_section_title()
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         self._tree_sort_state: dict[str, bool] = {}
         self._build_header_table()

@@ -50,9 +50,10 @@ class NormFrame:
         self.section = CollapsibleSection(
             parent, title="", on_toggle=lambda _section: self._sync_section_title()
         )
+        self._sync_section_title()
         self.section.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
 
-        self.frame = ttk.LabelFrame(self.section.content, text=f"Norma {self.idx+1}")
+        self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
         self.badges = BadgeManager(parent=self.frame)
