@@ -70,7 +70,9 @@ class ClientFrame:
         self.accionado_options_var = tk.StringVar(value=ACCIONADO_OPTIONS)
 
         self.section = CollapsibleSection(
-            parent, title="", on_toggle=lambda _section: self._sync_section_title()
+            parent,
+            title=f"Cliente {idx+1}",
+            on_toggle=lambda _section: self._sync_section_title(),
         )
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         self._register_title_traces()
@@ -83,7 +85,7 @@ class ClientFrame:
         else:
             self.summary_tree = getattr(owner, "clients_summary_tree", None)
 
-        self.frame = ttk.LabelFrame(self.section.content, text=f"Cliente {self.idx+1}")
+        self.frame = ttk.LabelFrame(self.section.content)
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
@@ -434,7 +436,7 @@ class ClientFrame:
             var.trace_add("write", self._on_identity_field_change)
 
     def _build_section_title(self) -> str:
-        base_title = f"Cliente {self.idx+1}"
+        title = f"Cliente {self.idx+1}"
         if getattr(self, "section", None) and not self.section.is_open:
             id_value = self.id_var.get().strip()
             name_value = " ".join(
@@ -444,8 +446,8 @@ class ClientFrame:
             )
             details = [value for value in (id_value, name_value) if value]
             if details:
-                base_title = f"{base_title} – {' | '.join(details)}"
-        return base_title
+                title = f"{title} – {' | '.join(details)}"
+        return title
 
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
