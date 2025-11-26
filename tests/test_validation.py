@@ -1762,6 +1762,22 @@ def test_validate_data_requires_agency_data_for_commercial_channels():
     )
 
 
+def test_validate_data_requires_agency_for_compound_division_labels():
+    team_config = {
+        "team_id": "T12345",
+        "division": "DCA - Lima",
+        "area": "Área Comercial Metropolitana",
+    }
+    app = build_headless_app("Crédito personal", team_configs=[team_config])
+
+    errors, _ = app.validate_data()
+
+    assert (
+        "El colaborador 1 debe registrar nombre y código de agencia por pertenecer a canales comerciales."
+        in errors
+    )
+
+
 def test_validate_data_only_flags_required_agency_collaborator():
     team_configs = [
         {
