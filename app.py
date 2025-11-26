@@ -5307,11 +5307,15 @@ class FraudCaseApp:
 
     def build_actions_tab(self, parent):
         PRIMARY_PADDING = (12, 6)
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
-        frame.columnconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=0)
 
-        header_frame = ttk.Frame(frame)
+        scrollable_tab, inner_frame = create_scrollable_container(parent)
+        scrollable_tab.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
+        inner_frame.columnconfigure(0, weight=1)
+
+        header_frame = ttk.Frame(inner_frame)
         header_frame.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
         header_frame.columnconfigure(0, weight=1)
         header_frame.columnconfigure(1, weight=0)
@@ -5338,7 +5342,7 @@ class FraudCaseApp:
         )
         self.theme_toggle_button.grid(row=0, column=2, sticky="ne")
 
-        catalog_group = ttk.LabelFrame(frame, text="Catálogos de detalle")
+        catalog_group = ttk.LabelFrame(inner_frame, text="Catálogos de detalle")
         catalog_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
         catalog_group.columnconfigure(0, weight=1)
         catalog_group.columnconfigure(1, weight=1)
@@ -5386,7 +5390,7 @@ class FraudCaseApp:
         self.catalog_progress.grid_remove()
         self._catalog_progress_visible = False
 
-        import_group = ttk.LabelFrame(frame, text="Importar datos masivos (CSV)")
+        import_group = ttk.LabelFrame(inner_frame, text="Importar datos masivos (CSV)")
         import_group.grid(row=2, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
         import_group.columnconfigure(0, weight=0)
         import_group.columnconfigure(1, weight=1)
@@ -5495,8 +5499,8 @@ class FraudCaseApp:
         self.import_progress.grid_remove()
         self._import_progress_visible = False
 
-        action_group = ttk.LabelFrame(frame, text="Guardar, cargar y reportes")
-        action_group.grid(row=3, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        action_group = ttk.LabelFrame(parent, text="Guardar, cargar y reportes")
+        action_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=(0, ROW_PADY))
         action_group.columnconfigure(0, weight=1)
 
         ttk.Label(
