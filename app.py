@@ -3951,6 +3951,10 @@ class FraudCaseApp:
             default_risk_id=default_risk_id,
             header_tree=self.risk_header_tree,
         )
+        risk.set_refresh_callbacks(
+            shared_tree_refresher=self._refresh_shared_risk_tree,
+            summary_refresher=lambda: self._schedule_summary_refresh('riesgos'),
+        )
         self.risk_frames.append(risk)
         self._maybe_show_milestone_badge(len(self.risk_frames), "Riesgos", user_initiated=user_initiated)
         for i, r in enumerate(self.risk_frames):
@@ -3965,7 +3969,7 @@ class FraudCaseApp:
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
         self._refresh_risk_auto_ids()
-        self._schedule_summary_refresh('riesgos')
+        self._refresh_shared_risk_tree()
 
     def _generate_next_risk_id(self, used_ids=None):
         """Obtiene el siguiente ID automático disponible para riesgos."""
@@ -4103,6 +4107,7 @@ class FraudCaseApp:
             )
             tag = "even" if idx % 2 == 0 else "odd"
             self.risk_header_tree.insert("", "end", values=values, tags=(tag,))
+        self._schedule_summary_refresh('riesgos')
 
         self._schedule_summary_refresh('riesgos')
 

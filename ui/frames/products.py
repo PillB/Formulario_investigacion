@@ -225,6 +225,7 @@ class ClaimRow:
         self.tooltip_register = tooltip_register
         self.validators = []
         self._claims_required = bool(getattr(product_frame, "claim_fields_required", True))
+        self._refresh_after_id = None
 
         self.id_var = tk.StringVar()
         self.name_var = tk.StringVar()
@@ -327,6 +328,20 @@ class ClaimRow:
         if snapshot == getattr(self, "_last_summary_snapshot", None):
             return
         self._last_summary_snapshot = snapshot
+        current_after_id = getattr(self, "_refresh_after_id", None)
+        if current_after_id:
+            try:
+                self.frame.after_cancel(current_after_id)
+            except Exception:
+                self._refresh_after_id = None
+        try:
+            self._refresh_after_id = self.frame.after(120, self._run_claim_refresh)
+        except Exception:
+            self._refresh_after_id = None
+            self._run_claim_refresh()
+
+    def _run_claim_refresh(self):
+        self._refresh_after_id = None
         refresher = getattr(self.product_frame, "schedule_summary_refresh", None)
         if callable(refresher):
             refresher('reclamos')
