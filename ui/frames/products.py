@@ -73,7 +73,7 @@ class InvolvementRow:
         self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
         self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
         self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
-        self.badges["team"] = self._make_badge(row=0, column=5)
+        self.badges["team"] = self.product_frame._create_badge_label(0, column=5, parent=self.frame)
 
         ttk.Label(self.frame, text="Monto asignado:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -84,7 +84,7 @@ class InvolvementRow:
         monto_entry.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
-        self.badges["amount"] = self._make_badge(row=0, column=6)
+        self.badges["amount"] = self.product_frame._create_badge_label(0, column=6, parent=self.frame)
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -143,35 +143,6 @@ class InvolvementRow:
             fallback.is_open = True  # type: ignore[attr-defined]
             fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
             return fallback
-
-    def _make_badge(self, row: int, *, column: int):
-        creator = getattr(self.product_frame, "_create_badge_label", None)
-        if callable(creator):
-            try:
-                return creator(row, column=column, parent=self.frame)
-            except Exception:
-                pass
-        try:
-            badge = ttk.Label(self.frame, text="Pendiente", anchor="w")
-            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
-            return badge
-        except Exception:
-            class _StubBadge:
-                def __init__(self):
-                    self.text = "Pendiente"
-
-                def config(self, **kwargs):  # noqa: D401, ANN001
-                    """Permite simular configure/config en pruebas sin Tk."""
-                    self.text = kwargs.get("text", self.text)
-
-                def configure(self, **kwargs):  # noqa: D401, ANN001
-                    """Alias de config para compatibilidad."""
-                    return self.config(**kwargs)
-
-            badge = _StubBadge()
-            ensure_grid_support(badge)
-            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
-            return badge
 
     def _apply_badge_state(self, badge, is_valid: bool, message: str | None):
         setter = getattr(self.product_frame, "_set_badge_state", None)
