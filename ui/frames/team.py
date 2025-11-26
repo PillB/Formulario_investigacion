@@ -10,7 +10,7 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         normalize_without_accents, should_autofill_field,
                         validate_agency_code, validate_date_text, validate_required_text,
                         validate_team_member_id)
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import BadgeManager, ensure_grid_support
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
@@ -88,6 +88,7 @@ class TeamMemberFrame:
         self.frame = ttk.LabelFrame(self.section.content, text=f"Colaborador {self.idx+1}")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
+        self.badges = BadgeManager(parent=self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(0, weight=0)
             self.frame.columnconfigure(1, weight=1)
@@ -96,8 +97,14 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="ID del colaborador:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
-        id_entry.grid(row=0, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_entry = self._make_badged_field(
+            self.frame,
+            "team_id",
+            lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=20),
+            row=0,
+            column=1,
+            columnspan=2,
+        )
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
 
@@ -120,14 +127,20 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Flag:").grid(
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        flag_cb = ttk.Combobox(
+        flag_cb = self._make_badged_field(
             self.frame,
-            textvariable=self.flag_var,
-            values=FLAG_COLABORADOR_LIST,
-            state="readonly",
-            width=20,
+            "team_flag",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.flag_var,
+                values=FLAG_COLABORADOR_LIST,
+                state="readonly",
+                width=20,
+            ),
+            row=3,
+            column=1,
+            columnspan=2,
         )
-        flag_cb.grid(row=3, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
@@ -182,10 +195,14 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Fecha carta inmediatez:").grid(
             row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        fecha_inm_entry = ttk.Entry(
-            self.frame, textvariable=self.fecha_carta_inmediatez_var, width=20
+        fecha_inm_entry = self._make_badged_field(
+            self.frame,
+            "team_fecha_inm",
+            lambda parent: ttk.Entry(parent, textvariable=self.fecha_carta_inmediatez_var, width=20),
+            row=8,
+            column=1,
+            columnspan=2,
         )
-        fecha_inm_entry.grid(row=8, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(fecha_inm_entry, "fecha_carta_inmediatez")
         self._bind_date_validation(fecha_inm_entry, self.fecha_carta_inmediatez_var, "la fecha de carta de inmediatez")
         self.tooltip_register(
@@ -196,10 +213,14 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Fecha carta renuncia:").grid(
             row=9, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        fecha_ren_entry = ttk.Entry(
-            self.frame, textvariable=self.fecha_carta_renuncia_var, width=20
+        fecha_ren_entry = self._make_badged_field(
+            self.frame,
+            "team_fecha_ren",
+            lambda parent: ttk.Entry(parent, textvariable=self.fecha_carta_renuncia_var, width=20),
+            row=9,
+            column=1,
+            columnspan=2,
         )
-        fecha_ren_entry.grid(row=9, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(fecha_ren_entry, "fecha_carta_renuncia")
         self._bind_date_validation(fecha_ren_entry, self.fecha_carta_renuncia_var, "la fecha de carta de renuncia")
         self.tooltip_register(
@@ -210,16 +231,28 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Nombre agencia:").grid(
             row=10, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        nombre_ag_entry = ttk.Entry(self.frame, textvariable=self.nombre_agencia_var, width=25)
-        nombre_ag_entry.grid(row=10, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        nombre_ag_entry = self._make_badged_field(
+            self.frame,
+            "team_agencia_nombre",
+            lambda parent: ttk.Entry(parent, textvariable=self.nombre_agencia_var, width=25),
+            row=10,
+            column=1,
+            columnspan=2,
+        )
         self._bind_dirty_tracking(nombre_ag_entry, "nombre_agencia")
         self.tooltip_register(nombre_ag_entry, "Especifica la agencia u oficina de trabajo.")
 
         ttk.Label(self.frame, text="Código agencia:").grid(
             row=11, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        cod_ag_entry = ttk.Entry(self.frame, textvariable=self.codigo_agencia_var, width=10)
-        cod_ag_entry.grid(row=11, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        cod_ag_entry = self._make_badged_field(
+            self.frame,
+            "team_agencia_codigo",
+            lambda parent: ttk.Entry(parent, textvariable=self.codigo_agencia_var, width=10),
+            row=11,
+            column=1,
+            columnspan=2,
+        )
         self._bind_dirty_tracking(cod_ag_entry, "codigo_agencia")
         self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
         self._division_entry = div_entry
@@ -228,28 +261,40 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Tipo de falta:").grid(
             row=12, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        falta_cb = ttk.Combobox(
+        falta_cb = self._make_badged_field(
             self.frame,
-            textvariable=self.tipo_falta_var,
-            values=TIPO_FALTA_LIST,
-            state="readonly",
-            width=20,
+            "team_tipo_falta",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.tipo_falta_var,
+                values=TIPO_FALTA_LIST,
+                state="readonly",
+                width=20,
+            ),
+            row=12,
+            column=1,
+            columnspan=2,
         )
-        falta_cb.grid(row=12, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         falta_cb.set('')
         self.tooltip_register(falta_cb, "Selecciona la falta disciplinaria tipificada.")
 
         ttk.Label(self.frame, text="Tipo de sanción:").grid(
             row=13, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        sanc_cb = ttk.Combobox(
+        sanc_cb = self._make_badged_field(
             self.frame,
-            textvariable=self.tipo_sancion_var,
-            values=TIPO_SANCION_LIST,
-            state="readonly",
-            width=20,
+            "team_tipo_sancion",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.tipo_sancion_var,
+                values=TIPO_SANCION_LIST,
+                state="readonly",
+                width=20,
+            ),
+            row=13,
+            column=1,
+            columnspan=2,
         )
-        sanc_cb.grid(row=13, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         sanc_cb.set('')
         self.tooltip_register(sanc_cb, "Describe la sanción propuesta o aplicada.")
 
@@ -275,7 +320,9 @@ class TeamMemberFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_team_member_id(self.id_var.get()),
+                self.badges.wrap_validation(
+                    "team_id", lambda: validate_team_member_id(self.id_var.get())
+                ),
                 self.logs,
                 f"Colaborador {self.idx+1} - ID",
                 variables=[self.id_var],
@@ -284,7 +331,12 @@ class TeamMemberFrame:
         self.validators.append(
             FieldValidator(
                 flag_cb,
-                lambda: validate_required_text(self.flag_var.get(), "el flag del colaborador"),
+                self.badges.wrap_validation(
+                    "team_flag",
+                    lambda: validate_required_text(
+                        self.flag_var.get(), "el flag del colaborador"
+                    ),
+                ),
                 self.logs,
                 f"Colaborador {self.idx+1} - Flag",
                 variables=[self.flag_var],
@@ -292,28 +344,44 @@ class TeamMemberFrame:
         )
         nombre_validator = FieldValidator(
             nombre_ag_entry,
-            lambda: self._validate_agency_fields("nombre"),
+            self.badges.wrap_validation(
+                "team_agencia_nombre", lambda: self._validate_agency_fields("nombre")
+            ),
             self.logs,
             f"Colaborador {self.idx+1} - Nombre agencia",
             variables=[self.nombre_agencia_var],
         )
         codigo_validator = FieldValidator(
             cod_ag_entry,
-            lambda: self._validate_agency_fields("codigo"),
+            self.badges.wrap_validation(
+                "team_agencia_codigo", lambda: self._validate_agency_fields("codigo")
+            ),
             self.logs,
             f"Colaborador {self.idx+1} - Código agencia",
             variables=[self.codigo_agencia_var],
         )
         self.validators.extend([nombre_validator, codigo_validator])
         self._agency_validators.extend([nombre_validator, codigo_validator])
-        for widget, label, var in [
-            (fecha_inm_entry, "la fecha de carta de inmediatez", self.fecha_carta_inmediatez_var),
-            (fecha_ren_entry, "la fecha de carta de renuncia", self.fecha_carta_renuncia_var),
+        for widget, label, var, badge_key in [
+            (
+                fecha_inm_entry,
+                "la fecha de carta de inmediatez",
+                self.fecha_carta_inmediatez_var,
+                "team_fecha_inm",
+            ),
+            (
+                fecha_ren_entry,
+                "la fecha de carta de renuncia",
+                self.fecha_carta_renuncia_var,
+                "team_fecha_ren",
+            ),
         ]:
             self.validators.append(
                 FieldValidator(
                     widget,
-                    lambda v=var, l=label: self._validate_date_field(v, l),
+                    self.badges.wrap_validation(
+                        badge_key, lambda v=var, l=label: self._validate_date_field(v, l)
+                    ),
                     self.logs,
                     f"Colaborador {self.idx+1} - {label}",
                     variables=[var],
@@ -325,30 +393,65 @@ class TeamMemberFrame:
                 self.flag_var,
                 FLAG_COLABORADOR_LIST,
                 "el flag del colaborador",
+                "team_flag",
             ),
             (
                 falta_cb,
                 self.tipo_falta_var,
                 TIPO_FALTA_LIST,
                 "el tipo de falta del colaborador",
+                "team_tipo_falta",
             ),
             (
                 sanc_cb,
                 self.tipo_sancion_var,
                 TIPO_SANCION_LIST,
                 "el tipo de sanción del colaborador",
+                "team_tipo_sancion",
             ),
         ]
-        for widget, variable, catalog, label in catalog_validations:
+        for widget, variable, catalog, label, badge_key in catalog_validations:
             self.validators.append(
                 FieldValidator(
                     widget,
-                    lambda v=variable, c=catalog, l=label: self._validate_catalog_selection(v.get(), l, c),
+                    self.badges.wrap_validation(
+                        badge_key,
+                        lambda v=variable, c=catalog, l=label: self._validate_catalog_selection(v.get(), l, c),
+                    ),
                     self.logs,
                     f"Colaborador {self.idx+1} - {label.capitalize()}",
                     variables=[variable],
                 )
             )
+
+    def _make_badged_field(
+        self,
+        parent,
+        key: str,
+        widget_factory,
+        *,
+        row: int,
+        column: int,
+        columnspan: int = 1,
+        sticky: str = "we",
+    ):
+        container = ttk.Frame(parent)
+        ensure_grid_support(container)
+        if hasattr(container, "columnconfigure"):
+            container.columnconfigure(0, weight=1)
+
+        widget = widget_factory(container)
+        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
+        self.badges.create_and_register(key, container, row=0, column=1)
+        container.grid(
+            row=row,
+            column=column,
+            columnspan=columnspan,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky=sticky,
+        )
+        return widget
 
     def _create_section(self, parent):
         try:

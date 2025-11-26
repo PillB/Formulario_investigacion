@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Callable
 
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -11,7 +12,7 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import ALERT_BADGE_ICON, ensure_grid_support
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
@@ -39,13 +40,14 @@ class InvolvementRow:
         self.tooltip_register = tooltip_register
         self.validators = []
         self.team_validator = None
+        self.badges: dict[str, object] = {}
 
         self.team_var = tk.StringVar()
         self.monto_var = tk.StringVar()
 
         self.section = self._create_section(parent)
         self.section.grid(
-            row=idx + 1, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+            row=idx + 1, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
 
         self.frame = ttk.Frame(self.section.content)
@@ -71,6 +73,7 @@ class InvolvementRow:
         self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
         self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
         self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
+        self.badges["team"] = self._make_badge(row=0, column=5)
 
         ttk.Label(self.frame, text="Monto asignado:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -81,6 +84,7 @@ class InvolvementRow:
         monto_entry.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
+        self.badges["amount"] = self._make_badge(row=0, column=6)
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -90,7 +94,7 @@ class InvolvementRow:
 
         amount_validator = FieldValidator(
             monto_entry,
-            self._validate_assignment_amount,
+            self._wrap_involvement_validation("amount", self._validate_assignment_amount),
             self.logs,
             f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1}",
             variables=[self.monto_var],
@@ -99,7 +103,7 @@ class InvolvementRow:
 
         self.team_validator = FieldValidator(
             self.team_cb,
-            self._validate_team_selection,
+            self._wrap_involvement_validation("team", self._validate_team_selection),
             self.logs,
             f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1} colaborador",
             variables=[self.team_var, self.monto_var],
@@ -139,6 +143,68 @@ class InvolvementRow:
             fallback.is_open = True  # type: ignore[attr-defined]
             fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
             return fallback
+
+    def _make_badge(self, row: int, *, column: int):
+        creator = getattr(self.product_frame, "_create_badge_label", None)
+        if callable(creator):
+            try:
+                return creator(row, column=column, parent=self.frame)
+            except Exception:
+                pass
+        try:
+            badge = ttk.Label(self.frame, text=ALERT_BADGE_ICON, anchor="w")
+            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+            return badge
+        except Exception:
+            class _StubBadge:
+                def __init__(self):
+                    self.text = ALERT_BADGE_ICON
+
+                def config(self, **kwargs):  # noqa: D401, ANN001
+                    """Permite simular configure/config en pruebas sin Tk."""
+                    self.text = kwargs.get("text", self.text)
+
+                def configure(self, **kwargs):  # noqa: D401, ANN001
+                    """Alias de config para compatibilidad."""
+                    return self.config(**kwargs)
+
+            badge = _StubBadge()
+            ensure_grid_support(badge)
+            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+            return badge
+
+    def _apply_badge_state(self, badge, is_valid: bool, message: str | None):
+        setter = getattr(self.product_frame, "_set_badge_state", None)
+        if callable(setter):
+            try:
+                setter(badge, is_valid, message, success_text="Listo")
+                return
+            except TypeError:
+                setter(badge, is_valid, message)
+                return
+        text = "Listo" if is_valid else (message or "Revisa la información")
+        style_name = "TLabel"
+        styles = getattr(self.product_frame, "_badge_styles", {})
+        if isinstance(styles, dict):
+            style_name = styles.get("success" if is_valid else "warning", style_name)
+        try:
+            badge.configure(text=text, style=style_name)
+        except Exception:
+            if hasattr(badge, "config"):
+                try:
+                    badge.config(text=text)
+                except Exception:
+                    pass
+
+    def _wrap_involvement_validation(self, key: str, validate_fn):
+        def _wrapped():
+            message = validate_fn()
+            badge = self.badges.get(key)
+            if badge:
+                self._apply_badge_state(badge, message is None, message)
+            return message
+
+        return _wrapped
 
     def get_data(self):
         return {
@@ -323,10 +389,13 @@ class ClaimRow:
         self.id_var = tk.StringVar()
         self.name_var = tk.StringVar()
         self.code_var = tk.StringVar()
+        self.badges: dict[str, object] = {}
+        self._badge_updaters: dict[str, Callable] = {}
+        self._claim_field_errors: dict[str, str | None] = {}
 
         self.section = self._create_section(parent)
         self.section.grid(
-            row=idx + 1, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+            row=idx + 1, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
 
         self.frame = ttk.Frame(self.section.content)
@@ -346,6 +415,7 @@ class ClaimRow:
         self.id_entry = id_entry
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
         self._bind_identifier_triggers(id_entry)
+        self.badges["id"] = self._make_badge(row=0, column=5)
 
         ttk.Label(self.frame, text="Código:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -357,6 +427,7 @@ class ClaimRow:
         self.code_entry = code_entry
         self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
         self._bind_claim_field_triggers(code_entry)
+        self.badges["code"] = self._make_badge(row=0, column=6)
 
         ttk.Label(self.frame, text="Analítica nombre:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -368,6 +439,7 @@ class ClaimRow:
         self.name_entry = name_entry
         self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
         self._bind_claim_field_triggers(name_entry)
+        self.badges["name"] = self._make_badge(row=1, column=5)
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -381,7 +453,7 @@ class ClaimRow:
 
         self.id_validator = FieldValidator(
             id_entry,
-            self._validate_claim_id,
+            self._wrap_claim_validation("id", self._validate_claim_id),
             self.logs,
             f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} ID",
             variables=[self.id_var],
@@ -389,7 +461,7 @@ class ClaimRow:
         self.validators.append(self.id_validator)
         self.name_validator = FieldValidator(
             name_entry,
-            self._validate_claim_name,
+            self._wrap_claim_validation("name", self._validate_claim_name),
             self.logs,
             f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Nombre analítica",
             variables=[self.name_var],
@@ -398,7 +470,7 @@ class ClaimRow:
 
         self.code_validator = FieldValidator(
             code_entry,
-            self._validate_claim_code,
+            self._wrap_claim_validation("code", self._validate_claim_code),
             self.logs,
             f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1} Código",
             variables=[self.code_var],
@@ -457,10 +529,14 @@ class ClaimRow:
         self.name_var.set((data.get("nombre_analitica") or "").strip())
         self.code_var.set((data.get("codigo_analitica") or "").strip())
         self.on_id_change(preserve_existing=True, silent=True)
-        self.set_claim_requirement(getattr(self.product_frame, "claim_fields_required", self._claims_required))
+        self.set_claim_requirement(
+            getattr(self.product_frame, "claim_fields_required", self._claims_required),
+            skip_refresh=True,
+        )
         refresher = getattr(self.product_frame, "refresh_claim_guidance", None)
         if callable(refresher):
             refresher()
+        self.refresh_badges()
         self._refresh_claim_summary()
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
@@ -522,12 +598,14 @@ class ClaimRow:
                 self.frame.destroy()
             self.remove_callback(self)
 
-    def set_claim_requirement(self, required: bool):
+    def set_claim_requirement(self, required: bool, *, skip_refresh: bool = False):
         previously_required = self._claims_required
         self._claims_required = required
         if previously_required and not required:
             for validator in self.validators:
                 validator.show_custom_error(None)
+        if not skip_refresh:
+            self.refresh_badges()
 
     def _register_title_traces(self):
         for var in (self.id_var, self.name_var):
@@ -579,6 +657,59 @@ class ClaimRow:
             fallback.is_open = True  # type: ignore[attr-defined]
             fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
             return fallback
+
+    def _make_badge(self, row: int, column: int):
+        creator = getattr(self.product_frame, "_create_badge_label", None)
+        if callable(creator):
+            try:
+                return creator(row, column=column, parent=self.frame)
+            except TypeError:
+                return creator(row)
+        styles = getattr(self.product_frame, "_badge_styles", {}) or {"warning": "TLabel"}
+        style_name = styles.get("warning", "TLabel")
+        badge = ttk.Label(self.frame, text=ALERT_BADGE_ICON, style=style_name, anchor="w")
+        badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+        return badge
+
+    def _apply_badge_state(self, badge, is_valid: bool, message: str | None):
+        setter = getattr(self.product_frame, "_set_badge_state", None)
+        if callable(setter):
+            try:
+                setter(badge, is_valid, message, success_text="Listo")
+                return
+            except TypeError:
+                setter(badge, is_valid, message)
+                return
+        styles = getattr(self.product_frame, "_badge_styles", {}) or {"success": "TLabel", "warning": "TLabel"}
+        style_name = styles.get("success" if is_valid else "warning", "TLabel")
+        text = "Listo" if is_valid else (message or "Revisa la información")
+        try:
+            badge.configure(text=text, style=style_name)
+        except Exception:
+            if hasattr(badge, "config"):
+                try:
+                    badge.config(text=text)
+                except Exception:
+                    pass
+
+    def _update_claim_badge(self, key: str, is_valid: bool, message: str | None):
+        badge = self.badges.get(key)
+        if badge:
+            self._apply_badge_state(badge, is_valid, message)
+
+    def _wrap_claim_validation(self, key: str, validate_fn):
+        def _wrapped():
+            message = validate_fn()
+            self._claim_field_errors[key] = message
+            self._update_claim_badge(key, message is None, message)
+            return message
+
+        self._badge_updaters[key] = _wrapped
+        return _wrapped
+
+    def refresh_badges(self):
+        for updater in self._badge_updaters.values():
+            updater()
 
     def _validate_claim_id(self):
         value = self.id_var.get()
@@ -654,6 +785,15 @@ PRODUCT_MONEY_SPECS = (
     ("monto_pago_deuda", "monto_pago_var", "Monto pago de deuda", True, "pago"),
 )
 
+AMOUNT_BADGE_KEYS = {
+    "inv": "monto_inv",
+    "perdida": "monto_perdida",
+    "falla": "monto_falla",
+    "contingencia": "monto_contingencia",
+    "recuperado": "monto_recuperado",
+    "pago": "monto_pago",
+}
+
 
 class ProductFrame:
     """Representa un producto y su interfaz en la sección de productos."""
@@ -696,6 +836,10 @@ class ProductFrame:
         self._last_missing_lookup_id = None
         self._claim_requirement_active = False
         self._claim_nudge_shown = False
+        self._badge_registry: dict[str, dict[str, object]] = {}
+        self._badge_updaters: dict[str, Callable] = {}
+        self._field_errors: dict[str, str | None] = {}
+        self._last_date_errors: dict[str, str | None] = {"fecha_oc": None, "fecha_desc": None}
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
@@ -761,6 +905,7 @@ class ProductFrame:
         self._bind_identifier_triggers(id_entry)
         self._register_duplicate_triggers(id_entry)
         self.tooltip_register(id_entry, "Código único del producto investigado.")
+        self._register_badge("producto_id", row=1, column=4)
 
         ttk.Label(self.frame, text="Cliente:").grid(
             row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -780,6 +925,7 @@ class ProductFrame:
         )
         self.client_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_client_focus_out(), add="+")
         self.tooltip_register(self.client_cb, "Selecciona al cliente dueño del producto.")
+        self._register_badge("producto_cliente", row=1, column=5)
 
         ttk.Label(self.frame, text="Categoría 1:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -797,6 +943,7 @@ class ProductFrame:
         cat1_cb.bind("<FocusOut>", lambda e: self.on_cat1_change())
         cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat1_change())
         self.tooltip_register(cat1_cb, "Define la categoría principal del riesgo de producto.")
+        self._register_badge("producto_categoria1", row=2, column=4)
 
         ttk.Label(self.frame, text="Categoría 2:").grid(
             row=2, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -813,6 +960,7 @@ class ProductFrame:
         self.cat2_cb.bind("<FocusOut>", lambda e: self.on_cat2_change())
         self.cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat2_change())
         self.tooltip_register(self.cat2_cb, "Selecciona la subcategoría específica.")
+        self._register_badge("producto_categoria2", row=2, column=5)
 
         ttk.Label(self.frame, text="Modalidad:").grid(
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -827,6 +975,7 @@ class ProductFrame:
         self.mod_cb.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.mod_cb.set('')
         self.tooltip_register(self.mod_cb, "Indica la modalidad concreta del fraude.")
+        self._register_badge("producto_modalidad", row=3, column=4)
 
         ttk.Label(self.frame, text="Canal:").grid(
             row=3, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -841,6 +990,7 @@ class ProductFrame:
         canal_cb.grid(row=3, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         canal_cb.set('')
         self.tooltip_register(canal_cb, "Canal por donde ocurrió el evento.")
+        self._register_badge("producto_canal", row=3, column=5)
 
         ttk.Label(self.frame, text="Proceso:").grid(
             row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -855,6 +1005,7 @@ class ProductFrame:
         proc_cb.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         proc_cb.set('')
         self.tooltip_register(proc_cb, "Proceso impactado por el incidente.")
+        self._register_badge("producto_proceso", row=4, column=4)
 
         ttk.Label(self.frame, text="Tipo de producto:").grid(
             row=4, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -870,6 +1021,7 @@ class ProductFrame:
         self.tipo_prod_cb = tipo_prod_cb
         tipo_prod_cb.set('')
         self.tooltip_register(tipo_prod_cb, "Clasificación comercial del producto.")
+        self._register_badge("producto_tipo", row=4, column=5)
 
         ttk.Label(self.frame, text="Fecha de ocurrencia (YYYY-MM-DD):").grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -879,6 +1031,7 @@ class ProductFrame:
         self.focc_entry = focc_entry
         self.tooltip_register(focc_entry, "Fecha exacta del evento.")
         self._register_duplicate_triggers(focc_entry)
+        self._register_badge("fecha_oc", row=5, column=4)
 
         ttk.Label(self.frame, text="Fecha de descubrimiento (YYYY-MM-DD):").grid(
             row=5, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -886,8 +1039,8 @@ class ProductFrame:
         fdesc_entry = ttk.Entry(self.frame, textvariable=self.fecha_desc_var, width=15)
         fdesc_entry.grid(row=5, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.fdesc_entry = fdesc_entry
-        self.date_badge = self._create_badge_label(row=5)
         self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")
+        self.date_badge = self._register_badge("fecha_desc", row=5, column=5)
 
         ttk.Label(self.frame, text="Monto investigado:").grid(
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -895,8 +1048,8 @@ class ProductFrame:
         inv_entry = ttk.Entry(self.frame, textvariable=self.monto_inv_var, width=15)
         inv_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.inv_entry = inv_entry
-        self.amount_badge = self._create_badge_label(row=6)
         self.tooltip_register(inv_entry, "Monto total bajo investigación.")
+        self.amount_badge = self._register_badge("monto_inv", row=6, column=4)
 
         ttk.Label(self.frame, text="Moneda:").grid(
             row=6, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -911,6 +1064,7 @@ class ProductFrame:
         moneda_cb.grid(row=6, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         moneda_cb.set('')
         self.tooltip_register(moneda_cb, "Tipo de moneda principal del caso.")
+        self._register_badge("producto_moneda", row=6, column=5)
 
         ttk.Label(self.frame, text="Monto pérdida fraude:").grid(
             row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -925,6 +1079,7 @@ class ProductFrame:
                 "Si falta un dato, usa “Ir al primer faltante” para saltar directo a la fila incompleta."
             ),
         )
+        self._register_badge("monto_perdida", row=7, column=4)
 
         ttk.Label(self.frame, text="Monto falla procesos:").grid(
             row=7, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -939,6 +1094,7 @@ class ProductFrame:
                 "Pulsa “Ir al primer faltante” si necesitas llegar al reclamo pendiente."
             ),
         )
+        self._register_badge("monto_falla", row=7, column=5)
 
         ttk.Label(self.frame, text="Monto contingencia:").grid(
             row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -953,6 +1109,7 @@ class ProductFrame:
                 "Apóyate en “Ir al primer faltante” para navegar al reclamo incompleto."
             ),
         )
+        self._register_badge("monto_contingencia", row=8, column=4)
 
         self._register_claim_requirement_triggers(
             cont_entry,
@@ -967,6 +1124,7 @@ class ProductFrame:
         rec_entry.grid(row=8, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.rec_entry = rec_entry
         self.tooltip_register(rec_entry, "Monto efectivamente recuperado.")
+        self._register_badge("monto_recuperado", row=8, column=5)
 
         ttk.Label(self.frame, text="Monto pago deuda:").grid(
             row=9, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -975,6 +1133,7 @@ class ProductFrame:
         pago_entry.grid(row=9, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.pago_entry = pago_entry
         self.tooltip_register(pago_entry, "Pago realizado por deuda vinculada.")
+        self._register_badge("monto_pago", row=9, column=4)
 
         self._build_claim_guidance_banner(row=10)
 
@@ -982,7 +1141,7 @@ class ProductFrame:
 
         self.claims_frame = ttk.LabelFrame(self.frame, text="Reclamos asociados")
         ensure_grid_support(self.claims_frame)
-        self.claims_frame.grid(row=12, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.claims_frame.grid(row=12, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.claims_frame, "columnconfigure"):
             self.claims_frame.columnconfigure(1, weight=1)
             self.claims_frame.columnconfigure(3, weight=1)
@@ -1000,7 +1159,7 @@ class ProductFrame:
 
         self.invol_frame = ttk.LabelFrame(self.frame, text="Involucramiento de colaboradores")
         ensure_grid_support(self.invol_frame)
-        self.invol_frame.grid(row=13, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.invol_frame.grid(row=13, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.invol_frame, "columnconfigure"):
             self.invol_frame.columnconfigure(1, weight=1)
             self.invol_frame.columnconfigure(3, weight=1)
@@ -1014,7 +1173,10 @@ class ProductFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_product_id(self.tipo_prod_var.get(), self.id_var.get()),
+                self._wrap_validation_with_badge(
+                    "producto_id",
+                    lambda: validate_product_id(self.tipo_prod_var.get(), self.id_var.get()),
+                ),
                 self.logs,
                 f"Producto {self.idx+1} - ID",
                 variables=[self.id_var, self.tipo_prod_var],
@@ -1022,7 +1184,10 @@ class ProductFrame:
         )
         self.client_validator = FieldValidator(
             self.client_cb,
-            lambda: validate_required_text(self.client_var.get(), "el cliente del producto"),
+            self._wrap_validation_with_badge(
+                "producto_cliente",
+                lambda: validate_required_text(self.client_var.get(), "el cliente del producto"),
+            ),
             self.logs,
             f"Producto {self.idx+1} - Cliente",
             variables=[self.client_var],
@@ -1037,84 +1202,127 @@ class ProductFrame:
             [
                 FieldValidator(
                     cat1_cb,
-                    lambda: validate_required_text(self.cat1_var.get(), "la categoría 1"),
+                    self._wrap_validation_with_badge(
+                        "producto_categoria1",
+                        lambda: validate_required_text(self.cat1_var.get(), "la categoría 1"),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Categoría 1",
                     variables=[self.cat1_var],
                 ),
                 FieldValidator(
                     self.cat2_cb,
-                    lambda: validate_required_text(self.cat2_var.get(), "la categoría 2"),
+                    self._wrap_validation_with_badge(
+                        "producto_categoria2",
+                        lambda: validate_required_text(self.cat2_var.get(), "la categoría 2"),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Categoría 2",
                     variables=[self.cat2_var],
                 ),
                 FieldValidator(
                     self.mod_cb,
-                    lambda: validate_required_text(self.mod_var.get(), "la modalidad"),
+                    self._wrap_validation_with_badge(
+                        "producto_modalidad",
+                        lambda: validate_required_text(self.mod_var.get(), "la modalidad"),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Modalidad",
                     variables=[self.mod_var],
                 ),
                 FieldValidator(
                     tipo_prod_cb,
-                    lambda: validate_required_text(self.tipo_prod_var.get(), "el tipo de producto"),
+                    self._wrap_validation_with_badge(
+                        "producto_tipo",
+                        lambda: validate_required_text(self.tipo_prod_var.get(), "el tipo de producto"),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Tipo de producto",
                     variables=[self.tipo_prod_var],
                 ),
                 FieldValidator(
                     focc_entry,
-                    self._validate_fecha_ocurrencia,
+                    self._wrap_validation_with_badge("fecha_oc", self._validate_fecha_ocurrencia),
                     self.logs,
                     f"Producto {self.idx+1} - Fecha ocurrencia",
                     variables=[self.fecha_oc_var, self.fecha_desc_var, self.id_var],
                 ),
                 FieldValidator(
                     fdesc_entry,
-                    self._validate_fecha_descubrimiento,
+                    self._wrap_validation_with_badge("fecha_desc", self._validate_fecha_descubrimiento),
                     self.logs,
                     f"Producto {self.idx+1} - Fecha descubrimiento",
                     variables=[self.fecha_desc_var, self.fecha_oc_var, self.id_var],
                 ),
                 FieldValidator(
                     inv_entry,
-                    self._build_amount_validator(self.monto_inv_var, "el monto investigado", False),
+                    self._wrap_validation_with_badge(
+                        "monto_inv",
+                        self._build_amount_validator("monto_inv", self.monto_inv_var, "el monto investigado", False),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Monto investigado",
                     variables=[self.monto_inv_var],
                 ),
                 FieldValidator(
                     perdida_entry,
-                    self._build_amount_validator(self.monto_perdida_var, "el monto pérdida de fraude", True),
+                    self._wrap_validation_with_badge(
+                        "monto_perdida",
+                        self._build_amount_validator(
+                            "monto_perdida",
+                            self.monto_perdida_var,
+                            "el monto pérdida de fraude",
+                            True,
+                        ),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Monto pérdida fraude",
                     variables=[self.monto_perdida_var],
                 ),
                 FieldValidator(
                     falla_entry,
-                    self._build_amount_validator(self.monto_falla_var, "el monto falla de procesos", True),
+                    self._wrap_validation_with_badge(
+                        "monto_falla",
+                        self._build_amount_validator(
+                            "monto_falla", self.monto_falla_var, "el monto falla de procesos", True
+                        ),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Monto falla procesos",
                     variables=[self.monto_falla_var],
                 ),
                 FieldValidator(
                     cont_entry,
-                    self._build_amount_validator(self.monto_cont_var, "el monto contingencia", True),
+                    self._wrap_validation_with_badge(
+                        "monto_contingencia",
+                        self._build_amount_validator(
+                            "monto_contingencia", self.monto_cont_var, "el monto contingencia", True
+                        ),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Monto contingencia",
                     variables=[self.monto_cont_var],
                 ),
                 FieldValidator(
                     rec_entry,
-                    self._build_amount_validator(self.monto_rec_var, "el monto recuperado", True),
+                    self._wrap_validation_with_badge(
+                        "monto_recuperado",
+                        self._build_amount_validator(
+                            "monto_recuperado", self.monto_rec_var, "el monto recuperado", True
+                        ),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Monto recuperado",
                     variables=[self.monto_rec_var],
                 ),
                 FieldValidator(
                     pago_entry,
-                    self._build_amount_validator(self.monto_pago_var, "el monto pago de deuda", True),
+                    self._wrap_validation_with_badge(
+                        "monto_pago",
+                        self._build_amount_validator(
+                            "monto_pago", self.monto_pago_var, "el monto pago de deuda", True
+                        ),
+                    ),
                     self.logs,
                     f"Producto {self.idx+1} - Pago de deuda",
                     variables=[self.monto_pago_var],
@@ -1459,7 +1667,7 @@ class ProductFrame:
     def add_claim(self, user_initiated: bool = False):
         idx = len(self.claims)
         row = ClaimRow(self.claims_frame, self, idx, self.remove_claim, self.logs, self.tooltip_register)
-        row.set_claim_requirement(self._claim_requirement_active)
+        row.set_claim_requirement(self._claim_requirement_active, skip_refresh=True)
         self.claims.append(row)
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
@@ -1581,23 +1789,93 @@ class ProductFrame:
         self._duplicate_status_style = style_name
         return style_name
 
-    def _create_badge_label(self, row: int):
+    def _create_badge_label(
+        self,
+        row: int,
+        *,
+        column: int = 4,
+        parent=None,
+        text: str = ALERT_BADGE_ICON,
+    ):
         styles = self._badge_styles or {"warning": "TLabel"}
+        badge_parent = parent or self.frame
         badge = ttk.Label(
-            self.frame,
-            text="Pendiente",
+            badge_parent,
+            text=text,
             style=styles.get("warning", "TLabel"),
             anchor="w",
         )
-        badge.grid(row=row, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+        badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
         return badge
 
-    def _set_badge_state(self, badge, is_ok: bool, message: str | None):
+    def _register_badge(
+        self,
+        key: str,
+        *,
+        row: int,
+        column: int = 4,
+        parent=None,
+        pending_text: str = ALERT_BADGE_ICON,
+        success_text: str = "Listo",
+    ):
+        badge = self._create_badge_label(
+            row,
+            column=column,
+            parent=parent,
+            text=pending_text,
+        )
+        self._badge_registry[key] = {
+            "badge": badge,
+            "pending": pending_text,
+            "success": success_text,
+        }
+        return badge
+
+    def _update_field_badge(
+        self,
+        key: str,
+        is_ok: bool,
+        message: str | None,
+        *,
+        success_text: str | None = None,
+        pending_text: str | None = None,
+    ):
+        config = self._badge_registry.get(key)
+        if not config:
+            return
+        badge = config.get("badge")
+        success_label = success_text or config.get("success", "Cuadra")
+        fallback_warning = pending_text or config.get("pending") or "Revisa la información"
+        self._set_badge_state(badge, is_ok, message or fallback_warning, success_text=success_label)
+
+    def _wrap_validation_with_badge(
+        self,
+        key: str,
+        validate_fn,
+        *,
+        success_text: str | None = None,
+        pending_text: str | None = None,
+        condition_fn=None,
+    ):
+        def _wrapped():
+            if condition_fn is not None and not condition_fn():
+                self._field_errors[key] = None
+                self._update_field_badge(key, True, None, success_text=success_text, pending_text=pending_text)
+                return None
+            message = validate_fn()
+            self._field_errors[key] = message
+            self._update_field_badge(key, message is None, message, success_text=success_text, pending_text=pending_text)
+            return message
+
+        self._badge_updaters[key] = _wrapped
+        return _wrapped
+
+    def _set_badge_state(self, badge, is_ok: bool, message: str | None, *, success_text: str = "Cuadra"):
         if badge is None:
             return
         styles = self._badge_styles or {"success": "TLabel", "warning": "TLabel"}
         style_name = styles["success"] if is_ok else styles["warning"]
-        text = "Cuadra" if is_ok else (message or "Revisa la información")
+        text = success_text if is_ok else (message or "Revisa la información")
         badge.configure(text=text, style=style_name)
 
     def _build_duplicate_status_label(self, row: int):
@@ -1611,7 +1889,7 @@ class ProductFrame:
             anchor="w",
             wraplength=520,
         )
-        label.grid(row=row, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        label.grid(row=row, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         tooltip_text = (
             "Si el sistema marca un duplicado, ajusta cualquiera de los campos de la "
             "clave técnica (caso, producto, cliente, colaborador, fecha de ocurrencia "
@@ -1668,15 +1946,26 @@ class ProductFrame:
         new_text = self._format_duplicate_status_text(result_text)
         self._duplicate_status_var.set(new_text)
 
+    def _refresh_date_badges(self, message: str | None, pair_ok: bool):
+        occ_message = self._last_date_errors.get("fecha_oc")
+        desc_message = self._last_date_errors.get("fecha_desc")
+        if not pair_ok:
+            if occ_message is None:
+                occ_message = message
+            if desc_message is None:
+                desc_message = message
+        self._update_field_badge("fecha_oc", occ_message is None, occ_message)
+        self._update_field_badge("fecha_desc", desc_message is None, desc_message)
+
     def _update_date_badge(self, message: str | None, is_valid: bool):
-        self._set_badge_state(self.date_badge, is_valid, message)
+        self._refresh_date_badges(message, is_valid)
 
     def _update_amount_badge(self, message: str | None, is_valid: bool):
-        self._set_badge_state(self.amount_badge, is_valid, message)
+        self._update_field_badge("monto_inv", is_valid, message)
 
     def _refresh_badges(self) -> None:
         pair_message, pair_ok = self._validate_product_date_pair()
-        self._update_date_badge(pair_message, pair_ok)
+        self._refresh_date_badges(pair_message, pair_ok)
         self._validate_montos_consistentes()
 
     def _register_duplicate_triggers(self, widget) -> None:
@@ -1722,7 +2011,7 @@ class ProductFrame:
     def _build_claim_guidance_banner(self, row: int):
         frame = ttk.Frame(self.frame)
         ensure_grid_support(frame)
-        frame.grid(row=row, column=0, columnspan=5, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY), sticky="we")
+        frame.grid(row=row, column=0, columnspan=6, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY), sticky="we")
         hide_fn = getattr(frame, "grid_remove", None) or getattr(frame, "grid_forget", None)
         if callable(hide_fn):
             hide_fn()
@@ -1761,9 +2050,14 @@ class ProductFrame:
             self._claim_requirement_active = required
             for claim in self.claims:
                 claim.set_claim_requirement(required)
+                if not initial:
+                    claim.refresh_badges()
             self.schedule_summary_refresh({'reclamos'})
             if not required:
                 self._claim_nudge_shown = False
+        elif not initial and required:
+            for claim in self.claims:
+                claim.refresh_badges()
         self.refresh_claim_guidance()
         if initial:
             return
@@ -1964,6 +2258,7 @@ class ProductFrame:
                 CANAL_LIST,
                 "canales",
                 "Canal",
+                "producto_canal",
             ),
             (
                 proc_cb,
@@ -1972,6 +2267,7 @@ class ProductFrame:
                 PROCESO_LIST,
                 "procesos",
                 "Proceso",
+                "producto_proceso",
             ),
             (
                 moneda_cb,
@@ -1980,18 +2276,22 @@ class ProductFrame:
                 TIPO_MONEDA_LIST,
                 "tipos de moneda",
                 "Moneda",
+                "producto_moneda",
             ),
         ]
 
-        for widget, variable, label, catalog, catalog_label, log_suffix in catalog_specs:
+        for widget, variable, label, catalog, catalog_label, log_suffix, badge_key in catalog_specs:
             self.validators.append(
                 FieldValidator(
                     widget,
-                    lambda var=variable, label=label, catalog=catalog, catalog_label=catalog_label: self._validate_catalog_selection(
-                        var.get(),
-                        label,
-                        catalog,
-                        catalog_label,
+                    self._wrap_validation_with_badge(
+                        badge_key,
+                        lambda var=variable, label=label, catalog=catalog, catalog_label=catalog_label: self._validate_catalog_selection(
+                            var.get(),
+                            label,
+                            catalog,
+                            catalog_label,
+                        ),
                     ),
                     self.logs,
                     f"Producto {self.idx+1} - {log_suffix}",
@@ -2283,12 +2583,10 @@ class ProductFrame:
                 "la fecha de descubrimiento",
             ),
         )
-        if message:
-            self._update_date_badge(message, False)
-            return message
+        self._last_date_errors["fecha_oc"] = message
         pair_message, pair_ok = self._validate_product_date_pair()
-        final_message = message or pair_message
-        self._update_date_badge(final_message, pair_ok and message is None)
+        final_message = message or (None if pair_ok else pair_message)
+        self._refresh_date_badges(pair_message, pair_ok)
         return final_message
 
     def _validate_fecha_descubrimiento(self):
@@ -2299,12 +2597,10 @@ class ProductFrame:
             enforce_max_today=True,
             must_be_after=(self.fecha_oc_var.get(), "la fecha de ocurrencia"),
         )
-        if msg:
-            self._update_date_badge(msg, False)
-            return msg
+        self._last_date_errors["fecha_desc"] = msg
         pair_message, pair_ok = self._validate_product_date_pair()
-        final_message = msg or pair_message
-        self._update_date_badge(final_message, pair_ok and msg is None)
+        final_message = msg or (None if pair_ok else pair_message)
+        self._refresh_date_badges(pair_message, pair_ok)
         return final_message
 
     def _validate_amount_field(self, var, label, allow_blank):
@@ -2319,11 +2615,13 @@ class ProductFrame:
             var.set(normalized_text)
         return message, decimal_value
 
-    def _build_amount_validator(self, var, label, allow_blank):
+    def _build_amount_validator(self, field_key, var, label, allow_blank):
         def _validate():
             message, _ = self._validate_amount_field(var, label, allow_blank)
+            self._field_errors[field_key] = message
             return message
 
+        self._badge_updaters[field_key] = _validate
         return _validate
 
     def _collect_amount_values(self):
@@ -2331,6 +2629,9 @@ class ProductFrame:
         for _, var_attr, label, allow_blank, key in PRODUCT_MONEY_SPECS:
             var = getattr(self, var_attr)
             message, decimal_value = self._validate_amount_field(var, label, allow_blank)
+            badge_key = AMOUNT_BADGE_KEYS.get(key)
+            if badge_key:
+                self._field_errors[badge_key] = message
             if message:
                 return None
             if decimal_value is None:
@@ -2376,6 +2677,11 @@ class ProductFrame:
         badge_message = next(iter(errors.values()), None)
         is_consistent = not errors
         self._update_amount_badge(badge_message, is_consistent)
+        for key, badge_key in AMOUNT_BADGE_KEYS.items():
+            message = self._field_errors.get(badge_key)
+            if message is None and key in errors:
+                message = errors[key]
+            self._update_field_badge(badge_key, message is None, message)
         target = target_key or 'inv'
         return (errors.get(target), is_consistent)
 
