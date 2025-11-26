@@ -10,7 +10,7 @@ from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 
 ALERT_BADGE_ICON = "⚠️"
-
+SUCCESS_BADGE_ICON = "✅"
 
 def ensure_grid_support(widget: Any) -> None:
     """Garantiza que el widget exponga un método grid incluso en stubs de prueba.
@@ -207,7 +207,7 @@ class BadgeManager:
         *,
         parent=None,
         pending_text: str = ALERT_BADGE_ICON,
-        success_text: str = "Listo",
+        success_text: str = SUCCESS_BADGE_ICON,
     ) -> None:
         self.parent = parent
         self.pending_text = pending_text
