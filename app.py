@@ -8779,7 +8779,12 @@ class FraudCaseApp:
                 except OSError:
                     log_event("validacion", f"No se pudo resolver la ruta {root}", self.logs)
                     continue
-                for base in (root_path,) + tuple(p for p in root_path.iterdir() if p.is_dir()):
+                try:
+                    bases = (root_path,) + tuple(p for p in root_path.iterdir() if p.is_dir())
+                except OSError as exc:
+                    log_event("validacion", f"No se pudo explorar {root_path}: {exc}", self.logs)
+                    continue
+                for base in bases:
                     try:
                         for path in _yield_matches(base):
                             try:
