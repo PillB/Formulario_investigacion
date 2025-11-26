@@ -1466,8 +1466,6 @@ class FraudCaseApp:
     def _publish_field_validation(
         self, field_name: str, message: Optional[str], widget
     ) -> None:
-        if not self._validation_panel:
-            return
         target_widget = widget if hasattr(widget, "focus_set") else None
         if target_widget is not None:
             try:
@@ -1477,6 +1475,8 @@ class FraudCaseApp:
         indicator = getattr(target_widget, "_inline_status_label", None)
         if indicator is not None:
             update_inline_status_label(indicator, is_ok=message is None)
+        if not self._validation_panel:
+            return
         target_id = id(target_widget) if target_widget is not None else field_name
         key = f"field:{field_name}:{target_id}"
         severity = "error" if message else "ok"
