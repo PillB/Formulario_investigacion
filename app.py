@@ -105,7 +105,11 @@ from ui.config import COL_PADX, FONT_BASE, ROW_PADY
 from ui.effects.confetti import ConfettiBurst
 from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
-from ui.frames.utils import create_scrollable_container, ensure_grid_support
+from ui.frames.utils import (
+    GlobalScrollBinding,
+    create_scrollable_container,
+    ensure_grid_support,
+)
 from ui.layout import ActionBar
 from ui.tooltips import HoverTooltip
 from validators import (drain_log_queue, FieldValidator, log_event,
@@ -411,6 +415,7 @@ class FraudCaseApp:
         self.logs = []
         self._streak_file = Path(AUTOSAVE_FILE).with_name("streak_status.json")
         self._streak_info: dict[str, object] = self._load_streak_info()
+        self._scroll_binder = GlobalScrollBinding(self.root)
         self.root.title(self._build_window_title())
         self._suppress_messagebox = False
         self._startup_complete = False
@@ -1146,6 +1151,8 @@ class FraudCaseApp:
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
+        self._scroll_binder.bind_to_root()
+
         main_container = ttk.Frame(self.root)
         main_container.grid(row=0, column=0, sticky="nsew")
         main_container.grid_columnconfigure(0, weight=1)
@@ -1220,6 +1227,7 @@ class FraudCaseApp:
         self.notebook.add(summary_tab, text="Resumen")
         self.build_summary_tab(summary_tab)
         self._current_tab_id = self.notebook.select()
+        self._scroll_binder.activate_tab(self._current_tab_id)
 
     def _focus_widget_from_validation_panel(self, widget, origin: str | None = None) -> None:
         target_widget = self._resolve_focus_target(widget, origin)
@@ -1875,7 +1883,9 @@ class FraudCaseApp:
             self.build_case_and_participants_tab(self.main_tab)
         """
 
-        scroll_container, inner_frame = create_scrollable_container(parent)
+        scroll_container, inner_frame = create_scrollable_container(
+            parent, scroll_binder=self._scroll_binder, tab_id=parent
+        )
         scroll_container.pack(fill="both", expand=True)
 
         self._main_scrollable_frame = inner_frame
@@ -3679,7 +3689,9 @@ class FraudCaseApp:
         summary_section.rowconfigure(0, weight=1)
         self.products_summary_section = summary_section
 
-        scrollable, inner = create_scrollable_container(frame)
+        scrollable, inner = create_scrollable_container(
+            frame, scroll_binder=self._scroll_binder, tab_id=parent
+        )
         scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.product_container = inner
 
@@ -3926,7 +3938,9 @@ class FraudCaseApp:
         )
         self.register_tooltip(add_btn, "Registra un nuevo riesgo identificado.")
 
-        scrollable, inner = create_scrollable_container(frame)
+        scrollable, inner = create_scrollable_container(
+            frame, scroll_binder=self._scroll_binder, tab_id=parent
+        )
         scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.risk_container = inner
         self.add_risk()
@@ -4116,7 +4130,9 @@ class FraudCaseApp:
         self._schedule_summary_refresh('riesgos')
 
     def build_analysis_tab(self, parent):
-        scrollable_tab, tab_container = create_scrollable_container(parent)
+        scrollable_tab, tab_container = create_scrollable_container(
+            parent, scroll_binder=self._scroll_binder, tab_id=parent
+        )
         scrollable_tab.pack(fill="both", expand=True)
         self._analysis_tab_container = tab_container
         tab_container.columnconfigure(0, weight=1)
@@ -5323,7 +5339,9 @@ class FraudCaseApp:
         parent.rowconfigure(0, weight=1)
         parent.rowconfigure(1, weight=0)
 
-        scrollable_tab, inner_frame = create_scrollable_container(parent)
+        scrollable_tab, inner_frame = create_scrollable_container(
+            parent, scroll_binder=self._scroll_binder, tab_id=parent
+        )
         scrollable_tab.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
         inner_frame.columnconfigure(0, weight=1)
         inner_frame.columnconfigure(1, weight=1)
@@ -6251,7 +6269,9 @@ class FraudCaseApp:
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(0, weight=1)
 
-        scrollable_tab, container = create_scrollable_container(parent)
+        scrollable_tab, container = create_scrollable_container(
+            parent, scroll_binder=self._scroll_binder, tab_id=parent
+        )
         scrollable_tab.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         container.columnconfigure(0, weight=1)
 
@@ -6392,6 +6412,7 @@ class FraudCaseApp:
             f"Abrió pestaña: {tab_text} (índice {tab_index})",
             self.logs,
         )
+        self._scroll_binder.activate_tab(selected_tab)
         ThemeManager.apply_to_widget_tree(self.root)
         self._reapply_treeview_styles()
         previous_tab_text = notebook.tab(previous_tab, "text") if previous_tab else ""

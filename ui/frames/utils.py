@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import math
+import sys
 import tkinter as tk
 from tkinter import ttk
-from typing import Any, Tuple
+from typing import Any, Iterable, Tuple
 
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
@@ -264,7 +265,9 @@ def build_required_label(
     return container
 
 
-def create_scrollable_container(parent: Any) -> Tuple[ttk.Frame, ttk.Frame]:
+def create_scrollable_container(
+    parent: Any, *, scroll_binder: "GlobalScrollBinding | None" = None, tab_id=None
+) -> Tuple[ttk.Frame, ttk.Frame]:
     """Crea un contenedor desplazable con soporte para trackpad y mouse wheel.
 
     El contenedor externo incluye un ``Canvas`` con su respectiva barra de
@@ -297,7 +300,13 @@ def create_scrollable_container(parent: Any) -> Tuple[ttk.Frame, ttk.Frame]:
     inner.bind("<Configure>", _configure_canvas)
     canvas.bind("<Configure>", _resize_inner)
 
-    _enable_mousewheel_scrolling(canvas, inner)
+    outer._scroll_canvas = canvas  # type: ignore[attr-defined]
+    outer._scroll_inner = inner  # type: ignore[attr-defined]
+
+    if scroll_binder is not None:
+        scroll_binder.register_tab_canvas(tab_id or parent, canvas, inner)
+    else:
+        _enable_mousewheel_scrolling(canvas, inner)
 
     return outer, inner
 
@@ -322,16 +331,10 @@ def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
     def _on_mousewheel(event):  # noqa: ANN001
         if not is_active["value"]:
             return
-        delta = event.delta
-        if delta == 0 and hasattr(event, "num"):
-            delta = 120 if event.num == 4 else -120
-        if not delta:
+        steps = _normalize_mousewheel_delta(event)
+        if not steps:
             return
-        direction = -1 if delta > 0 else 1
-        magnitude = abs(delta)
-        steps = direction * max(1, math.ceil(magnitude / 120))
-        if steps:
-            canvas.yview_scroll(steps, "units")
+        if _scroll_lineage(getattr(event, "widget", None), canvas, steps):
             return "break"
 
     def _bind_widget(widget):
@@ -357,6 +360,171 @@ def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
     _bind_widget(canvas)
     _bind_widget(target)
     target.bind("<Configure>", _sync_children, add="+")
+
+
+def _normalize_mousewheel_delta(event) -> int:  # noqa: ANN001
+    delta = getattr(event, "delta", 0) or 0
+    if delta == 0 and hasattr(event, "num"):
+        num = getattr(event, "num", None)
+        if num == 4:
+            delta = 120
+        elif num == 5:
+            delta = -120
+    if delta == 0:
+        return 0
+    magnitude = max(abs(delta), 120)
+    steps = max(1, math.ceil(magnitude / 120))
+    return -steps if delta > 0 else steps
+
+
+def _iter_ancestors(widget: Any) -> Iterable[Any]:
+    current = widget
+    while current is not None:
+        yield current
+        parent_name = None
+        try:
+            parent_name = current.winfo_parent()
+        except Exception:
+            current = None
+            continue
+        if not parent_name:
+            current = None
+            continue
+        try:
+            current = current.nametowidget(parent_name)
+        except Exception:
+            current = None
+
+
+def _can_scroll_widget(widget: Any, steps: int) -> bool:
+    try:
+        first, last = widget.yview()
+    except Exception:
+        return True
+    if steps < 0:
+        return first > 0.0
+    return last < 1.0
+
+
+def _scroll_lineage(widget: Any, fallback_canvas: Any, steps: int) -> bool:
+    for ancestor in _iter_ancestors(widget):
+        if hasattr(ancestor, "yview"):
+            if _can_scroll_widget(ancestor, steps):
+                try:
+                    ancestor.yview_scroll(steps, "units")
+                    return True
+                except Exception:
+                    continue
+    if fallback_canvas is not None and hasattr(fallback_canvas, "yview_scroll"):
+        try:
+            fallback_canvas.yview_scroll(steps, "units")
+            return True
+        except Exception:
+            return False
+    return False
+
+
+class GlobalScrollBinding:
+    """Gestiona el enlace global de la rueda del ratón por pestaña.
+
+    Para nuevas pestañas, registra el contenedor desplazable principal con
+    ``register_tab_canvas`` y actualiza la pestaña activa desde el manejador
+    ``<<NotebookTabChanged>>``. Esto evita duplicar enlaces por cada sección y
+    garantiza que el desplazamiento funcione sobre cualquier hijo (botones,
+    entradas, tablas) y que, al llegar al final de un scrollbar interno, la
+    rueda continúe con el canvas principal de la pestaña.
+    """
+
+    def __init__(self, root: tk.Misc):
+        self.root = root
+        self._tab_canvases: dict[str, tk.Canvas] = {}
+        self._hover_tab: str | None = None
+        self._active_tab: str | None = None
+        self._bound_targets: set[int] = set()
+        self._is_bound = False
+
+    def bind_to_root(self) -> None:
+        if self._is_bound:
+            return
+        sequences = ["<MouseWheel>"]
+        if sys.platform.startswith("linux"):
+            sequences.extend(["<Button-4>", "<Button-5>"])
+        for sequence in sequences:
+            self.root.bind_all(sequence, self._handle_mousewheel, add="+")
+        self._is_bound = True
+
+    def register_tab_canvas(self, tab_id, canvas: tk.Canvas, target: ttk.Frame) -> None:
+        normalized = self._normalize_tab_id(tab_id)
+        if normalized is None:
+            return
+        self._tab_canvases[normalized] = canvas
+        self._bind_hover_targets(canvas, normalized)
+        self._bind_hover_targets(target, normalized)
+
+    def activate_tab(self, tab_id) -> None:
+        normalized = self._normalize_tab_id(tab_id)
+        self._active_tab = normalized
+
+    def _normalize_tab_id(self, tab_id) -> str | None:
+        if tab_id is None:
+            return None
+        try:
+            return str(tab_id)
+        except Exception:
+            return None
+
+    def _bind_hover_targets(self, widget: Any, tab_id: str) -> None:
+        if widget is None:
+            return
+        widget_id = id(widget)
+        already_bound = widget_id in self._bound_targets
+        if not already_bound:
+            self._bound_targets.add(widget_id)
+            widget.bind(
+                "<Enter>", lambda _e, tid=tab_id: self._set_hover_tab(tid), add="+"
+            )
+            widget.bind(
+                "<Leave>", lambda _e, tid=tab_id: self._clear_hover_tab(tid), add="+"
+            )
+        children_fn = getattr(widget, "winfo_children", None)
+        if callable(children_fn):
+            for child in children_fn():
+                self._bind_hover_targets(child, tab_id)
+        if not already_bound:
+            widget.bind(
+                "<Configure>",
+                lambda _e, source=widget, tid=tab_id: self._bind_hover_targets(source, tid),
+                add="+",
+            )
+
+    def _set_hover_tab(self, tab_id: str) -> None:
+        self._hover_tab = tab_id
+
+    def _clear_hover_tab(self, tab_id: str) -> None:
+        if self._hover_tab == tab_id:
+            self._hover_tab = None
+
+    def _select_canvas(self) -> tk.Canvas | None:
+        for candidate in (self._hover_tab, self._active_tab):
+            if candidate and candidate in self._tab_canvases:
+                canvas = self._tab_canvases[candidate]
+                try:
+                    exists = canvas.winfo_exists()
+                except Exception:
+                    return canvas
+                if exists:
+                    return canvas
+        return None
+
+    def _handle_mousewheel(self, event):  # noqa: ANN001
+        steps = _normalize_mousewheel_delta(event)
+        if not steps:
+            return
+        canvas = self._select_canvas()
+        if canvas is None:
+            return
+        if _scroll_lineage(getattr(event, "widget", None), canvas, steps):
+            return "break"
 
 
 class BadgeManager:
