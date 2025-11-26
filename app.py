@@ -1872,25 +1872,10 @@ class FraudCaseApp:
             self.build_case_and_participants_tab(self.main_tab)
         """
 
-        scroll_container = ttk.Frame(parent)
+        scroll_container, inner_frame = create_scrollable_container(parent)
         scroll_container.pack(fill="both", expand=True)
-        canvas = tk.Canvas(scroll_container, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
 
-        self._main_scrollable_frame = ttk.Frame(canvas)
-        window_id = canvas.create_window((0, 0), window=self._main_scrollable_frame, anchor="nw")
-
-        def _configure_canvas(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        def _resize_inner(event):
-            canvas.itemconfigure(window_id, width=event.width)
-
-        self._main_scrollable_frame.bind("<Configure>", _configure_canvas)
-        canvas.bind("<Configure>", _resize_inner)
+        self._main_scrollable_frame = inner_frame
 
         case_section = ttk.LabelFrame(self._main_scrollable_frame, text="1. Datos generales del caso")
         case_section.pack(fill="x", expand=False, padx=5, pady=5)
