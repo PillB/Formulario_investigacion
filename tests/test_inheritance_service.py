@@ -3,19 +3,23 @@
 import copy
 
 from inheritance_service import InheritanceService
-from settings import TAXONOMIA
+from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA
 
 
 def _base_case_state():
     cat1 = list(TAXONOMIA.keys())[0]
     cat2 = list(TAXONOMIA[cat1].keys())[0]
     modalidad = TAXONOMIA[cat1][cat2][0]
+    canal = CANAL_LIST[0]
+    proceso = PROCESO_LIST[0]
     return {
         "categoria_1_caso": cat1,
         "categoria_2_caso": cat2,
         "modalidad_caso": modalidad,
         "fecha_de_ocurrencia_caso": "2024-01-01",
         "fecha_de_descubrimiento_caso": "2024-01-10",
+        "canal_caso": canal,
+        "proceso_caso": proceso,
     }
 
 
@@ -30,6 +34,8 @@ def test_happy_path_inherits_all_fields():
         "modalidad": case_state["modalidad_caso"],
         "fecha_ocurrencia": case_state["fecha_de_ocurrencia_caso"],
         "fecha_descubrimiento": case_state["fecha_de_descubrimiento_caso"],
+        "canal": case_state["canal_caso"],
+        "proceso": case_state["proceso_caso"],
     }
     assert not result.has_missing
     assert not result.has_invalid
@@ -46,6 +52,8 @@ def test_partial_case_only_copies_available_fields():
     assert "modalidad" not in result.values
     assert result.values["categoria1"] == case_state["categoria_1_caso"]
     assert result.values["categoria2"] == case_state["categoria_2_caso"]
+    assert result.values["canal"] == case_state["canal_caso"]
+    assert result.values["proceso"] == case_state["proceso_caso"]
     assert result.has_missing
     assert not result.has_invalid
 
@@ -61,6 +69,18 @@ def test_invalid_dates_are_not_copied_and_flagged():
     assert "fecha_descubrimiento" not in result.values
     assert result.has_invalid
     assert {"fecha_ocurrencia", "fecha_descubrimiento"} <= result.invalid_fields
+
+
+def test_invalid_channel_and_process_are_flagged():
+    case_state = _base_case_state()
+    case_state["canal_caso"] = "canal invalido"
+    case_state["proceso_caso"] = "proceso invalido"
+
+    result = InheritanceService.inherit_product_fields_from_case(case_state)
+
+    assert "canal" not in result.values
+    assert "proceso" not in result.values
+    assert {"canal", "proceso"} <= result.invalid_fields
 
 
 def test_inheritance_creates_snapshot_not_reference():

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Iterable, Set
 
-from settings import TAXONOMIA
+from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA
 from validators import validate_date_text, validate_product_dates
 
 
@@ -45,6 +45,8 @@ class InheritanceService:
             "fecha_descubrimiento",
             "fecha_de_descubrimiento",
         ),
+        "canal": ("canal_caso", "canal"),
+        "proceso": ("proceso_caso", "proceso"),
     }
 
     @classmethod
@@ -65,6 +67,11 @@ class InheritanceService:
         fecha_desc = cls._get_field(case_state, "fecha_descubrimiento")
 
         cls._copy_dates(fecha_oc, fecha_desc, values, missing_fields, invalid_fields)
+
+        canal = cls._get_field(case_state, "canal")
+        proceso = cls._get_field(case_state, "proceso")
+
+        cls._copy_context_fields(canal, proceso, values, missing_fields, invalid_fields)
 
         return InheritanceResult(values=values, missing_fields=missing_fields, invalid_fields=invalid_fields)
 
@@ -149,4 +156,28 @@ class InheritanceService:
                 invalid_fields.update({"fecha_ocurrencia", "fecha_descubrimiento"})
                 values.pop("fecha_ocurrencia", None)
                 values.pop("fecha_descubrimiento", None)
+
+    @staticmethod
+    def _copy_context_fields(
+        canal: str,
+        proceso: str,
+        values: Dict[str, str],
+        missing_fields: Set[str],
+        invalid_fields: Set[str],
+    ) -> None:
+        if canal:
+            if canal in CANAL_LIST:
+                values["canal"] = canal
+            else:
+                invalid_fields.add("canal")
+        else:
+            missing_fields.add("canal")
+
+        if proceso:
+            if proceso in PROCESO_LIST:
+                values["proceso"] = proceso
+            else:
+                invalid_fields.add("proceso")
+        else:
+            missing_fields.add("proceso")
 
