@@ -105,7 +105,11 @@ from ui.config import COL_PADX, FONT_BASE, ROW_PADY
 from ui.effects.confetti import ConfettiBurst
 from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
-from ui.frames.utils import create_scrollable_container, ensure_grid_support
+from ui.frames.utils import (
+    create_scrollable_container,
+    ensure_grid_support,
+    update_inline_status_label,
+)
 from ui.layout import ActionBar
 from ui.tooltips import HoverTooltip
 from validators import (drain_log_queue, FieldValidator, log_event,
@@ -1470,6 +1474,9 @@ class FraudCaseApp:
                 setattr(target_widget, "_validation_origin", field_name)
             except Exception:
                 pass
+        indicator = getattr(target_widget, "_inline_status_label", None)
+        if indicator is not None:
+            update_inline_status_label(indicator, is_ok=message is None)
         target_id = id(target_widget) if target_widget is not None else field_name
         key = f"field:{field_name}:{target_id}"
         severity = "error" if message else "ok"

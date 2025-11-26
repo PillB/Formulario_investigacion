@@ -11,7 +11,7 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import build_inline_status_label, ensure_grid_support
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
@@ -45,46 +45,69 @@ class InvolvementRow:
 
         self.section = self._create_section(parent)
         self.section.grid(
-            row=idx + 1, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+            row=idx + 1, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
 
         self.frame = ttk.Frame(self.section.content)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "grid_columnconfigure"):
             self.frame.grid_columnconfigure(1, weight=1)
+            self.frame.grid_columnconfigure(3, weight=1)
         self.section.pack_content(self.frame, fill="x", expand=True)
+
+        def _wrap_with_status(row, column, *, columnspan=1):
+            container = ttk.Frame(self.frame)
+            ensure_grid_support(container)
+            if hasattr(container, "columnconfigure"):
+                container.columnconfigure(0, weight=1)
+            container.grid(
+                row=row,
+                column=column,
+                columnspan=columnspan,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky="we",
+            )
+            status = build_inline_status_label(container, tooltip_register=self.tooltip_register)
+            if hasattr(status, "grid"):
+                status.grid(row=0, column=1, padx=(6, 0), sticky="w")
+            return container, status
 
         ttk.Label(self.frame, text="Colaborador:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        team_container, team_status = _wrap_with_status(0, 1)
         self.team_cb = ttk.Combobox(
-            self.frame,
+            team_container,
             textvariable=self.team_var,
             values=self.team_getter(),
             state="readonly",
             width=20,
             style=COMBOBOX_STYLE,
         )
-        self.team_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.team_cb.grid(row=0, column=0, sticky="we")
+        self.team_cb._inline_status_label = team_status
         self.team_cb.set('')
         self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
         self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
         self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
 
         ttk.Label(self.frame, text="Monto asignado:").grid(
-            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        monto_container, monto_status = _wrap_with_status(0, 3)
         monto_entry = ttk.Entry(
-            self.frame, textvariable=self.monto_var, width=15, style=ENTRY_STYLE
+            monto_container, textvariable=self.monto_var, width=15, style=ENTRY_STYLE
         )
-        monto_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        monto_entry.grid(row=0, column=0, sticky="we")
+        monto_entry._inline_status_label = monto_status
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
         )
-        remove_btn.grid(row=0, column=2, rowspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        remove_btn.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(remove_btn, "Elimina esta asignación específica.")
 
         amount_validator = FieldValidator(
@@ -325,55 +348,77 @@ class ClaimRow:
 
         self.section = self._create_section(parent)
         self.section.grid(
-            row=idx + 1, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+            row=idx + 1, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
 
         self.frame = ttk.Frame(self.section.content)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "grid_columnconfigure"):
             self.frame.grid_columnconfigure(1, weight=1)
+            self.frame.grid_columnconfigure(3, weight=1)
         self.section.pack_content(self.frame, fill="x", expand=True)
+
+        def _wrap_with_status(row, column, *, columnspan=1):
+            container = ttk.Frame(self.frame)
+            ensure_grid_support(container)
+            if hasattr(container, "columnconfigure"):
+                container.columnconfigure(0, weight=1)
+            container.grid(
+                row=row,
+                column=column,
+                columnspan=columnspan,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky="we",
+            )
+            status = build_inline_status_label(container, tooltip_register=self.tooltip_register)
+            if hasattr(status, "grid"):
+                status.grid(row=0, column=1, padx=(6, 0), sticky="w")
+            return container, status
 
         ttk.Label(self.frame, text="ID reclamo:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        id_container, id_status = _wrap_with_status(0, 1)
         id_entry = ttk.Entry(
-            self.frame, textvariable=self.id_var, width=15, style=ENTRY_STYLE
+            id_container, textvariable=self.id_var, width=15, style=ENTRY_STYLE
         )
-        id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_entry.grid(row=0, column=0, sticky="we")
+        id_entry._inline_status_label = id_status
         self.id_entry = id_entry
-        ttk.Label(self.frame, text="").grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
         self._bind_identifier_triggers(id_entry)
+
+        ttk.Label(self.frame, text="Código:").grid(
+            row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        code_container, code_status = _wrap_with_status(0, 3)
+        code_entry = ttk.Entry(
+            code_container, textvariable=self.code_var, width=12, style=ENTRY_STYLE
+        )
+        code_entry.grid(row=0, column=0, sticky="we")
+        code_entry._inline_status_label = code_status
+        self.code_entry = code_entry
+        self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
+        self._bind_claim_field_triggers(code_entry)
 
         ttk.Label(self.frame, text="Analítica nombre:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        name_container, name_status = _wrap_with_status(1, 1, columnspan=3)
         name_entry = ttk.Entry(
-            self.frame, textvariable=self.name_var, width=20, style=ENTRY_STYLE
+            name_container, textvariable=self.name_var, width=20, style=ENTRY_STYLE
         )
-        name_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        name_entry.grid(row=0, column=0, sticky="we")
+        name_entry._inline_status_label = name_status
         self.name_entry = name_entry
-        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
         self._bind_claim_field_triggers(name_entry)
-
-        ttk.Label(self.frame, text="Código:").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        code_entry = ttk.Entry(
-            self.frame, textvariable=self.code_var, width=12, style=ENTRY_STYLE
-        )
-        code_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self.code_entry = code_entry
-        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
-        self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
-        self._bind_claim_field_triggers(code_entry)
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
         )
-        remove_btn.grid(row=0, column=3, rowspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        remove_btn.grid(row=0, column=4, rowspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(remove_btn, "Elimina este reclamo del producto.")
 
         self.product_frame._register_lookup_sync(id_entry)
@@ -748,33 +793,54 @@ class ProductFrame:
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
+            self.frame.columnconfigure(3, weight=1)
         if hasattr(self.owner, "_set_active_product_frame"):
             self.frame.bind("<FocusIn>", lambda _e: self.owner._set_active_product_frame(self), add="+")
         self._configure_badge_styles()
 
+        def _wrap_with_status(row, column, *, columnspan=1):
+            container = ttk.Frame(self.frame)
+            ensure_grid_support(container)
+            if hasattr(container, "columnconfigure"):
+                container.columnconfigure(0, weight=1)
+            container.grid(
+                row=row,
+                column=column,
+                columnspan=columnspan,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky="we",
+            )
+            status = build_inline_status_label(container, tooltip_register=self.tooltip_register)
+            if hasattr(status, "grid"):
+                status.grid(row=0, column=1, padx=(6, 0), sticky="w")
+            return container, status
+
         ttk.Label(self.frame, text="ID del producto:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
-        id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_container, id_status = _wrap_with_status(1, 1)
+        id_entry = ttk.Entry(id_container, textvariable=self.id_var, width=20)
+        id_entry.grid(row=0, column=0, sticky="we")
+        id_entry._inline_status_label = id_status
         self.id_entry = id_entry
-        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self._bind_identifier_triggers(id_entry)
         self._register_duplicate_triggers(id_entry)
         self.tooltip_register(id_entry, "Código único del producto investigado.")
 
         ttk.Label(self.frame, text="Cliente:").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        client_container, client_status = _wrap_with_status(1, 3)
         self.client_cb = ttk.Combobox(
-            self.frame,
+            client_container,
             textvariable=self.client_var,
             values=self.get_client_options(),
             state="readonly",
             width=20,
         )
-        self.client_cb.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
+        self.client_cb.grid(row=0, column=0, sticky="we")
+        self.client_cb._inline_status_label = client_status
         self.client_cb.set('')
         self.client_cb.bind(
             "<FocusOut>",
@@ -784,151 +850,164 @@ class ProductFrame:
         self.tooltip_register(self.client_cb, "Selecciona al cliente dueño del producto.")
 
         ttk.Label(self.frame, text="Categoría 1:").grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        cat1_container, cat1_status = _wrap_with_status(2, 1)
         cat1_cb = ttk.Combobox(
-            self.frame,
+            cat1_container,
             textvariable=self.cat1_var,
             values=list(TAXONOMIA.keys()),
             state="readonly",
             width=20,
         )
-        cat1_cb.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        cat1_cb.grid(row=0, column=0, sticky="we")
+        cat1_cb._inline_status_label = cat1_status
         self.cat1_cb = cat1_cb
-        ttk.Label(self.frame, text="").grid(row=3, column=2, padx=COL_PADX, pady=ROW_PADY)
         cat1_cb.set('')
         cat1_cb.bind("<FocusOut>", lambda e: self.on_cat1_change())
         cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat1_change())
         self.tooltip_register(cat1_cb, "Define la categoría principal del riesgo de producto.")
 
         ttk.Label(self.frame, text="Categoría 2:").grid(
-            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=2, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        cat2_container, cat2_status = _wrap_with_status(2, 3)
         self.cat2_cb = ttk.Combobox(
-            self.frame,
+            cat2_container,
             textvariable=self.cat2_var,
             values=first_subcats,
             state="readonly",
             width=20,
         )
-        self.cat2_cb.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=4, column=2, padx=COL_PADX, pady=ROW_PADY)
+        self.cat2_cb.grid(row=0, column=0, sticky="we")
+        self.cat2_cb._inline_status_label = cat2_status
         self.cat2_cb.set('')
         self.cat2_cb.bind("<FocusOut>", lambda e: self.on_cat2_change())
         self.cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat2_change())
         self.tooltip_register(self.cat2_cb, "Selecciona la subcategoría específica.")
 
         ttk.Label(self.frame, text="Modalidad:").grid(
-            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        mod_container, mod_status = _wrap_with_status(3, 1)
         self.mod_cb = ttk.Combobox(
-            self.frame,
+            mod_container,
             textvariable=self.mod_var,
             values=first_modalities,
             state="readonly",
             width=25,
         )
-        self.mod_cb.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=5, column=2, padx=COL_PADX, pady=ROW_PADY)
+        self.mod_cb.grid(row=0, column=0, sticky="we")
+        self.mod_cb._inline_status_label = mod_status
         self.mod_cb.set('')
         self.tooltip_register(self.mod_cb, "Indica la modalidad concreta del fraude.")
 
         ttk.Label(self.frame, text="Canal:").grid(
-            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=3, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        canal_container, canal_status = _wrap_with_status(3, 3)
         canal_cb = ttk.Combobox(
-            self.frame,
+            canal_container,
             textvariable=self.canal_var,
             values=CANAL_LIST,
             state="readonly",
             width=20,
         )
-        canal_cb.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=6, column=2, padx=COL_PADX, pady=ROW_PADY)
+        canal_cb.grid(row=0, column=0, sticky="we")
+        canal_cb._inline_status_label = canal_status
         canal_cb.set('')
         self.tooltip_register(canal_cb, "Canal por donde ocurrió el evento.")
 
         ttk.Label(self.frame, text="Proceso:").grid(
-            row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        proc_container, proc_status = _wrap_with_status(4, 1)
         proc_cb = ttk.Combobox(
-            self.frame,
+            proc_container,
             textvariable=self.proceso_var,
             values=PROCESO_LIST,
             state="readonly",
             width=25,
         )
-        proc_cb.grid(row=7, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=7, column=2, padx=COL_PADX, pady=ROW_PADY)
+        proc_cb.grid(row=0, column=0, sticky="we")
+        proc_cb._inline_status_label = proc_status
         proc_cb.set('')
         self.tooltip_register(proc_cb, "Proceso impactado por el incidente.")
 
         ttk.Label(self.frame, text="Tipo de producto:").grid(
-            row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=4, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        tipo_container, tipo_status = _wrap_with_status(4, 3)
         tipo_prod_cb = ttk.Combobox(
-            self.frame,
+            tipo_container,
             textvariable=self.tipo_prod_var,
             values=TIPO_PRODUCTO_LIST,
             state="readonly",
             width=25,
         )
-        tipo_prod_cb.grid(row=8, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        tipo_prod_cb.grid(row=0, column=0, sticky="we")
+        tipo_prod_cb._inline_status_label = tipo_status
         self.tipo_prod_cb = tipo_prod_cb
-        ttk.Label(self.frame, text="").grid(row=8, column=2, padx=COL_PADX, pady=ROW_PADY)
         tipo_prod_cb.set('')
         self.tooltip_register(tipo_prod_cb, "Clasificación comercial del producto.")
 
         ttk.Label(self.frame, text="Fecha de ocurrencia (YYYY-MM-DD):").grid(
-            row=9, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        focc_entry = ttk.Entry(self.frame, textvariable=self.fecha_oc_var, width=15)
-        focc_entry.grid(row=9, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        focc_container, focc_status = _wrap_with_status(5, 1)
+        focc_entry = ttk.Entry(focc_container, textvariable=self.fecha_oc_var, width=15)
+        focc_entry.grid(row=0, column=0, sticky="we")
+        focc_entry._inline_status_label = focc_status
         self.focc_entry = focc_entry
-        ttk.Label(self.frame, text="").grid(row=9, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(focc_entry, "Fecha exacta del evento.")
         self._register_duplicate_triggers(focc_entry)
 
         ttk.Label(self.frame, text="Fecha de descubrimiento (YYYY-MM-DD):").grid(
-            row=10, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=5, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        fdesc_entry = ttk.Entry(self.frame, textvariable=self.fecha_desc_var, width=15)
-        fdesc_entry.grid(row=10, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        fdesc_container, fdesc_status = _wrap_with_status(5, 3)
+        fdesc_entry = ttk.Entry(fdesc_container, textvariable=self.fecha_desc_var, width=15)
+        fdesc_entry.grid(row=0, column=0, sticky="we")
+        fdesc_entry._inline_status_label = fdesc_status
         self.fdesc_entry = fdesc_entry
-        self.date_badge = self._create_badge_label(row=10)
+        self.date_badge = self._create_badge_label(row=5)
         self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")
 
         ttk.Label(self.frame, text="Monto investigado:").grid(
-            row=11, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        inv_entry = ttk.Entry(self.frame, textvariable=self.monto_inv_var, width=15)
-        inv_entry.grid(row=11, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        inv_container, inv_status = _wrap_with_status(6, 1)
+        inv_entry = ttk.Entry(inv_container, textvariable=self.monto_inv_var, width=15)
+        inv_entry.grid(row=0, column=0, sticky="we")
+        inv_entry._inline_status_label = inv_status
         self.inv_entry = inv_entry
-        self.amount_badge = self._create_badge_label(row=11)
+        self.amount_badge = self._create_badge_label(row=6)
         self.tooltip_register(inv_entry, "Monto total bajo investigación.")
 
         ttk.Label(self.frame, text="Moneda:").grid(
-            row=12, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=6, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        moneda_container, moneda_status = _wrap_with_status(6, 3)
         moneda_cb = ttk.Combobox(
-            self.frame,
+            moneda_container,
             textvariable=self.moneda_var,
             values=TIPO_MONEDA_LIST,
             state="readonly",
             width=12,
         )
-        moneda_cb.grid(row=12, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=12, column=2, padx=COL_PADX, pady=ROW_PADY)
+        moneda_cb.grid(row=0, column=0, sticky="we")
+        moneda_cb._inline_status_label = moneda_status
         moneda_cb.set('')
         self.tooltip_register(moneda_cb, "Tipo de moneda principal del caso.")
 
         ttk.Label(self.frame, text="Monto pérdida fraude:").grid(
-            row=13, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        perdida_entry = ttk.Entry(self.frame, textvariable=self.monto_perdida_var, width=12)
-        perdida_entry.grid(row=13, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        perdida_container, perdida_status = _wrap_with_status(7, 1)
+        perdida_entry = ttk.Entry(perdida_container, textvariable=self.monto_perdida_var, width=12)
+        perdida_entry.grid(row=0, column=0, sticky="we")
+        perdida_entry._inline_status_label = perdida_status
         self.perdida_entry = perdida_entry
-        ttk.Label(self.frame, text="").grid(row=13, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(
             perdida_entry,
             (
@@ -938,12 +1017,13 @@ class ProductFrame:
         )
 
         ttk.Label(self.frame, text="Monto falla procesos:").grid(
-            row=14, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=7, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        falla_entry = ttk.Entry(self.frame, textvariable=self.monto_falla_var, width=12)
-        falla_entry.grid(row=14, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        falla_container, falla_status = _wrap_with_status(7, 3)
+        falla_entry = ttk.Entry(falla_container, textvariable=self.monto_falla_var, width=12)
+        falla_entry.grid(row=0, column=0, sticky="we")
+        falla_entry._inline_status_label = falla_status
         self.falla_entry = falla_entry
-        ttk.Label(self.frame, text="").grid(row=14, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(
             falla_entry,
             (
@@ -953,12 +1033,13 @@ class ProductFrame:
         )
 
         ttk.Label(self.frame, text="Monto contingencia:").grid(
-            row=15, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        cont_entry = ttk.Entry(self.frame, textvariable=self.monto_cont_var, width=12)
-        cont_entry.grid(row=15, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        cont_container, cont_status = _wrap_with_status(8, 1)
+        cont_entry = ttk.Entry(cont_container, textvariable=self.monto_cont_var, width=12)
+        cont_entry.grid(row=0, column=0, sticky="we")
+        cont_entry._inline_status_label = cont_status
         self.cont_entry = cont_entry
-        ttk.Label(self.frame, text="").grid(row=15, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(
             cont_entry,
             (
@@ -974,36 +1055,39 @@ class ProductFrame:
         )
 
         ttk.Label(self.frame, text="Monto recuperado:").grid(
-            row=16, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=8, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        rec_entry = ttk.Entry(self.frame, textvariable=self.monto_rec_var, width=12)
-        rec_entry.grid(row=16, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        rec_container, rec_status = _wrap_with_status(8, 3)
+        rec_entry = ttk.Entry(rec_container, textvariable=self.monto_rec_var, width=12)
+        rec_entry.grid(row=0, column=0, sticky="we")
+        rec_entry._inline_status_label = rec_status
         self.rec_entry = rec_entry
-        ttk.Label(self.frame, text="").grid(row=16, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(rec_entry, "Monto efectivamente recuperado.")
 
         ttk.Label(self.frame, text="Monto pago deuda:").grid(
-            row=17, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=9, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        pago_entry = ttk.Entry(self.frame, textvariable=self.monto_pago_var, width=12)
-        pago_entry.grid(row=17, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        pago_container, pago_status = _wrap_with_status(9, 1)
+        pago_entry = ttk.Entry(pago_container, textvariable=self.monto_pago_var, width=12)
+        pago_entry.grid(row=0, column=0, sticky="we")
+        pago_entry._inline_status_label = pago_status
         self.pago_entry = pago_entry
-        ttk.Label(self.frame, text="").grid(row=17, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(pago_entry, "Pago realizado por deuda vinculada.")
 
-        self._build_claim_guidance_banner(row=18)
+        self._build_claim_guidance_banner(row=10)
 
-        self._build_duplicate_status_label(row=19)
+        self._build_duplicate_status_label(row=11)
 
         self.claims_frame = ttk.LabelFrame(self.frame, text="Reclamos asociados")
         ensure_grid_support(self.claims_frame)
-        self.claims_frame.grid(row=20, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.claims_frame.grid(row=12, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.claims_frame, "columnconfigure"):
             self.claims_frame.columnconfigure(1, weight=1)
+            self.claims_frame.columnconfigure(3, weight=1)
         claim_add_btn = ttk.Button(
             self.claims_frame, text="Añadir reclamo", command=lambda: self.add_claim(user_initiated=True)
         )
-        claim_add_btn.grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        claim_add_btn.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(
             claim_add_btn,
             (
@@ -1014,11 +1098,12 @@ class ProductFrame:
 
         self.invol_frame = ttk.LabelFrame(self.frame, text="Involucramiento de colaboradores")
         ensure_grid_support(self.invol_frame)
-        self.invol_frame.grid(row=21, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.invol_frame.grid(row=13, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(self.invol_frame, "columnconfigure"):
             self.invol_frame.columnconfigure(1, weight=1)
+            self.invol_frame.columnconfigure(3, weight=1)
         inv_add_btn = ttk.Button(self.invol_frame, text="Añadir involucrado", command=self.add_involvement)
-        inv_add_btn.grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        inv_add_btn.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(
             inv_add_btn,
             "Registra un colaborador asociado a este producto. Es obligatorio para validar duplicados.",
@@ -1602,7 +1687,7 @@ class ProductFrame:
             style=styles.get("warning", "TLabel"),
             anchor="w",
         )
-        badge.grid(row=row, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+        badge.grid(row=row, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="w")
         return badge
 
     def _set_badge_state(self, badge, is_ok: bool, message: str | None):
@@ -1624,7 +1709,7 @@ class ProductFrame:
             anchor="w",
             wraplength=520,
         )
-        label.grid(row=row, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        label.grid(row=row, column=0, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         tooltip_text = (
             "Si el sistema marca un duplicado, ajusta cualquiera de los campos de la "
             "clave técnica (caso, producto, cliente, colaborador, fecha de ocurrencia "
@@ -1735,7 +1820,7 @@ class ProductFrame:
     def _build_claim_guidance_banner(self, row: int):
         frame = ttk.Frame(self.frame)
         ensure_grid_support(frame)
-        frame.grid(row=row, column=0, columnspan=3, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY), sticky="we")
+        frame.grid(row=row, column=0, columnspan=5, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY), sticky="we")
         hide_fn = getattr(frame, "grid_remove", None) or getattr(frame, "grid_forget", None)
         if callable(hide_fn):
             hide_fn()

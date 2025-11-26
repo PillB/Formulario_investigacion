@@ -9,6 +9,10 @@ from typing import Any, Tuple
 from theme_manager import ThemeManager
 
 
+INLINE_WARNING_COLOR = "#d99100"
+INLINE_SUCCESS_COLOR = "#2e7d32"
+
+
 def ensure_grid_support(widget: Any) -> None:
     """Garantiza que el widget exponga un método grid incluso en stubs de prueba.
 
@@ -99,6 +103,59 @@ def build_required_label(
         )
 
     return container
+
+
+def build_inline_status_label(parent: Any, *, tooltip_register=None) -> Any:
+    """Create a compact inline status label for validation badges.
+
+    The label defaults to a yellow warning icon (⚠️) to indicate a pending
+    validation state. Call ``update_inline_status_label`` with ``is_ok=True``
+    after a successful validation to switch it to a green checkmark.
+    """
+
+    palette = ThemeManager.current()
+    warning_color = palette.get("warning", INLINE_WARNING_COLOR)
+    try:
+        label = ttk.Label(
+            parent,
+            text="⚠️",
+            width=3,
+            anchor="center",
+            foreground=warning_color,
+        )
+    except Exception:
+        class _StubLabel:
+            def __init__(self):
+                self._text = "⚠️"
+                self._foreground = warning_color
+
+            def configure(self, **kwargs):
+                self._text = kwargs.get("text", self._text)
+                self._foreground = kwargs.get("foreground", self._foreground)
+
+        label = _StubLabel()
+
+    if callable(tooltip_register):
+        tooltip_register(
+            label,
+            "Campo pendiente de validar. Se mostrará ✓ cuando el valor sea válido.",
+        )
+
+    ensure_grid_support(label)
+    return label
+
+
+def update_inline_status_label(label: Any, *, is_ok: bool) -> None:
+    """Switch a status label between warning and success symbols."""
+
+    palette = ThemeManager.current()
+    if is_ok:
+        label.configure(text="✅", foreground=palette.get("accent", INLINE_SUCCESS_COLOR))
+    else:
+        label.configure(
+            text="⚠️",
+            foreground=palette.get("warning", INLINE_WARNING_COLOR),
+        )
 
 
 def create_scrollable_container(parent: Any) -> Tuple[ttk.Frame, ttk.Frame]:

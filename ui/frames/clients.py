@@ -10,7 +10,11 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_client_id, validate_email_list,
                         validate_multi_selection, validate_phone_list,
                         validate_required_text)
-from ui.frames.utils import build_required_label, ensure_grid_support
+from ui.frames.utils import (
+    build_inline_status_label,
+    build_required_label,
+    ensure_grid_support,
+)
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 from theme_manager import ThemeManager
@@ -89,6 +93,25 @@ class ClientFrame:
             self.frame.columnconfigure(0, weight=0)
             self.frame.columnconfigure(1, weight=1)
             self.frame.columnconfigure(2, weight=0)
+            self.frame.columnconfigure(3, weight=1)
+
+        def _wrap_with_status(row, column, *, columnspan=1):
+            container = ttk.Frame(self.frame)
+            ensure_grid_support(container)
+            if hasattr(container, "columnconfigure"):
+                container.columnconfigure(0, weight=1)
+            container.grid(
+                row=row,
+                column=column,
+                columnspan=columnspan,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky="we",
+            )
+            status = build_inline_status_label(container, tooltip_register=self.tooltip_register)
+            if hasattr(status, "grid"):
+                status.grid(row=0, column=1, padx=(6, 0), sticky="w")
+            return container, status
 
         tipo_id_label = build_required_label(
             self.frame,
@@ -98,18 +121,19 @@ class ClientFrame:
         tipo_id_label.grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        tipo_container, tipo_status = _wrap_with_status(0, 1)
         tipo_id_cb = ttk.Combobox(
-            self.frame,
+            tipo_container,
             textvariable=self.tipo_id_var,
             values=TIPO_ID_LIST,
             state="readonly",
             width=20,
             style=COMBOBOX_STYLE,
         )
-        tipo_id_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY)
+        tipo_id_cb.grid(row=0, column=0, sticky="we")
         tipo_id_cb.set('')
         self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
+        tipo_id_cb._inline_status_label = tipo_status
 
         client_id_label = build_required_label(
             self.frame,
@@ -117,11 +141,12 @@ class ClientFrame:
             tooltip_register=self.tooltip_register,
         )
         client_id_label.grid(
-            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20, style=ENTRY_STYLE)
-        id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
+        id_container, id_status = _wrap_with_status(0, 3)
+        id_entry = ttk.Entry(id_container, textvariable=self.id_var, width=20, style=ENTRY_STYLE)
+        id_entry.grid(row=0, column=0, sticky="we")
+        id_entry._inline_status_label = id_status
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
@@ -131,12 +156,14 @@ class ClientFrame:
             tooltip_register=self.tooltip_register,
         )
         nombres_label.grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        nombres_container, nombres_status = _wrap_with_status(1, 1, columnspan=3)
         nombres_entry = ttk.Entry(
-            self.frame, textvariable=self.nombres_var, width=25, style=ENTRY_STYLE
+            nombres_container, textvariable=self.nombres_var, width=25, style=ENTRY_STYLE
         )
-        nombres_entry.grid(row=2, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        nombres_entry.grid(row=0, column=0, sticky="we")
+        nombres_entry._inline_status_label = nombres_status
         nombres_entry.bind(
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó nombres"), add="+"
         )
@@ -148,12 +175,14 @@ class ClientFrame:
             tooltip_register=self.tooltip_register,
         )
         apellidos_label.grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        apellidos_container, apellidos_status = _wrap_with_status(2, 1, columnspan=3)
         apellidos_entry = ttk.Entry(
-            self.frame, textvariable=self.apellidos_var, width=25, style=ENTRY_STYLE
+            apellidos_container, textvariable=self.apellidos_var, width=25, style=ENTRY_STYLE
         )
-        apellidos_entry.grid(row=3, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        apellidos_entry.grid(row=0, column=0, sticky="we")
+        apellidos_entry._inline_status_label = apellidos_status
         apellidos_entry.bind(
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó apellidos"), add="+"
         )
@@ -165,18 +194,19 @@ class ClientFrame:
             tooltip_register=self.tooltip_register,
         )
         flag_label.grid(
-            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        flag_container, flag_status = _wrap_with_status(3, 1)
         flag_cb = ttk.Combobox(
-            self.frame,
+            flag_container,
             textvariable=self.flag_var,
             values=FLAG_CLIENTE_LIST,
             state="readonly",
             width=20,
             style=COMBOBOX_STYLE,
         )
-        flag_cb.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=4, column=2, padx=COL_PADX, pady=ROW_PADY)
+        flag_cb.grid(row=0, column=0, sticky="we")
+        flag_cb._inline_status_label = flag_status
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
 
@@ -186,16 +216,17 @@ class ClientFrame:
             tooltip_register=self.tooltip_register,
         )
         accionado_label.grid(
-            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         accionado_list_container = ttk.Frame(self.frame)
         ensure_grid_support(accionado_list_container)
         accionado_list_container.grid(
-            row=5, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+            row=4, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
         if hasattr(accionado_list_container, "columnconfigure"):
             accionado_list_container.columnconfigure(0, weight=1)
             accionado_list_container.columnconfigure(1, weight=0)
+            accionado_list_container.columnconfigure(2, weight=0)
 
         accionado_scrollbar = None
         scrollbar_class = getattr(tk, "Scrollbar", None) or getattr(ttk, "Scrollbar", None)
@@ -221,6 +252,11 @@ class ClientFrame:
         if accionado_scrollbar:
             accionado_scrollbar.grid(row=0, column=1, sticky="ns")
             accionado_scrollbar.configure(command=self.accionado_listbox.yview)
+        accionado_status = build_inline_status_label(
+            accionado_list_container, tooltip_register=self.tooltip_register
+        )
+        accionado_status.grid(row=0, column=2, padx=(6, 0), sticky="w")
+        self.accionado_listbox._inline_status_label = accionado_status
         self.accionado_listbox.bind("<<ListboxSelect>>", self.update_accionado_var)
         self.tooltip_register(
             self.accionado_listbox,
@@ -233,13 +269,14 @@ class ClientFrame:
             tooltip_register=self.tooltip_register,
         )
         tel_label.grid(
-            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        tel_container, tel_status = _wrap_with_status(5, 1)
         tel_entry = ttk.Entry(
-            self.frame, textvariable=self.telefonos_var, width=30, style=ENTRY_STYLE
+            tel_container, textvariable=self.telefonos_var, width=30, style=ENTRY_STYLE
         )
-        tel_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=6, column=2, padx=COL_PADX, pady=ROW_PADY)
+        tel_entry.grid(row=0, column=0, sticky="we")
+        tel_entry._inline_status_label = tel_status
         tel_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó teléfonos"))
         self.tooltip_register(
             tel_entry,
@@ -252,13 +289,14 @@ class ClientFrame:
             tooltip_register=self.tooltip_register,
         )
         correo_label.grid(
-            row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=5, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        cor_container, cor_status = _wrap_with_status(5, 3)
         cor_entry = ttk.Entry(
-            self.frame, textvariable=self.correos_var, width=30, style=ENTRY_STYLE
+            cor_container, textvariable=self.correos_var, width=30, style=ENTRY_STYLE
         )
-        cor_entry.grid(row=7, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=7, column=2, padx=COL_PADX, pady=ROW_PADY)
+        cor_entry.grid(row=0, column=0, sticky="we")
+        cor_entry._inline_status_label = cor_status
         cor_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó correos"))
         self.tooltip_register(
             cor_entry,
@@ -266,13 +304,12 @@ class ClientFrame:
         )
 
         ttk.Label(self.frame, text="Direcciones (separados por ;):").grid(
-            row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         dir_entry = ttk.Entry(
             self.frame, textvariable=self.direcciones_var, width=30, style=ENTRY_STYLE
         )
-        dir_entry.grid(row=8, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=8, column=2, padx=COL_PADX, pady=ROW_PADY)
+        dir_entry.grid(row=6, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
         self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
 

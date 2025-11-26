@@ -8,7 +8,7 @@ from tkinter import messagebox, ttk
 from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_date_text, validate_norm_id,
                         validate_required_text)
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import build_inline_status_label, ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 
@@ -57,10 +57,29 @@ class NormFrame:
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
+            self.frame.columnconfigure(3, weight=1)
+
+        def _wrap_with_status(row, column, *, columnspan=1):
+            container = ttk.Frame(self.frame)
+            ensure_grid_support(container)
+            if hasattr(container, "columnconfigure"):
+                container.columnconfigure(0, weight=1)
+            container.grid(
+                row=row,
+                column=column,
+                columnspan=columnspan,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky="we",
+            )
+            status = build_inline_status_label(container, tooltip_register=self.tooltip_register)
+            if hasattr(status, "grid"):
+                status.grid(row=0, column=1, padx=(6, 0), sticky="w")
+            return container, status
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=0, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
+        action_row.grid(row=0, column=0, columnspan=4, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
@@ -71,26 +90,29 @@ class NormFrame:
         ttk.Label(self.frame, text="ID de norma:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
-        id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
+        id_container, id_status = _wrap_with_status(1, 1)
+        id_entry = ttk.Entry(id_container, textvariable=self.id_var, width=20)
+        id_entry.grid(row=0, column=0, sticky="we")
+        id_entry._inline_status_label = id_status
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
         ttk.Label(self.frame, text="Fecha de vigencia (YYYY-MM-DD):").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        fecha_entry = ttk.Entry(self.frame, textvariable=self.fecha_var, width=15)
-        fecha_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
+        fecha_container, fecha_status = _wrap_with_status(1, 3)
+        fecha_entry = ttk.Entry(fecha_container, textvariable=self.fecha_var, width=15)
+        fecha_entry.grid(row=0, column=0, sticky="we")
+        fecha_entry._inline_status_label = fecha_status
         self.tooltip_register(fecha_entry, "Fecha de publicación o vigencia de la norma.")
 
         ttk.Label(self.frame, text="Descripción de la norma:").grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        desc_entry = ttk.Entry(self.frame, textvariable=self.descripcion_var, width=70)
-        desc_entry.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=3, column=2, padx=COL_PADX, pady=ROW_PADY)
+        desc_container, desc_status = _wrap_with_status(2, 1, columnspan=3)
+        desc_entry = ttk.Entry(desc_container, textvariable=self.descripcion_var, width=70)
+        desc_entry.grid(row=0, column=0, sticky="we")
+        desc_entry._inline_status_label = desc_status
         self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
 
         self.validators.append(
