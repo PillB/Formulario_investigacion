@@ -77,6 +77,8 @@ class TeamMemberFrame:
         self.tipo_sancion_var = tk.StringVar()
 
         self.section = self._create_section(parent)
+        self._register_title_traces()
+        self._sync_section_title()
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         if summary_parent is not None and owner is not None and not getattr(owner, "team_summary_tree", None):
             self.summary_tree = self._build_summary(summary_parent)
@@ -455,7 +457,9 @@ class TeamMemberFrame:
 
     def _create_section(self, parent):
         try:
-            return CollapsibleSection(parent, title=f"Colaborador {self.idx+1}")
+            return CollapsibleSection(
+                parent, title="", on_toggle=lambda _section: self._sync_section_title()
+            )
         except Exception as exc:
             log_event(
                 "validacion",
@@ -465,6 +469,8 @@ class TeamMemberFrame:
             fallback = ttk.Frame(parent)
             ensure_grid_support(fallback)
             fallback.content = ttk.Frame(fallback)
+            fallback.is_open = True  # type: ignore[attr-defined]
+            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
 
             def _pack_content(widget, **pack_kwargs):
                 defaults = {"fill": "both", "expand": True}
@@ -474,6 +480,32 @@ class TeamMemberFrame:
 
             fallback.pack_content = _pack_content  # type: ignore[attr-defined]
             return fallback
+
+    def _register_title_traces(self):
+        for var in (self.id_var, self.nombres_var, self.apellidos_var):
+            var.trace_add("write", self._on_identity_field_change)
+
+    def _build_section_title(self) -> str:
+        base_title = f"Colaborador {self.idx+1}"
+        if getattr(self, "section", None) and not getattr(self.section, "is_open", True):
+            id_value = self.id_var.get().strip()
+            name_value = " ".join(
+                part.strip()
+                for part in (self.nombres_var.get(), self.apellidos_var.get())
+                if part.strip()
+            )
+            details = [value for value in (id_value, name_value) if value]
+            if details:
+                base_title = f"{base_title} – {' | '.join(details)}"
+        return base_title
+
+    def _sync_section_title(self, *_args):
+        if not getattr(self, "section", None):
+            return
+        self.section.set_title(self._build_section_title())
+
+    def _on_identity_field_change(self, *_args):
+        self._sync_section_title()
 
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
