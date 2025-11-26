@@ -796,6 +796,7 @@ class ProductFrame:
         self._claim_nudge_shown = False
         self._badge_registry: dict[str, dict[str, object]] = {}
         self._badge_updaters: dict[str, Callable] = {}
+        self._badge_setters: dict[str, Callable] = {}
         self._field_errors: dict[str, str | None] = {}
         self._last_date_errors: dict[str, str | None] = {"fecha_oc": None, "fecha_desc": None}
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
@@ -1798,7 +1799,7 @@ class ProductFrame:
         column: int = 4,
         parent=None,
         pending_text: str = ALERT_BADGE_ICON,
-        success_text: str = "Listo",
+        success_text: str = "✓",
     ):
         badge = self._create_badge_label(
             row,
@@ -1812,6 +1813,31 @@ class ProductFrame:
             "success": success_text,
         }
         return badge
+
+    def _get_badge_setter(
+        self,
+        key: str,
+        *,
+        success_text: str | None = None,
+        pending_text: str | None = None,
+    ):
+        if key in self._badge_setters:
+            return self._badge_setters[key]
+
+        def _setter(message: str | None, *, force_state: bool | None = None):
+            is_ok = (message is None) if force_state is None else force_state
+            self._field_errors[key] = message
+            self._update_field_badge(
+                key,
+                is_ok,
+                message,
+                success_text=success_text,
+                pending_text=pending_text,
+            )
+            return message
+
+        self._badge_setters[key] = _setter
+        return _setter
 
     def _update_field_badge(
         self,
@@ -1839,17 +1865,17 @@ class ProductFrame:
         pending_text: str | None = None,
         condition_fn=None,
     ):
+        badge_setter = self._get_badge_setter(
+            key, success_text=success_text, pending_text=pending_text
+        )
+
         def _wrapped():
             if condition_fn is not None and not condition_fn():
-                self._field_errors[key] = None
-                self._update_field_badge(key, True, None, success_text=success_text, pending_text=pending_text)
-                return None
+                return badge_setter(None, force_state=True)
             message = validate_fn()
-            self._field_errors[key] = message
-            self._update_field_badge(key, message is None, message, success_text=success_text, pending_text=pending_text)
-            return message
+            return badge_setter(message)
 
-        self._badge_updaters[key] = _wrapped
+        self._badge_updaters[key] = lambda: badge_setter(self._field_errors.get(key))
         return _wrapped
 
     def _set_badge_state(self, badge, is_ok: bool, message: str | None, *, success_text: str = "Cuadra"):
@@ -1936,14 +1962,17 @@ class ProductFrame:
                 occ_message = message
             if desc_message is None:
                 desc_message = message
-        self._update_field_badge("fecha_oc", occ_message is None, occ_message)
-        self._update_field_badge("fecha_desc", desc_message is None, desc_message)
+        occ_setter = self._get_badge_setter("fecha_oc")
+        desc_setter = self._get_badge_setter("fecha_desc")
+        occ_setter(occ_message)
+        desc_setter(desc_message)
 
     def _update_date_badge(self, message: str | None, is_valid: bool):
         self._refresh_date_badges(message, is_valid)
 
     def _update_amount_badge(self, message: str | None, is_valid: bool):
-        self._update_field_badge("monto_inv", is_valid, message)
+        setter = self._get_badge_setter("monto_inv")
+        setter(message, force_state=is_valid)
 
     def _refresh_badges(self) -> None:
         pair_message, pair_ok = self._validate_product_date_pair()
@@ -2598,12 +2627,13 @@ class ProductFrame:
         return message, decimal_value
 
     def _build_amount_validator(self, field_key, var, label, allow_blank):
+        badge_setter = self._get_badge_setter(field_key)
+
         def _validate():
             message, _ = self._validate_amount_field(var, label, allow_blank)
-            self._field_errors[field_key] = message
-            return message
+            return badge_setter(message)
 
-        self._badge_updaters[field_key] = _validate
+        self._badge_updaters[field_key] = lambda: badge_setter(self._field_errors.get(field_key))
         return _validate
 
     def _collect_amount_values(self):
@@ -2663,7 +2693,8 @@ class ProductFrame:
             message = self._field_errors.get(badge_key)
             if message is None and key in errors:
                 message = errors[key]
-            self._update_field_badge(badge_key, message is None, message)
+            badge_setter = self._get_badge_setter(badge_key)
+            badge_setter(message)
         target = target_key or 'inv'
         return (errors.get(target), is_consistent)
 
