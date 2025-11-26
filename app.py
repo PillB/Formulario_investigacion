@@ -172,7 +172,7 @@ class ValidationPanel(ttk.Frame):
         self.collapse(force=True)
 
     def _init_ui(self) -> None:
-        self.columnconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1, minsize=self.COLLAPSED_WIDTH)
         self.rowconfigure(0, weight=1)
 
         self._content_container = ttk.Frame(self)
@@ -190,7 +190,9 @@ class ValidationPanel(ttk.Frame):
 
         self._issue_badge = ttk.Label(header, textvariable=self._issue_count_var)
         self._issue_badge.grid(row=0, column=1, sticky="e", padx=(4, 0))
+        self._issue_badge.configure(cursor="hand2")
         self._issue_badge.bind("<Button-1>", lambda _e: self.expand())
+        self._issue_badge.bind("<Return>", lambda _e: self.expand())
         self._toggle_button = ttk.Button(header, width=3, text="⇤", command=self.toggle)
         self._toggle_button.grid(row=0, column=2, sticky="e")
 
@@ -218,7 +220,7 @@ class ValidationPanel(ttk.Frame):
         )
         self._focus_button.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 5))
 
-        self._collapsed_strip = ttk.Frame(self)
+        self._collapsed_strip = ttk.Frame(self, cursor="hand2")
         self._collapsed_strip.grid_rowconfigure(0, weight=1)
         self._collapsed_strip.grid_propagate(False)
         self._collapsed_strip.configure(width=self.COLLAPSED_WIDTH)
@@ -226,7 +228,9 @@ class ValidationPanel(ttk.Frame):
             self._collapsed_strip, textvariable=self._issue_count_var, anchor="center"
         )
         strip_label.grid(row=0, column=0, padx=6, pady=5, sticky="n")
+        strip_label.configure(cursor="hand2", takefocus=True)
         strip_label.bind("<Button-1>", lambda _e: self.expand())
+        strip_label.bind("<Return>", lambda _e: self.expand())
         self._collapsed_strip.bind("<Button-1>", lambda _e: self.expand())
         expand_button = ttk.Button(
             self._collapsed_strip, width=3, text="⇥", command=self.expand
