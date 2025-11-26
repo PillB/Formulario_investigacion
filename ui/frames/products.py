@@ -43,11 +43,16 @@ class InvolvementRow:
         self.team_var = tk.StringVar()
         self.monto_var = tk.StringVar()
 
-        self.frame = ttk.Frame(parent)
+        self.section = self._create_section(parent)
+        self.section.grid(
+            row=idx + 1, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+        )
+
+        self.frame = ttk.Frame(self.section.content)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "grid_columnconfigure"):
             self.frame.grid_columnconfigure(1, weight=1)
-        self.frame.grid(row=idx + 1, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.section.pack_content(self.frame, fill="x", expand=True)
 
         ttk.Label(self.frame, text="Colaborador:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -101,6 +106,39 @@ class InvolvementRow:
         self.team_validator.add_widget(monto_entry)
         self.validators.append(self.team_validator)
 
+        self._register_title_traces()
+        self._sync_section_title()
+
+    def _create_section(self, parent):
+        try:
+            return CollapsibleSection(
+                parent,
+                title="",
+                on_toggle=lambda _section: self._sync_section_title(),
+            )
+        except Exception as exc:
+            log_event(
+                "validacion",
+                f"No se pudo crear sección colapsable para involucramiento {self.idx+1}: {exc}",
+                self.logs,
+            )
+            fallback = ttk.Frame(parent)
+            ensure_grid_support(fallback)
+            fallback.content = ttk.Frame(fallback)
+            ensure_grid_support(fallback.content)
+            fallback.content.pack(fill="both", expand=True)
+
+            def _pack_content(widget, **pack_kwargs):
+                defaults = {"fill": "both", "expand": True}
+                defaults.update(pack_kwargs)
+                widget.pack(**defaults)
+                return widget
+
+            fallback.pack_content = _pack_content  # type: ignore[attr-defined]
+            fallback.is_open = True  # type: ignore[attr-defined]
+            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
+            return fallback
+
     def get_data(self):
         return {
             "id_colaborador": self.team_var.get().strip(),
@@ -129,7 +167,10 @@ class InvolvementRow:
             self.product_frame.log_change(
                 f"Se eliminó asignación de colaborador en producto {self.product_frame.idx+1}"
             )
-            self.frame.destroy()
+            if getattr(self, "section", None):
+                self.section.destroy()
+            else:
+                self.frame.destroy()
             self.remove_callback(self)
 
     def _handle_amount_focus_out(self):
@@ -146,6 +187,57 @@ class InvolvementRow:
 
     def _notify_summary_change(self):
         self.product_frame._schedule_product_summary_refresh()
+
+    def _register_title_traces(self):
+        for var in (self.team_var, self.monto_var):
+            trace_add = getattr(var, "trace_add", None)
+            if callable(trace_add):
+                trace_add("write", self._sync_section_title)
+
+    def _build_section_title(self) -> str:
+        base_title = f"Asignación {self.idx+1}"
+        if getattr(self, "section", None) and not self.section.is_open:
+            team_value = self.team_var.get().strip()
+            monto_value = self.monto_var.get().strip()
+            details = [value for value in (team_value, monto_value) if value]
+            if details:
+                base_title = f"{base_title} – {' | '.join(details)}"
+        return base_title
+
+    def _sync_section_title(self, *_args):
+        if not getattr(self, "section", None):
+            return
+        set_title = getattr(self.section, "set_title", None)
+        if callable(set_title):
+            self.section.set_title(self._build_section_title())
+
+    def _create_section(self, parent):
+        try:
+            return CollapsibleSection(
+                parent, title="", on_toggle=lambda _section: self._sync_section_title()
+            )
+        except Exception as exc:
+            log_event(
+                "validacion",
+                f"No se pudo crear sección colapsable para reclamo {self.idx+1}: {exc}",
+                self.logs,
+            )
+            fallback = ttk.Frame(parent)
+            ensure_grid_support(fallback)
+            fallback.content = ttk.Frame(fallback)
+            ensure_grid_support(fallback.content)
+            fallback.content.pack(fill="both", expand=True)
+
+            def _pack_content(widget, **pack_kwargs):
+                defaults = {"fill": "both", "expand": True}
+                defaults.update(pack_kwargs)
+                widget.pack(**defaults)
+                return widget
+
+            fallback.pack_content = _pack_content  # type: ignore[attr-defined]
+            fallback.is_open = True  # type: ignore[attr-defined]
+            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
+            return fallback
 
     def _get_known_team_ids(self):
         return {option.strip() for option in self.team_getter() if option and option.strip()}
@@ -231,11 +323,16 @@ class ClaimRow:
         self.name_var = tk.StringVar()
         self.code_var = tk.StringVar()
 
-        self.frame = ttk.Frame(parent)
+        self.section = self._create_section(parent)
+        self.section.grid(
+            row=idx + 1, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+        )
+
+        self.frame = ttk.Frame(self.section.content)
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "grid_columnconfigure"):
             self.frame.grid_columnconfigure(1, weight=1)
-        self.frame.grid(row=idx + 1, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.section.pack_content(self.frame, fill="x", expand=True)
 
         ttk.Label(self.frame, text="ID reclamo:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -311,6 +408,9 @@ class ClaimRow:
 
         self._last_missing_lookup_id = None
         self._last_summary_snapshot = self.get_data()
+
+        self._register_title_traces()
+        self._sync_section_title()
 
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
@@ -417,7 +517,10 @@ class ClaimRow:
             self.product_frame.log_change(
                 f"Se eliminó reclamo del producto {self.product_frame.idx+1}"
             )
-            self.frame.destroy()
+            if getattr(self, "section", None):
+                self.section.destroy()
+            else:
+                self.frame.destroy()
             self.remove_callback(self)
 
     def set_claim_requirement(self, required: bool):
@@ -426,6 +529,57 @@ class ClaimRow:
         if previously_required and not required:
             for validator in self.validators:
                 validator.show_custom_error(None)
+
+    def _register_title_traces(self):
+        for var in (self.id_var, self.name_var):
+            trace_add = getattr(var, "trace_add", None)
+            if callable(trace_add):
+                trace_add("write", self._sync_section_title)
+
+    def _build_section_title(self) -> str:
+        base_title = f"Reclamo {self.idx+1}"
+        if getattr(self, "section", None) and not self.section.is_open:
+            rid = self.id_var.get().strip()
+            name = self.name_var.get().strip()
+            details = [value for value in (rid, name) if value]
+            if details:
+                base_title = f"{base_title} – {' | '.join(details)}"
+        return base_title
+
+    def _sync_section_title(self, *_args):
+        if not getattr(self, "section", None):
+            return
+        set_title = getattr(self.section, "set_title", None)
+        if callable(set_title):
+            self.section.set_title(self._build_section_title())
+
+    def _create_section(self, parent):
+        try:
+            return CollapsibleSection(
+                parent, title="", on_toggle=lambda _section: self._sync_section_title()
+            )
+        except Exception as exc:
+            log_event(
+                "validacion",
+                f"No se pudo crear sección colapsable para reclamo {self.idx+1}: {exc}",
+                self.logs,
+            )
+            fallback = ttk.Frame(parent)
+            ensure_grid_support(fallback)
+            fallback.content = ttk.Frame(fallback)
+            ensure_grid_support(fallback.content)
+            fallback.content.pack(fill="both", expand=True)
+
+            def _pack_content(widget, **pack_kwargs):
+                defaults = {"fill": "both", "expand": True}
+                defaults.update(pack_kwargs)
+                widget.pack(**defaults)
+                return widget
+
+            fallback.pack_content = _pack_content  # type: ignore[attr-defined]
+            fallback.is_open = True  # type: ignore[attr-defined]
+            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
+            return fallback
 
     def _validate_claim_id(self):
         value = self.id_var.get()
@@ -586,6 +740,8 @@ class ProductFrame:
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         self._tree_sort_state: dict[str, bool] = {}
         self._build_header_table()
+        self._register_title_traces()
+        self._sync_section_title()
 
         self.frame = ttk.Frame(self.section.content)
         self.section.pack_content(self.frame, fill="x", expand=True)
@@ -1047,7 +1203,9 @@ class ProductFrame:
 
     def _create_section(self, parent):
         try:
-            return CollapsibleSection(parent, title=f"Producto {self.idx+1}")
+            return CollapsibleSection(
+                parent, title="", on_toggle=lambda _section: self._sync_section_title()
+            )
         except Exception as exc:
             log_event(
                 "validacion",
@@ -1066,7 +1224,32 @@ class ProductFrame:
                 return widget
 
             fallback.pack_content = _pack_content  # type: ignore[attr-defined]
+            fallback.is_open = True  # type: ignore[attr-defined]
+            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
             return fallback
+
+    def _register_title_traces(self):
+        for var in (self.id_var, self.client_var):
+            trace_add = getattr(var, "trace_add", None)
+            if callable(trace_add):
+                trace_add("write", self._sync_section_title)
+
+    def _build_section_title(self) -> str:
+        base_title = f"Producto {self.idx+1}"
+        if getattr(self, "section", None) and not self.section.is_open:
+            id_value = self.id_var.get().strip()
+            client_value = self.client_var.get().strip()
+            details = [value for value in (id_value, client_value) if value]
+            if details:
+                base_title = f"{base_title} – {' | '.join(details)}"
+        return base_title
+
+    def _sync_section_title(self, *_args):
+        if not getattr(self, "section", None):
+            return
+        set_title = getattr(self.section, "set_title", None)
+        if callable(set_title):
+            self.section.set_title(self._build_section_title())
 
     def _build_header_table(self):
         container = ttk.Frame(self.section.content)
@@ -1312,12 +1495,18 @@ class ProductFrame:
 
     def clear_claims(self):
         for claim in self.claims:
-            claim.frame.destroy()
+            if getattr(claim, "section", None):
+                claim.section.destroy()
+            else:
+                claim.frame.destroy()
         self.claims.clear()
 
     def clear_involvements(self):
         for inv in self.involvements:
-            inv.frame.destroy()
+            if getattr(inv, "section", None):
+                inv.section.destroy()
+            else:
+                inv.frame.destroy()
         self.involvements.clear()
 
     def set_claims_from_data(self, claims):
