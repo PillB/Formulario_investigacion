@@ -819,6 +819,7 @@ class ProductFrame:
         initialize_rows=True,
         duplicate_key_checker=None,
         owner=None,
+        summary_parent=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -855,6 +856,7 @@ class ProductFrame:
         self._duplicate_status_var = tk.StringVar()
         self._duplicate_status_style = None
         self.duplicate_status_label = None
+        self.header_tree = None
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -885,7 +887,7 @@ class ProductFrame:
         self._sync_section_title()
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         self._tree_sort_state: dict[str, bool] = {}
-        self._build_header_table()
+        self._initialize_header_table(summary_parent)
         self._register_title_traces()
         self._sync_section_title()
 
@@ -1442,6 +1444,26 @@ class ProductFrame:
                 base_title = f"{base_title} – {' | '.join(details)}"
         return base_title
 
+    def _initialize_header_table(self, summary_parent):
+        owner_tree = getattr(self.owner, "product_summary_tree", None) if self.owner else None
+        if owner_tree is not None:
+            self.header_tree = owner_tree
+            self._populate_header_tree()
+            return
+
+        parent = summary_parent or getattr(self.section, "content", None) or self.section
+        self.header_tree = self._build_header_table(parent)
+        if summary_parent is not None and self.owner is not None:
+            self.owner.product_summary_tree = self.header_tree
+            inline = getattr(self.owner, "inline_summary_trees", None)
+            if isinstance(inline, dict):
+                inline["productos"] = self.header_tree
+            try:
+                self.owner._product_summary_owner = self
+            except Exception:
+                pass
+        self._populate_header_tree()
+
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
             return
@@ -1449,9 +1471,17 @@ class ProductFrame:
         if callable(set_title):
             self.section.set_title(self._build_section_title())
 
-    def _build_header_table(self):
-        container = ttk.Frame(self.section.content)
-        self.section.pack_content(container, fill="x", expand=False)
+    def _build_header_table(self, parent=None):
+        host = parent or getattr(self.section, "content", None) or self.section
+        container = ttk.Frame(host)
+        packer = getattr(self.section, "pack_content", None)
+        if parent is None and callable(packer):
+            packer(container, fill="x", expand=False)
+        else:
+            try:
+                container.pack(fill="x", expand=True, padx=COL_PADX, pady=ROW_PADY)
+            except Exception:
+                pass
         ensure_grid_support(container)
         if hasattr(container, "columnconfigure"):
             container.columnconfigure(0, weight=1)
@@ -1501,6 +1531,7 @@ class ProductFrame:
         if hasattr(self.header_tree, "bind"):
             self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
             self.header_tree.bind("<Double-1>", self._on_tree_double_click)
+        return self.header_tree
 
     def _create_treeview(self, container, columns):
         class _DummyTree:
@@ -1584,7 +1615,7 @@ class ProductFrame:
             return _DummyTree(columns)
 
     def _populate_header_tree(self):
-        if not hasattr(self, "header_tree"):
+        if not getattr(self, "header_tree", None):
             return
 
         for child in self.header_tree.get_children(""):
@@ -1615,6 +1646,11 @@ class ProductFrame:
             self.header_tree.item(item, tags=(tag,))
         self._tree_sort_state[column] = not reverse
 
+    def _get_target_product_frame(self):
+        if getattr(self, "owner", None) and getattr(self.owner, "_active_product_frame", None):
+            return self.owner._active_product_frame
+        return self
+
     def _on_tree_select(self, _event=None):
         item = self._first_selected_item()
         if not item:
@@ -1622,9 +1658,10 @@ class ProductFrame:
         values = self.header_tree.item(item, "values")
         if not values:
             return
-        self.id_var.set(values[0])
-        self.on_id_change(preserve_existing=True, silent=True)
-        self.trigger_duplicate_check()
+        target = self._get_target_product_frame()
+        target.id_var.set(values[0])
+        target.on_id_change(preserve_existing=True, silent=True)
+        target.trigger_duplicate_check()
 
     def _on_tree_double_click(self, _event=None):
         item = self._first_selected_item()
@@ -1633,9 +1670,10 @@ class ProductFrame:
         values = self.header_tree.item(item, "values")
         if not values:
             return
-        self.id_var.set(values[0])
-        self.on_id_change(from_focus=True)
-        self.trigger_duplicate_check()
+        target = self._get_target_product_frame()
+        target.id_var.set(values[0])
+        target.on_id_change(from_focus=True)
+        target.trigger_duplicate_check()
 
     def _first_selected_item(self):
         selection = self.header_tree.selection()
