@@ -282,16 +282,29 @@ def _patch_risk_module(monkeypatch):
                 return super().__getitem__(key)
 
     class _CollapsibleSection(_UIStubWidget):
-        def __init__(self, parent=None, title="", open=True, **_kwargs):
+        def __init__(self, parent=None, title="", open=True, on_toggle=None, **_kwargs):
             super().__init__(parent=parent)
             self.title = title
             self._is_open = open
+            self._on_toggle = on_toggle
             self.header = _UIStubWidget()
             self.title_label = _UIStubWidget()
             self.content = _UIStubWidget()
 
         def pack_content(self, widget, **_kwargs):
             return widget
+
+        @property
+        def is_open(self):
+            return self._is_open
+
+        def set_title(self, title):
+            self.title = title
+
+        def toggle(self, *_args):
+            self._is_open = not self._is_open
+            if callable(self._on_toggle):
+                self._on_toggle(self)
 
     monkeypatch.setattr(risk, "tk", _TkStub())
     monkeypatch.setattr(risk, "ttk", _TtkStub())
