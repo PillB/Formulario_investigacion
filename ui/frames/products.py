@@ -12,7 +12,7 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import ALERT_BADGE_ICON, ensure_grid_support
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
@@ -73,7 +73,7 @@ class InvolvementRow:
         self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
         self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
         self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
-        self.badges["team"] = self.product_frame._create_badge_label(0, column=5, parent=self.frame)
+        self.badges["team"] = self._make_badge(row=0, column=5)
 
         ttk.Label(self.frame, text="Monto asignado:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -84,7 +84,7 @@ class InvolvementRow:
         monto_entry.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
-        self.badges["amount"] = self.product_frame._create_badge_label(0, column=6, parent=self.frame)
+        self.badges["amount"] = self._make_badge(row=0, column=6)
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -143,6 +143,35 @@ class InvolvementRow:
             fallback.is_open = True  # type: ignore[attr-defined]
             fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
             return fallback
+
+    def _make_badge(self, row: int, *, column: int):
+        creator = getattr(self.product_frame, "_create_badge_label", None)
+        if callable(creator):
+            try:
+                return creator(row, column=column, parent=self.frame)
+            except Exception:
+                pass
+        try:
+            badge = ttk.Label(self.frame, text=ALERT_BADGE_ICON, anchor="w")
+            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+            return badge
+        except Exception:
+            class _StubBadge:
+                def __init__(self):
+                    self.text = ALERT_BADGE_ICON
+
+                def config(self, **kwargs):  # noqa: D401, ANN001
+                    """Permite simular configure/config en pruebas sin Tk."""
+                    self.text = kwargs.get("text", self.text)
+
+                def configure(self, **kwargs):  # noqa: D401, ANN001
+                    """Alias de config para compatibilidad."""
+                    return self.config(**kwargs)
+
+            badge = _StubBadge()
+            ensure_grid_support(badge)
+            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+            return badge
 
     def _apply_badge_state(self, badge, is_valid: bool, message: str | None):
         setter = getattr(self.product_frame, "_set_badge_state", None)
@@ -638,7 +667,7 @@ class ClaimRow:
                 return creator(row)
         styles = getattr(self.product_frame, "_badge_styles", {}) or {"warning": "TLabel"}
         style_name = styles.get("warning", "TLabel")
-        badge = ttk.Label(self.frame, text="Pendiente", style=style_name, anchor="w")
+        badge = ttk.Label(self.frame, text=ALERT_BADGE_ICON, style=style_name, anchor="w")
         badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
         return badge
 
@@ -1766,7 +1795,7 @@ class ProductFrame:
         *,
         column: int = 4,
         parent=None,
-        text: str = "Pendiente",
+        text: str = ALERT_BADGE_ICON,
     ):
         styles = self._badge_styles or {"warning": "TLabel"}
         badge_parent = parent or self.frame
@@ -1786,7 +1815,7 @@ class ProductFrame:
         row: int,
         column: int = 4,
         parent=None,
-        pending_text: str = "Pendiente",
+        pending_text: str = ALERT_BADGE_ICON,
         success_text: str = "Listo",
     ):
         badge = self._create_badge_label(
