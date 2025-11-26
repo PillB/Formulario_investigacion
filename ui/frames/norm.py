@@ -47,7 +47,9 @@ class NormFrame:
         self.norm_lookup = {}
         self._last_missing_lookup_id = None
 
-        self.section = CollapsibleSection(parent, title=f"Norma {self.idx+1}")
+        self.section = CollapsibleSection(
+            parent, title="", on_toggle=lambda _section: self._sync_section_title()
+        )
         self.section.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
 
         self.frame = ttk.LabelFrame(self.section.content, text=f"Norma {self.idx+1}")
@@ -123,6 +125,9 @@ class NormFrame:
                 variables=[self.descripcion_var],
             )
         )
+
+        self._register_title_traces()
+        self._sync_section_title()
         self.attach_header_tree(header_tree)
         self._register_header_tree_focus(id_entry, fecha_entry, desc_entry)
 
@@ -172,6 +177,29 @@ class NormFrame:
             )
         self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select, add=False)
         self.header_tree.bind("<Double-1>", self._on_tree_double_click, add=False)
+
+    def _register_title_traces(self):
+        for var in (self.id_var, self.descripcion_var):
+            trace_add = getattr(var, "trace_add", None)
+            if callable(trace_add):
+                trace_add("write", self._sync_section_title)
+
+    def _build_section_title(self) -> str:
+        base_title = f"Norma {self.idx+1}"
+        if getattr(self, "section", None) and not self.section.is_open:
+            norm_id = self.id_var.get().strip()
+            descripcion = self.descripcion_var.get().strip()
+            details = [value for value in (norm_id, descripcion) if value]
+            if details:
+                base_title = f"{base_title} – {' | '.join(details)}"
+        return base_title
+
+    def _sync_section_title(self, *_args):
+        if not getattr(self, "section", None):
+            return
+        set_title = getattr(self.section, "set_title", None)
+        if callable(set_title):
+            self.section.set_title(self._build_section_title())
 
     def get_data(self):
         norm_id = self.id_var.get().strip()
