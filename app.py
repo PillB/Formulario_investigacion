@@ -157,6 +157,7 @@ class ValidationPanel(ttk.Frame):
         "error": "⚠️",
         "warning": "⚠️",
     }
+    COLLAPSED_WIDTH = 90
 
     def __init__(self, parent, *, on_focus_request=None):
         super().__init__(parent)
@@ -165,9 +166,10 @@ class ValidationPanel(ttk.Frame):
         self._targets: dict[str, dict[str, object] | tk.Widget] = {}
         self._entry_status: dict[str, str] = {}
         self._placeholder_id: Optional[str] = None
-        self._collapsed = False
+        self._collapsed = True
         self._issue_count_var = tk.StringVar(value="⚠️ 0")
         self._init_ui()
+        self.collapse(force=True)
 
     def _init_ui(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -188,6 +190,7 @@ class ValidationPanel(ttk.Frame):
 
         self._issue_badge = ttk.Label(header, textvariable=self._issue_count_var)
         self._issue_badge.grid(row=0, column=1, sticky="e", padx=(4, 0))
+        self._issue_badge.bind("<Button-1>", lambda _e: self.expand())
         self._toggle_button = ttk.Button(header, width=3, text="⇤", command=self.toggle)
         self._toggle_button.grid(row=0, column=2, sticky="e")
 
@@ -218,11 +221,13 @@ class ValidationPanel(ttk.Frame):
         self._collapsed_strip = ttk.Frame(self)
         self._collapsed_strip.grid_rowconfigure(0, weight=1)
         self._collapsed_strip.grid_propagate(False)
-        self._collapsed_strip.configure(width=90)
+        self._collapsed_strip.configure(width=self.COLLAPSED_WIDTH)
         strip_label = ttk.Label(
             self._collapsed_strip, textvariable=self._issue_count_var, anchor="center"
         )
         strip_label.grid(row=0, column=0, padx=6, pady=5, sticky="n")
+        strip_label.bind("<Button-1>", lambda _e: self.expand())
+        self._collapsed_strip.bind("<Button-1>", lambda _e: self.expand())
         expand_button = ttk.Button(
             self._collapsed_strip, width=3, text="⇥", command=self.expand
         )
@@ -266,8 +271,8 @@ class ValidationPanel(ttk.Frame):
         else:
             self.collapse()
 
-    def collapse(self) -> None:
-        if self._collapsed:
+    def collapse(self, *, force: bool = False) -> None:
+        if self._collapsed and not force:
             return
         self._collapsed = True
         self._content_container.grid_remove()
@@ -1194,7 +1199,9 @@ class FraudCaseApp:
             main_container, on_focus_request=self._focus_widget_from_validation_panel
         )
         FieldValidator.set_status_consumer(self._publish_field_validation)
-        main_container.grid_columnconfigure(1, weight=0)
+        main_container.grid_columnconfigure(
+            1, weight=0, minsize=ValidationPanel.COLLAPSED_WIDTH
+        )
         self._validation_panel.grid(row=0, column=1, sticky="ns")
 
         # --- Pestaña principal: caso y participantes ---
