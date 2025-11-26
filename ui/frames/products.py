@@ -820,6 +820,10 @@ class ProductFrame:
         default_cat1 = taxonomy_keys[0] if taxonomy_keys else ""
         first_subcats = list(TAXONOMIA.get(default_cat1, {}).keys()) or ['']
         first_modalities = TAXONOMIA.get(default_cat1, {}).get(first_subcats[0], []) or ['']
+        cat1_width = self._calculate_combobox_width(taxonomy_keys, min_width=20)
+        cat2_width = self._calculate_combobox_width(first_subcats, min_width=20)
+        canal_width = self._calculate_combobox_width(CANAL_LIST, min_width=20)
+        tipo_producto_width = self._calculate_combobox_width(TIPO_PRODUCTO_LIST, min_width=25)
         self.cat1_var = tk.StringVar()
         self.cat2_var = tk.StringVar()
         self.mod_var = tk.StringVar()
@@ -896,7 +900,7 @@ class ProductFrame:
             textvariable=self.cat1_var,
             values=list(TAXONOMIA.keys()),
             state="readonly",
-            width=20,
+            width=cat1_width,
         )
         cat1_cb.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.cat1_cb = cat1_cb
@@ -914,7 +918,7 @@ class ProductFrame:
             textvariable=self.cat2_var,
             values=first_subcats,
             state="readonly",
-            width=20,
+            width=cat2_width,
         )
         self.cat2_cb.grid(row=2, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.cat2_cb.set('')
@@ -946,7 +950,7 @@ class ProductFrame:
             textvariable=self.canal_var,
             values=CANAL_LIST,
             state="readonly",
-            width=20,
+            width=canal_width,
         )
         canal_cb.grid(row=3, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         canal_cb.set('')
@@ -976,7 +980,7 @@ class ProductFrame:
             textvariable=self.tipo_prod_var,
             values=TIPO_PRODUCTO_LIST,
             state="readonly",
-            width=25,
+            width=tipo_producto_width,
         )
         tipo_prod_cb.grid(row=4, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.tipo_prod_cb = tipo_prod_cb
@@ -1327,6 +1331,25 @@ class ProductFrame:
 
         self._populate_header_tree()
 
+    def _calculate_combobox_width(self, options, *, min_width: int = 10, padding: int = 2) -> int:
+        try:
+            lengths = [len(str(option)) for option in options]
+        except TypeError:
+            lengths = []
+        computed_width = (max(lengths) if lengths else 0) + padding
+        return max(min_width, computed_width)
+
+    def _apply_combobox_width(self, combobox, options, *, min_width: int = 10, padding: int = 2):
+        width = self._calculate_combobox_width(options, min_width=min_width, padding=padding)
+        try:
+            combobox.configure(width=width)
+        except Exception:
+            if hasattr(combobox, "config"):
+                try:
+                    combobox.config(width=width)
+                except Exception:
+                    pass
+
     def _iter_amount_vars(self):
         return (
             self.monto_inv_var,
@@ -1626,6 +1649,7 @@ class ProductFrame:
         subcats = list(TAXONOMIA.get(cat1, {}).keys()) or [""]
         previous_cat2 = self.cat2_var.get()
         self.cat2_cb['values'] = subcats
+        self._apply_combobox_width(self.cat2_cb, subcats, min_width=20)
 
         if previous_cat2 in subcats:
             self.cat2_var.set(previous_cat2)
