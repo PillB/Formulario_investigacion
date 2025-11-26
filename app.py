@@ -229,6 +229,16 @@ class ValidationPanel(ttk.Frame):
         expand_button.grid(row=1, column=0, padx=6, pady=5, sticky="s")
         self._collapsed_strip.grid_remove()
 
+    def get_anchor_widget(self) -> tk.Widget | None:
+        """Devuelve el widget ideal para anclar overlays o ayudas visuales."""
+
+        try:
+            if self._collapsed:
+                return self._collapsed_strip
+            return self._toggle_button or self
+        except tk.TclError:
+            return None
+
     def _ensure_placeholder(self) -> None:
         if self._entries or self._placeholder_id:
             return
@@ -1264,6 +1274,21 @@ class FraudCaseApp:
             return revived
         return None
 
+    def _iter_widget_ancestors(self, widget):
+        current = widget
+        while current is not None:
+            yield current
+            try:
+                parent_name = current.winfo_parent()
+            except Exception:
+                break
+            if not parent_name:
+                break
+            try:
+                current = current.nametowidget(parent_name)
+            except Exception:
+                break
+
     def _locate_tab_for_widget(self, widget) -> str | None:
         notebook = getattr(self, "notebook", None)
         if not notebook or not self._widget_is_focusable(widget):
@@ -1295,6 +1320,101 @@ class FraudCaseApp:
                     current = None
                     break
         return None
+
+    def _ensure_walkthrough_anchor_visible(self, anchor: tk.Widget) -> None:
+        tab_id = self._locate_tab_for_widget(anchor)
+        if tab_id:
+            try:
+                self.notebook.select(tab_id)
+                if hasattr(self, "_scroll_binder"):
+                    self._scroll_binder.activate_tab(tab_id)
+            except Exception:
+                pass
+        self._safe_update_idletasks()
+        self._scroll_widget_into_view(anchor)
+        self._safe_update_idletasks()
+
+    def _scroll_widget_into_view(self, widget: tk.Widget) -> None:
+        if widget is None:
+            return
+        if self._scroll_with_see(widget):
+            return
+        canvas, inner = self._find_scrollable_canvas(widget)
+        if canvas is None or inner is None:
+            return
+        self._scroll_with_canvas(canvas, inner, widget)
+
+    def _scroll_with_see(self, widget: tk.Widget) -> bool:
+        for ancestor in self._iter_widget_ancestors(widget):
+            see_fn = getattr(ancestor, "see", None)
+            if callable(see_fn):
+                try:
+                    see_fn(widget)
+                    return True
+                except Exception:
+                    continue
+        return False
+
+    def _find_scrollable_canvas(self, widget: tk.Widget) -> tuple[tk.Canvas | None, ttk.Frame | None]:
+        for ancestor in self._iter_widget_ancestors(widget):
+            canvas = getattr(ancestor, "_scroll_canvas", None)
+            inner = getattr(ancestor, "_scroll_inner", None)
+            if canvas is not None and inner is not None:
+                return canvas, inner
+        return None, None
+
+    def _compute_offset_in_ancestor(self, widget: tk.Widget, ancestor: tk.Widget) -> int | None:
+        offset = 0
+        current = widget
+        while current is not None and current is not ancestor:
+            try:
+                offset += current.winfo_y()
+            except Exception:
+                return None
+            try:
+                parent_name = current.winfo_parent()
+            except Exception:
+                return None
+            if not parent_name:
+                return None
+            try:
+                current = current.nametowidget(parent_name)
+            except Exception:
+                return None
+        return offset if current is ancestor else None
+
+    def _scroll_with_canvas(self, canvas: tk.Canvas, inner: ttk.Frame, widget: tk.Widget) -> None:
+        try:
+            first, last = canvas.yview()
+        except Exception:
+            first = 0.0
+            last = 1.0
+        self._safe_update_idletasks()
+        inner_height = inner.winfo_height()
+        view_height = canvas.winfo_height()
+        offset = self._compute_offset_in_ancestor(widget, inner)
+        widget_height = widget.winfo_height()
+        if (
+            offset is None
+            or inner_height <= 0
+            or view_height <= 0
+            or widget_height <= 0
+        ):
+            return
+        visible_top = first * inner_height
+        visible_bottom = last * inner_height
+        widget_top = offset
+        widget_bottom = offset + widget_height
+        if visible_top <= widget_top and widget_bottom <= visible_bottom:
+            return
+        center_target = max(0.0, widget_top + (widget_height / 2) - (view_height / 2))
+        max_scroll = max(inner_height - view_height, 1)
+        fraction = min(max(center_target / max_scroll, 0.0), 1.0)
+        try:
+            canvas.yview_moveto(fraction)
+        except Exception:
+            return
+        self._safe_update_idletasks()
 
     def _revive_focus_widget(self, widget, origin: str | None = None):
         origin_hint = origin or getattr(widget, "_validation_origin", None) or ""
@@ -2572,27 +2692,34 @@ class FraudCaseApp:
         self._show_walkthrough_step()
 
     def _build_walkthrough_steps(self) -> list[dict[str, object]]:
-        headline = "3 pasos para documentar tu caso y exportar sin errores."
+        headline = "4 pasos para documentar tu caso y exportar sin errores."
         steps = [
             {
                 "id": "case",
-                "title": "Paso 1 de 3: Datos del caso",
+                "title": "Paso 1 de 4: Datos del caso",
                 "message": "Empieza con los datos generales del expediente para habilitar herencias y controles posteriores.",
                 "anchor_getter": lambda key="case": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "clients",
-                "title": "Paso 2 de 3: Clientes implicados",
+                "title": "Paso 2 de 4: Clientes implicados",
                 "message": "Relaciona a los clientes afectados o vinculados; aquí se valida unicidad y puedes autocompletar con catálogos.",
                 "anchor_getter": lambda key="clients": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "products",
-                "title": "Paso 3 de 3: Productos investigados",
+                "title": "Paso 3 de 4: Productos investigados",
                 "message": "Registra los productos asociados al caso para consolidar montos y exportar sin errores.",
                 "anchor_getter": lambda key="products": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
+                "id": "validation",
+                "title": "Paso 4 de 4: Panel de validación",
+                "message": "Consulta el panel para ver errores y advertencias, lee el contador y usa el botón lateral para contraer o expandirlo según necesites.",
+                "anchor_getter": lambda key="validation": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
         ]
@@ -2611,6 +2738,13 @@ class FraudCaseApp:
             candidates = [
                 getattr(self, "_product_anchor_widget", None),
                 getattr(self, "_product_action_anchor", None),
+            ]
+        elif key == "validation":
+            panel = getattr(self, "_validation_panel", None)
+            anchor_getter = getattr(panel, "get_anchor_widget", None)
+            candidates = [
+                anchor_getter() if callable(anchor_getter) else None,
+                panel,
             ]
         for widget in candidates:
             if widget is None:
@@ -2638,6 +2772,8 @@ class FraudCaseApp:
             else:
                 self._dismiss_walkthrough()
             return
+
+        self._ensure_walkthrough_anchor_visible(anchor)
 
         palette = ThemeManager.current()
         background = palette.get("background", "#1f1f1f")
@@ -2687,13 +2823,10 @@ class FraudCaseApp:
         self._position_walkthrough(anchor)
 
     def _position_walkthrough(self, anchor: tk.Widget) -> None:
-        try:
-            anchor_x = anchor.winfo_rootx()
-            anchor_y = anchor.winfo_rooty()
-            anchor_width = anchor.winfo_width()
-            anchor_height = anchor.winfo_height()
-        except tk.TclError:
+        geometry = self._get_widget_geometry(anchor)
+        if geometry is None:
             return
+        anchor_x, anchor_y, anchor_width, anchor_height = geometry
         if not self._walkthrough_overlay or not self._walkthrough_overlay.winfo_exists():
             return
         self._safe_update_idletasks()
@@ -2708,6 +2841,18 @@ class FraudCaseApp:
         if y + height > screen_height - 10:
             y = max(10, screen_height - height - 10)
         self._walkthrough_overlay.geometry(f"+{x}+{y}")
+
+    def _get_widget_geometry(self, widget: tk.Widget) -> tuple[int, int, int, int] | None:
+        try:
+            self._safe_update_idletasks()
+            return (
+                widget.winfo_rootx(),
+                widget.winfo_rooty(),
+                widget.winfo_width(),
+                widget.winfo_height(),
+            )
+        except tk.TclError:
+            return None
 
     def _advance_walkthrough(self) -> None:
         if self._walkthrough_step_index + 1 >= len(self._walkthrough_steps):
