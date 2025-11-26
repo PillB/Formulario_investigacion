@@ -569,6 +569,9 @@ class FraudCaseApp:
         self._autosave_job_id = None
         self._autosave_dirty = False
         self._duplicate_checks_armed = False
+        self._duplicate_warning_signature: Optional[str] = None
+        self._duplicate_warning_cooldown_until: Optional[datetime] = None
+        self._last_duplicate_warning_message: Optional[str] = None
         self._rich_text_images = defaultdict(list)
         self._rich_text_image_sources = {}
         self._rich_text_fonts = {}
@@ -7719,6 +7722,74 @@ class FraudCaseApp:
         except tk.TclError:
             pass
 
+    def _build_duplicate_dataset_signature(self) -> str:
+        """Crea una huella determinística del estado relevante para la clave técnica."""
+
+        normalized_case_id = self._normalize_identifier(self.id_caso_var.get())
+        product_snapshots: list[object] = []
+        for product in self.product_frames:
+            pid_norm = self._normalize_identifier(product.id_var.get())
+            client_norm = self._normalize_identifier(product.client_var.get())
+            occ_date = (product.fecha_oc_var.get() or "").strip()
+            claim_ids: set[str] = set()
+            for claim in product.claims:
+                claim_data = claim.get_data()
+                if not any(claim_data.values()):
+                    continue
+                claim_ids.add(self._normalize_identifier((claim_data.get("id_reclamo") or "")))
+            collaborator_ids: set[str] = set()
+            for involvement in product.involvements:
+                involvement_data = involvement.get_data()
+                collaborator_ids.add(
+                    self._normalize_identifier((involvement_data.get("id_colaborador") or ""))
+                )
+            product_snapshots.append(
+                {
+                    "pid": pid_norm,
+                    "cid": client_norm,
+                    "occ": occ_date,
+                    "claims": sorted(claim_ids),
+                    "collabs": sorted(collaborator_ids),
+                }
+            )
+        fingerprint = {"case": normalized_case_id, "products": product_snapshots}
+        return json.dumps(fingerprint, ensure_ascii=False, sort_keys=True)
+
+    def duplicate_dataset_signature(self) -> str:
+        """Expuesta para que los frames eviten ejecuciones redundantes."""
+
+        return self._build_duplicate_dataset_signature()
+
+    def is_duplicate_check_on_cooldown(self, dataset_signature: str) -> bool:
+        return self._is_duplicate_warning_on_cooldown(dataset_signature)
+
+    def _is_duplicate_warning_on_cooldown(self, dataset_signature: str) -> bool:
+        """Indica si ya se alertó por este estado dentro de la ventana de enfriamiento."""
+
+        if self._duplicate_warning_signature != dataset_signature:
+            return False
+        if not self._duplicate_warning_cooldown_until:
+            return False
+        return datetime.now() < self._duplicate_warning_cooldown_until
+
+    def _activate_duplicate_warning_cooldown(
+        self, dataset_signature: str, message: str
+    ) -> None:
+        self._duplicate_warning_signature = dataset_signature
+        self._duplicate_warning_cooldown_until = datetime.now() + timedelta(minutes=10)
+        self._last_duplicate_warning_message = message
+
+    def _update_duplicate_validation_entry(self, message: Optional[str]) -> None:
+        if not self._validation_panel:
+            return
+        severity = "warning" if message else "ok"
+        self._validation_panel.update_entry(
+            "realtime:duplicate",
+            message,
+            severity=severity,
+            origin="Clave técnica",
+        )
+
     @staticmethod
     def _normalize_identifier(identifier):
         return (identifier or '').strip().upper()
@@ -7744,7 +7815,9 @@ class FraudCaseApp:
         else:
             _perform_check()
 
-    def _check_duplicate_technical_keys_realtime(self, armed: bool = False):
+    def _check_duplicate_technical_keys_realtime(
+        self, armed: bool = False, dataset_signature: Optional[str] = None
+    ):
         status_message = "Clave técnica sin validar"
         if armed:
             self._duplicate_checks_armed = True
@@ -7753,6 +7826,9 @@ class FraudCaseApp:
         normalized_case_id = self._normalize_identifier(self.id_caso_var.get())
         if not normalized_case_id:
             return "Ingresa el número de caso para validar duplicados"
+
+        signature = dataset_signature or self._build_duplicate_dataset_signature()
+        cooldown_active = self._is_duplicate_warning_on_cooldown(signature)
 
         seen_keys = {}
         duplicate_messages: list[str] = []
@@ -7833,11 +7909,21 @@ class FraudCaseApp:
         if error_messages:
             message = "\n\n".join(error_messages)
             log_event("validacion", message, self.logs)
-            try:
-                messagebox.showerror("Validación de clave técnica", message)
-            except tk.TclError:
-                return "Validación interrumpida"
-            return "Duplicado detectado o colaborador faltante"
+            self._update_duplicate_validation_entry(message)
+            if not cooldown_active:
+                self._activate_duplicate_warning_cooldown(signature, message)
+            if not cooldown_active and not getattr(self, "_suppress_messagebox", False):
+                try:
+                    messagebox.showerror("Validación de clave técnica", message)
+                except tk.TclError:
+                    return "Validación interrumpida"
+                return "Duplicado detectado o colaborador faltante"
+
+            return "Duplicado detectado o colaborador faltante (en panel)"
+
+        self._update_duplicate_validation_entry(None)
+        self._last_duplicate_warning_message = None
+        self._duplicate_warning_cooldown_until = None
         return "Sin duplicados detectados"
 
     @staticmethod
