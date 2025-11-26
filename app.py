@@ -7872,7 +7872,9 @@ class FraudCaseApp:
         seen_keys = {}
         duplicate_messages: list[str] = []
         missing_association_messages: list[str] = []
+        missing_date_messages: list[str] = []
         missing_assignment_detected = False
+        missing_date_detected = False
 
         def _normalize_occurrence_date(raw_date: str) -> str:
             text = (raw_date or "").strip()
@@ -7892,10 +7894,18 @@ class FraudCaseApp:
             client_norm = self._normalize_identifier(product.client_var.get())
             occ_date_raw = (product.fecha_oc_var.get() or '').strip()
             occ_date_norm = _normalize_occurrence_date(occ_date_raw)
+            product_label = product._get_product_label()
+
+            if pid_norm and not occ_date_raw:
+                missing_date_detected = True
+                missing_date_messages.append(
+                    (
+                        f"{product_label}: ingresa la fecha de ocurrencia (YYYY-MM-DD) "
+                        "para validar la clave técnica."
+                    )
+                )
             if not (pid_norm and occ_date_raw):
                 continue
-
-            product_label = product._get_product_label()
             claim_rows = [claim.get_data() for claim in product.claims if any(claim.get_data().values())]
             if not claim_rows:
                 claim_rows = [{'id_reclamo': ''}]
@@ -7953,28 +7963,42 @@ class FraudCaseApp:
         error_messages = []
         if duplicate_messages:
             error_messages.append("\n".join(duplicate_messages))
-        if missing_association_messages:
-            guidance = (
-                "La clave técnica se valida con caso, producto, cliente, colaborador,"
-                " fecha de ocurrencia e ID de reclamo."
-                " Asigna al menos un colaborador en 'Involucramiento de colaboradores'"
-                " antes de continuar."
-            )
-            error_messages.append(guidance)
-            error_messages.append("\n".join(missing_association_messages))
+        if missing_association_messages or missing_date_messages:
+            guidance_parts = [
+                (
+                    "La clave técnica se valida con caso, producto, cliente, colaborador,"
+                    " fecha de ocurrencia e ID de reclamo."
+                )
+            ]
+            if missing_association_messages:
+                guidance_parts.append(
+                    "Asigna al menos un colaborador en 'Involucramiento de colaboradores' antes de continuar."
+                )
+            if missing_date_messages:
+                guidance_parts.append(
+                    "Registra la fecha de ocurrencia en cada producto antes de reintentar la validación."
+                )
+            error_messages.append(" ".join(guidance_parts))
+            blocking_messages = missing_association_messages + missing_date_messages
+            error_messages.append("\n".join(blocking_messages))
 
         cooldown_active = (
             False
-            if missing_assignment_detected
+            if (missing_assignment_detected or missing_date_detected)
             else self._is_duplicate_warning_on_cooldown(signature)
         )
 
         if error_messages:
             message = "\n\n".join(error_messages)
-            if missing_association_messages and not duplicate_messages:
-                status = "Bloqueado: asigna colaborador para validar"
-            elif missing_association_messages:
-                status = "Duplicado detectado o asignación faltante (bloqueante)"
+            if (missing_association_messages or missing_date_messages) and not duplicate_messages:
+                if missing_association_messages and missing_date_messages:
+                    status = "Bloqueado: agrega colaboradores y fecha de ocurrencia"
+                elif missing_association_messages:
+                    status = "Bloqueado: asigna colaborador para validar"
+                else:
+                    status = "Bloqueado: ingresa fecha de ocurrencia para validar"
+            elif missing_association_messages or missing_date_messages:
+                status = "Duplicado detectado o datos faltantes (bloqueante)"
             else:
                 status = "Duplicado detectado en clave técnica"
             severity = "error"
