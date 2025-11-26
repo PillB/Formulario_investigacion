@@ -12,7 +12,8 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import ALERT_BADGE_ICON, ensure_grid_support
+from ui.frames.utils import (ALERT_BADGE_ICON, create_collapsible_card,
+                             ensure_grid_support)
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
@@ -20,6 +21,7 @@ from validators import (FieldValidator, log_event, normalize_without_accents,
                         validate_money_bounds, validate_product_dates,
                         validate_product_id, validate_reclamo_id,
                         validate_required_text)
+
 
 ENTRY_STYLE = ThemeManager.ENTRY_STYLE
 COMBOBOX_STYLE = ThemeManager.COMBOBOX_STYLE
@@ -116,34 +118,17 @@ class InvolvementRow:
         self._sync_section_title()
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent,
-                title="",
-                on_toggle=lambda _section: self._sync_section_title(),
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para involucramiento {self.idx+1}: {exc}",
                 self.logs,
-            )
-            fallback = ttk.Frame(parent)
-            ensure_grid_support(fallback)
-            fallback.content = ttk.Frame(fallback)
-            ensure_grid_support(fallback.content)
-            fallback.content.pack(fill="both", expand=True)
-
-            def _pack_content(widget, **pack_kwargs):
-                defaults = {"fill": "both", "expand": True}
-                defaults.update(pack_kwargs)
-                widget.pack(**defaults)
-                return widget
-
-            fallback.pack_content = _pack_content  # type: ignore[attr-defined]
-            fallback.is_open = True  # type: ignore[attr-defined]
-            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
-            return fallback
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _make_badge(self, row: int, *, column: int):
         creator = getattr(self.product_frame, "_create_badge_label", None)
@@ -280,32 +265,17 @@ class InvolvementRow:
             self.section.set_title(self._build_section_title())
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent, title="", on_toggle=lambda _section: self._sync_section_title()
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para reclamo {self.idx+1}: {exc}",
                 self.logs,
-            )
-            fallback = ttk.Frame(parent)
-            ensure_grid_support(fallback)
-            fallback.content = ttk.Frame(fallback)
-            ensure_grid_support(fallback.content)
-            fallback.content.pack(fill="both", expand=True)
-
-            def _pack_content(widget, **pack_kwargs):
-                defaults = {"fill": "both", "expand": True}
-                defaults.update(pack_kwargs)
-                widget.pack(**defaults)
-                return widget
-
-            fallback.pack_content = _pack_content  # type: ignore[attr-defined]
-            fallback.is_open = True  # type: ignore[attr-defined]
-            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
-            return fallback
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _get_known_team_ids(self):
         return {option.strip() for option in self.team_getter() if option and option.strip()}
@@ -633,32 +603,17 @@ class ClaimRow:
             self.section.set_title(self._build_section_title())
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent, title="", on_toggle=lambda _section: self._sync_section_title()
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para reclamo {self.idx+1}: {exc}",
                 self.logs,
-            )
-            fallback = ttk.Frame(parent)
-            ensure_grid_support(fallback)
-            fallback.content = ttk.Frame(fallback)
-            ensure_grid_support(fallback.content)
-            fallback.content.pack(fill="both", expand=True)
-
-            def _pack_content(widget, **pack_kwargs):
-                defaults = {"fill": "both", "expand": True}
-                defaults.update(pack_kwargs)
-                widget.pack(**defaults)
-                return widget
-
-            fallback.pack_content = _pack_content  # type: ignore[attr-defined]
-            fallback.is_open = True  # type: ignore[attr-defined]
-            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
-            return fallback
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _make_badge(self, row: int, column: int):
         creator = getattr(self.product_frame, "_create_badge_label", None)
@@ -1402,34 +1357,20 @@ class ProductFrame:
             widget.bind("<<Cut>>", self._enable_amount_validation, add="+")
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent, title="", on_toggle=lambda _section: self._sync_section_title()
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para producto {self.idx+1}: {exc}",
                 self.logs,
-            )
-            fallback = ttk.Frame(parent)
-            ensure_grid_support(fallback)
-            fallback.content = ttk.Frame(fallback)
-            fallback.content.pack(fill="both", expand=True)
-
-            def _pack_content(widget, **pack_kwargs):
-                defaults = {"fill": "both", "expand": True}
-                defaults.update(pack_kwargs)
-                widget.pack(**defaults)
-                return widget
-
-            fallback.pack_content = _pack_content  # type: ignore[attr-defined]
-            fallback.is_open = True  # type: ignore[attr-defined]
-            fallback.set_title = lambda _title: None  # type: ignore[attr-defined]
-            return fallback
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _register_title_traces(self):
-        for var in (self.id_var, self.client_var):
+        for var in (self.id_var, self.tipo_prod_var):
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
@@ -1438,8 +1379,8 @@ class ProductFrame:
         base_title = f"Producto {self.idx+1}"
         if getattr(self, "section", None) and not self.section.is_open:
             id_value = self.id_var.get().strip()
-            client_value = self.client_var.get().strip()
-            details = [value for value in (id_value, client_value) if value]
+            tipo_value = self.tipo_prod_var.get().strip()
+            details = [value for value in (id_value, tipo_value) if value]
             if details:
                 base_title = f"{base_title} – {' | '.join(details)}"
         return base_title

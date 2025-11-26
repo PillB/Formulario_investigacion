@@ -10,7 +10,8 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_client_id, validate_email_list,
                         validate_multi_selection, validate_phone_list,
                         validate_required_text)
-from ui.frames.utils import BadgeManager, build_required_label, ensure_grid_support
+from ui.frames.utils import (BadgeManager, build_required_label,
+                             create_collapsible_card, ensure_grid_support)
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 from theme_manager import ThemeManager
@@ -69,10 +70,16 @@ class ClientFrame:
         self.accionado_var = tk.StringVar()
         self.accionado_options_var = tk.StringVar(value=ACCIONADO_OPTIONS)
 
-        self.section = CollapsibleSection(
+        self.section = create_collapsible_card(
             parent,
             title="",
             on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
+                "validacion",
+                f"No se pudo crear acordeón para cliente {idx+1}: {exc}",
+                self.logs,
+            ),
+            collapsible_cls=CollapsibleSection,
         )
         self._sync_section_title()
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
