@@ -1494,7 +1494,25 @@ class ProductFrame:
             widget.bind("<<ComboboxSelected>>", self._handle_duplicate_check_event, add="+")
 
     def _handle_duplicate_check_event(self, *_args):
-        self.trigger_duplicate_check()
+        signature = None
+        owner_has_signature = hasattr(self.owner, "duplicate_dataset_signature")
+        owner_has_cooldown = hasattr(self.owner, "is_duplicate_check_on_cooldown")
+        if owner_has_signature:
+            try:
+                signature = self.owner.duplicate_dataset_signature()
+            except Exception:
+                signature = None
+        if signature and owner_has_cooldown:
+            try:
+                if self.owner.is_duplicate_check_on_cooldown(signature):
+                    self._update_duplicate_status_label(
+                        "Advertencia reciente: revisa el panel de validación"
+                    )
+                    self._refresh_badges()
+                    return
+            except Exception:
+                pass
+        self.trigger_duplicate_check(dataset_signature=signature)
         self._refresh_badges()
 
     def _register_claim_requirement_triggers(self, cont_entry, falla_entry, perdida_entry):
@@ -2031,10 +2049,15 @@ class ProductFrame:
         if callable(self.id_change_callback):
             self.id_change_callback(self, previous, new_id)
 
-    def trigger_duplicate_check(self):
+    def trigger_duplicate_check(self, dataset_signature=None):
         result = None
         if callable(self.duplicate_key_checker):
-            result = self.duplicate_key_checker(armed=True)
+            try:
+                result = self.duplicate_key_checker(
+                    armed=True, dataset_signature=dataset_signature
+                )
+            except TypeError:
+                result = self.duplicate_key_checker(armed=True)
         self._update_duplicate_status_label(result)
         return result
 
