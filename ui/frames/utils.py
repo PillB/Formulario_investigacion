@@ -8,9 +8,169 @@ from typing import Any, Tuple
 
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
+from ui.layout import CollapsibleSection, register_styles
 
 ALERT_BADGE_ICON = "⚠️"
 SUCCESS_BADGE_ICON = "✅"
+
+
+def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggle=None):
+    """Create a minimal accordion-like container without ``CollapsibleSection``.
+
+    The fallback mirrors the public surface used by the frames: ``content``
+    frame, ``pack_content`` helper, ``toggle`` method, ``is_open`` flag and
+    ``set_title`` to refresh the header text. It reuses the accordion styles
+    when available so visual parity is preserved even in degraded contexts
+    (headless tests or missing themed elements).
+    """
+
+    try:
+        register_styles()
+    except Exception:
+        # En pruebas sin Tk no es crítico registrar estilos; continuar.
+        pass
+
+    header = None
+    indicator = None
+    title_lbl = None
+    content = None
+    try:
+        card = ttk.Frame(parent, style="AccordionCard.TFrame")
+        ensure_grid_support(card)
+
+        header = ttk.Frame(card, style="AccordionHeader.TFrame")
+        header.pack(fill="x")
+
+        indicator = ttk.Label(
+            header,
+            text="▼" if open else "▸",
+            style="AccordionIndicator.TLabel",
+        )
+        indicator.pack(side="left", padx=(6, 4))
+
+        title_lbl = ttk.Label(
+            header, text=title, style="AccordionTitle.TLabel", anchor="w"
+        )
+        title_lbl.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        content = ttk.Frame(card, style="AccordionContent.TFrame")
+        ensure_grid_support(content)
+        card.content = content  # type: ignore[assignment]
+        if open:
+            content.pack(fill="both", expand=True)
+
+    except Exception:
+        class _StubContent:
+            def __init__(self):
+                self.children = []
+
+            def pack(self, *_args, **_kwargs):
+                return None
+
+            def pack_forget(self):
+                return None
+
+        class _StubCard:
+            def __init__(self):
+                self.content = _StubContent()
+                ensure_grid_support(self)
+
+            def pack(self, *_args, **_kwargs):
+                return None
+
+            def pack_forget(self):
+                return None
+
+        card = _StubCard()
+        content = card.content
+
+    card.is_open = bool(open)  # type: ignore[attr-defined]
+    card._on_toggle = on_toggle  # type: ignore[attr-defined]
+
+    def _set_title(new_title: str):
+        try:
+            if title_lbl is not None:
+                title_lbl.configure(text=new_title)
+            else:
+                card.title = new_title  # type: ignore[attr-defined]
+        except Exception:
+            card.title = new_title  # type: ignore[attr-defined]
+
+    def _pack_content(widget: Any, **pack_kwargs):
+        defaults = {"fill": "both", "expand": True}
+        defaults.update(pack_kwargs)
+        try:
+            widget.pack(**defaults)
+        except Exception:
+            pass
+        card.is_open = True  # type: ignore[attr-defined]
+        return widget
+
+    def _toggle(_event=None):  # noqa: ANN001
+        is_open = getattr(card, "is_open", True)
+        if is_open:
+            if hasattr(content, "pack_forget"):
+                content.pack_forget()
+            try:
+                if indicator is not None:
+                    indicator.configure(text="▸")
+            except Exception:
+                pass
+        else:
+            if hasattr(content, "pack"):
+                content.pack(fill="both", expand=True)
+            try:
+                if indicator is not None:
+                    indicator.configure(text="▼")
+            except Exception:
+                pass
+        card.is_open = not is_open  # type: ignore[attr-defined]
+        callback = getattr(card, "_on_toggle", None)
+        if callable(callback):
+            try:
+                callback(card)
+            except Exception:
+                pass
+
+    for widget in (header, title_lbl, indicator):
+        if widget is not None:
+            widget.bind("<Button-1>", _toggle)
+
+    card.pack_content = _pack_content  # type: ignore[attr-defined]
+    card.toggle = _toggle  # type: ignore[attr-defined]
+    card.set_title = _set_title  # type: ignore[attr-defined]
+    return card
+
+
+def create_collapsible_card(
+    parent: Any,
+    *,
+    title: str,
+    open: bool = True,
+    on_toggle=None,
+    log_error=None,
+    collapsible_cls=None,
+):
+    """Create a themed collapsible card with graceful fallback.
+
+    When ``CollapsibleSection`` cannot be instantiated (for example in headless
+    environments), this helper returns a minimal stand-in preserving the same
+    public API used throughout the frames. An optional ``log_error`` callback
+    receives the raised exception so callers can trace UI degradation.
+    """
+
+    collapsible = collapsible_cls or CollapsibleSection
+    try:
+        return collapsible(parent, title=title, open=open, on_toggle=on_toggle)
+    except Exception as exc:  # pragma: no cover - solo se ejecuta en entornos degradados
+        if callable(log_error):
+            try:
+                log_error(exc)
+            except Exception:
+                pass
+        return _build_collapsible_fallback(
+            parent, title=title, open=open, on_toggle=on_toggle
+        )
 
 def ensure_grid_support(widget: Any) -> None:
     """Garantiza que el widget exponga un método grid incluso en stubs de prueba.

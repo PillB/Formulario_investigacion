@@ -12,7 +12,8 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import ALERT_BADGE_ICON, ensure_grid_support
+from ui.frames.utils import (ALERT_BADGE_ICON, create_collapsible_card,
+                             ensure_grid_support)
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
@@ -21,54 +22,6 @@ from validators import (FieldValidator, log_event, normalize_without_accents,
                         validate_product_id, validate_reclamo_id,
                         validate_required_text)
 
-
-def _create_section_fallback(parent, *, on_toggle=None):
-    """Return a minimal drop-in replacement for ``CollapsibleSection``."""
-
-    fallback = ttk.Frame(parent)
-    ensure_grid_support(fallback)
-    fallback.content = ttk.Frame(fallback)
-    ensure_grid_support(fallback.content)
-    fallback.content.pack(fill="both", expand=True)
-    fallback._on_toggle = on_toggle
-    fallback._content_visible = True
-
-    def _pack_content(widget, **pack_kwargs):
-        defaults = {"fill": "both", "expand": True}
-        defaults.update(pack_kwargs)
-        if hasattr(widget, "pack"):
-            widget.pack(**defaults)
-        fallback._content_visible = True
-        return widget
-
-    def _toggle(_event=None):
-        is_open = getattr(fallback, "is_open", True)
-        if is_open:
-            if hasattr(fallback.content, "pack_forget"):
-                fallback.content.pack_forget()
-            fallback._content_visible = False
-        else:
-            if hasattr(fallback.content, "pack"):
-                fallback.content.pack(fill="both", expand=True)
-            fallback._content_visible = True
-        fallback.is_open = not is_open
-        callback = getattr(fallback, "_on_toggle", None)
-        if callable(callback):
-            try:
-                callback(fallback)
-            except Exception:
-                pass
-
-    fallback.pack_content = _pack_content  # type: ignore[attr-defined]
-    fallback.toggle = _toggle  # type: ignore[attr-defined]
-    fallback.is_open = True  # type: ignore[attr-defined]
-
-    def _set_title(title):
-        fallback.title = title
-
-    fallback.title = ""
-    fallback.set_title = _set_title  # type: ignore[attr-defined]
-    return fallback
 
 ENTRY_STYLE = ThemeManager.ENTRY_STYLE
 COMBOBOX_STYLE = ThemeManager.COMBOBOX_STYLE
@@ -165,21 +118,17 @@ class InvolvementRow:
         self._sync_section_title()
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent,
-                title="",
-                on_toggle=lambda _section: self._sync_section_title(),
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para involucramiento {self.idx+1}: {exc}",
                 self.logs,
-            )
-            return _create_section_fallback(
-                parent, on_toggle=lambda _section: self._sync_section_title()
-            )
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _make_badge(self, row: int, *, column: int):
         creator = getattr(self.product_frame, "_create_badge_label", None)
@@ -316,19 +265,17 @@ class InvolvementRow:
             self.section.set_title(self._build_section_title())
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent, title="", on_toggle=lambda _section: self._sync_section_title()
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para reclamo {self.idx+1}: {exc}",
                 self.logs,
-            )
-            return _create_section_fallback(
-                parent, on_toggle=lambda _section: self._sync_section_title()
-            )
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _get_known_team_ids(self):
         return {option.strip() for option in self.team_getter() if option and option.strip()}
@@ -656,19 +603,17 @@ class ClaimRow:
             self.section.set_title(self._build_section_title())
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent, title="", on_toggle=lambda _section: self._sync_section_title()
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para reclamo {self.idx+1}: {exc}",
                 self.logs,
-            )
-            return _create_section_fallback(
-                parent, on_toggle=lambda _section: self._sync_section_title()
-            )
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _make_badge(self, row: int, column: int):
         creator = getattr(self.product_frame, "_create_badge_label", None)
@@ -1412,19 +1357,17 @@ class ProductFrame:
             widget.bind("<<Cut>>", self._enable_amount_validation, add="+")
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent, title="", on_toggle=lambda _section: self._sync_section_title()
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para producto {self.idx+1}: {exc}",
                 self.logs,
-            )
-            return _create_section_fallback(
-                parent, on_toggle=lambda _section: self._sync_section_title()
-            )
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _register_title_traces(self):
         for var in (self.id_var, self.tipo_prod_var):

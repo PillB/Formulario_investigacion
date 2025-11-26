@@ -10,7 +10,8 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         normalize_without_accents, should_autofill_field,
                         validate_agency_code, validate_date_text, validate_required_text,
                         validate_team_member_id)
-from ui.frames.utils import BadgeManager, ensure_grid_support
+from ui.frames.utils import (BadgeManager, create_collapsible_card,
+                             ensure_grid_support)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
@@ -456,53 +457,17 @@ class TeamMemberFrame:
         return widget
 
     def _create_section(self, parent):
-        try:
-            return CollapsibleSection(
-                parent, title="", on_toggle=lambda _section: self._sync_section_title()
-            )
-        except Exception as exc:
-            log_event(
+        return create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section=None: self._sync_section_title(),
+            log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para colaborador {self.idx+1}: {exc}",
                 self.logs,
-            )
-            fallback = ttk.Frame(parent)
-            ensure_grid_support(fallback)
-            fallback.content = ttk.Frame(fallback)
-            ensure_grid_support(fallback.content)
-            fallback.content.pack(fill="both", expand=True)
-            fallback.is_open = True  # type: ignore[attr-defined]
-            fallback._content_visible = True  # type: ignore[attr-defined]
-            fallback._on_toggle = lambda _section=None: self._sync_section_title()  # type: ignore[attr-defined]
-            fallback.title = ""  # type: ignore[attr-defined]
-            fallback.set_title = (  # type: ignore[attr-defined]
-                lambda _title: setattr(fallback, "title", _title)
-            )
-
-            def _toggle(_event=None):
-                is_open = getattr(fallback, "is_open", True)
-                if is_open and hasattr(fallback.content, "pack_forget"):
-                    fallback.content.pack_forget()
-                    fallback._content_visible = False
-                elif not is_open and hasattr(fallback.content, "pack"):
-                    fallback.content.pack(fill="both", expand=True)
-                    fallback._content_visible = True
-                fallback.is_open = not is_open
-                if callable(getattr(fallback, "_on_toggle", None)):
-                    try:
-                        fallback._on_toggle(fallback)
-                    except Exception:
-                        pass
-
-            def _pack_content(widget, **pack_kwargs):
-                defaults = {"fill": "both", "expand": True}
-                defaults.update(pack_kwargs)
-                widget.pack(**defaults)
-                return widget
-
-            fallback.pack_content = _pack_content  # type: ignore[attr-defined]
-            fallback.toggle = _toggle  # type: ignore[attr-defined]
-            return fallback
+            ),
+            collapsible_cls=CollapsibleSection,
+        )
 
     def _register_title_traces(self):
         for var in (self.id_var, self.nombres_var, self.apellidos_var):

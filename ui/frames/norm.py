@@ -8,7 +8,8 @@ from tkinter import messagebox, ttk
 from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_date_text, validate_norm_id,
                         validate_required_text)
-from ui.frames.utils import BadgeManager, ensure_grid_support
+from ui.frames.utils import (BadgeManager, create_collapsible_card,
+                             ensure_grid_support)
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 
@@ -47,8 +48,16 @@ class NormFrame:
         self.norm_lookup = {}
         self._last_missing_lookup_id = None
 
-        self.section = CollapsibleSection(
-            parent, title="", on_toggle=lambda _section: self._sync_section_title()
+        self.section = create_collapsible_card(
+            parent,
+            title="",
+            on_toggle=lambda _section: self._sync_section_title(),
+            log_error=lambda exc: log_event(
+                "validacion",
+                f"No se pudo crear acordeón para norma {idx+1}: {exc}",
+                self.logs,
+            ),
+            collapsible_cls=CollapsibleSection,
         )
         self._sync_section_title()
         self.section.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
