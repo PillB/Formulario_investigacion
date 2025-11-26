@@ -68,8 +68,11 @@ class ClientFrame:
         self.accionado_var = tk.StringVar()
         self.accionado_options_var = tk.StringVar(value=ACCIONADO_OPTIONS)
 
-        self.section = CollapsibleSection(parent, title="Clientes implicados")
+        self.section = CollapsibleSection(
+            parent, title="", on_toggle=lambda _section: self._sync_section_title()
+        )
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        self._register_title_traces()
 
         if summary_parent is not None and owner is not None and not getattr(owner, "clients_summary_tree", None):
             self.summary_tree = self._build_summary(summary_parent)
@@ -350,10 +353,37 @@ class ClientFrame:
                 variables=[self.accionado_var],
             )
         )
+        self._sync_section_title()
 
     def set_lookup(self, lookup):
         self.client_lookup = lookup or {}
         self._last_missing_lookup_id = None
+
+    def _register_title_traces(self):
+        for var in (self.id_var, self.nombres_var, self.apellidos_var):
+            var.trace_add("write", self._on_identity_field_change)
+
+    def _build_section_title(self) -> str:
+        base_title = f"Cliente {self.idx+1}"
+        if getattr(self, "section", None) and not self.section.is_open:
+            id_value = self.id_var.get().strip()
+            name_value = " ".join(
+                part.strip()
+                for part in (self.nombres_var.get(), self.apellidos_var.get())
+                if part.strip()
+            )
+            details = [value for value in (id_value, name_value) if value]
+            if details:
+                base_title = f"{base_title} – {' | '.join(details)}"
+        return base_title
+
+    def _sync_section_title(self, *_args):
+        if not getattr(self, "section", None):
+            return
+        self.section.set_title(self._build_section_title())
+
+    def _on_identity_field_change(self, *_args):
+        self._sync_section_title()
 
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")

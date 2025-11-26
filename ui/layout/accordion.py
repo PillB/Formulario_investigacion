@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+from typing import Callable, Optional
 
 from theme_manager import ThemeManager
 
@@ -17,11 +18,20 @@ _registered_theme: str | None = None
 class CollapsibleSection(ttk.Frame):
     """Frame that can collapse/expand its inner content with a header toggle."""
 
-    def __init__(self, parent: tk.Misc, title: str, *, open: bool = True, **kwargs) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        title: str,
+        *,
+        open: bool = True,
+        on_toggle: Optional[Callable[["CollapsibleSection"], None]] = None,
+        **kwargs,
+    ) -> None:
         register_styles()
         super().__init__(parent, style="AccordionCard.TFrame", **kwargs)
         self._is_open = open
         self._hovering = False
+        self._on_toggle = on_toggle
 
         self.header = ttk.Frame(self, style="AccordionHeader.TFrame")
         self.header.pack(fill="x")
@@ -57,6 +67,11 @@ class CollapsibleSection(ttk.Frame):
     def _indicator_symbol(self) -> str:
         return _INDICATOR_OPEN if self._is_open else _INDICATOR_CLOSED
 
+    def set_title(self, title: str) -> None:
+        """Update the header title label text."""
+
+        self.title_label.configure(text=title)
+
     def toggle(self, _event: tk.Event | None = None) -> None:
         """Toggle the visibility of the content frame."""
 
@@ -65,6 +80,8 @@ class CollapsibleSection(ttk.Frame):
         else:
             self._show_content()
         self.indicator.configure(text=self._indicator_symbol)
+        if callable(self._on_toggle):
+            self._on_toggle(self)
 
     def pack_content(self, widget: tk.Widget, **pack_kwargs) -> tk.Widget:
         """Pack ``widget`` into the content frame with sensible defaults.
