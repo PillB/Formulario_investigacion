@@ -3871,7 +3871,14 @@ class FraudCaseApp:
         # Renombrar
         for i, p in enumerate(self.product_frames):
             p.idx = i
-            p.frame.config(text=f"Producto {i+1}")
+            sync_title = getattr(p, "_sync_section_title", None)
+            if callable(sync_title):
+                sync_title()
+                continue
+            section = getattr(p, "section", None)
+            set_title = getattr(section, "set_title", None)
+            if callable(set_title):
+                set_title(f"Producto {i+1}")
         self._schedule_summary_refresh({'productos', 'reclamos'})
         prod.focus_first_field()
         if user_initiated:
@@ -3884,7 +3891,14 @@ class FraudCaseApp:
         self.product_frames.remove(prod_frame)
         for i, p in enumerate(self.product_frames):
             p.idx = i
-            p.frame.config(text=f"Producto {i+1}")
+            sync_title = getattr(p, "_sync_section_title", None)
+            if callable(sync_title):
+                sync_title()
+                continue
+            section = getattr(p, "section", None)
+            set_title = getattr(section, "set_title", None)
+            if callable(set_title):
+                set_title(f"Producto {i+1}")
         if getattr(self, "_active_product_frame", None) is prod_frame:
             self._active_product_frame = self.product_frames[-1] if self.product_frames else None
         self._schedule_summary_refresh({'productos', 'reclamos'})
