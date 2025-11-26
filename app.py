@@ -5314,9 +5314,13 @@ class FraudCaseApp:
         scrollable_tab, inner_frame = create_scrollable_container(parent)
         scrollable_tab.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
         inner_frame.columnconfigure(0, weight=1)
+        inner_frame.columnconfigure(1, weight=1)
+        inner_frame.rowconfigure(1, weight=1)
 
         header_frame = ttk.Frame(inner_frame)
-        header_frame.grid(row=0, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
+        header_frame.grid(
+            row=0, column=0, columnspan=2, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY)
+        )
         header_frame.columnconfigure(0, weight=1)
         header_frame.columnconfigure(1, weight=0)
         header_frame.columnconfigure(2, weight=0)
@@ -5343,14 +5347,14 @@ class FraudCaseApp:
         self.theme_toggle_button.grid(row=0, column=2, sticky="ne")
 
         catalog_group = ttk.LabelFrame(inner_frame, text="Catálogos de detalle")
-        catalog_group.grid(row=1, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        catalog_group.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
         catalog_group.columnconfigure(0, weight=1)
         catalog_group.columnconfigure(1, weight=1)
 
         ttk.Label(
             catalog_group,
             textvariable=self.catalog_status_var,
-            wraplength=520,
+            wraplength=420,
             justify="left",
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
 
@@ -5364,7 +5368,7 @@ class FraudCaseApp:
         ttk.Label(
             catalog_group,
             text="Actualiza los catálogos para validar listas desplegables antes de importar datos.",
-            wraplength=360,
+            wraplength=320,
             justify="left",
         ).grid(row=1, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(
@@ -5381,7 +5385,7 @@ class FraudCaseApp:
         ttk.Label(
             catalog_group,
             text="Permite avanzar sin catálogos; usar sólo si ya se cuenta con datos validados.",
-            wraplength=360,
+            wraplength=320,
             justify="left",
         ).grid(row=2, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
 
@@ -5391,7 +5395,7 @@ class FraudCaseApp:
         self._catalog_progress_visible = False
 
         import_group = ttk.LabelFrame(inner_frame, text="Importar datos masivos (CSV)")
-        import_group.grid(row=2, column=0, sticky="we", padx=COL_PADX, pady=ROW_PADY)
+        import_group.grid(row=1, column=1, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
         import_group.columnconfigure(0, weight=0)
         import_group.columnconfigure(1, weight=1)
 
