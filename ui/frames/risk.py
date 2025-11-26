@@ -41,6 +41,9 @@ class RiskFrame:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self._refresh_after_id = None
+        self._summary_refresher = None
+        self._shared_tree_refresher = None
         self._last_exposicion_decimal = None
         self.risk_lookup = {}
         self._last_missing_lookup_id = None
@@ -58,6 +61,7 @@ class RiskFrame:
         self.criticidad_var = tk.StringVar()
         self.exposicion_var = tk.StringVar()
         self.planes_var = tk.StringVar()
+        self._register_refresh_traces()
 
         self.section = CollapsibleSection(parent, title=f"Riesgo {self.idx+1}")
         self.section.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
@@ -266,6 +270,7 @@ class RiskFrame:
         self._last_missing_lookup_id = None
         if not silent:
             self._log_change(f"Riesgo {self.idx+1}: autopoblado desde catálogo")
+        self._schedule_refresh()
 
     def _populate_header_tree(self):
         if not self.header_tree:
@@ -426,6 +431,49 @@ class RiskFrame:
             self.section.bind("<FocusIn>", self._activate_header_tree, add="+")
         except Exception:
             pass
+
+    # ------------------------------------------------------------------
+    # Refresh management
+
+    def set_refresh_callbacks(self, shared_tree_refresher=None, summary_refresher=None):
+        self._shared_tree_refresher = shared_tree_refresher
+        self._summary_refresher = summary_refresher
+
+    def _register_refresh_traces(self):
+        for var in (
+            self.id_var,
+            self.lider_var,
+            self.descripcion_var,
+            self.criticidad_var,
+            self.exposicion_var,
+            self.planes_var,
+        ):
+            var.trace_add("write", lambda *_args: self._schedule_refresh())
+
+    def _schedule_refresh(self):
+        current_after_id = getattr(self, "_refresh_after_id", None)
+        if current_after_id:
+            try:
+                self.frame.after_cancel(current_after_id)
+            except Exception:
+                self._refresh_after_id = None
+        frame = getattr(self, "frame", None)
+        if frame and hasattr(frame, "after"):
+            try:
+                self._refresh_after_id = frame.after(120, self._run_refresh_callbacks)
+                return
+            except Exception:
+                self._refresh_after_id = None
+        self._run_refresh_callbacks()
+
+    def _run_refresh_callbacks(self):
+        self._refresh_after_id = None
+        shared_refresher = getattr(self, "_shared_tree_refresher", None)
+        summary_refresher = getattr(self, "_summary_refresher", None)
+        if callable(shared_refresher):
+            shared_refresher()
+        if callable(summary_refresher):
+            summary_refresher()
 
 
 __all__ = ["RiskFrame"]
