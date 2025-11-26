@@ -183,7 +183,7 @@ class RiskFrame:
         )
 
     @staticmethod
-    def build_header_tree(parent):
+    def build_header_tree(parent, xscrollcommand=None):
         header_tree = ttk.Treeview(
             parent,
             columns=[c[0] for c in RiskFrame.HEADER_COLUMNS],
@@ -191,9 +191,26 @@ class RiskFrame:
             height=4,
         )
 
+        column_widths = {
+            "id_riesgo": 180,
+            "criticidad": 140,
+            "exposicion_residual": 160,
+            "lider": 180,
+            "descripcion": 360,
+        }
+
         for col_id, text in RiskFrame.HEADER_COLUMNS:
             header_tree.heading(col_id, text=text)
-            header_tree.column(col_id, anchor="w", width=140)
+            header_tree.column(
+                col_id,
+                anchor="w",
+                width=column_widths.get(col_id, 140),
+                minwidth=column_widths.get(col_id, 140),
+                stretch=True,
+            )
+
+        if xscrollcommand:
+            header_tree.configure(xscrollcommand=xscrollcommand)
 
         header_tree.tag_configure("even", background="#f7f7f7")
         header_tree.tag_configure("odd", background="#ffffff")
