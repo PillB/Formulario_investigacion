@@ -1,7 +1,7 @@
 import types
 
 from app import FraudCaseApp
-from settings import TAXONOMIA
+from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA
 from tests.stubs import DummyVar
 
 
@@ -21,8 +21,12 @@ class _ProductStub:
         self.mod_var = DummyVar("")
         self.fecha_oc_var = DummyVar("")
         self.fecha_desc_var = DummyVar("")
+        self.canal_var = DummyVar("")
+        self.proceso_var = DummyVar("")
         self.cat2_cb = _ComboStub()
         self.mod_cb = _ComboStub()
+        self.canal_cb = _ComboStub()
+        self.proc_cb = _ComboStub()
         self._suppress_change_notifications = False
         self.focus_called = False
 
@@ -46,11 +50,15 @@ def test_inheritance_creation_matches_manual_copy(monkeypatch):
     cat1 = list(TAXONOMIA.keys())[0]
     cat2 = list(TAXONOMIA[cat1].keys())[0]
     modalidad = TAXONOMIA[cat1][cat2][0]
+    canal = CANAL_LIST[0]
+    proceso = PROCESO_LIST[0]
     app.cat_caso1_var = DummyVar(cat1)
     app.cat_caso2_var = DummyVar(cat2)
     app.mod_caso_var = DummyVar(modalidad)
     app.fecha_caso_var = DummyVar("2024-01-01")
     app.fecha_descubrimiento_caso_var = DummyVar("2024-01-02")
+    app.canal_caso_var = DummyVar(canal)
+    app.proceso_caso_var = DummyVar(proceso)
 
     def _add_product(self, initialize_rows=True):
         frame = _ProductStub(len(self.product_frames))
@@ -66,6 +74,8 @@ def test_inheritance_creation_matches_manual_copy(monkeypatch):
     assert product_frame.mod_var.get() == modalidad
     assert product_frame.fecha_oc_var.get() == "2024-01-01"
     assert product_frame.fecha_desc_var.get() == "2024-01-02"
+    assert product_frame.canal_var.get() == canal
+    assert product_frame.proceso_var.get() == proceso
     assert product_frame.focus_called
 
     manual_product = _ProductStub(1)
@@ -74,6 +84,8 @@ def test_inheritance_creation_matches_manual_copy(monkeypatch):
     manual_product.mod_var.set(modalidad)
     manual_product.fecha_oc_var.set("2024-01-01")
     manual_product.fecha_desc_var.set("2024-01-02")
+    manual_product.canal_var.set(canal)
+    manual_product.proceso_var.set(proceso)
 
     assert manual_product.cat1_var.get() == product_frame.cat1_var.get()
     assert manual_product.fecha_desc_var.get() == product_frame.fecha_desc_var.get()

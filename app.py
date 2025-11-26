@@ -3770,33 +3770,40 @@ class FraudCaseApp:
             "modalidad_caso": self.mod_caso_var.get().strip(),
             "fecha_de_ocurrencia_caso": self.fecha_caso_var.get().strip(),
             "fecha_de_descubrimiento_caso": self.fecha_descubrimiento_caso_var.get().strip(),
+            "canal_caso": self.canal_caso_var.get().strip(),
+            "proceso_caso": self.proceso_caso_var.get().strip(),
         }
 
     def _apply_inherited_fields_to_product(self, product_frame, inherited_values):
         previous_suppression = getattr(product_frame, "_suppress_change_notifications", False)
         product_frame._suppress_change_notifications = True
         try:
+            def _set_if_blank(var, value, combobox=None, on_change=None):
+                if not value:
+                    return False
+                if var.get().strip():
+                    return False
+                var.set(value)
+                if combobox is not None:
+                    combobox.set(value)
+                if on_change:
+                    on_change()
+                return True
+
             cat1 = inherited_values.get("categoria1")
-            if cat1:
-                product_frame.cat1_var.set(cat1)
-                product_frame.on_cat1_change()
+            _set_if_blank(product_frame.cat1_var, cat1, on_change=product_frame.on_cat1_change)
             cat2 = inherited_values.get("categoria2")
-            if cat2:
-                product_frame.cat2_var.set(cat2)
-                if hasattr(product_frame, "cat2_cb"):
-                    product_frame.cat2_cb.set(cat2)
-                product_frame.on_cat2_change()
+            _set_if_blank(product_frame.cat2_var, cat2, getattr(product_frame, "cat2_cb", None), product_frame.on_cat2_change)
             mod = inherited_values.get("modalidad")
-            if mod:
-                product_frame.mod_var.set(mod)
-                if hasattr(product_frame, "mod_cb"):
-                    product_frame.mod_cb.set(mod)
+            _set_if_blank(product_frame.mod_var, mod, getattr(product_frame, "mod_cb", None))
             occ = inherited_values.get("fecha_ocurrencia")
-            if occ:
-                product_frame.fecha_oc_var.set(occ)
+            _set_if_blank(product_frame.fecha_oc_var, occ)
             desc = inherited_values.get("fecha_descubrimiento")
-            if desc:
-                product_frame.fecha_desc_var.set(desc)
+            _set_if_blank(product_frame.fecha_desc_var, desc)
+            canal = inherited_values.get("canal")
+            _set_if_blank(product_frame.canal_var, canal, getattr(product_frame, "canal_cb", None))
+            proceso = inherited_values.get("proceso")
+            _set_if_blank(product_frame.proceso_var, proceso, getattr(product_frame, "proc_cb", None))
         finally:
             product_frame._suppress_change_notifications = previous_suppression
         product_frame.focus_first_field()
