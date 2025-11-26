@@ -2699,50 +2699,94 @@ class FraudCaseApp:
         self._show_walkthrough_step()
 
     def _build_walkthrough_steps(self) -> list[dict[str, object]]:
-        headline = "8 pasos para documentar tu caso y exportar sin errores."
+        headline = "13 pasos para documentar tu caso y exportar sin errores."
         steps = [
             {
                 "id": "case",
-                "title": "Paso 1 de 8: Datos del caso",
+                "title": "Paso 1 de 13: Datos del caso",
                 "message": "Empieza con los datos generales del expediente para habilitar herencias y controles posteriores.",
                 "anchor_getter": lambda key="case": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "clients",
-                "title": "Paso 2 de 8: Clientes implicados",
+                "title": "Paso 2 de 13: Clientes implicados",
                 "message": "Relaciona a los clientes afectados o vinculados; aquí se valida unicidad y puedes autocompletar con catálogos.",
                 "anchor_getter": lambda key="clients": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "products",
-                "title": "Paso 3 de 8: Productos investigados",
+                "title": "Paso 3 de 13: Productos investigados",
                 "message": "Registra los productos asociados al caso para consolidar montos y exportar sin errores.",
                 "anchor_getter": lambda key="products": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "team",
-                "title": "Paso 4 de 8: Colaboradores involucrados",
-                "message": "Agrega colaboradores con el botón superior y despliega el formulario si está oculto para documentar su detalle.",
+                "title": "Paso 4 de 13: Colaboradores involucrados",
+                "message": (
+                    "Agrega colaboradores con sus IDs laborales, división y área; el formulario indica los campos "
+                    "obligatorios y mostrará avisos si faltan datos requeridos para validar sanciones y asignaciones."
+                ),
                 "anchor_getter": lambda key="team": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
-                "id": "actions",
-                "title": "Paso 5 de 8: Acciones e importaciones",
+                "id": "risks",
+                "title": "Paso 5 de 13: Riesgos identificados",
                 "message": (
-                    "En la pestaña Acciones puedes importar CSV. Usa \"Cargar combinado\" "
-                    "para clientes, productos y colaboradores en un solo archivo; requiere "
-                    "tener los catálogos cargados para validar correctamente."
+                    "Registra cada riesgo con su ID, criticidad y exposición residual. Los planes de acción y líderes son "
+                    "obligatorios cuando aplique; las alertas de duplicado aparecen al repetir un ID."
+                ),
+                "anchor_getter": lambda key="risks": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
+                "id": "norms",
+                "title": "Paso 6 de 13: Normas transgredidas",
+                "message": (
+                    "Documenta cada norma con su identificador y fecha de vigencia; los campos resaltan cuando falta "
+                    "información mínima para validar transgresiones antes de exportar."
+                ),
+                "anchor_getter": lambda key="norms": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
+                "id": "analysis",
+                "title": "Paso 7 de 13: Narrativas y acciones",
+                "message": (
+                    "Completa antecedentes, modus operandi, hallazgos y acciones recomendadas. Los campos muestran límites "
+                    "de formato y debes cubrir las secciones clave para justificar decisiones y sanciones."
+                ),
+                "anchor_getter": lambda key="analysis": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
+                "id": "imports",
+                "title": "Paso 8 de 13: Importar datos masivos (CSV)",
+                "message": (
+                    "Usa las opciones de 'Cargar clientes/colaboradores/productos/combinado/riesgos/normas' cuando ya "
+                    "sincronizaste catálogos. Cada botón valida formatos y mostrará mensajes si falta información crítica "
+                    "o si hay filas duplicadas."
+                ),
+                "anchor_getter": lambda key="imports": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
+                "id": "actions",
+                "title": "Paso 9 de 13: Acciones y combinados",
+                "message": (
+                    "En la pestaña Acciones puedes alternar entre cargas individuales y el botón 'Cargar combinado' para "
+                    "poblar clientes, productos y colaboradores en un paso; asegúrate de que los catálogos estén vigentes "
+                    "para pasar las validaciones."
                 ),
                 "anchor_getter": lambda key="actions": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
                 "id": "actions_bar",
-                "title": "Paso 6 de 8: Barra de acciones fijas",
+                "title": "Paso 10 de 13: Barra de acciones fijas",
                 "message": (
                     "En la sección Guardar, cargar y reportes tienes los botones clave: "
                     "\"Guardar y enviar\" valida todo y genera anexos, \"Generar Word\" crea el informe "
@@ -2752,16 +2796,29 @@ class FraudCaseApp:
                 "headline": headline,
             },
             {
+                "id": "export",
+                "title": "Paso 11 de 13: Exportar informe",
+                "message": (
+                    "Cuando no queden errores de validación y los montos coinciden, usa \"Exportar informe\" para generar los archivos. "
+                    "El botón se encuentra en la barra de acciones; si un control está deshabilitado revisa las alertas de validación."
+                ),
+                "anchor_getter": lambda key="export": self._get_walkthrough_anchor(key),
+                "headline": headline,
+            },
+            {
                 "id": "validation",
-                "title": "Paso 7 de 8: Panel de validación",
+                "title": "Paso 12 de 13: Panel de validación",
                 "message": "Consulta el panel para ver errores y advertencias, lee el contador y usa el botón lateral para contraer o expandirlo según necesites.",
                 "anchor_getter": lambda key="validation": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
             {
-                "id": "summary",
-                "title": "Paso 8 de 8: Resumen",
-                "message": "Revisa la pestaña Resumen para ver tablas compactas de clientes, productos y más. Selecciona la sección para validar que tus datos consolidados estén completos antes de exportar.",
+                "id": "summary_tab",
+                "title": "Paso 13 de 13: Resumen",
+                "message": (
+                    "Revisa la pestaña Resumen para ver tablas compactas actualizadas después de cada guardar o importación. "
+                    "Selecciona la sección y desplázate para validar que los datos consolidados coincidan con lo capturado."
+                ),
                 "anchor_getter": lambda key="summary": self._get_walkthrough_anchor(key),
                 "headline": headline,
             },
@@ -2794,6 +2851,27 @@ class FraudCaseApp:
                 getattr(self, "_team_anchor_widget", None),
                 detail,
             ]
+        elif key == "risks":
+            candidates = [
+                getattr(self, "_risk_anchor_widget", None),
+                getattr(self, "risk_header_container", None),
+            ]
+        elif key == "norms":
+            candidates = [
+                getattr(self, "_norm_anchor_widget", None),
+                getattr(self, "norm_header_container", None),
+            ]
+        elif key == "analysis":
+            candidates = [
+                getattr(self, "_analysis_anchor_widget", None),
+                getattr(self, "_analysis_group", None),
+            ]
+        elif key == "imports":
+            candidates = [
+                getattr(self, "_import_anchor_widget", None),
+                getattr(self, "import_group_frame", None),
+                getattr(self, "import_clients_button", None),
+            ]
         elif key == "actions":
             candidates = [
                 getattr(self, "import_combined_button", None),
@@ -2806,6 +2884,15 @@ class FraudCaseApp:
                 getattr(self, "btn_docx", None),
                 getattr(self, "actions_action_bar", None)
                 and getattr(self.actions_action_bar, "buttons", {}).get("md"),
+            ]
+        elif key == "export":
+            action_bar = getattr(self, "actions_action_bar", None)
+            candidates = [
+                getattr(self, "_export_anchor_widget", None),
+                getattr(action_bar, "buttons", {}).get("export") if action_bar else None,
+                getattr(self, "btn_docx", None),
+                getattr(action_bar, "buttons", {}).get("md") if action_bar else None,
+                action_bar,
             ]
         elif key == "validation":
             panel = getattr(self, "_validation_panel", None)
@@ -4199,6 +4286,8 @@ class FraudCaseApp:
             pady=(ROW_PADY, ROW_PADY // 2),
         )
         self.register_tooltip(add_btn, "Registra un nuevo riesgo identificado.")
+        if getattr(self, "_risk_anchor_widget", None) is None:
+            self._risk_anchor_widget = add_btn
 
         scrollable, inner = create_scrollable_container(
             frame, scroll_binder=self._scroll_binder, tab_id=parent
@@ -4293,6 +4382,8 @@ class FraudCaseApp:
         add_btn = ttk.Button(header_row, text="Agregar norma", command=self._on_add_norm)
         add_btn.grid(row=0, column=1, sticky="n", padx=(COL_PADX, 0), pady=(ROW_PADY, ROW_PADY // 2))
         self.register_tooltip(add_btn, "Agrega otra norma transgredida.")
+        if getattr(self, "_norm_anchor_widget", None) is None:
+            self._norm_anchor_widget = add_btn
 
         scrollable, inner = create_scrollable_container(frame)
         scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
@@ -4429,6 +4520,8 @@ class FraudCaseApp:
         analysis_group.columnconfigure(0, weight=1)
         analysis_group.rowconfigure(1, weight=1)
         self._analysis_group = analysis_group
+        if getattr(self, "_analysis_anchor_widget", None) is None:
+            self._analysis_anchor_widget = analysis_group
 
         constraints_label = ttk.Label(
             analysis_group,
@@ -5701,6 +5794,8 @@ class FraudCaseApp:
             justify="left",
         ).grid(row=0, column=1, sticky="w", padx=COL_PADX, pady=ROW_PADY)
         self.register_tooltip(btn_clientes, "Importa clientes desde un CSV masivo.")
+        if getattr(self, "_import_anchor_widget", None) is None:
+            self._import_anchor_widget = btn_clientes
 
         btn_colabs = ttk.Button(import_group, text="Cargar colaboradores", command=self.import_team_members)
         btn_colabs.grid(row=1, column=0, sticky="w", padx=COL_PADX, pady=ROW_PADY)
@@ -5868,6 +5963,13 @@ class FraudCaseApp:
             md_button,
             "Crea una copia del informe en Markdown como respaldo manual.",
         )
+        if getattr(self, "_export_anchor_widget", None) is None:
+            self._export_anchor_widget = (
+                self.actions_action_bar.buttons.get("export")
+                or self.btn_docx
+                or md_button
+                or self.actions_action_bar
+            )
         if md_button is not None and self._actions_bar_anchor is None:
             self._actions_bar_anchor = md_button
 
