@@ -64,85 +64,64 @@ import os
 import random
 import re
 import shutil
-import zipfile
 import threading
+import wave
+import zipfile
 from collections import defaultdict
 from collections.abc import Mapping
+from contextlib import suppress
 from datetime import datetime, timedelta
 from decimal import Decimal
 from importlib import util as importlib_util
 from pathlib import Path
-from contextlib import suppress
 from typing import Iterable, Optional
-import wave
 
 import tkinter as tk
-from tkinter import filedialog, font as tkfont, messagebox, scrolledtext, ttk
+from tkinter import filedialog
+from tkinter import font as tkfont
+from tkinter import messagebox, scrolledtext, ttk
 
-from models import (AutofillService, CatalogService, build_detail_catalog_id_index,
-                    iter_massive_csv_rows, normalize_detail_catalog_key,
-                    parse_involvement_entries)
-from report_builder import (
-    CaseData,
-    DOCX_AVAILABLE,
-    DOCX_MISSING_MESSAGE,
-    build_docx,
-    build_report_filename,
-    save_md,
-)
 from inheritance_service import InheritanceService
+from models import (AutofillService, build_detail_catalog_id_index,
+                    CatalogService, iter_massive_csv_rows,
+                    normalize_detail_catalog_key, parse_involvement_entries)
+from report_builder import (build_docx, build_report_filename, CaseData,
+                            DOCX_AVAILABLE, DOCX_MISSING_MESSAGE, save_md)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
-                      ENABLE_EXTENDED_ANALYSIS_SECTIONS, EXPORTS_DIR,
+                      ENABLE_EXTENDED_ANALYSIS_SECTIONS,
+                      ensure_external_drive_dir, EXPORTS_DIR,
                       EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
-                      FLAG_COLABORADOR_LIST, LOGS_FILE, RICH_TEXT_MAX_CHARS,
-                      STORE_LOGS_LOCALLY,
-                      MASSIVE_SAMPLE_FILES, NORM_ID_ALIASES, PROCESO_LIST,
-                      PRODUCT_ID_ALIASES, RISK_ID_ALIASES, TAXONOMIA,
-                      TEAM_ID_ALIASES, TEMP_AUTOSAVE_COMPRESS_OLD,
+                      FLAG_COLABORADOR_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
+                      NORM_ID_ALIASES, PROCESO_LIST, PRODUCT_ID_ALIASES,
+                      RICH_TEXT_MAX_CHARS, RISK_ID_ALIASES, STORE_LOGS_LOCALLY,
+                      TAXONOMIA, TEAM_ID_ALIASES, TEMP_AUTOSAVE_COMPRESS_OLD,
                       TEMP_AUTOSAVE_DEBOUNCE_SECONDS,
                       TEMP_AUTOSAVE_MAX_AGE_DAYS, TEMP_AUTOSAVE_MAX_PER_CASE,
                       TIPO_FALTA_LIST, TIPO_ID_LIST, TIPO_INFORME_LIST,
-                      TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST,
-                      ensure_external_drive_dir)
+                      TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST)
+from theme_manager import ThemeManager
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY
+from ui.effects.confetti import ConfettiBurst
 from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.frames.utils import create_scrollable_container, ensure_grid_support
 from ui.layout import ActionBar
-from ui.effects.confetti import ConfettiBurst
 from ui.tooltips import HoverTooltip
-from validators import (
-    LOG_FIELDNAMES,
-    FieldValidator,
-    TIPO_PRODUCTO_NORMALIZED,
-    drain_log_queue,
-    log_event,
-    normalize_log_row,
-    normalize_without_accents,
-    parse_decimal_amount,
-    resolve_catalog_product_type,
-    sanitize_rich_text,
-    should_autofill_field,
-    sum_investigation_components,
-    validate_agency_code,
-    validate_case_id,
-    validate_client_id,
-    validate_codigo_analitica,
-    validate_date_text,
-    validate_email_list,
-    validate_money_bounds,
-    validate_multi_selection,
-    validate_norm_id,
-    validate_phone_list,
-    validate_product_dates,
-    validate_product_id,
-    validate_reclamo_id,
-    validate_required_text,
-    validate_risk_id,
-    validate_team_member_id,
-)
-from theme_manager import ThemeManager
+from validators import (drain_log_queue, FieldValidator, log_event,
+                        LOG_FIELDNAMES, normalize_log_row,
+                        normalize_without_accents, parse_decimal_amount,
+                        resolve_catalog_product_type, sanitize_rich_text,
+                        should_autofill_field, sum_investigation_components,
+                        TIPO_PRODUCTO_NORMALIZED, validate_agency_code,
+                        validate_case_id, validate_client_id,
+                        validate_codigo_analitica, validate_date_text,
+                        validate_email_list, validate_money_bounds,
+                        validate_multi_selection, validate_norm_id,
+                        validate_phone_list, validate_product_dates,
+                        validate_product_id, validate_reclamo_id,
+                        validate_required_text, validate_risk_id,
+                        validate_team_member_id)
 
 PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
 if PIL_AVAILABLE:
@@ -8782,11 +8761,13 @@ class FraudCaseApp:
 
         def _iter_candidates():
             seen: set[Path] = set()
-            search_roots = [Path(BASE_DIR)]
+            autosave_path = Path(AUTOSAVE_FILE)
+            primary_root = autosave_path.parent if autosave_path.parent else Path(BASE_DIR)
+            search_roots = [primary_root]
             external_base = self._get_external_drive_path()
             if external_base:
                 search_roots.append(Path(external_base))
-            patterns = ("autosave.json", "*autosave*.json", "*_temp_*.json")
+            patterns = (autosave_path.name, "*autosave*.json", "*_temp_*.json")
 
             def _yield_matches(root: Path):
                 for pattern in patterns:
@@ -8794,19 +8775,13 @@ class FraudCaseApp:
 
             for root in search_roots:
                 try:
-                    for path in _yield_matches(root):
-                        try:
-                            resolved = path.resolve()
-                        except OSError:
-                            continue
-                        if resolved in seen or not path.is_file():
-                            continue
-                        seen.add(resolved)
-                        yield path
-                    for child in root.iterdir():
-                        if not child.is_dir():
-                            continue
-                        for path in _yield_matches(child):
+                    root_path = root.resolve()
+                except OSError:
+                    log_event("validacion", f"No se pudo resolver la ruta {root}", self.logs)
+                    continue
+                for base in (root_path,) + tuple(p for p in root_path.iterdir() if p.is_dir()):
+                    try:
+                        for path in _yield_matches(base):
                             try:
                                 resolved = path.resolve()
                             except OSError:
@@ -8815,14 +8790,16 @@ class FraudCaseApp:
                                 continue
                             seen.add(resolved)
                             yield path
-                except OSError:
-                    continue
+                    except OSError as exc:
+                        log_event("validacion", f"No se pudo explorar {base}: {exc}", self.logs)
+                        continue
 
         candidates: list[tuple[float, Path]] = []
         for path in _iter_candidates():
             try:
                 mtime = path.stat().st_mtime
-            except OSError:
+            except OSError as exc:
+                log_event("validacion", f"No se pudo leer metadatos de {path}: {exc}", self.logs)
                 continue
             candidates.append((mtime, path))
         if not candidates:
@@ -8838,10 +8815,27 @@ class FraudCaseApp:
             except tk.TclError:
                 return
 
-        for _mtime, path in candidates:
+        def _notify_fallback(path: Path) -> None:
+            message = (
+                "El autosave más reciente no se pudo abrir; se restauró el respaldo "
+                f"{path.name}."
+            )
+            self._last_autosave_notice = message
+            log_event("navegacion", message, self.logs)
+            if getattr(self, "_suppress_messagebox", False):
+                return
+            try:
+                messagebox.showinfo("Autosave recuperado", message)
+            except tk.TclError:
+                return
+
+        errors_detected = False
+        for index, (_mtime, path) in enumerate(candidates):
             try:
                 with path.open('r', encoding="utf-8") as f:
                     data = json.load(f)
+                if not isinstance(data, dict):
+                    raise ValueError("El autosave debe ser un objeto JSON válido")
                 dataset = self._ensure_case_data(data)
                 self.populate_from_data(dataset)
                 case_id = (dataset.get("caso", {}) or {}).get("id_caso")
@@ -8852,8 +8846,11 @@ class FraudCaseApp:
                 self._last_autosave_source = str(path)
                 log_event("navegacion", source_msg, self.logs)
                 self._display_toast(self.root, source_msg, duration_ms=2200)
+                if errors_detected or index > 0:
+                    _notify_fallback(path)
                 return
             except Exception as ex:
+                errors_detected = True
                 _warn_user("Autosave inválido", f"No se pudo cargar {path.name}: {ex}")
                 continue
 
