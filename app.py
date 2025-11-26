@@ -7871,11 +7871,26 @@ class FraudCaseApp:
         seen_keys = {}
         duplicate_messages: list[str] = []
         missing_association_messages: list[str] = []
+
+        def _normalize_occurrence_date(raw_date: str) -> str:
+            text = (raw_date or "").strip()
+            if not text:
+                return text
+            sanitized = text.replace("/", "-")
+            parsed = None
+            for parser in (datetime.fromisoformat, lambda value: datetime.strptime(value, "%Y-%m-%d")):
+                try:
+                    parsed = parser(sanitized)
+                    break
+                except ValueError:
+                    continue
+            return parsed.date().isoformat() if parsed else text
         for product in self.product_frames:
             pid_norm = self._normalize_identifier(product.id_var.get())
             client_norm = self._normalize_identifier(product.client_var.get())
-            occ_date = (product.fecha_oc_var.get() or '').strip()
-            if not (pid_norm and occ_date):
+            occ_date_raw = (product.fecha_oc_var.get() or '').strip()
+            occ_date_norm = _normalize_occurrence_date(occ_date_raw)
+            if not (pid_norm and occ_date_raw):
                 continue
 
             product_label = product._get_product_label()
@@ -7916,7 +7931,7 @@ class FraudCaseApp:
                         pid_norm,
                         client_norm,
                         collaborator_norm,
-                        occ_date,
+                        occ_date_norm,
                         claim_norm,
                     )
                     if key in seen_keys:

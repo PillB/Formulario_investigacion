@@ -1604,6 +1604,50 @@ def test_validate_data_detects_case_insensitive_technical_keys():
     )
 
 
+def test_duplicate_check_normalizes_occurrence_date_formats():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app._duplicate_checks_armed = False
+    app._duplicate_warning_signature = None
+    app._duplicate_warning_cooldown_until = None
+    app._last_duplicate_warning_message = None
+    app._validation_panel = None
+    app._suppress_messagebox = True
+    app.logs = []
+    app.id_caso_var = DummyVar("2024-0001")
+
+    class _ClaimStub:
+        def get_data(self):
+            return {"id_reclamo": ""}
+
+    class _InvolvementStub:
+        def get_data(self):
+            return {"id_colaborador": "T12345"}
+
+    class _ProductStub:
+        def __init__(self, occurrence_date):
+            self.id_var = DummyVar("1234567890123")
+            self.client_var = DummyVar("CL001")
+            self.fecha_oc_var = DummyVar(occurrence_date)
+            self.claims = [_ClaimStub()]
+            self.involvements = [_InvolvementStub()]
+
+        def _get_product_label(self):
+            return f"Producto {self.id_var.get()}"
+
+    app.product_frames = [
+        _ProductStub("2024-1-02"),
+        _ProductStub("2024/01/02"),
+    ]
+
+    result = app._check_duplicate_technical_keys_realtime(
+        armed=True, dataset_signature="sig"
+    )
+
+    assert "Duplicado detectado" in result
+    assert app._last_duplicate_warning_message
+    assert "Registro duplicado de clave técnica" in app._last_duplicate_warning_message
+
+
 def test_validate_data_detects_duplicate_technical_keys_without_claims():
     product_configs = [
         {
