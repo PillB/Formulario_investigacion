@@ -77,8 +77,8 @@ class TeamMemberFrame:
         self.tipo_sancion_var = tk.StringVar()
 
         self.section = self._create_section(parent)
-        self._register_title_traces()
         self._sync_section_title()
+        self._register_title_traces()
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         if summary_parent is not None and owner is not None and not getattr(owner, "team_summary_tree", None):
             self.summary_tree = self._build_summary(summary_parent)
@@ -87,7 +87,7 @@ class TeamMemberFrame:
             owner._team_summary_owner = self
         else:
             self.summary_tree = getattr(owner, "team_summary_tree", None)
-        self.frame = ttk.LabelFrame(self.section.content, text=f"Colaborador {self.idx+1}")
+        self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
         self.badges = BadgeManager(parent=self.frame)

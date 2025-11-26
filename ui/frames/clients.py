@@ -71,9 +71,10 @@ class ClientFrame:
 
         self.section = CollapsibleSection(
             parent,
-            title=f"Cliente {idx+1}",
+            title="",
             on_toggle=lambda _section: self._sync_section_title(),
         )
+        self._sync_section_title()
         self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
         self._register_title_traces()
 
