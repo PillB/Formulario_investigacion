@@ -10,7 +10,7 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_client_id, validate_email_list,
                         validate_multi_selection, validate_phone_list,
                         validate_required_text)
-from ui.frames.utils import build_required_label, ensure_grid_support
+from ui.frames.utils import BadgeManager, build_required_label, ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 from theme_manager import ThemeManager
@@ -56,6 +56,7 @@ class ClientFrame:
         self._last_tracked_id = ''
         self._tree_sort_state: dict[str, bool] = {}
         self.summary_tree = None
+        self.badges = BadgeManager(parent=parent)
 
         self.tipo_id_var = tk.StringVar()
         self.id_var = tk.StringVar()
@@ -99,15 +100,19 @@ class ClientFrame:
         tipo_id_label.grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        tipo_id_cb = ttk.Combobox(
+        tipo_container, tipo_id_cb = self._make_badged_field(
             self.frame,
-            textvariable=self.tipo_id_var,
-            values=TIPO_ID_LIST,
-            state="readonly",
-            width=20,
-            style=COMBOBOX_STYLE,
+            "cliente_tipo_id",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.tipo_id_var,
+                values=TIPO_ID_LIST,
+                state="readonly",
+                width=20,
+                style=COMBOBOX_STYLE,
+            ),
         )
-        tipo_id_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        tipo_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         tipo_id_cb.set('')
         self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
 
@@ -119,8 +124,12 @@ class ClientFrame:
         client_id_label.grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20, style=ENTRY_STYLE)
-        id_entry.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_container, id_entry = self._make_badged_field(
+            self.frame,
+            "cliente_id",
+            lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=20, style=ENTRY_STYLE),
+        )
+        id_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
@@ -132,10 +141,14 @@ class ClientFrame:
         nombres_label.grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        nombres_entry = ttk.Entry(
-            self.frame, textvariable=self.nombres_var, width=25, style=ENTRY_STYLE
+        nombres_container, nombres_entry = self._make_badged_field(
+            self.frame,
+            "cliente_nombres",
+            lambda parent: ttk.Entry(
+                parent, textvariable=self.nombres_var, width=25, style=ENTRY_STYLE
+            ),
         )
-        nombres_entry.grid(row=1, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        nombres_container.grid(row=1, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         nombres_entry.bind(
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó nombres"), add="+"
         )
@@ -149,10 +162,14 @@ class ClientFrame:
         apellidos_label.grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        apellidos_entry = ttk.Entry(
-            self.frame, textvariable=self.apellidos_var, width=25, style=ENTRY_STYLE
+        apellidos_container, apellidos_entry = self._make_badged_field(
+            self.frame,
+            "cliente_apellidos",
+            lambda parent: ttk.Entry(
+                parent, textvariable=self.apellidos_var, width=25, style=ENTRY_STYLE
+            ),
         )
-        apellidos_entry.grid(row=2, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        apellidos_container.grid(row=2, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         apellidos_entry.bind(
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó apellidos"), add="+"
         )
@@ -166,15 +183,19 @@ class ClientFrame:
         flag_label.grid(
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        flag_cb = ttk.Combobox(
+        flag_container, flag_cb = self._make_badged_field(
             self.frame,
-            textvariable=self.flag_var,
-            values=FLAG_CLIENTE_LIST,
-            state="readonly",
-            width=20,
-            style=COMBOBOX_STYLE,
+            "cliente_flag",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.flag_var,
+                values=FLAG_CLIENTE_LIST,
+                state="readonly",
+                width=20,
+                style=COMBOBOX_STYLE,
+            ),
         )
-        flag_cb.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        flag_container.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
 
@@ -194,6 +215,7 @@ class ClientFrame:
         if hasattr(accionado_list_container, "columnconfigure"):
             accionado_list_container.columnconfigure(0, weight=1)
             accionado_list_container.columnconfigure(1, weight=0)
+            accionado_list_container.columnconfigure(2, weight=0)
 
         accionado_scrollbar = None
         scrollbar_class = getattr(tk, "Scrollbar", None) or getattr(ttk, "Scrollbar", None)
@@ -224,6 +246,7 @@ class ClientFrame:
             self.accionado_listbox,
             "Marca las tribus o equipos accionados por la alerta. Puedes escoger varias opciones.",
         )
+        self.badges.create_and_register("cliente_accionado", accionado_list_container, row=0, column=2)
 
         tel_label = build_required_label(
             self.frame,
@@ -233,10 +256,12 @@ class ClientFrame:
         tel_label.grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        tel_entry = ttk.Entry(
-            self.frame, textvariable=self.telefonos_var, width=30, style=ENTRY_STYLE
+        tel_container, tel_entry = self._make_badged_field(
+            self.frame,
+            "cliente_tel",
+            lambda parent: ttk.Entry(parent, textvariable=self.telefonos_var, width=30, style=ENTRY_STYLE),
         )
-        tel_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        tel_container.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         tel_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó teléfonos"))
         self.tooltip_register(
             tel_entry,
@@ -251,10 +276,12 @@ class ClientFrame:
         correo_label.grid(
             row=5, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        cor_entry = ttk.Entry(
-            self.frame, textvariable=self.correos_var, width=30, style=ENTRY_STYLE
+        cor_container, cor_entry = self._make_badged_field(
+            self.frame,
+            "cliente_correo",
+            lambda parent: ttk.Entry(parent, textvariable=self.correos_var, width=30, style=ENTRY_STYLE),
         )
-        cor_entry.grid(row=5, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        cor_container.grid(row=5, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         cor_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó correos"))
         self.tooltip_register(
             cor_entry,
@@ -274,7 +301,10 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_client_id(self.tipo_id_var.get(), self.id_var.get()),
+                self.badges.wrap_validation(
+                    "cliente_id",
+                    lambda: validate_client_id(self.tipo_id_var.get(), self.id_var.get()),
+                ),
                 self.logs,
                 f"Cliente {self.idx+1} - ID",
                 variables=[self.id_var, self.tipo_id_var],
@@ -283,10 +313,43 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 tipo_id_cb,
-                lambda: validate_required_text(self.tipo_id_var.get(), "el tipo de ID del cliente"),
+                self.badges.wrap_validation(
+                    "cliente_tipo_id",
+                    lambda: validate_required_text(
+                        self.tipo_id_var.get(), "el tipo de ID del cliente"
+                    ),
+                ),
                 self.logs,
                 f"Cliente {self.idx+1} - Tipo de ID",
                 variables=[self.tipo_id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                nombres_entry,
+                self.badges.wrap_validation(
+                    "cliente_nombres",
+                    lambda: validate_required_text(
+                        self.nombres_var.get(), "los nombres del cliente"
+                    ),
+                ),
+                self.logs,
+                f"Cliente {self.idx+1} - Nombres",
+                variables=[self.nombres_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                apellidos_entry,
+                self.badges.wrap_validation(
+                    "cliente_apellidos",
+                    lambda: validate_required_text(
+                        self.apellidos_var.get(), "los apellidos del cliente"
+                    ),
+                ),
+                self.logs,
+                f"Cliente {self.idx+1} - Apellidos",
+                variables=[self.apellidos_var],
             )
         )
         def _validate_flag():
@@ -301,7 +364,7 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 flag_cb,
-                _validate_flag,
+                self.badges.wrap_validation("cliente_flag", _validate_flag),
                 self.logs,
                 f"Cliente {self.idx+1} - Flag",
                 variables=[self.flag_var],
@@ -324,7 +387,7 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 tel_entry,
-                _validate_required_phones,
+                self.badges.wrap_validation("cliente_tel", _validate_required_phones),
                 self.logs,
                 f"Cliente {self.idx+1} - Teléfonos",
                 variables=[self.telefonos_var],
@@ -333,7 +396,7 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 cor_entry,
-                _validate_required_emails,
+                self.badges.wrap_validation("cliente_correo", _validate_required_emails),
                 self.logs,
                 f"Cliente {self.idx+1} - Correos",
                 variables=[self.correos_var],
@@ -342,7 +405,9 @@ class ClientFrame:
         self.validators.append(
             FieldValidator(
                 self.accionado_listbox,
-                lambda: validate_multi_selection(self.accionado_var.get(), "Accionado"),
+                self.badges.wrap_validation(
+                    "cliente_accionado", lambda: validate_multi_selection(self.accionado_var.get(), "Accionado")
+                ),
                 self.logs,
                 f"Cliente {self.idx+1} - Accionado",
                 variables=[self.accionado_var],
@@ -353,6 +418,16 @@ class ClientFrame:
     def set_lookup(self, lookup):
         self.client_lookup = lookup or {}
         self._last_missing_lookup_id = None
+
+    def _make_badged_field(self, parent, key: str, widget_factory):
+        container = ttk.Frame(parent)
+        ensure_grid_support(container)
+        if hasattr(container, "columnconfigure"):
+            container.columnconfigure(0, weight=1)
+        widget = widget_factory(container)
+        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
+        self.badges.create_and_register(key, container, row=0, column=1)
+        return container, widget
 
     def _register_title_traces(self):
         for var in (self.id_var, self.nombres_var, self.apellidos_var):

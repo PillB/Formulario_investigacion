@@ -8,7 +8,7 @@ from tkinter import messagebox, ttk
 from settings import CRITICIDAD_LIST
 from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_money_bounds, validate_risk_id)
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import BadgeManager, ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 
@@ -71,6 +71,7 @@ class RiskFrame:
         self.frame = ttk.LabelFrame(self.section.content, text=f"Riesgo {self.idx+1}")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
+        self.badges = BadgeManager(parent=self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
             self.frame.columnconfigure(3, weight=1)
@@ -88,22 +89,32 @@ class RiskFrame:
         ttk.Label(self.frame, text="ID riesgo:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=15)
-        id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_entry = self._make_badged_field(
+            self.frame,
+            "riesgo_id",
+            lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=15),
+            row=1,
+            column=1,
+        )
         self.tooltip_register(id_entry, "Usa el formato RSK-000000.")
         self._bind_identifier_triggers(id_entry)
 
         ttk.Label(self.frame, text="Criticidad:").grid(
             row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        crit_cb = ttk.Combobox(
+        crit_cb = self._make_badged_field(
             self.frame,
-            textvariable=self.criticidad_var,
-            values=CRITICIDAD_LIST,
-            state="readonly",
-            width=12,
+            "riesgo_criticidad",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.criticidad_var,
+                values=CRITICIDAD_LIST,
+                state="readonly",
+                width=12,
+            ),
+            row=1,
+            column=3,
         )
-        crit_cb.grid(row=1, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         crit_cb.set('')
         self.tooltip_register(crit_cb, "Nivel de severidad del riesgo.")
 
@@ -117,8 +128,13 @@ class RiskFrame:
         ttk.Label(self.frame, text="Exposición residual (US$):").grid(
             row=2, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        expos_entry = ttk.Entry(self.frame, textvariable=self.exposicion_var, width=15)
-        expos_entry.grid(row=2, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        expos_entry = self._make_badged_field(
+            self.frame,
+            "riesgo_exposicion",
+            lambda parent: ttk.Entry(parent, textvariable=self.exposicion_var, width=15),
+            row=2,
+            column=3,
+        )
         self.tooltip_register(expos_entry, "Monto estimado en dólares.")
 
         ttk.Label(self.frame, text="Descripción del riesgo:").grid(
@@ -138,7 +154,7 @@ class RiskFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                self._validate_risk_id,
+                self.badges.wrap_validation("riesgo_id", self._validate_risk_id),
                 self.logs,
                 f"Riesgo {self.idx+1} - ID",
                 variables=[self.id_var],
@@ -152,7 +168,9 @@ class RiskFrame:
         self.validators.append(
             FieldValidator(
                 expos_entry,
-                _validate_exposure_amount,
+                self.badges.wrap_validation(
+                    "riesgo_exposicion", _validate_exposure_amount
+                ),
                 self.logs,
                 f"Riesgo {self.idx+1} - Exposición",
                 variables=[self.exposicion_var],
@@ -162,7 +180,9 @@ class RiskFrame:
         self.validators.append(
             FieldValidator(
                 crit_cb,
-                self._validate_criticidad,
+                self.badges.wrap_validation(
+                    "riesgo_criticidad", self._validate_criticidad
+                ),
                 self.logs,
                 f"Riesgo {self.idx+1} - Criticidad",
                 variables=[self.criticidad_var],
@@ -230,6 +250,35 @@ class RiskFrame:
             )
         self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select, add=False)
         self.header_tree.bind("<Double-1>", self._on_tree_double_click, add=False)
+
+    def _make_badged_field(
+        self,
+        parent,
+        key: str,
+        widget_factory,
+        *,
+        row: int,
+        column: int,
+        columnspan: int = 1,
+        sticky: str = "we",
+    ):
+        container = ttk.Frame(parent)
+        ensure_grid_support(container)
+        if hasattr(container, "columnconfigure"):
+            container.columnconfigure(0, weight=1)
+
+        widget = widget_factory(container)
+        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
+        self.badges.create_and_register(key, container, row=0, column=1)
+        container.grid(
+            row=row,
+            column=column,
+            columnspan=columnspan,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky=sticky,
+        )
+        return widget
 
     def _register_title_traces(self):
         for var in (self.id_var, self.descripcion_var):

@@ -7,6 +7,7 @@ from tkinter import ttk
 from typing import Any, Tuple
 
 from theme_manager import ThemeManager
+from ui.config import COL_PADX, ROW_PADY
 
 
 def ensure_grid_support(widget: Any) -> None:
@@ -194,3 +195,184 @@ def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
     _bind_widget(canvas)
     _bind_widget(target)
     target.bind("<Configure>", _sync_children, add="+")
+
+
+class BadgeManager:
+    """Crea y administra indicadores de validación por campo."""
+
+    def __init__(
+        self,
+        *,
+        parent=None,
+        pending_text: str = "Pendiente",
+        success_text: str = "Listo",
+    ) -> None:
+        self.parent = parent
+        self.pending_text = pending_text
+        self.success_text = success_text
+        self._badge_styles: dict[str, str] = {}
+        self._registry: dict[str, dict[str, object]] = {}
+        self._updaters: dict[str, callable] = {}
+        self._configure_badge_styles()
+
+    def _configure_badge_styles(self) -> None:
+        style = None
+        try:
+            style = ThemeManager.build_style(self.parent)
+        except Exception:
+            if hasattr(ttk, "Style"):
+                try:
+                    style = ttk.Style(master=self.parent)
+                except Exception:
+                    style = None
+        if not style or not hasattr(style, "configure"):
+            self._badge_styles = {"success": "TLabel", "warning": "TLabel"}
+            return
+        palette = ThemeManager.current()
+        success_style = "SuccessBadge.TLabel"
+        warning_style = "WarningBadge.TLabel"
+        style.configure(
+            success_style,
+            background=palette.get("accent", "#2e7d32"),
+            foreground=palette.get("select_foreground", "#ffffff"),
+            padding=(6, 2),
+            borderwidth=1,
+            relief="solid",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        style.configure(
+            warning_style,
+            background="#f0ad4e",
+            foreground=palette.get("foreground", "#000000"),
+            padding=(6, 2),
+            borderwidth=1,
+            relief="solid",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self._badge_styles = {"success": success_style, "warning": warning_style}
+
+    def create_badge(self, parent, *, row: int, column: int, text: str | None = None):
+        styles = self._badge_styles or {"warning": "TLabel"}
+        try:
+            badge = ttk.Label(
+                parent,
+                text=text or self.pending_text,
+                style=styles.get("warning", "TLabel"),
+                anchor="w",
+            )
+            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+        except Exception:
+            class _StubBadge:
+                def __init__(self, initial_text):
+                    self._text = initial_text
+
+                def config(self, **kwargs):  # noqa: D401, ANN001
+                    """Guarda el texto configurado para pruebas sin Tk."""
+                    self._text = kwargs.get("text", self._text)
+
+                def configure(self, **kwargs):  # noqa: D401, ANN001
+                    """Alias de config para compatibilidad."""
+                    return self.config(**kwargs)
+
+            badge = _StubBadge(text or self.pending_text)
+            ensure_grid_support(badge)
+            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
+        return badge
+
+    def register_badge(
+        self,
+        key: str,
+        badge,
+        *,
+        pending_text: str | None = None,
+        success_text: str | None = None,
+    ) -> None:
+        self._registry[key] = {
+            "badge": badge,
+            "pending": pending_text or self.pending_text,
+            "success": success_text or self.success_text,
+        }
+
+    def create_and_register(
+        self,
+        key: str,
+        parent,
+        *,
+        row: int,
+        column: int,
+        pending_text: str | None = None,
+        success_text: str | None = None,
+    ):
+        badge = self.create_badge(
+            parent,
+            row=row,
+            column=column,
+            text=pending_text or self.pending_text,
+        )
+        self.register_badge(key, badge, pending_text=pending_text, success_text=success_text)
+        return badge
+
+    def set_badge_state(
+        self,
+        badge,
+        is_ok: bool,
+        message: str | None,
+        *,
+        success_text: str | None = None,
+    ) -> None:
+        if badge is None:
+            return
+        styles = self._badge_styles or {"success": "TLabel", "warning": "TLabel"}
+        style_name = styles["success"] if is_ok else styles["warning"]
+        text = success_text if is_ok else (message or self.pending_text)
+        try:
+            badge.configure(text=text, style=style_name)
+        except Exception:
+            if hasattr(badge, "config"):
+                try:
+                    badge.config(text=text)
+                except Exception:
+                    return
+
+    def update_badge(
+        self,
+        key: str,
+        is_ok: bool,
+        message: str | None,
+        *,
+        success_text: str | None = None,
+        pending_text: str | None = None,
+    ) -> None:
+        config = self._registry.get(key)
+        if not config:
+            return
+        success_label = success_text or config.get("success", self.success_text)
+        pending_label = pending_text or config.get("pending", self.pending_text)
+        badge = config.get("badge")
+        self.set_badge_state(badge, is_ok, message or pending_label, success_text=success_label)
+
+    def wrap_validation(
+        self,
+        key: str,
+        validate_fn,
+        *,
+        success_text: str | None = None,
+        pending_text: str | None = None,
+    ):
+        def _wrapped():
+            message = validate_fn()
+            self.update_badge(
+                key,
+                message is None,
+                message,
+                success_text=success_text,
+                pending_text=pending_text,
+            )
+            return message
+
+        self._updaters[key] = _wrapped
+        return _wrapped
+
+    def refresh(self) -> None:
+        for updater in self._updaters.values():
+            updater()
