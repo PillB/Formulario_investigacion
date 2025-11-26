@@ -559,9 +559,12 @@ class FraudCaseApp:
         self.clients_detail_wrapper = None
         self.team_detail_wrapper = None
         self.clients_summary_tree = None
+        self.product_summary_tree = None
         self.team_summary_tree = None
         self._client_summary_owner = None
+        self._product_summary_owner = None
         self._team_summary_owner = None
+        self.products_summary_section = None
         self._clients_detail_visible = False
         self._team_detail_visible = False
 
@@ -3668,8 +3671,16 @@ class FraudCaseApp:
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        summary_section = ttk.LabelFrame(frame, text="Resumen de productos")
+        summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        summary_section.columnconfigure(0, weight=1)
+        summary_section.rowconfigure(0, weight=1)
+        self.products_summary_section = summary_section
+
         scrollable, inner = create_scrollable_container(frame)
-        scrollable.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.product_container = inner
 
         product_actions = (
@@ -3685,7 +3696,7 @@ class FraudCaseApp:
             "delete": self._remove_active_product_from_action,
         }
         product_action_parent = ttk.Frame(frame)
-        product_action_parent.grid(row=1, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
+        product_action_parent.grid(row=2, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.product_action_bar = ActionBar(
             product_action_parent,
             commands=product_commands,
@@ -3817,7 +3828,7 @@ class FraudCaseApp:
         self._show_inheritance_messages(result)
         return prod
 
-    def add_product(self, initialize_rows=True, user_initiated: bool = False):
+    def add_product(self, initialize_rows=True, user_initiated: bool = False, summary_parent=None):
         idx = len(self.product_frames)
         prod = ProductFrame(
             self.product_container,
@@ -3835,6 +3846,7 @@ class FraudCaseApp:
             initialize_rows=initialize_rows,
             duplicate_key_checker=self._check_duplicate_technical_keys_realtime,
             owner=self,
+            summary_parent=summary_parent or getattr(self, "products_summary_section", None),
         )
         if getattr(self, "_product_anchor_widget", None) is None:
             anchor = getattr(prod, "section", None)
