@@ -2702,6 +2702,24 @@ class ProductFrame:
         message, _is_valid = self._validate_montos_consistentes(target_key)
         return message
 
+    def collect_amount_consistency_errors(self) -> list[str]:
+        """Devuelve los mensajes de inconsistencia de montos activos para el producto."""
+
+        message, is_valid = self._validate_montos_consistentes()
+        if is_valid:
+            return []
+        messages: list[str] = []
+        seen = set()
+        if message:
+            seen.add(message)
+            messages.append(message)
+        for badge_key in AMOUNT_BADGE_KEYS.values():
+            badge_message = self._field_errors.get(badge_key)
+            if badge_message and badge_message not in seen:
+                seen.add(badge_message)
+                messages.append(badge_message)
+        return messages
+
     def _validate_catalog_selection(self, value, label, catalog, catalog_label):
         message = validate_required_text(value, label)
         if message:

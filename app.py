@@ -7817,14 +7817,16 @@ class FraudCaseApp:
         self._duplicate_warning_cooldown_until = datetime.now() + timedelta(minutes=10)
         self._last_duplicate_warning_message = message
 
-    def _update_duplicate_validation_entry(self, message: Optional[str]) -> None:
+    def _update_duplicate_validation_entry(
+        self, message: Optional[str], *, severity: Optional[str] = None
+    ) -> None:
         if not self._validation_panel:
             return
-        severity = "warning" if message else "ok"
+        resolved_severity = severity or ("warning" if message else "ok")
         self._validation_panel.update_entry(
             "realtime:duplicate",
             message,
-            severity=severity,
+            severity=resolved_severity,
             origin="Clave técnica",
         )
 
@@ -7866,11 +7868,11 @@ class FraudCaseApp:
             return "Ingresa el número de caso para validar duplicados"
 
         signature = dataset_signature or self._build_duplicate_dataset_signature()
-        cooldown_active = self._is_duplicate_warning_on_cooldown(signature)
 
         seen_keys = {}
         duplicate_messages: list[str] = []
         missing_association_messages: list[str] = []
+        missing_assignment_detected = False
 
         def _normalize_occurrence_date(raw_date: str) -> str:
             text = (raw_date or "").strip()
@@ -7899,28 +7901,30 @@ class FraudCaseApp:
                 claim_rows = [{'id_reclamo': ''}]
 
             assignment_rows = [inv.get_data() for inv in product.involvements if any(inv.get_data().values())]
+            collaborator_ids = [
+                self._normalize_identifier(assignment.get('id_colaborador'))
+                for assignment in assignment_rows
+                if (assignment.get('id_colaborador') or '').strip()
+            ]
             if not assignment_rows:
+                missing_assignment_detected = True
                 missing_association_messages.append(
                     (
                         f"{product_label}: asigna al menos un colaborador en la sección"
                         " 'Involucramiento de colaboradores' antes de validar duplicados."
                     )
                 )
-                continue
-
-            collaborator_ids = [
-                self._normalize_identifier(assignment.get('id_colaborador'))
-                for assignment in assignment_rows
-                if (assignment.get('id_colaborador') or '').strip()
-            ]
-            if not collaborator_ids:
+            elif not collaborator_ids:
+                missing_assignment_detected = True
                 missing_association_messages.append(
                     (
                         f"{product_label}: selecciona el colaborador en cada asignación activa"
                         " para validar la clave técnica."
                     )
                 )
-                continue
+
+            if not collaborator_ids:
+                collaborator_ids = ["<FALTA_COLABORADOR>"]
 
             for claim in claim_rows:
                 claim_id_raw = (claim.get('id_reclamo') or '').strip()
@@ -7959,20 +7963,31 @@ class FraudCaseApp:
             error_messages.append(guidance)
             error_messages.append("\n".join(missing_association_messages))
 
+        cooldown_active = (
+            False
+            if missing_assignment_detected
+            else self._is_duplicate_warning_on_cooldown(signature)
+        )
+
         if error_messages:
             message = "\n\n".join(error_messages)
+            if missing_association_messages and not duplicate_messages:
+                status = "Bloqueado: asigna colaborador para validar"
+            elif missing_association_messages:
+                status = "Duplicado detectado o asignación faltante (bloqueante)"
+            else:
+                status = "Duplicado detectado en clave técnica"
+            severity = "error"
             log_event("validacion", message, self.logs)
-            self._update_duplicate_validation_entry(message)
-            if not cooldown_active:
+            self._update_duplicate_validation_entry(message, severity=severity)
+            if duplicate_messages and not cooldown_active:
                 self._activate_duplicate_warning_cooldown(signature, message)
-            if not cooldown_active and not getattr(self, "_suppress_messagebox", False):
+            if not getattr(self, "_suppress_messagebox", False):
                 try:
                     messagebox.showerror("Validación de clave técnica", message)
                 except tk.TclError:
                     return "Validación interrumpida"
-                return "Duplicado detectado o colaborador faltante"
-
-            return "Duplicado detectado o colaborador faltante (en panel)"
+            return status
 
         self._update_duplicate_validation_entry(None)
         self._last_duplicate_warning_message = None
@@ -10148,13 +10163,9 @@ class FraudCaseApp:
             claim_rows = prod_data['reclamos'] or []
             product_occurrence_date = prod_data['producto'].get('fecha_ocurrencia')
             assignments = prod_data['asignaciones'] or []
-            enforce_assignations = (
-                hasattr(self, "_duplicate_checks_armed")
-                and getattr(self, "_duplicate_checks_armed", False)
-                and not getattr(self, "_suppress_messagebox", False)
-            )
             product_has_involvements = hasattr(p, "involvements")
-            if enforce_assignations and product_has_involvements and not assignments:
+            enforce_assignations = bool(product_has_involvements)
+            if enforce_assignations and not assignments:
                 errors.append(
                     (
                         f"Producto {producto_label}: agrega al menos un colaborador en"
@@ -10473,11 +10484,34 @@ class FraudCaseApp:
                 if isinstance(row, dict):
                     row["id_caso"] = case_id
 
+    def _validate_amount_consistency_before_export(self) -> bool:
+        """Verifica montos consistentes antes de exportar y bloquea si hay errores."""
+
+        blocking_messages: list[str] = []
+        for product in self.product_frames:
+            if not hasattr(product, "collect_amount_consistency_errors"):
+                continue
+            product_label = product._get_product_label() if hasattr(product, "_get_product_label") else "Producto"
+            for message in product.collect_amount_consistency_errors():
+                blocking_messages.append(f"{product_label}: {message}")
+
+        if not blocking_messages:
+            return True
+
+        unique_messages = list(dict.fromkeys(blocking_messages))
+        combined_message = "\n".join(unique_messages)
+        log_event("validacion", combined_message, self.logs)
+        if not getattr(self, "_suppress_messagebox", False):
+            messagebox.showerror("Montos inconsistentes", combined_message)
+        return False
+
     def _prepare_case_data_for_export(self) -> tuple[Optional[CaseData], Optional[Path], Optional[str]]:
         """Valida y normaliza los datos antes de exportarlos."""
 
         self.flush_autosave()
         self.flush_logs_now()
+        if not self._validate_amount_consistency_before_export():
+            return None, None, None
         errors, warnings = self.validate_data()
         if errors:
             messagebox.showerror("Errores de validación", "\n".join(errors))
