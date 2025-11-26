@@ -7,7 +7,7 @@ from tkinter import ttk
 
 from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import build_required_label, ensure_grid_support
+from ui.frames.utils import BadgeManager, build_required_label, ensure_grid_support
 from ui.layout import responsive_grid
 from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
@@ -38,6 +38,7 @@ class CaseFrame:
         self._right_column = ttk.Frame(self._paned)
         ensure_grid_support(self._left_column)
         ensure_grid_support(self._right_column)
+        self.badges = BadgeManager(parent=self.frame)
         self._paned.add(self._left_column, weight=1)
         self._paned.add(self._right_column, weight=1)
         owner._case_inputs = {}
@@ -53,6 +54,16 @@ class CaseFrame:
         responsive_grid(self._left_column, self._left_fields)
         responsive_grid(self._right_column, self._right_fields)
 
+    def _make_badged_field(self, parent, key: str, widget_factory):
+        container = ttk.Frame(parent)
+        ensure_grid_support(container)
+        if hasattr(container, "columnconfigure"):
+            container.columnconfigure(0, weight=1)
+        widget = widget_factory(container)
+        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
+        badge = self.badges.create_and_register(key, container, row=0, column=1)
+        return container, widget, badge
+
     def _build_header_fields(self, frame, collector):
         owner = self.owner
         case_id_label = build_required_label(
@@ -60,8 +71,12 @@ class CaseFrame:
             "Número de caso (AAAA-XXXX):",
             tooltip_register=owner.register_tooltip,
         )
-        id_entry = ttk.Entry(
-            frame, textvariable=owner.id_caso_var, width=20, style=ENTRY_STYLE
+        id_container, id_entry, _ = self._make_badged_field(
+            frame,
+            "case_id",
+            lambda parent: ttk.Entry(
+                parent, textvariable=owner.id_caso_var, width=20, style=ENTRY_STYLE
+            ),
         )
         owner.register_tooltip(
             id_entry, "Formato AAAA-XXXX. Se usa para detectar duplicados."
@@ -72,21 +87,25 @@ class CaseFrame:
             "Tipo de informe:",
             tooltip_register=owner.register_tooltip,
         )
-        tipo_cb = ttk.Combobox(
+        tipo_container, tipo_cb, _ = self._make_badged_field(
             frame,
-            textvariable=owner.tipo_informe_var,
-            values=TIPO_INFORME_LIST,
-            state="readonly",
-            width=30,
-            style=COMBOBOX_STYLE,
+            "case_tipo",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=owner.tipo_informe_var,
+                values=TIPO_INFORME_LIST,
+                state="readonly",
+                width=30,
+                style=COMBOBOX_STYLE,
+            ),
         )
         owner.register_tooltip(tipo_cb, "Selecciona el tipo de reporte a generar.")
         tipo_cb.set('')
         owner._case_inputs.update({"id_entry": id_entry, "tipo_cb": tipo_cb})
         collector.extend(
             [
-                (case_id_label, id_entry),
-                (tipo_label, tipo_cb),
+                (case_id_label, id_container),
+                (tipo_label, tipo_container),
             ]
         )
 
@@ -107,15 +126,19 @@ class CaseFrame:
         cat1_label.grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        cat1_cb = ttk.Combobox(
+        cat1_container, cat1_cb, _ = self._make_badged_field(
             taxonomy_container,
-            textvariable=owner.cat_caso1_var,
-            values=list(TAXONOMIA.keys()),
-            state="readonly",
-            width=25,
-            style=COMBOBOX_STYLE,
+            "case_cat1",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=owner.cat_caso1_var,
+                values=list(TAXONOMIA.keys()),
+                state="readonly",
+                width=25,
+                style=COMBOBOX_STYLE,
+            ),
         )
-        cat1_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        cat1_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(cat1_cb, "Selecciona la categoría principal del caso.")
         cat1_cb.bind("<<ComboboxSelected>>", lambda _e: owner.on_case_cat1_change())
         cat1_cb.bind("<FocusOut>", lambda _e: owner.on_case_cat1_change())
@@ -129,15 +152,19 @@ class CaseFrame:
         cat2_label.grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        case_cat2_cb = ttk.Combobox(
+        cat2_container, case_cat2_cb, _ = self._make_badged_field(
             taxonomy_container,
-            textvariable=owner.cat_caso2_var,
-            values=[],
-            state="readonly",
-            width=25,
-            style=COMBOBOX_STYLE,
+            "case_cat2",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=owner.cat_caso2_var,
+                values=[],
+                state="readonly",
+                width=25,
+                style=COMBOBOX_STYLE,
+            ),
         )
-        case_cat2_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        cat2_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(case_cat2_cb, "Selecciona la subcategoría del caso.")
         case_cat2_cb.bind("<<ComboboxSelected>>", lambda _e: owner.on_case_cat2_change())
         case_cat2_cb.bind("<FocusOut>", lambda _e: owner.on_case_cat2_change())
@@ -152,15 +179,19 @@ class CaseFrame:
         modalidad_label.grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        case_mod_cb = ttk.Combobox(
+        mod_container, case_mod_cb, _ = self._make_badged_field(
             taxonomy_container,
-            textvariable=owner.mod_caso_var,
-            values=[],
-            state="readonly",
-            width=25,
-            style=COMBOBOX_STYLE,
+            "case_mod",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=owner.mod_caso_var,
+                values=[],
+                state="readonly",
+                width=25,
+                style=COMBOBOX_STYLE,
+            ),
         )
-        case_mod_cb.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        mod_container.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(case_mod_cb, "Selecciona la modalidad específica.")
         owner.case_mod_cb = case_mod_cb
         case_mod_cb.set('')
@@ -178,15 +209,19 @@ class CaseFrame:
         canal_label.grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        canal_cb = ttk.Combobox(
+        canal_container, canal_cb, _ = self._make_badged_field(
             canal_proc_container,
-            textvariable=owner.canal_caso_var,
-            values=CANAL_LIST,
-            state="readonly",
-            width=25,
-            style=COMBOBOX_STYLE,
+            "case_canal",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=owner.canal_caso_var,
+                values=CANAL_LIST,
+                state="readonly",
+                width=25,
+                style=COMBOBOX_STYLE,
+            ),
         )
-        canal_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        canal_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(canal_cb, "Canal donde se originó el evento.")
         canal_cb.set('')
 
@@ -198,15 +233,19 @@ class CaseFrame:
         proc_label.grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        proc_cb = ttk.Combobox(
+        proc_container, proc_cb, _ = self._make_badged_field(
             canal_proc_container,
-            textvariable=owner.proceso_caso_var,
-            values=PROCESO_LIST,
-            state="readonly",
-            width=25,
-            style=COMBOBOX_STYLE,
+            "case_proc",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=owner.proceso_caso_var,
+                values=PROCESO_LIST,
+                state="readonly",
+                width=25,
+                style=COMBOBOX_STYLE,
+            ),
         )
-        proc_cb.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        proc_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
         proc_cb.set('')
         owner._case_inputs.update(
@@ -299,10 +338,14 @@ class CaseFrame:
         occurrence_label.grid(
             row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
-        fecha_case_entry = ttk.Entry(
-            dates_container, textvariable=owner.fecha_caso_var, width=16, style=ENTRY_STYLE
+        occ_container, fecha_case_entry, _ = self._make_badged_field(
+            dates_container,
+            "case_fecha_oc",
+            lambda parent: ttk.Entry(
+                parent, textvariable=owner.fecha_caso_var, width=16, style=ENTRY_STYLE
+            ),
         )
-        fecha_case_entry.grid(
+        occ_container.grid(
             row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
         )
         owner.register_tooltip(
@@ -316,13 +359,17 @@ class CaseFrame:
         discovery_label.grid(
             row=0, column=2, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
-        fecha_desc_entry = ttk.Entry(
+        desc_container, fecha_desc_entry, _ = self._make_badged_field(
             dates_container,
-            textvariable=owner.fecha_descubrimiento_caso_var,
-            width=16,
-            style=ENTRY_STYLE,
+            "case_fecha_desc",
+            lambda parent: ttk.Entry(
+                parent,
+                textvariable=owner.fecha_descubrimiento_caso_var,
+                width=16,
+                style=ENTRY_STYLE,
+            ),
         )
-        fecha_desc_entry.grid(
+        desc_container.grid(
             row=0, column=3, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
         )
         owner.register_tooltip(
@@ -358,7 +405,9 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["id_entry"],
-                lambda: validate_case_id(owner.id_caso_var.get()),
+                self.badges.wrap_validation(
+                    "case_id", lambda: validate_case_id(owner.id_caso_var.get())
+                ),
                 owner.logs,
                 "Caso - ID",
                 variables=[owner.id_caso_var],
@@ -367,7 +416,12 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["tipo_cb"],
-                lambda: validate_required_text(owner.tipo_informe_var.get(), "el tipo de informe"),
+                self.badges.wrap_validation(
+                    "case_tipo",
+                    lambda: validate_required_text(
+                        owner.tipo_informe_var.get(), "el tipo de informe"
+                    ),
+                ),
                 owner.logs,
                 "Caso - Tipo de informe",
                 variables=[owner.tipo_informe_var],
@@ -376,7 +430,12 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["cat1_cb"],
-                lambda: validate_required_text(owner.cat_caso1_var.get(), "la categoría nivel 1"),
+                self.badges.wrap_validation(
+                    "case_cat1",
+                    lambda: validate_required_text(
+                        owner.cat_caso1_var.get(), "la categoría nivel 1"
+                    ),
+                ),
                 owner.logs,
                 "Caso - Categoría 1",
                 variables=[owner.cat_caso1_var],
@@ -385,7 +444,12 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["case_cat2_cb"],
-                lambda: validate_required_text(owner.cat_caso2_var.get(), "la categoría nivel 2"),
+                self.badges.wrap_validation(
+                    "case_cat2",
+                    lambda: validate_required_text(
+                        owner.cat_caso2_var.get(), "la categoría nivel 2"
+                    ),
+                ),
                 owner.logs,
                 "Caso - Categoría 2",
                 variables=[owner.cat_caso2_var],
@@ -394,7 +458,12 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["case_mod_cb"],
-                lambda: validate_required_text(owner.mod_caso_var.get(), "la modalidad del caso"),
+                self.badges.wrap_validation(
+                    "case_mod",
+                    lambda: validate_required_text(
+                        owner.mod_caso_var.get(), "la modalidad del caso"
+                    ),
+                ),
                 owner.logs,
                 "Caso - Modalidad",
                 variables=[owner.mod_caso_var],
@@ -403,7 +472,12 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["canal_cb"],
-                lambda: validate_required_text(owner.canal_caso_var.get(), "el canal del caso"),
+                self.badges.wrap_validation(
+                    "case_canal",
+                    lambda: validate_required_text(
+                        owner.canal_caso_var.get(), "el canal del caso"
+                    ),
+                ),
                 owner.logs,
                 "Caso - Canal",
                 variables=[owner.canal_caso_var],
@@ -412,7 +486,12 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["proc_cb"],
-                lambda: validate_required_text(owner.proceso_caso_var.get(), "el proceso impactado"),
+                self.badges.wrap_validation(
+                    "case_proc",
+                    lambda: validate_required_text(
+                        owner.proceso_caso_var.get(), "el proceso impactado"
+                    ),
+                ),
                 owner.logs,
                 "Caso - Proceso",
                 variables=[owner.proceso_caso_var],
@@ -421,7 +500,7 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["fecha_case_entry"],
-                owner._validate_case_occurrence_date,
+                self.badges.wrap_validation("case_fecha_oc", owner._validate_case_occurrence_date),
                 owner.logs,
                 "Caso - Fecha de ocurrencia",
                 variables=[owner.fecha_caso_var],
@@ -430,7 +509,9 @@ class CaseFrame:
         owner.validators.append(
             FieldValidator(
                 inputs["fecha_desc_entry"],
-                owner._validate_case_discovery_date,
+                self.badges.wrap_validation(
+                    "case_fecha_desc", owner._validate_case_discovery_date
+                ),
                 owner.logs,
                 "Caso - Fecha de descubrimiento",
                 variables=[owner.fecha_descubrimiento_caso_var],

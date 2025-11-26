@@ -8,7 +8,7 @@ from tkinter import messagebox, ttk
 from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_date_text, validate_norm_id,
                         validate_required_text)
-from ui.frames.utils import ensure_grid_support
+from ui.frames.utils import BadgeManager, ensure_grid_support
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 
@@ -55,6 +55,7 @@ class NormFrame:
         self.frame = ttk.LabelFrame(self.section.content, text=f"Norma {self.idx+1}")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
+        self.badges = BadgeManager(parent=self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
             self.frame.columnconfigure(3, weight=1)
@@ -72,29 +73,47 @@ class NormFrame:
         ttk.Label(self.frame, text="ID de norma:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
-        id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_entry = self._make_badged_field(
+            self.frame,
+            "norm_id",
+            lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=20),
+            row=1,
+            column=1,
+        )
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
         ttk.Label(self.frame, text="Fecha de vigencia (YYYY-MM-DD):").grid(
             row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        fecha_entry = ttk.Entry(self.frame, textvariable=self.fecha_var, width=15)
-        fecha_entry.grid(row=1, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        fecha_entry = self._make_badged_field(
+            self.frame,
+            "norm_fecha",
+            lambda parent: ttk.Entry(parent, textvariable=self.fecha_var, width=15),
+            row=1,
+            column=3,
+        )
         self.tooltip_register(fecha_entry, "Fecha de publicación o vigencia de la norma.")
 
         ttk.Label(self.frame, text="Descripción de la norma:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        desc_entry = ttk.Entry(self.frame, textvariable=self.descripcion_var, width=70)
-        desc_entry.grid(row=2, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        desc_entry = self._make_badged_field(
+            self.frame,
+            "norm_desc",
+            lambda parent: ttk.Entry(parent, textvariable=self.descripcion_var, width=70),
+            row=2,
+            column=1,
+            columnspan=3,
+        )
         self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
 
         self.validators.append(
             FieldValidator(
                 id_entry,
-                lambda: validate_norm_id(self.id_var.get()),
+                self.badges.wrap_validation(
+                    "norm_id", lambda: validate_norm_id(self.id_var.get())
+                ),
                 self.logs,
                 f"Norma {self.idx+1} - ID",
                 variables=[self.id_var],
@@ -103,11 +122,14 @@ class NormFrame:
         self.validators.append(
             FieldValidator(
                 fecha_entry,
-                lambda: validate_date_text(
-                    self.fecha_var.get(),
-                    "la fecha de vigencia",
-                    allow_blank=False,
-                    enforce_max_today=True,
+                self.badges.wrap_validation(
+                    "norm_fecha",
+                    lambda: validate_date_text(
+                        self.fecha_var.get(),
+                        "la fecha de vigencia",
+                        allow_blank=False,
+                        enforce_max_today=True,
+                    ),
                 ),
                 self.logs,
                 f"Norma {self.idx+1} - Fecha",
@@ -117,7 +139,12 @@ class NormFrame:
         self.validators.append(
             FieldValidator(
                 desc_entry,
-                lambda: validate_required_text(self.descripcion_var.get(), "la descripción de la norma"),
+                self.badges.wrap_validation(
+                    "norm_desc",
+                    lambda: validate_required_text(
+                        self.descripcion_var.get(), "la descripción de la norma"
+                    ),
+                ),
                 self.logs,
                 f"Norma {self.idx+1} - Descripción",
                 variables=[self.descripcion_var],
@@ -175,6 +202,35 @@ class NormFrame:
             )
         self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select, add=False)
         self.header_tree.bind("<Double-1>", self._on_tree_double_click, add=False)
+
+    def _make_badged_field(
+        self,
+        parent,
+        key: str,
+        widget_factory,
+        *,
+        row: int,
+        column: int,
+        columnspan: int = 1,
+        sticky: str = "we",
+    ):
+        container = ttk.Frame(parent)
+        ensure_grid_support(container)
+        if hasattr(container, "columnconfigure"):
+            container.columnconfigure(0, weight=1)
+
+        widget = widget_factory(container)
+        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
+        self.badges.create_and_register(key, container, row=0, column=1)
+        container.grid(
+            row=row,
+            column=column,
+            columnspan=columnspan,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky=sticky,
+        )
+        return widget
 
     def _register_title_traces(self):
         for var in (self.id_var, self.descripcion_var):
