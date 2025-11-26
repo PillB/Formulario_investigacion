@@ -73,10 +73,11 @@ class RiskFrame:
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
+            self.frame.columnconfigure(3, weight=1)
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=0, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
+        action_row.grid(row=0, column=0, columnspan=4, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
@@ -89,20 +90,11 @@ class RiskFrame:
         )
         id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=15)
         id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(id_entry, "Usa el formato RSK-000000.")
         self._bind_identifier_triggers(id_entry)
 
-        ttk.Label(self.frame, text="Líder:").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        lider_entry = ttk.Entry(self.frame, textvariable=self.lider_var, width=20)
-        lider_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
-        self.tooltip_register(lider_entry, "Responsable del seguimiento del riesgo.")
-
         ttk.Label(self.frame, text="Criticidad:").grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         crit_cb = ttk.Combobox(
             self.frame,
@@ -111,33 +103,36 @@ class RiskFrame:
             state="readonly",
             width=12,
         )
-        crit_cb.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=3, column=2, padx=COL_PADX, pady=ROW_PADY)
+        crit_cb.grid(row=1, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         crit_cb.set('')
         self.tooltip_register(crit_cb, "Nivel de severidad del riesgo.")
 
-        ttk.Label(self.frame, text="Descripción del riesgo:").grid(
-            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        ttk.Label(self.frame, text="Líder:").grid(
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        desc_entry = ttk.Entry(self.frame, textvariable=self.descripcion_var, width=60)
-        desc_entry.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=4, column=2, padx=COL_PADX, pady=ROW_PADY)
-        self.tooltip_register(desc_entry, "Describe el riesgo de forma clara.")
+        lider_entry = ttk.Entry(self.frame, textvariable=self.lider_var, width=20)
+        lider_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.tooltip_register(lider_entry, "Responsable del seguimiento del riesgo.")
 
         ttk.Label(self.frame, text="Exposición residual (US$):").grid(
-            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=2, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         expos_entry = ttk.Entry(self.frame, textvariable=self.exposicion_var, width=15)
-        expos_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=5, column=2, padx=COL_PADX, pady=ROW_PADY)
+        expos_entry.grid(row=2, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.tooltip_register(expos_entry, "Monto estimado en dólares.")
 
+        ttk.Label(self.frame, text="Descripción del riesgo:").grid(
+            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        desc_entry = ttk.Entry(self.frame, textvariable=self.descripcion_var, width=60)
+        desc_entry.grid(row=3, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        self.tooltip_register(desc_entry, "Describe el riesgo de forma clara.")
+
         ttk.Label(self.frame, text="Planes de acción (IDs separados por ;):").grid(
-            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         planes_entry = ttk.Entry(self.frame, textvariable=self.planes_var, width=40)
-        planes_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=6, column=2, padx=COL_PADX, pady=ROW_PADY)
+        planes_entry.grid(row=4, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.tooltip_register(planes_entry, "Lista de planes registrados en OTRS o Aranda.")
 
         self.validators.append(

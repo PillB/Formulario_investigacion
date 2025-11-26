@@ -57,10 +57,11 @@ class NormFrame:
         ensure_grid_support(self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
+            self.frame.columnconfigure(3, weight=1)
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=0, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
+        action_row.grid(row=0, column=0, columnspan=4, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
@@ -73,24 +74,21 @@ class NormFrame:
         )
         id_entry = ttk.Entry(self.frame, textvariable=self.id_var, width=20)
         id_entry.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY)
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
         ttk.Label(self.frame, text="Fecha de vigencia (YYYY-MM-DD):").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         fecha_entry = ttk.Entry(self.frame, textvariable=self.fecha_var, width=15)
-        fecha_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=2, column=2, padx=COL_PADX, pady=ROW_PADY)
+        fecha_entry.grid(row=1, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.tooltip_register(fecha_entry, "Fecha de publicación o vigencia de la norma.")
 
         ttk.Label(self.frame, text="Descripción de la norma:").grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         desc_entry = ttk.Entry(self.frame, textvariable=self.descripcion_var, width=70)
-        desc_entry.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        ttk.Label(self.frame, text="").grid(row=3, column=2, padx=COL_PADX, pady=ROW_PADY)
+        desc_entry.grid(row=2, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
 
         self.validators.append(
