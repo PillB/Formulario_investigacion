@@ -32,13 +32,13 @@ def _build_stub_app():
     return app
 
 
-def _setup_autosave_paths(tmp_path, monkeypatch):
-    autosave_file = tmp_path / "autosave.json"
+def _setup_autosave_paths(tmp_path, monkeypatch, autosave_file: Path | None = None):
+    autosave_target = autosave_file or (tmp_path / "autosave.json")
     monkeypatch.setattr(app_module, "BASE_DIR", tmp_path)
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path)
-    monkeypatch.setattr(app_module, "AUTOSAVE_FILE", autosave_file)
-    monkeypatch.setattr(settings, "AUTOSAVE_FILE", autosave_file)
-    return autosave_file
+    monkeypatch.setattr(app_module, "AUTOSAVE_FILE", autosave_target)
+    monkeypatch.setattr(settings, "AUTOSAVE_FILE", autosave_target)
+    return autosave_target
 
 
 def test_load_autosave_uses_latest_candidate(tmp_path, monkeypatch):
@@ -99,3 +99,38 @@ def test_load_autosave_clears_when_all_candidates_fail(tmp_path, monkeypatch):
 
     assert not app.populate_calls
     assert getattr(app, "cleared", False)
+
+
+def test_load_autosave_notifies_when_using_fallback(tmp_path, monkeypatch):
+    autosave_file = _setup_autosave_paths(tmp_path, monkeypatch)
+    app = _build_stub_app()
+
+    autosave_file.write_text("{invalid json", encoding="utf-8")
+    os.utime(autosave_file, (20, 20))
+
+    fallback = tmp_path / "2025-0101_temp_20230101_010101.json"
+    fallback.write_text(json.dumps(_build_case_data("2025-0101")), encoding="utf-8")
+    os.utime(fallback, (10, 10))
+
+    app.load_autosave()
+
+    notice = getattr(app, "_last_autosave_notice", "")
+    assert notice, "Debe notificar cuando se usa un respaldo como fallback"
+    assert fallback.name in notice
+
+
+def test_load_autosave_respects_autosave_location(tmp_path, monkeypatch):
+    target_dir = tmp_path / "autosaves"
+    target_dir.mkdir()
+    autosave_file = target_dir / "autosave.json"
+    _setup_autosave_paths(tmp_path, monkeypatch, autosave_file=autosave_file)
+    app = _build_stub_app()
+
+    autosave_file.write_text(json.dumps(_build_case_data("2024-0999")), encoding="utf-8")
+    os.utime(autosave_file, (30, 30))
+
+    app.load_autosave()
+
+    assert app.populate_calls
+    loaded_dataset = app.populate_calls[-1]
+    assert loaded_dataset.get("caso", {}).get("id_caso") == "2024-0999"
