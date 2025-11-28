@@ -572,14 +572,12 @@ class ThemeManager:
 
         def start_pulse(_event=None) -> None:
             cancel_pulse()
+            if not cls._widget_is_valid(widget):
+                return
             try:
                 widget.configure(style=cls.BUTTON_HOVER_STYLE)
             except tk.TclError:
                 return
-            try:
-                widget._tm_pulse_after_id = widget.after(150, lambda: cls._reset_button_style(widget))
-            except tk.TclError:
-                widget._tm_pulse_after_id = None
 
         def end_pulse(_event=None) -> None:
             cancel_pulse()

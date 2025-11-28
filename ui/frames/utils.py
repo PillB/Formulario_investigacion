@@ -311,6 +311,39 @@ def create_scrollable_container(
     return outer, inner
 
 
+def resize_scrollable_to_content(container: Any, *, max_height: int | None = None) -> None:
+    """Expande el alto del canvas para evitar desplazamiento innecesario."""
+
+    if container is None:
+        return
+
+    canvas = getattr(container, "_scroll_canvas", None)
+    inner = getattr(container, "_scroll_inner", None)
+    if canvas is None or inner is None:
+        return
+
+    try:
+        container.update_idletasks()
+    except Exception:
+        pass
+
+    try:
+        required_height = inner.winfo_reqheight()
+        available_height = max_height if max_height is not None else container.winfo_height()
+        if not available_height:
+            parent = getattr(container, "master", None)
+            try:
+                available_height = parent.winfo_height() if parent else 0
+            except Exception:
+                available_height = 0
+        target_height = required_height if not available_height else min(required_height, available_height)
+        canvas.configure(height=target_height)
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.yview_moveto(0)
+    except Exception:
+        return
+
+
 def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
     """Permite desplazar el canvas usando la rueda del ratón o trackpad.
 
