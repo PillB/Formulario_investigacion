@@ -109,6 +109,7 @@ from ui.frames.utils import (
     GlobalScrollBinding,
     create_scrollable_container,
     ensure_grid_support,
+    resize_scrollable_to_content,
 )
 from ui.layout import ActionBar
 from ui.tooltips import HoverTooltip
@@ -591,6 +592,14 @@ class FraudCaseApp:
         self.products_summary_section = None
         self._clients_detail_visible = False
         self._team_detail_visible = False
+        self.clients_scrollable = None
+        self.team_scrollable = None
+        self.products_scrollable = None
+        self.risks_scrollable = None
+        self.norms_scrollable = None
+        self.analysis_scrollable = None
+        self.summary_scrollable = None
+        self._scrollable_containers: list[object] = []
 
         # Variables de caso
         self.id_caso_var = tk.StringVar()
@@ -2056,6 +2065,8 @@ class FraudCaseApp:
             parent, scroll_binder=self._scroll_binder, tab_id=parent
         )
         scroll_container.pack(fill="both", expand=True)
+        self.summary_scrollable = scroll_container
+        self._register_scrollable(scroll_container)
 
         self._main_scrollable_frame = inner_frame
 
@@ -2082,6 +2093,27 @@ class FraudCaseApp:
             self.root.update_idletasks()
         except tk.TclError:
             pass
+
+    def _register_scrollable(self, container):
+        if container is None:
+            return
+        self._scrollable_containers.append(container)
+
+    def _refresh_scrollable(self, container):
+        if container is None:
+            return
+
+        def _sync():
+            resize_scrollable_to_content(container)
+
+        try:
+            self.root.after_idle(_sync)
+        except tk.TclError:
+            _sync()
+
+    def _refresh_all_scrollables(self):
+        for container in self._scrollable_containers:
+            self._refresh_scrollable(container)
 
     def _build_window_title(self, *, case_id: Optional[str] = None, streak_days: Optional[int] = None) -> str:
         """Devuelve el título normalizado de la ventana principal."""
@@ -3701,6 +3733,8 @@ class FraudCaseApp:
         self.clients_detail_wrapper.rowconfigure(0, weight=1)
         scrollable, inner = create_scrollable_container(self.clients_detail_wrapper)
         scrollable.grid(row=0, column=0, sticky="nsew")
+        self.clients_scrollable = scrollable
+        self._register_scrollable(scrollable)
         self.clients_container = inner
         # Inicialmente un cliente en blanco
         self.add_client()
@@ -3770,6 +3804,7 @@ class FraudCaseApp:
         except Exception:
             pass
         self._clients_detail_visible = True
+        self._refresh_scrollable(getattr(self, "clients_scrollable", None))
         if getattr(self, "clients_toggle_btn", None):
             try:
                 self.clients_toggle_btn.config(text="Ocultar formulario")
@@ -3822,6 +3857,8 @@ class FraudCaseApp:
         self._maybe_show_milestone_badge(len(self.client_frames), "Clientes", user_initiated=user_initiated)
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
+        if self._clients_detail_visible:
+            self._refresh_scrollable(getattr(self, "clients_scrollable", None))
         if not was_visible:
             self.hide_clients_detail()
         if user_initiated:
@@ -3934,6 +3971,8 @@ class FraudCaseApp:
         self.team_detail_wrapper.rowconfigure(0, weight=1)
         scrollable, inner = create_scrollable_container(self.team_detail_wrapper)
         scrollable.grid(row=0, column=0, sticky="nsew")
+        self.team_scrollable = scrollable
+        self._register_scrollable(scrollable)
         self.team_container = inner
         if getattr(self, "_team_anchor_widget", None) is None:
             header = getattr(self.team_detail_wrapper, "header", None)
@@ -3962,6 +4001,7 @@ class FraudCaseApp:
         except Exception:
             pass
         self._team_detail_visible = True
+        self._refresh_scrollable(getattr(self, "team_scrollable", None))
         if getattr(self, "team_toggle_btn", None):
             try:
                 self.team_toggle_btn.config(text="Ocultar formulario")
@@ -4005,6 +4045,8 @@ class FraudCaseApp:
         self._maybe_show_milestone_badge(len(self.team_frames), "Colaboradores", user_initiated=user_initiated)
         self.update_team_options_global()
         self._schedule_summary_refresh('colaboradores')
+        if self._team_detail_visible:
+            self._refresh_scrollable(getattr(self, "team_scrollable", None))
         if not was_visible:
             self.hide_team_detail()
         if user_initiated:
@@ -4090,6 +4132,8 @@ class FraudCaseApp:
             frame, scroll_binder=self._scroll_binder, tab_id=parent
         )
         scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.products_scrollable = scrollable
+        self._register_scrollable(scrollable)
         self.product_container = inner
 
         product_actions = (
@@ -4277,6 +4321,7 @@ class FraudCaseApp:
             if callable(set_title):
                 set_title(f"Producto {i+1}")
         self._schedule_summary_refresh({'productos', 'reclamos'})
+        self._refresh_scrollable(getattr(self, "products_scrollable", None))
         prod.focus_first_field()
         if user_initiated:
             self._mark_user_edited()
@@ -4355,6 +4400,8 @@ class FraudCaseApp:
             frame, scroll_binder=self._scroll_binder, tab_id=parent
         )
         scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.risks_scrollable = scrollable
+        self._register_scrollable(scrollable)
         self.risk_container = inner
         self.add_risk()
 
@@ -4386,6 +4433,7 @@ class FraudCaseApp:
             r.frame.config(text=f"Riesgo {i+1}")
         self._refresh_risk_auto_ids()
         self._refresh_shared_risk_tree()
+        self._refresh_scrollable(getattr(self, "risks_scrollable", None))
 
     def remove_risk(self, risk_frame):
         self.risk_frames.remove(risk_frame)
@@ -4449,6 +4497,8 @@ class FraudCaseApp:
 
         scrollable, inner = create_scrollable_container(frame)
         scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.norms_scrollable = scrollable
+        self._register_scrollable(scrollable)
         self.norm_container = inner
         self.add_norm()
 
@@ -4471,6 +4521,7 @@ class FraudCaseApp:
         for i, n in enumerate(self.norm_frames):
             n.update_title(i)
         self._refresh_shared_norm_tree()
+        self._refresh_scrollable(getattr(self, "norms_scrollable", None))
 
     def remove_norm(self, norm_frame):
         self.norm_frames.remove(norm_frame)
@@ -4549,6 +4600,8 @@ class FraudCaseApp:
             parent, scroll_binder=self._scroll_binder, tab_id=parent
         )
         scrollable_tab.pack(fill="both", expand=True)
+        self.analysis_scrollable = scrollable_tab
+        self._register_scrollable(scrollable_tab)
         self._analysis_tab_container = tab_container
         tab_container.columnconfigure(0, weight=1)
         tab_container.rowconfigure(1, weight=1)
@@ -5760,6 +5813,7 @@ class FraudCaseApp:
             parent, scroll_binder=self._scroll_binder, tab_id=parent
         )
         scrollable_tab.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
+        self._register_scrollable(scrollable_tab)
         inner_frame.columnconfigure(0, weight=1)
         inner_frame.columnconfigure(1, weight=1)
         inner_frame.rowconfigure(1, weight=1)
@@ -6707,6 +6761,7 @@ class FraudCaseApp:
             parent, scroll_binder=self._scroll_binder, tab_id=parent
         )
         scrollable_tab.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self._register_scrollable(scrollable_tab)
         container.columnconfigure(0, weight=1)
 
         self.summary_intro_label = ttk.Label(
