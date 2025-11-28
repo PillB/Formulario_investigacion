@@ -12,7 +12,8 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import (ALERT_BADGE_ICON, create_collapsible_card,
+from ui.frames.utils import (ALERT_BADGE_ICON, SUCCESS_BADGE_ICON,
+                             BadgeManager, create_collapsible_card,
                              ensure_grid_support)
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
@@ -162,17 +163,11 @@ class InvolvementRow:
     def _apply_badge_state(self, badge, is_valid: bool, message: str | None):
         setter = getattr(self.product_frame, "_set_badge_state", None)
         if callable(setter):
-            try:
-                setter(badge, is_valid, message, success_text="Listo")
-                return
-            except TypeError:
-                setter(badge, is_valid, message)
-                return
-        text = "Listo" if is_valid else (message or "Revisa la información")
-        style_name = "TLabel"
-        styles = getattr(self.product_frame, "_badge_styles", {})
-        if isinstance(styles, dict):
-            style_name = styles.get("success" if is_valid else "warning", style_name)
+            setter(badge, is_valid, message, success_text=SUCCESS_BADGE_ICON)
+            return
+        text = SUCCESS_BADGE_ICON if is_valid else ALERT_BADGE_ICON
+        styles = getattr(self.product_frame, "_badge_styles", {}) or {"success": "TLabel", "warning": "TLabel"}
+        style_name = styles.get("success" if is_valid else "warning", "TLabel")
         try:
             badge.configure(text=text, style=style_name)
         except Exception:
@@ -631,15 +626,11 @@ class ClaimRow:
     def _apply_badge_state(self, badge, is_valid: bool, message: str | None):
         setter = getattr(self.product_frame, "_set_badge_state", None)
         if callable(setter):
-            try:
-                setter(badge, is_valid, message, success_text="Listo")
-                return
-            except TypeError:
-                setter(badge, is_valid, message)
-                return
+            setter(badge, is_valid, message, success_text=SUCCESS_BADGE_ICON)
+            return
         styles = getattr(self.product_frame, "_badge_styles", {}) or {"success": "TLabel", "warning": "TLabel"}
         style_name = styles.get("success" if is_valid else "warning", "TLabel")
-        text = "Listo" if is_valid else (message or "Revisa la información")
+        text = SUCCESS_BADGE_ICON if is_valid else ALERT_BADGE_ICON
         try:
             badge.configure(text=text, style=style_name)
         except Exception:
@@ -797,6 +788,7 @@ class ProductFrame:
         self._badge_registry: dict[str, dict[str, object]] = {}
         self._badge_updaters: dict[str, Callable] = {}
         self._badge_setters: dict[str, Callable] = {}
+        self.badge_manager: BadgeManager | None = None
         self._field_errors: dict[str, str | None] = {}
         self._last_date_errors: dict[str, str | None] = {"fecha_oc": None, "fecha_desc": None}
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
@@ -1741,40 +1733,14 @@ class ProductFrame:
             self.validators.append(validator)
 
     def _configure_badge_styles(self):
-        style = None
-        try:
-            style = ThemeManager.build_style(self.frame)
-        except Exception:
-            if hasattr(ttk, "Style"):
-                try:
-                    style = ttk.Style(master=self.frame)
-                except Exception:
-                    style = None
-        if not style or not hasattr(style, "configure"):
-            self._badge_styles = {"success": "TLabel", "warning": "TLabel"}
-            return
-        palette = ThemeManager.current()
-        success_style = "SuccessBadge.TLabel"
-        warning_style = "WarningBadge.TLabel"
-        style.configure(
-            success_style,
-            background=palette.get("accent", "#2e7d32"),
-            foreground=palette.get("select_foreground", "#ffffff"),
-            padding=(6, 2),
-            borderwidth=1,
-            relief="solid",
-            font=("TkDefaultFont", 9, "bold"),
+        self.badge_manager = BadgeManager(
+            parent=self.frame,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
         )
-        style.configure(
-            warning_style,
-            background="#f0ad4e",
-            foreground=palette.get("foreground", "#000000"),
-            padding=(6, 2),
-            borderwidth=1,
-            relief="solid",
-            font=("TkDefaultFont", 9, "bold"),
+        self._badge_styles = getattr(
+            self.badge_manager, "_badge_styles", {"success": "TLabel", "warning": "TLabel"}
         )
-        self._badge_styles = {"success": success_style, "warning": warning_style}
 
     def _configure_duplicate_status_style(self):
         if self._duplicate_status_style:
@@ -1804,16 +1770,13 @@ class ProductFrame:
         parent=None,
         text: str = ALERT_BADGE_ICON,
     ):
-        styles = self._badge_styles or {"warning": "TLabel"}
         badge_parent = parent or self.frame
-        badge = ttk.Label(
-            badge_parent,
-            text=text,
-            style=styles.get("warning", "TLabel"),
-            anchor="w",
+        manager = self.badge_manager or BadgeManager(
+            parent=badge_parent, pending_text=ALERT_BADGE_ICON, success_text=SUCCESS_BADGE_ICON
         )
-        badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
-        return badge
+        self.badge_manager = manager
+        self._badge_styles = getattr(manager, "_badge_styles", {"success": "TLabel", "warning": "TLabel"})
+        return manager.create_badge(badge_parent, row=row, column=column, text=text)
 
     def _register_badge(
         self,
@@ -1823,27 +1786,36 @@ class ProductFrame:
         column: int = 4,
         parent=None,
         pending_text: str = ALERT_BADGE_ICON,
-        success_text: str = "✓",
+        success_text: str = SUCCESS_BADGE_ICON,
     ):
-        badge = self._create_badge_label(
-            row,
+        manager = self.badge_manager or BadgeManager(
+            parent=parent or self.frame,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
+        )
+        self.badge_manager = manager
+        badge = manager.create_and_register(
+            key,
+            parent or self.frame,
+            row=row,
             column=column,
-            parent=parent,
-            text=pending_text,
+            pending_text=pending_text,
+            success_text=success_text,
         )
         self._badge_registry[key] = {
             "badge": badge,
             "pending": pending_text,
             "success": success_text,
         }
+        self._badge_styles = getattr(manager, "_badge_styles", {"success": "TLabel", "warning": "TLabel"})
         return badge
 
     def _get_badge_setter(
         self,
         key: str,
         *,
-        success_text: str | None = None,
-        pending_text: str | None = None,
+        success_text: str | None = SUCCESS_BADGE_ICON,
+        pending_text: str | None = ALERT_BADGE_ICON,
     ):
         if key in self._badge_setters:
             return self._badge_setters[key]
@@ -1869,15 +1841,15 @@ class ProductFrame:
         is_ok: bool,
         message: str | None,
         *,
-        success_text: str | None = None,
-        pending_text: str | None = None,
+        success_text: str | None = SUCCESS_BADGE_ICON,
+        pending_text: str | None = ALERT_BADGE_ICON,
     ):
         config = self._badge_registry.get(key)
         if not config:
             return
         badge = config.get("badge")
-        success_label = success_text or config.get("success", "Cuadra")
-        fallback_warning = pending_text or config.get("pending") or "Revisa la información"
+        success_label = success_text or config.get("success", SUCCESS_BADGE_ICON)
+        fallback_warning = pending_text or config.get("pending") or ALERT_BADGE_ICON
         self._set_badge_state(badge, is_ok, message or fallback_warning, success_text=success_label)
 
     def _wrap_validation_with_badge(
@@ -1902,13 +1874,21 @@ class ProductFrame:
         self._badge_updaters[key] = lambda: badge_setter(self._field_errors.get(key))
         return _wrapped
 
-    def _set_badge_state(self, badge, is_ok: bool, message: str | None, *, success_text: str = "Cuadra"):
-        if badge is None:
-            return
-        styles = self._badge_styles or {"success": "TLabel", "warning": "TLabel"}
-        style_name = styles["success"] if is_ok else styles["warning"]
-        text = success_text if is_ok else (message or "Revisa la información")
-        badge.configure(text=text, style=style_name)
+    def _set_badge_state(
+        self, badge, is_ok: bool, message: str | None, *, success_text: str = SUCCESS_BADGE_ICON
+    ):
+        manager = self.badge_manager
+        if manager is None:
+            manager = BadgeManager(
+                parent=self.frame,
+                pending_text=ALERT_BADGE_ICON,
+                success_text=SUCCESS_BADGE_ICON,
+            )
+            self.badge_manager = manager
+            self._badge_styles = getattr(
+                manager, "_badge_styles", {"success": "TLabel", "warning": "TLabel"}
+            )
+        manager.set_badge_state(badge, is_ok, message, success_text=SUCCESS_BADGE_ICON)
 
     def _build_duplicate_status_label(self, row: int):
         style_name = self._configure_duplicate_status_style()

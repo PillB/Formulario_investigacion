@@ -687,7 +687,7 @@ class BadgeManager:
             return
         styles = self._badge_styles or {"success": "TLabel", "warning": "TLabel"}
         style_name = styles["success"] if is_ok else styles["warning"]
-        text = success_text if is_ok else (message or self.pending_text)
+        text = success_text if is_ok else self.pending_text
         try:
             badge.configure(text=text, style=style_name)
         except Exception:
