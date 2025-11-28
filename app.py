@@ -8348,14 +8348,15 @@ class FraudCaseApp:
                 missing_association_messages.append(
                     (
                         f"{product_label}: asocia un cliente o agrega un colaborador en la sección"
-                        " 'Involucramiento de colaboradores' antes de validar duplicados."
+                        " 'Involucramiento de colaboradores'. Solo necesitas uno de ellos para"
+                        " validar duplicados."
                     )
                 )
             elif not has_client_association and not has_collaborator_association:
                 missing_assignment_detected = True
                 missing_association_messages.append(
                     (
-                        f"{product_label}: selecciona el colaborador o indica el cliente para"
+                        f"{product_label}: registra el cliente o el colaborador (basta uno) para"
                         " validar la clave técnica."
                     )
                 )
@@ -8393,13 +8394,13 @@ class FraudCaseApp:
         if missing_association_messages or missing_date_messages:
             guidance_parts = [
                 (
-                    "La clave técnica se valida con caso, producto, cliente o colaborador,"
-                    " fecha de ocurrencia e ID de reclamo."
+                    "La clave técnica se valida con caso, producto, fecha de ocurrencia, ID de reclamo"
+                    " y la asociación disponible: cliente o colaborador (no necesitas ambos)."
                 )
             ]
             if missing_association_messages:
                 guidance_parts.append(
-                    "Asocia un cliente o indica un colaborador en 'Involucramiento de colaboradores' antes de continuar."
+                    "Asocia un cliente o registra un colaborador (uno es suficiente) en 'Involucramiento de colaboradores' antes de continuar."
                 )
             if missing_date_messages:
                 guidance_parts.append(
