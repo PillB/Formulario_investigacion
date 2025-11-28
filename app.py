@@ -8339,25 +8339,29 @@ class FraudCaseApp:
                 for assignment in assignment_rows
                 if (assignment.get('id_colaborador') or '').strip()
             ]
-            if not assignment_rows:
+
+            has_client_association = bool(client_norm)
+            has_collaborator_association = bool(collaborator_ids)
+
+            if not has_client_association and not assignment_rows:
                 missing_assignment_detected = True
                 missing_association_messages.append(
                     (
-                        f"{product_label}: asigna al menos un colaborador en la sección"
+                        f"{product_label}: asocia un cliente o agrega un colaborador en la sección"
                         " 'Involucramiento de colaboradores' antes de validar duplicados."
                     )
                 )
-            elif not collaborator_ids:
+            elif not has_client_association and not has_collaborator_association:
                 missing_assignment_detected = True
                 missing_association_messages.append(
                     (
-                        f"{product_label}: selecciona el colaborador en cada asignación activa"
-                        " para validar la clave técnica."
+                        f"{product_label}: selecciona el colaborador o indica el cliente para"
+                        " validar la clave técnica."
                     )
                 )
 
-            if not collaborator_ids:
-                collaborator_ids = ["<FALTA_COLABORADOR>"]
+            if not has_collaborator_association:
+                collaborator_ids = [""] if has_client_association else ["<FALTA_ASOCIACION>"]
 
             for claim in claim_rows:
                 claim_id_raw = (claim.get('id_reclamo') or '').strip()
@@ -8389,13 +8393,13 @@ class FraudCaseApp:
         if missing_association_messages or missing_date_messages:
             guidance_parts = [
                 (
-                    "La clave técnica se valida con caso, producto, cliente, colaborador,"
+                    "La clave técnica se valida con caso, producto, cliente o colaborador,"
                     " fecha de ocurrencia e ID de reclamo."
                 )
             ]
             if missing_association_messages:
                 guidance_parts.append(
-                    "Asigna al menos un colaborador en 'Involucramiento de colaboradores' antes de continuar."
+                    "Asocia un cliente o indica un colaborador en 'Involucramiento de colaboradores' antes de continuar."
                 )
             if missing_date_messages:
                 guidance_parts.append(
@@ -8415,9 +8419,9 @@ class FraudCaseApp:
             message = "\n\n".join(error_messages)
             if (missing_association_messages or missing_date_messages) and not duplicate_messages:
                 if missing_association_messages and missing_date_messages:
-                    status = "Bloqueado: agrega colaboradores y fecha de ocurrencia"
+                    status = "Bloqueado: agrega cliente/colaborador y fecha de ocurrencia"
                 elif missing_association_messages:
-                    status = "Bloqueado: asigna colaborador para validar"
+                    status = "Bloqueado: asigna cliente o colaborador para validar"
                 else:
                     status = "Bloqueado: ingresa fecha de ocurrencia para validar"
             elif missing_association_messages or missing_date_messages:
