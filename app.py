@@ -421,6 +421,135 @@ class FraudCaseApp:
     IMAGE_MAX_BYTES = 3 * 1024 * 1024
     IMAGE_MAX_DIMENSION = 2000
     IMAGE_DISPLAY_MAX = 1000
+    IMPORT_CONFIG = {
+        "clientes": {
+            "title": "Seleccionar CSV de clientes",
+            "initialfile": Path(MASSIVE_SAMPLE_FILES.get("clientes", "")).name,
+            "expected_headers": (
+                "id_cliente",
+                "nombres",
+                "apellidos",
+                "tipo_id",
+                "flag",
+                "telefonos",
+                "correos",
+                "direcciones",
+                "accionado",
+            ),
+            "expected_keyword": "cliente",
+        },
+        "colaboradores": {
+            "title": "Seleccionar CSV de colaboradores",
+            "initialfile": Path(MASSIVE_SAMPLE_FILES.get("colaboradores", "")).name,
+            "expected_headers": (
+                "id_colaborador",
+                "flag",
+                "nombres",
+                "apellidos",
+                "division",
+                "area",
+                "servicio",
+                "puesto",
+                "nombre_agencia",
+                "codigo_agencia",
+                "tipo_falta",
+                "tipo_sancion",
+            ),
+            "expected_keyword": "colaborador",
+        },
+        "productos": {
+            "title": "Seleccionar CSV de productos",
+            "initialfile": Path(MASSIVE_SAMPLE_FILES.get("productos", "")).name,
+            "expected_headers": (
+                "id_producto",
+                "id_cliente",
+                "tipo_producto",
+                "categoria1",
+                "categoria2",
+                "modalidad",
+                "canal",
+                "proceso",
+                "fecha_ocurrencia",
+                "fecha_descubrimiento",
+                "monto_investigado",
+                "tipo_moneda",
+                "monto_perdida_fraude",
+                "monto_falla_procesos",
+                "monto_contingencia",
+                "monto_recuperado",
+                "monto_pago_deuda",
+                "id_reclamo",
+                "nombre_analitica",
+                "codigo_analitica",
+            ),
+            "expected_keyword": "producto",
+        },
+        "riesgos": {
+            "title": "Seleccionar CSV de riesgos",
+            "initialfile": Path(MASSIVE_SAMPLE_FILES.get("riesgos", "")).name,
+            "expected_headers": (
+                "id_riesgo",
+                "id_caso",
+                "lider",
+                "descripcion",
+                "criticidad",
+                "exposicion_residual",
+                "planes_accion",
+            ),
+            "expected_keyword": "riesgo",
+        },
+        "normas": {
+            "title": "Seleccionar CSV de normas",
+            "initialfile": Path(MASSIVE_SAMPLE_FILES.get("normas", "")).name,
+            "expected_headers": (
+                "id_norma",
+                "id_caso",
+                "descripcion",
+                "fecha_vigencia",
+            ),
+            "expected_keyword": "norma",
+        },
+        "reclamos": {
+            "title": "Seleccionar CSV de reclamos",
+            "initialfile": Path(MASSIVE_SAMPLE_FILES.get("reclamos", "")).name,
+            "expected_headers": (
+                "id_reclamo",
+                "id_caso",
+                "id_producto",
+                "nombre_analitica",
+                "codigo_analitica",
+            ),
+            "expected_keyword": "reclamo",
+        },
+        "combinado": {
+            "title": "Seleccionar CSV combinado",
+            "initialfile": Path(MASSIVE_SAMPLE_FILES.get("combinado", "")).name,
+            "expected_headers": (
+                "id_producto",
+                "id_cliente",
+                "tipo_producto",
+                "categoria1",
+                "categoria2",
+                "modalidad",
+                "canal",
+                "proceso",
+                "fecha_ocurrencia",
+                "fecha_descubrimiento",
+                "monto_investigado",
+                "tipo_moneda",
+                "monto_perdida_fraude",
+                "monto_falla_procesos",
+                "monto_contingencia",
+                "monto_recuperado",
+                "monto_pago_deuda",
+                "id_reclamo",
+                "nombre_analitica",
+                "codigo_analitica",
+                "id_colaborador",
+            ),
+            "expected_keyword": "combinado",
+        },
+    }
     _external_drive_path: Optional[Path] = None
     _external_log_file_initialized: bool = False
     _extended_sections_enabled: bool = ENABLE_EXTENDED_ANALYSIS_SECTIONS
@@ -1066,6 +1195,8 @@ class FraudCaseApp:
         filename = filename or self._select_csv_file("combinado", "Seleccionar CSV combinado")
         if not filename:
             return
+        if not self._validate_import_headers(filename, "combinado"):
+            return
         log_event("navegacion", "Inició importación de datos combinados", self.logs)
         def worker():
             prepared_rows = []
@@ -1107,6 +1238,8 @@ class FraudCaseApp:
         filename = filename or self._select_csv_file("riesgos", "Seleccionar CSV de riesgos")
         if not filename:
             return
+        if not self._validate_import_headers(filename, "riesgos"):
+            return
         log_event("navegacion", "Inició importación de riesgos", self.logs)
         def worker():
             payload = []
@@ -1131,6 +1264,8 @@ class FraudCaseApp:
         filename = filename or self._select_csv_file("normas", "Seleccionar CSV de normas")
         if not filename:
             return
+        if not self._validate_import_headers(filename, "normas"):
+            return
         log_event("navegacion", "Inició importación de normas", self.logs)
         def worker():
             payload = []
@@ -1154,6 +1289,8 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar reclamos", self.logs)
         filename = filename or self._select_csv_file("reclamos", "Seleccionar CSV de reclamos")
         if not filename:
+            return
+        if not self._validate_import_headers(filename, "reclamos"):
             return
         log_event("navegacion", "Inició importación de reclamos", self.logs)
         def worker():
@@ -8081,12 +8218,24 @@ class FraudCaseApp:
     # ---------------------------------------------------------------------
     # Importación desde CSV
 
+    def _get_import_config(self, sample_key):
+        return self.IMPORT_CONFIG.get(sample_key, {})
+
     def _select_csv_file(self, sample_key, dialog_title):
         """Obtiene un CSV desde diálogo y registra cancelaciones explícitas."""
 
         filename = None
+        config = self._get_import_config(sample_key)
+        dialog_options = {
+            "title": dialog_title or config.get("title") or "Seleccionar CSV",
+            "filetypes": [("CSV Files", "*.csv")],
+        }
+        initialfile = config.get("initialfile")
+        if initialfile:
+            dialog_options["initialfile"] = initialfile
+            dialog_options["initialdir"] = str(Path(MASSIVE_SAMPLE_FILES.get(sample_key, "")).parent)
         try:
-            filename = filedialog.askopenfilename(title=dialog_title, filetypes=[("CSV Files", "*.csv")])
+            filename = filedialog.askopenfilename(**dialog_options)
         except tk.TclError:
             filename = None
         if not filename:
@@ -8095,7 +8244,59 @@ class FraudCaseApp:
             if not getattr(self, "_suppress_messagebox", False):
                 messagebox.showinfo("Importación cancelada", message)
             return None
+        expected_keyword = (config.get("expected_keyword") or str(sample_key)).lower()
+        basename = os.path.basename(filename).lower()
+        if expected_keyword and expected_keyword not in basename:
+            try:
+                proceed = messagebox.askyesno(
+                    "Advertencia",
+                    (
+                        f"El archivo seleccionado ({os.path.basename(filename)}) no parece ser de {sample_key}.\n"
+                        "¿Deseas continuar de todos modos?"
+                    ),
+                )
+            except tk.TclError:
+                proceed = True
+            if not proceed:
+                log_event("cancelado", f"Importación cancelada por posible tipo incorrecto: {filename}", self.logs)
+                return None
         return filename
+
+    def _validate_import_headers(self, filename, sample_key):
+        config = self._get_import_config(sample_key)
+        expected_headers = config.get("expected_headers")
+        if not expected_headers:
+            return True
+        if not os.path.exists(filename):
+            log_event(
+                "validacion",
+                f"No se pudo validar encabezados para {sample_key}: archivo inexistente {filename}",
+                self.logs,
+            )
+            return True
+        try:
+            with open(filename, newline="", encoding="utf-8-sig") as handle:
+                reader = csv.DictReader(line for line in handle if line.strip())
+                headers = reader.fieldnames or []
+        except Exception as exc:  # pragma: no cover - errores de IO poco frecuentes
+            log_event("validacion", f"No se pudo leer {filename} para validar encabezados: {exc}", self.logs)
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror("CSV inválido", f"No se pudo leer el archivo: {exc}")
+            return False
+        missing = [header for header in expected_headers if header not in headers]
+        if missing:
+            log_event(
+                "validacion",
+                f"CSV de {sample_key} con columnas faltantes: {', '.join(missing)}",
+                self.logs,
+            )
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror(
+                    "CSV inválido",
+                    f"Faltan columnas requeridas para {sample_key}: {', '.join(missing)}",
+                )
+            return False
+        return True
 
     def _get_detail_lookup(self, id_column):
         """Obtiene el diccionario de detalles considerando alias configurados."""
@@ -8975,16 +9176,40 @@ class FraudCaseApp:
             self._populate_team_frame_from_row(frame, payload)
         return frame, created
 
+    @staticmethod
+    def _format_import_summary(tipo, nuevos, actualizados, duplicados, errores):
+        lines = [
+            f"Importación completada de {tipo}:",
+            f"{nuevos} registros nuevos",
+            f"{actualizados} registros actualizados",
+            f"{duplicados} duplicados omitidos",
+            f"{errores} filas con errores",
+        ]
+        return "\n".join(lines)
+
     def _apply_client_import_payload(self, entries):
-        imported = 0
+        nuevos = 0
+        actualizados = 0
+        duplicados = 0
+        errores = 0
         missing_ids = []
+        seen_ids = set()
         for entry in entries or []:
             hydrated = entry.get('row', {})
             found = entry.get('found', False)
             id_cliente = (hydrated.get('id_cliente') or '').strip()
             if not id_cliente:
+                errores += 1
                 continue
-            frame = self._find_client_frame(id_cliente) or self._obtain_client_slot_for_import()
+            if id_cliente in seen_ids:
+                duplicados += 1
+                continue
+            seen_ids.add(id_cliente)
+            frame = self._find_client_frame(id_cliente)
+            created = False
+            if not frame:
+                frame = self._obtain_client_slot_for_import()
+                created = True
             self._populate_client_frame_from_row(frame, hydrated, preserve_existing=True)
             self._trigger_import_id_refresh(
                 frame,
@@ -8992,28 +9217,50 @@ class FraudCaseApp:
                 notify_on_missing=True,
                 preserve_existing=False,
             )
-            imported += 1
+            if created:
+                nuevos += 1
+            else:
+                actualizados += 1
             if not found and 'id_cliente' in self.detail_catalogs:
                 missing_ids.append(id_cliente)
         self._notify_dataset_changed(summary_sections="clientes")
-        log_event("navegacion", f"Clientes importados desde CSV: {imported}", self.logs)
-        if imported:
+        total = nuevos + actualizados
+        log_event(
+            "navegacion",
+            f"Clientes importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
+            self.logs,
+        )
+        if total:
             self.sync_main_form_after_import("clientes")
-            messagebox.showinfo("Importación completa", f"Se cargaron {imported} clientes.")
+            summary = self._format_import_summary("clientes", nuevos, actualizados, duplicados, errores)
+            messagebox.showinfo("Importación completa", summary)
         else:
             messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
         self._report_missing_detail_ids("clientes", missing_ids)
 
     def _apply_team_import_payload(self, entries):
-        imported = 0
+        nuevos = 0
+        actualizados = 0
+        duplicados = 0
+        errores = 0
         missing_ids = []
+        seen_ids = set()
         for entry in entries or []:
             hydrated = entry.get('row', {})
             found = entry.get('found', False)
             collaborator_id = (hydrated.get('id_colaborador') or '').strip()
             if not collaborator_id:
+                errores += 1
                 continue
-            frame = self._find_team_frame(collaborator_id) or self._obtain_team_slot_for_import()
+            if collaborator_id in seen_ids:
+                duplicados += 1
+                continue
+            seen_ids.add(collaborator_id)
+            frame = self._find_team_frame(collaborator_id)
+            created = False
+            if not frame:
+                frame = self._obtain_team_slot_for_import()
+                created = True
             self._populate_team_frame_from_row(frame, hydrated)
             self._trigger_import_id_refresh(
                 frame,
@@ -9021,28 +9268,50 @@ class FraudCaseApp:
                 notify_on_missing=True,
                 preserve_existing=False,
             )
-            imported += 1
+            if created:
+                nuevos += 1
+            else:
+                actualizados += 1
             if not found and 'id_colaborador' in self.detail_catalogs:
                 missing_ids.append(collaborator_id)
         self._notify_dataset_changed(summary_sections="colaboradores")
-        log_event("navegacion", f"Colaboradores importados desde CSV: {imported}", self.logs)
-        if imported:
+        total = nuevos + actualizados
+        log_event(
+            "navegacion",
+            f"Colaboradores importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
+            self.logs,
+        )
+        if total:
             self.sync_main_form_after_import("colaboradores")
-            messagebox.showinfo("Importación completa", "Colaboradores importados correctamente.")
+            summary = self._format_import_summary("colaboradores", nuevos, actualizados, duplicados, errores)
+            messagebox.showinfo("Importación completa", summary)
         else:
             messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
         self._report_missing_detail_ids("colaboradores", missing_ids)
 
     def _apply_product_import_payload(self, entries):
-        imported = 0
+        nuevos = 0
+        actualizados = 0
+        duplicados = 0
+        errores = 0
         missing_ids = []
+        seen_ids = set()
         for entry in entries or []:
             hydrated = entry.get('row', {})
             found = entry.get('found', False)
             product_id = (hydrated.get('id_producto') or '').strip()
             if not product_id:
+                errores += 1
                 continue
-            frame = self._find_product_frame(product_id) or self._obtain_product_slot_for_import()
+            if product_id in seen_ids:
+                duplicados += 1
+                continue
+            seen_ids.add(product_id)
+            frame = self._find_product_frame(product_id)
+            created = False
+            if not frame:
+                frame = self._obtain_product_slot_for_import()
+                created = True
             client_id = (hydrated.get('id_cliente') or '').strip()
             if client_id:
                 client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
@@ -9054,14 +9323,23 @@ class FraudCaseApp:
                 notify_on_missing=True,
                 preserve_existing=False,
             )
-            imported += 1
+            if created:
+                nuevos += 1
+            else:
+                actualizados += 1
             if not found and 'id_producto' in self.detail_catalogs:
                 missing_ids.append(product_id)
         self._notify_dataset_changed(summary_sections="productos")
-        log_event("navegacion", f"Productos importados desde CSV: {imported}", self.logs)
-        if imported:
+        total = nuevos + actualizados
+        log_event(
+            "navegacion",
+            f"Productos importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
+            self.logs,
+        )
+        if total:
             self.sync_main_form_after_import("productos")
-            messagebox.showinfo("Importación completa", "Productos importados correctamente.")
+            summary = self._format_import_summary("productos", nuevos, actualizados, duplicados, errores)
+            messagebox.showinfo("Importación completa", summary)
         else:
             messagebox.showwarning("Sin cambios", "No se detectaron productos nuevos en el archivo.")
         self._report_missing_detail_ids("productos", missing_ids)
@@ -9289,6 +9567,8 @@ class FraudCaseApp:
         filename = filename or self._select_csv_file("clientes", "Seleccionar CSV de clientes")
         if not filename:
             return
+        if not self._validate_import_headers(filename, "clientes"):
+            return
         log_event("navegacion", "Inició importación de clientes", self.logs)
         def worker():
             payload = []
@@ -9315,6 +9595,8 @@ class FraudCaseApp:
         filename = filename or self._select_csv_file("colaboradores", "Seleccionar CSV de colaboradores")
         if not filename:
             return
+        if not self._validate_import_headers(filename, "colaboradores"):
+            return
         log_event("navegacion", "Inició importación de colaboradores", self.logs)
         def worker():
             payload = []
@@ -9340,6 +9622,8 @@ class FraudCaseApp:
         log_event("navegacion", "Usuario pulsó importar productos", self.logs)
         filename = filename or self._select_csv_file("productos", "Seleccionar CSV de productos")
         if not filename:
+            return
+        if not self._validate_import_headers(filename, "productos"):
             return
         log_event("navegacion", "Inició importación de productos", self.logs)
         def worker():
