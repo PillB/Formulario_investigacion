@@ -19,7 +19,7 @@ from ui.frames.utils import (
     create_collapsible_card,
     ensure_grid_support,
     grid_section,
-    renumber_indexed_rows,
+    refresh_dynamic_rows,
 )
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
@@ -1708,12 +1708,27 @@ class ProductFrame:
         self.mod_cb.set('')
         self.log_change(f"Producto {self.idx+1}: cambió categoría 2")
 
-    def add_claim(self, user_initiated: bool = False):
-        idx = len(self.claims)
+    def _build_claim_row(self, idx: int):
         row = ClaimRow(self.claims_frame, self, idx, self.remove_claim, self.logs, self.tooltip_register)
         row.set_claim_requirement(self._claim_requirement_active, skip_refresh=True)
+        return row
+
+    def _refresh_claim_rows(self, *, min_rows: int = 0):
+        refresh_dynamic_rows(
+            self.claims,
+            start_row=1,
+            columnspan=6,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky="we",
+            min_rows=min_rows,
+            row_factory=self._build_claim_row,
+        )
+
+    def add_claim(self, user_initiated: bool = False):
+        row = self._build_claim_row(len(self.claims))
         self.claims.append(row)
-        self.renumber_claims()
+        self._refresh_claim_rows()
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
         self.refresh_claim_guidance()
@@ -1727,22 +1742,10 @@ class ProductFrame:
     def remove_claim(self, row):
         if row in self.claims:
             self.claims.remove(row)
-        if not self.claims:
-            self.add_claim()
-        self.renumber_claims()
+        self._refresh_claim_rows(min_rows=1)
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
         self.refresh_claim_guidance()
-
-    def renumber_claims(self):
-        renumber_indexed_rows(
-            self.claims,
-            start_row=1,
-            columnspan=6,
-            padx=COL_PADX,
-            pady=ROW_PADY,
-            sticky="we",
-        )
 
     def clear_claims(self):
         for claim in self.claims:
@@ -2433,22 +2436,19 @@ class ProductFrame:
                 normalized.append(legacy)
         return normalized
 
-    def add_involvement(self):
-        idx = len(self.involvements)
-        row = InvolvementRow(self.invol_frame, self, idx, self.get_team_options, self.remove_involvement, self.logs, self.tooltip_register)
-        self.involvements.append(row)
-        self.renumber_involvements()
-        self.schedule_summary_refresh('involucramientos')
-        return row
+    def _build_involvement_row(self, idx: int):
+        return InvolvementRow(
+            self.invol_frame,
+            self,
+            idx,
+            self.get_team_options,
+            self.remove_involvement,
+            self.logs,
+            self.tooltip_register,
+        )
 
-    def remove_involvement(self, row):
-        if row in self.involvements:
-            self.involvements.remove(row)
-        self.renumber_involvements()
-        self.schedule_summary_refresh('involucramientos')
-
-    def renumber_involvements(self):
-        renumber_indexed_rows(
+    def _refresh_involvement_rows(self):
+        refresh_dynamic_rows(
             self.involvements,
             start_row=1,
             columnspan=6,
@@ -2456,6 +2456,19 @@ class ProductFrame:
             pady=ROW_PADY,
             sticky="we",
         )
+
+    def add_involvement(self):
+        row = self._build_involvement_row(len(self.involvements))
+        self.involvements.append(row)
+        self._refresh_involvement_rows()
+        self.schedule_summary_refresh('involucramientos')
+        return row
+
+    def remove_involvement(self, row):
+        if row in self.involvements:
+            self.involvements.remove(row)
+        self._refresh_involvement_rows()
+        self.schedule_summary_refresh('involucramientos')
 
     def update_client_options(self):
         current = self.client_var.get().strip()

@@ -301,6 +301,53 @@ def renumber_indexed_rows(
     )
 
 
+def refresh_dynamic_rows(
+    rows: list[Any],
+    *,
+    start_row: int = 1,
+    columnspan: int = 6,
+    padx: int = COL_PADX,
+    pady: int = ROW_PADY,
+    sticky: str = "we",
+    min_rows: int = 0,
+    row_factory=None,
+    on_row_created=None,
+):
+    """Reindexa y reubica filas dinámicas aplicando una política uniforme.
+
+    ``rows`` recibe la colección viva que representa secciones dinámicas
+    (reclamos, involucramientos, riesgos, etc.). El helper garantiza el
+    reindexado y regrid mediante :func:`renumber_indexed_rows` y, si
+    ``min_rows`` es mayor que cero, utiliza ``row_factory`` para generar las
+    filas necesarias hasta alcanzar dicho mínimo. De esta forma se evita
+    duplicar lógica de renumerado en cada marco y se mantiene un comportamiento
+    consistente en todas las pantallas.
+    """
+
+    while callable(row_factory) and len(rows) < min_rows:
+        try:
+            new_row = row_factory(len(rows))
+        except Exception:
+            break
+        if new_row is None:
+            break
+        rows.append(new_row)
+        if callable(on_row_created):
+            try:
+                on_row_created(new_row)
+            except Exception:
+                pass
+
+    renumber_indexed_rows(
+        rows,
+        start_row=start_row,
+        columnspan=columnspan,
+        padx=padx,
+        pady=pady,
+        sticky=sticky,
+    )
+
+
 def grid_and_configure(
     widget: Any,
     parent: Any,
