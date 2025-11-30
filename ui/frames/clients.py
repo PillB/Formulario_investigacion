@@ -10,8 +10,14 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_client_id, validate_email_list,
                         validate_multi_selection, validate_phone_list,
                         validate_required_text)
-from ui.frames.utils import (BadgeManager, build_required_label,
-                             create_collapsible_card, ensure_grid_support)
+from ui.frames.utils import (
+    BadgeManager,
+    build_required_label,
+    create_collapsible_card,
+    ensure_grid_support,
+    grid_and_configure,
+    grid_section,
+)
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 from theme_manager import ThemeManager
@@ -82,7 +88,7 @@ class ClientFrame:
             collapsible_cls=CollapsibleSection,
         )
         self._sync_section_title()
-        self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        self._place_section()
         self._register_title_traces()
 
         if summary_parent is not None and owner is not None and not getattr(owner, "clients_summary_tree", None):
@@ -412,6 +418,25 @@ class ClientFrame:
                 variables=[self.correos_var],
             )
         )
+        if not self.validators:
+            self.validators.append(
+                FieldValidator(
+                    tel_entry,
+                    self.badges.wrap_validation("cliente_tel", _validate_required_phones),
+                    self.logs,
+                    f"Cliente {self.idx+1} - Teléfonos",
+                    variables=[self.telefonos_var],
+                )
+            )
+            self.validators.append(
+                FieldValidator(
+                    cor_entry,
+                    self.badges.wrap_validation("cliente_correo", _validate_required_emails),
+                    self.logs,
+                    f"Cliente {self.idx+1} - Correos",
+                    variables=[self.correos_var],
+                )
+            )
         self.validators.append(
             FieldValidator(
                 self.accionado_listbox,
@@ -456,6 +481,22 @@ class ClientFrame:
             if details:
                 title = f"{title} – {' | '.join(details)}"
         return title
+
+    def _place_section(self):
+        grid_section(self.section, self.parent, row=self.idx, padx=COL_PADX, pady=ROW_PADY)
+        if hasattr(self.parent, "columnconfigure"):
+            try:
+                self.parent.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+
+    def update_position(self, new_index: int | None = None):
+        if new_index is not None:
+            self.idx = new_index
+        try:
+            self.section.grid_configure(row=self.idx, padx=COL_PADX, pady=ROW_PADY, sticky="nsew")
+        except Exception:
+            self._place_section()
 
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
@@ -650,7 +691,14 @@ class ClientFrame:
 
         tree.bind("<<TreeviewSelect>>", self._on_summary_select)
         tree.bind("<Double-1>", self._on_summary_double_click)
-        summary_frame.pack(fill="both", expand=True)
+        grid_and_configure(
+            summary_frame,
+            container,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            row_weight=1,
+            column_weight=1,
+        )
         return tree
 
     def refresh_summary(self):

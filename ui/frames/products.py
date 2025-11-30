@@ -12,9 +12,14 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import (ALERT_BADGE_ICON, SUCCESS_BADGE_ICON,
-                             BadgeManager, create_collapsible_card,
-                             ensure_grid_support)
+from ui.frames.utils import (
+    ALERT_BADGE_ICON,
+    SUCCESS_BADGE_ICON,
+    BadgeManager,
+    create_collapsible_card,
+    ensure_grid_support,
+    grid_section,
+)
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
@@ -837,7 +842,7 @@ class ProductFrame:
 
         self.section = self._create_section(parent)
         self._sync_section_title()
-        self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        self._place_section()
         self._tree_sort_state: dict[str, bool] = {}
         self._initialize_header_table(summary_parent)
         self._register_title_traces()
@@ -1384,6 +1389,22 @@ class ProductFrame:
             ),
             collapsible_cls=CollapsibleSection,
         )
+
+    def _place_section(self):
+        grid_section(self.section, self.parent, row=self.idx, padx=COL_PADX, pady=ROW_PADY)
+        if hasattr(self.parent, "columnconfigure"):
+            try:
+                self.parent.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+
+    def update_position(self, new_index: int | None = None):
+        if new_index is not None:
+            self.idx = new_index
+        try:
+            self.section.grid_configure(row=self.idx, padx=COL_PADX, pady=ROW_PADY, sticky="nsew")
+        except Exception:
+            self._place_section()
 
     def _register_title_traces(self):
         for var in (self.id_var, self.tipo_prod_var):

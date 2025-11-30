@@ -7,7 +7,12 @@ from tkinter import ttk
 
 from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
 from ui.config import COL_PADX, ROW_PADY
-from ui.frames.utils import BadgeManager, build_required_label, ensure_grid_support
+from ui.frames.utils import (
+    BadgeManager,
+    build_required_label,
+    ensure_grid_support,
+    grid_and_configure,
+)
 from ui.layout import responsive_grid
 from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
@@ -29,11 +34,13 @@ class CaseFrame:
     def __init__(self, owner, parent):
         self.owner = owner
         self.frame = ttk.Frame(parent)
-        self.frame.pack(fill="both", expand=True, padx=5, pady=5)
+        grid_and_configure(self.frame, parent, padx=5, pady=5)
+        self.frame.grid_rowconfigure(0, weight=1)
+        self.frame.grid_columnconfigure(0, weight=1)
         self._left_fields: list[tuple[ttk.Widget, ttk.Widget]] = []
         self._right_fields: list[tuple[ttk.Widget, ttk.Widget]] = []
         self._paned = ttk.Panedwindow(self.frame, orient="horizontal")
-        self._paned.pack(fill="both", expand=True)
+        grid_and_configure(self._paned, self.frame)
         self._left_column = ttk.Frame(self._paned)
         self._right_column = ttk.Frame(self._paned)
         ensure_grid_support(self._left_column)

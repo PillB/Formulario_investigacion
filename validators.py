@@ -348,6 +348,11 @@ class FieldValidator:
 
     modal_notifications_enabled = True
     status_consumer: Optional[Callable[[str, Optional[str], object], None]] = None
+    # Permite que los tests o herramientas de depuración recopilen instancias
+    # sin necesidad de aplicar un monkeypatch explícito. Si ``instance_registry``
+    # o ``instances`` apunta a una lista, cada validador se añadirá
+    # automáticamente.
+    instance_registry: Optional[list] = None
 
     @classmethod
     def set_status_consumer(
@@ -379,6 +384,14 @@ class FieldValidator:
         for var in self.variables:
             self._traces.append(var.trace_add("write", self._on_change))
         self._bind_widget_events(widget)
+        self._register_instance()
+
+    def _register_instance(self) -> None:
+        registry = getattr(self.__class__, "instance_registry", None)
+        if registry is None:
+            registry = getattr(self.__class__, "instances", None)
+        if isinstance(registry, list):
+            registry.append(self)
 
     def _bind_widget_events(self, widget) -> None:
         for event_name in (

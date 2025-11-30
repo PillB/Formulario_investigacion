@@ -211,6 +211,75 @@ def ensure_grid_support(widget: Any) -> None:
     setattr(widget.__class__, "grid", _grid_proxy)
 
 
+def grid_and_configure(
+    widget: Any,
+    parent: Any,
+    *,
+    row: int = 0,
+    column: int = 0,
+    padx: int | tuple[int, int] = 0,
+    pady: int | tuple[int, int] = 0,
+    sticky: str = "nsew",
+    row_weight: int | None = 1,
+    column_weight: int | None = 1,
+):
+    """Grid ``widget`` inside ``parent`` applying weight defaults consistently."""
+
+    ensure_grid_support(parent)
+    ensure_grid_support(widget)
+    try:
+        widget.grid(row=row, column=column, padx=padx, pady=pady, sticky=sticky)
+    except Exception:
+        return widget
+
+    if hasattr(parent, "rowconfigure") and row_weight is not None:
+        try:
+            parent.rowconfigure(row, weight=row_weight)
+        except Exception:
+            pass
+    if hasattr(parent, "columnconfigure") and column_weight is not None:
+        try:
+            parent.columnconfigure(column, weight=column_weight)
+        except Exception:
+            pass
+
+    return widget
+
+
+def grid_section(
+    section: Any,
+    parent: Any,
+    *,
+    row: int = 0,
+    column: int = 0,
+    padx: int | tuple[int, int] = COL_PADX,
+    pady: int | tuple[int, int] = ROW_PADY,
+    sticky: str = "nsew",
+):
+    """Ubica una sección de formulario en ``parent`` usando ``grid`` de forma uniforme.
+
+    Aplica pesos por defecto y garantiza compatibilidad con dobles de prueba a través de
+    :func:`ensure_grid_support`. Se emplea en secciones dinámicas (clientes, productos,
+    colaboradores, riesgos y normas) para evitar mezclar gestores de geometría en el mismo
+    contenedor.
+    """
+
+    ensure_grid_support(parent)
+    ensure_grid_support(section)
+    grid_and_configure(
+        section,
+        parent,
+        row=row,
+        column=column,
+        padx=padx,
+        pady=pady,
+        sticky=sticky,
+        row_weight=0,
+        column_weight=1,
+    )
+    return section
+
+
 def build_required_label(
     parent: Any,
     text: str,
