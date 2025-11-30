@@ -211,6 +211,69 @@ def ensure_grid_support(widget: Any) -> None:
     setattr(widget.__class__, "grid", _grid_proxy)
 
 
+def renumber_grid_sections(
+    rows: Iterable[Any],
+    *,
+    start_row: int = 1,
+    columnspan: int = 6,
+    padx: int = COL_PADX,
+    pady: int = ROW_PADY,
+    sticky: str = "we",
+) -> None:
+    """Reasigna índices y reposiciona secciones dinámicas en una cuadrícula.
+
+    Cada fila recibe su nuevo índice, sincroniza el título si expone
+    ``refresh_indexed_state`` o ``_sync_section_title`` y se reubica usando
+    ``grid``. Se usa en contenedores con una fila de encabezado en ``row=0``
+    (por ejemplo, botones de "Añadir"), por lo que ``start_row`` es 1 por
+    defecto.
+    """
+
+    for idx, row in enumerate(rows):
+        try:
+            row.idx = idx
+        except Exception:
+            pass
+
+        refresher = getattr(row, "refresh_indexed_state", None)
+        if callable(refresher):
+            try:
+                refresher()
+            except Exception:
+                pass
+        else:
+            sync_title = getattr(row, "_sync_section_title", None)
+            if callable(sync_title):
+                try:
+                    sync_title()
+                except Exception:
+                    pass
+
+        section = getattr(row, "section", None) or getattr(row, "frame", None)
+        if hasattr(section, "grid"):
+            try:
+                section.grid(
+                    row=idx + start_row,
+                    column=0,
+                    columnspan=columnspan,
+                    padx=padx,
+                    pady=pady,
+                    sticky=sticky,
+                )
+            except Exception:
+                try:
+                    section.grid_configure(
+                        row=idx + start_row,
+                        column=0,
+                        columnspan=columnspan,
+                        padx=padx,
+                        pady=pady,
+                        sticky=sticky,
+                    )
+                except Exception:
+                    pass
+
+
 def grid_and_configure(
     widget: Any,
     parent: Any,
