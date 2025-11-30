@@ -10,8 +10,8 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         normalize_without_accents, should_autofill_field,
                         validate_agency_code, validate_date_text, validate_required_text,
                         validate_team_member_id)
-from ui.frames.utils import (BadgeManager, create_collapsible_card,
-                             ensure_grid_support)
+from ui.frames.utils import (BadgeManager, apply_entry_error_feedback,
+                             create_collapsible_card, ensure_grid_support)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
@@ -383,7 +383,10 @@ class TeamMemberFrame:
                 FieldValidator(
                     widget,
                     self.badges.wrap_validation(
-                        badge_key, lambda v=var, l=label: self._validate_date_field(v, l)
+                        badge_key,
+                        lambda v=var, l=label, w=widget: self._validate_date_field(
+                            v, l, widget=w
+                        ),
                     ),
                     self.logs,
                     f"Colaborador {self.idx+1} - {label}",
@@ -510,7 +513,9 @@ class TeamMemberFrame:
     def _bind_date_validation(self, widget, variable: tk.StringVar, label: str) -> None:
         widget.bind(
             "<FocusOut>",
-            lambda _e, v=variable, l=label: self._validate_date_field(v, l, show_alert=True),
+            lambda _e, v=variable, l=label, w=widget: self._validate_date_field(
+                v, l, widget=w, show_alert=True
+            ),
             add="+",
         )
 
@@ -792,11 +797,19 @@ class TeamMemberFrame:
             pass
         log_event("validacion", message, self.logs)
 
-    @staticmethod
-    def _validate_date_field(var: tk.StringVar, label: str, show_alert: bool = False) -> str | None:
+    def _validate_date_field(
+        self,
+        var: tk.StringVar,
+        label: str,
+        *,
+        widget: tk.Widget | None = None,
+        show_alert: bool = False,
+    ) -> str | None:
         message = validate_date_text(
             var.get(), label, allow_blank=True, enforce_max_today=True
         )
+        if message and widget is not None:
+            apply_entry_error_feedback(widget, self.tooltip_register, message)
         if show_alert and message:
             try:
                 messagebox.showerror("Fecha inválida", message)

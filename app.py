@@ -107,6 +107,7 @@ from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.frames.utils import (
     GlobalScrollBinding,
+    apply_entry_error_feedback,
     create_scrollable_container,
     ensure_grid_support,
     resize_scrollable_to_content,
@@ -547,6 +548,8 @@ class FraudCaseApp:
             return tip
 
         self.register_tooltip = register_tooltip
+        FieldValidator.default_error_highlighter = apply_entry_error_feedback
+        FieldValidator.default_tooltip_register = register_tooltip
         self.root.protocol("WM_DELETE_WINDOW", self._handle_window_close)
         self._schedule_log_flush()
         # Datos en memoria: listas de frames

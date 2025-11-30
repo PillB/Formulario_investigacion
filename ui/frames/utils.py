@@ -15,6 +15,89 @@ ALERT_BADGE_ICON = "⚠️"
 SUCCESS_BADGE_ICON = "✅"
 
 
+def apply_entry_error_feedback(
+    widget: tk.Widget,
+    tooltip_register,
+    message: str | None,
+    *,
+    reset_after_ms: int = 1800,
+) -> None:
+    """Highlight a widget temporarily and attach a tooltip with ``message``.
+
+    The helper stores the original appearance so it can be restored after a
+    short delay or when the user starts editing again. It avoids creating
+    additional layout artifacts while still providing immediate feedback next
+    to the offending field.
+    """
+
+    if widget is None or not message:
+        return
+
+    def _safe_config(option: str, value: Any) -> None:
+        if value is None:
+            return
+        try:
+            widget.config(**{option: value})
+        except Exception:
+            pass
+
+    defaults = getattr(widget, "_validation_style_defaults", None)
+    if defaults is None:
+        defaults = {}
+        for key in ("relief", "borderwidth", "foreground"):
+            try:
+                defaults[key] = widget.cget(key)
+            except Exception:
+                defaults[key] = None
+        setattr(widget, "_validation_style_defaults", defaults)
+
+    # Cancel any pending reset before applying a new one.
+    pending_job = getattr(widget, "_validation_reset_job", None)
+    if pending_job:
+        try:
+            widget.after_cancel(pending_job)
+        except Exception:
+            pass
+
+    _safe_config("relief", "sunken")
+    _safe_config("borderwidth", 2)
+    _safe_config("foreground", "red")
+
+    tooltip = getattr(widget, "_validation_error_tooltip", None)
+    if tooltip is None and callable(tooltip_register):
+        tooltip = tooltip_register(widget, message)
+        setattr(widget, "_validation_error_tooltip", tooltip)
+        setattr(widget, "_validation_tooltip_reset_text", "")
+    elif tooltip is not None:
+        try:
+            tooltip.text = message
+        except Exception:
+            pass
+
+    def _reset_styles(_event=None) -> None:  # noqa: ANN001
+        for option, value in defaults.items():
+            _safe_config(option, value)
+        if tooltip is not None:
+            try:
+                tooltip.text = getattr(widget, "_validation_tooltip_reset_text", "")
+            except Exception:
+                pass
+
+    if not getattr(widget, "_validation_reset_bound", False):
+        try:
+            widget.bind("<KeyRelease>", _reset_styles, add="+")
+            widget.bind("<FocusIn>", _reset_styles, add="+")
+            setattr(widget, "_validation_reset_bound", True)
+        except Exception:
+            pass
+
+    try:
+        reset_id = widget.after(reset_after_ms, _reset_styles)
+        setattr(widget, "_validation_reset_job", reset_id)
+    except Exception:
+        _reset_styles()
+
+
 def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggle=None):
     """Create a minimal accordion-like container without ``CollapsibleSection``.
 
