@@ -3736,6 +3736,9 @@ class FraudCaseApp:
         self.clients_scrollable = scrollable
         self._register_scrollable(scrollable)
         self.clients_container = inner
+        ensure_grid_support(self.clients_container)
+        if hasattr(self.clients_container, "columnconfigure"):
+            self.clients_container.columnconfigure(0, weight=1)
         # Inicialmente un cliente en blanco
         self.add_client()
         self.hide_clients_detail()
@@ -3872,6 +3875,9 @@ class FraudCaseApp:
         for i, cl in enumerate(self.client_frames):
             cl.idx = i
             cl.frame.config(text=f"Cliente {i+1}")
+            reposition = getattr(cl, "update_position", None)
+            if callable(reposition):
+                reposition(i)
         if self._client_summary_owner is client_frame:
             self._client_summary_owner = self.client_frames[0] if self.client_frames else None
         self.update_client_options_global()
@@ -3974,6 +3980,9 @@ class FraudCaseApp:
         self.team_scrollable = scrollable
         self._register_scrollable(scrollable)
         self.team_container = inner
+        ensure_grid_support(self.team_container)
+        if hasattr(self.team_container, "columnconfigure"):
+            self.team_container.columnconfigure(0, weight=1)
         if getattr(self, "_team_anchor_widget", None) is None:
             header = getattr(self.team_detail_wrapper, "header", None)
             self._team_anchor_widget = header or self.team_detail_wrapper
@@ -4060,6 +4069,9 @@ class FraudCaseApp:
         for i, tm in enumerate(self.team_frames):
             tm.idx = i
             tm.frame.config(text=f"Colaborador {i+1}")
+            reposition = getattr(tm, "update_position", None)
+            if callable(reposition):
+                reposition(i)
         if self._team_summary_owner is team_frame:
             self._team_summary_owner = self.team_frames[0] if self.team_frames else None
         self.update_team_options_global()
@@ -4135,6 +4147,9 @@ class FraudCaseApp:
         self.products_scrollable = scrollable
         self._register_scrollable(scrollable)
         self.product_container = inner
+        ensure_grid_support(self.product_container)
+        if hasattr(self.product_container, "columnconfigure"):
+            self.product_container.columnconfigure(0, weight=1)
 
         product_actions = (
             ("Crear producto nuevo (vacío)", "add_empty"),
@@ -4320,6 +4335,9 @@ class FraudCaseApp:
             set_title = getattr(section, "set_title", None)
             if callable(set_title):
                 set_title(f"Producto {i+1}")
+            reposition = getattr(p, "update_position", None)
+            if callable(reposition):
+                reposition(i)
         self._schedule_summary_refresh({'productos', 'reclamos'})
         self._refresh_scrollable(getattr(self, "products_scrollable", None))
         prod.focus_first_field()
@@ -4341,6 +4359,9 @@ class FraudCaseApp:
             set_title = getattr(section, "set_title", None)
             if callable(set_title):
                 set_title(f"Producto {i+1}")
+            reposition = getattr(p, "update_position", None)
+            if callable(reposition):
+                reposition(i)
         if getattr(self, "_active_product_frame", None) is prod_frame:
             self._active_product_frame = self.product_frames[-1] if self.product_frames else None
         self._schedule_summary_refresh({'productos', 'reclamos'})
@@ -4403,6 +4424,9 @@ class FraudCaseApp:
         self.risks_scrollable = scrollable
         self._register_scrollable(scrollable)
         self.risk_container = inner
+        ensure_grid_support(self.risk_container)
+        if hasattr(self.risk_container, "columnconfigure"):
+            self.risk_container.columnconfigure(0, weight=1)
         self.add_risk()
 
     def _on_add_risk(self):
@@ -4431,6 +4455,9 @@ class FraudCaseApp:
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
+            reposition = getattr(r, "update_position", None)
+            if callable(reposition):
+                reposition(i)
         self._refresh_risk_auto_ids()
         self._refresh_shared_risk_tree()
         self._refresh_scrollable(getattr(self, "risks_scrollable", None))
@@ -4440,6 +4467,9 @@ class FraudCaseApp:
         for i, r in enumerate(self.risk_frames):
             r.idx = i
             r.frame.config(text=f"Riesgo {i+1}")
+            reposition = getattr(r, "update_position", None)
+            if callable(reposition):
+                reposition(i)
         self._refresh_risk_auto_ids()
         self._refresh_shared_risk_tree()
 
@@ -4500,6 +4530,9 @@ class FraudCaseApp:
         self.norms_scrollable = scrollable
         self._register_scrollable(scrollable)
         self.norm_container = inner
+        ensure_grid_support(self.norm_container)
+        if hasattr(self.norm_container, "columnconfigure"):
+            self.norm_container.columnconfigure(0, weight=1)
         self.add_norm()
 
     def _on_add_norm(self):
@@ -4520,6 +4553,9 @@ class FraudCaseApp:
         self.norm_frames.append(norm)
         for i, n in enumerate(self.norm_frames):
             n.update_title(i)
+            reposition = getattr(n, "update_position", None)
+            if callable(reposition):
+                reposition(i)
         self._refresh_shared_norm_tree()
         self._refresh_scrollable(getattr(self, "norms_scrollable", None))
 
@@ -4527,6 +4563,9 @@ class FraudCaseApp:
         self.norm_frames.remove(norm_frame)
         for i, n in enumerate(self.norm_frames):
             n.update_title(i)
+            reposition = getattr(n, "update_position", None)
+            if callable(reposition):
+                reposition(i)
         self._refresh_shared_norm_tree()
 
     def _build_shared_header_tree(self, parent, row_index, tree_builder):

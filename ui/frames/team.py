@@ -10,8 +10,13 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         normalize_without_accents, should_autofill_field,
                         validate_agency_code, validate_date_text, validate_required_text,
                         validate_team_member_id)
-from ui.frames.utils import (BadgeManager, create_collapsible_card,
-                             ensure_grid_support)
+from ui.frames.utils import (
+    BadgeManager,
+    create_collapsible_card,
+    ensure_grid_support,
+    grid_and_configure,
+    grid_section,
+)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
@@ -80,7 +85,7 @@ class TeamMemberFrame:
         self.section = self._create_section(parent)
         self._sync_section_title()
         self._register_title_traces()
-        self.section.pack(fill="x", padx=COL_PADX, pady=ROW_PADY)
+        self._place_section()
         if summary_parent is not None and owner is not None and not getattr(owner, "team_summary_tree", None):
             self.summary_tree = self._build_summary(summary_parent)
             owner.team_summary_tree = self.summary_tree
@@ -469,6 +474,22 @@ class TeamMemberFrame:
             collapsible_cls=CollapsibleSection,
         )
 
+    def _place_section(self):
+        grid_section(self.section, self.parent, row=self.idx, padx=COL_PADX, pady=ROW_PADY)
+        if hasattr(self.parent, "columnconfigure"):
+            try:
+                self.parent.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+
+    def update_position(self, new_index: int | None = None):
+        if new_index is not None:
+            self.idx = new_index
+        try:
+            self.section.grid_configure(row=self.idx, padx=COL_PADX, pady=ROW_PADY, sticky="nsew")
+        except Exception:
+            self._place_section()
+
     def _register_title_traces(self):
         for var in (self.id_var, self.nombres_var, self.apellidos_var):
             var.trace_add("write", self._on_identity_field_change)
@@ -844,7 +865,14 @@ class TeamMemberFrame:
 
         tree.bind("<<TreeviewSelect>>", self._on_summary_select)
         tree.bind("<Double-1>", self._on_summary_double_click)
-        summary_frame.pack(fill="both", expand=True)
+        grid_and_configure(
+            summary_frame,
+            parent,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            row_weight=1,
+            column_weight=1,
+        )
         return tree
 
     def refresh_summary(self):

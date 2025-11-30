@@ -8,8 +8,12 @@ from tkinter import messagebox, ttk
 from settings import CRITICIDAD_LIST
 from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_money_bounds, validate_risk_id)
-from ui.frames.utils import (BadgeManager, create_collapsible_card,
-                             ensure_grid_support)
+from ui.frames.utils import (
+    BadgeManager,
+    create_collapsible_card,
+    ensure_grid_support,
+    grid_section,
+)
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 
@@ -76,7 +80,7 @@ class RiskFrame:
             collapsible_cls=CollapsibleSection,
         )
         self._sync_section_title()
-        self.section.pack(fill="x", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
+        self._place_section()
 
         self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
@@ -211,6 +215,30 @@ class RiskFrame:
 
         self._register_title_traces()
         self._sync_section_title()
+
+    def _place_section(self):
+        grid_section(
+            self.section,
+            self.parent,
+            row=self.idx,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY),
+        )
+        if hasattr(self.parent, "columnconfigure"):
+            try:
+                self.parent.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+
+    def update_position(self, new_index: int | None = None):
+        if new_index is not None:
+            self.idx = new_index
+        try:
+            self.section.grid_configure(
+                row=self.idx, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY), sticky="nsew"
+            )
+        except Exception:
+            self._place_section()
 
     @staticmethod
     def build_header_tree(parent, xscrollcommand=None):
