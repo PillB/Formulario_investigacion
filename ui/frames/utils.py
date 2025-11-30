@@ -274,6 +274,33 @@ def renumber_grid_sections(
                     pass
 
 
+def renumber_indexed_rows(
+    rows: Iterable[Any],
+    *,
+    start_row: int = 1,
+    columnspan: int = 6,
+    padx: int = COL_PADX,
+    pady: int = ROW_PADY,
+    sticky: str = "we",
+):
+    """Aplicar renumeración consistente a colecciones de secciones dinámicas.
+
+    Centraliza la reasignación de índices, la sincronización de títulos y la
+    reubicación en ``grid`` para mantener un comportamiento uniforme en todas
+    las pantallas que gestionan listas dinámicas (reclamos, involucramientos,
+    etc.).
+    """
+
+    renumber_grid_sections(
+        rows,
+        start_row=start_row,
+        columnspan=columnspan,
+        padx=padx,
+        pady=pady,
+        sticky=sticky,
+    )
+
+
 def grid_and_configure(
     widget: Any,
     parent: Any,

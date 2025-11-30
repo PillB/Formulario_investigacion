@@ -19,7 +19,7 @@ from ui.frames.utils import (
     create_collapsible_card,
     ensure_grid_support,
     grid_section,
-    renumber_grid_sections,
+    renumber_indexed_rows,
 )
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
@@ -1735,7 +1735,7 @@ class ProductFrame:
         self.refresh_claim_guidance()
 
     def renumber_claims(self):
-        renumber_grid_sections(
+        renumber_indexed_rows(
             self.claims,
             start_row=1,
             columnspan=6,
@@ -2448,7 +2448,7 @@ class ProductFrame:
         self.schedule_summary_refresh('involucramientos')
 
     def renumber_involvements(self):
-        renumber_grid_sections(
+        renumber_indexed_rows(
             self.involvements,
             start_row=1,
             columnspan=6,
