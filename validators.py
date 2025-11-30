@@ -348,6 +348,8 @@ class FieldValidator:
 
     modal_notifications_enabled = True
     status_consumer: Optional[Callable[[str, Optional[str], object], None]] = None
+    default_error_highlighter: Optional[Callable[[object, Optional[Callable], str], None]] = None
+    default_tooltip_register: Optional[Callable[[object, str], object]] = None
 
     @classmethod
     def set_status_consumer(
@@ -364,12 +366,17 @@ class FieldValidator:
         logs: List[dict],
         field_name: str,
         variables: Optional[List] = None,
+        *,
+        error_highlighter: Optional[Callable[[object, Optional[Callable], str], None]] = None,
+        tooltip_register: Optional[Callable[[object, str], object]] = None,
     ) -> None:
         self.widget = widget
         self.validate_callback = validate_callback
         self.logs = logs
         self.field_name = field_name
         self.tooltip = ValidationTooltip(widget)
+        self.error_highlighter = error_highlighter or self.default_error_highlighter
+        self.tooltip_register = tooltip_register or self.default_tooltip_register
         self.variables = variables or []
         self._traces: List[str] = []
         self.last_error: Optional[str] = None
@@ -468,6 +475,11 @@ class FieldValidator:
         allow_modal: bool = True,
         transient: bool = False,
     ) -> None:
+        if error and callable(self.error_highlighter):
+            try:
+                self.error_highlighter(self.widget, self.tooltip_register, error)
+            except Exception:
+                pass
         tooltip_visible = getattr(self.tooltip, "is_visible", True)
         if callable(tooltip_visible):
             try:

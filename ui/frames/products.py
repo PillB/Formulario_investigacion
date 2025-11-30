@@ -13,8 +13,8 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import (ALERT_BADGE_ICON, SUCCESS_BADGE_ICON,
-                             BadgeManager, create_collapsible_card,
-                             ensure_grid_support)
+                             BadgeManager, apply_entry_error_feedback,
+                             create_collapsible_card, ensure_grid_support)
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
@@ -1978,6 +1978,17 @@ class ProductFrame:
         setter = self._get_badge_setter("monto_inv")
         setter(message, force_state=is_valid)
 
+    def _flash_date_entries(self, message: str | None, *, include_pair: bool, origin):
+        if not message:
+            return
+        targets = [origin] if origin is not None else []
+        if include_pair:
+            for entry in (getattr(self, "focc_entry", None), getattr(self, "fdesc_entry", None)):
+                if entry is not None and entry not in targets:
+                    targets.append(entry)
+        for entry in targets:
+            apply_entry_error_feedback(entry, self.tooltip_register, message)
+
     def _refresh_badges(self) -> None:
         pair_message, pair_ok = self._validate_product_date_pair()
         self._refresh_date_badges(pair_message, pair_ok)
@@ -2602,6 +2613,7 @@ class ProductFrame:
         pair_message, pair_ok = self._validate_product_date_pair()
         final_message = message or (None if pair_ok else pair_message)
         self._refresh_date_badges(pair_message, pair_ok)
+        self._flash_date_entries(final_message, include_pair=not pair_ok, origin=getattr(self, "focc_entry", None))
         return final_message
 
     def _validate_fecha_descubrimiento(self):
@@ -2616,6 +2628,7 @@ class ProductFrame:
         pair_message, pair_ok = self._validate_product_date_pair()
         final_message = msg or (None if pair_ok else pair_message)
         self._refresh_date_badges(pair_message, pair_ok)
+        self._flash_date_entries(final_message, include_pair=not pair_ok, origin=getattr(self, "fdesc_entry", None))
         return final_message
 
     def _validate_amount_field(self, var, label, allow_blank):
