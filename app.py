@@ -109,7 +109,7 @@ from ui.frames.utils import (
     GlobalScrollBinding,
     create_scrollable_container,
     ensure_grid_support,
-    renumber_grid_sections,
+    renumber_indexed_rows,
     resize_scrollable_to_content,
 )
 from ui.layout import ActionBar
@@ -3880,7 +3880,7 @@ class FraudCaseApp:
         self._schedule_summary_refresh('clientes')
 
     def _renumber_clients(self):
-        renumber_grid_sections(
+        renumber_indexed_rows(
             self.client_frames,
             start_row=0,
             columnspan=1,
@@ -4079,7 +4079,7 @@ class FraudCaseApp:
         self._schedule_summary_refresh('colaboradores')
 
     def _renumber_team(self):
-        renumber_grid_sections(
+        renumber_indexed_rows(
             self.team_frames,
             start_row=0,
             columnspan=1,
@@ -4353,7 +4353,7 @@ class FraudCaseApp:
         self._schedule_summary_refresh({'productos', 'reclamos'})
 
     def _renumber_products(self):
-        renumber_grid_sections(
+        renumber_indexed_rows(
             self.product_frames,
             start_row=0,
             columnspan=1,
@@ -4460,7 +4460,7 @@ class FraudCaseApp:
         self._refresh_shared_risk_tree()
 
     def _renumber_risks(self):
-        renumber_grid_sections(
+        renumber_indexed_rows(
             self.risk_frames,
             start_row=0,
             columnspan=1,
@@ -4557,7 +4557,7 @@ class FraudCaseApp:
         self._refresh_shared_norm_tree()
 
     def _renumber_norms(self):
-        renumber_grid_sections(
+        renumber_indexed_rows(
             self.norm_frames,
             start_row=0,
             columnspan=1,
