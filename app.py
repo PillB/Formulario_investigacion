@@ -109,7 +109,7 @@ from ui.frames.utils import (
     GlobalScrollBinding,
     create_scrollable_container,
     ensure_grid_support,
-    renumber_indexed_rows,
+    refresh_dynamic_rows,
     resize_scrollable_to_content,
 )
 from ui.layout import ActionBar
@@ -3879,15 +3879,27 @@ class FraudCaseApp:
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
 
-    def _renumber_clients(self):
-        renumber_indexed_rows(
-            self.client_frames,
-            start_row=0,
-            columnspan=1,
-            padx=COL_PADX,
-            pady=ROW_PADY,
-            sticky="nsew",
+    def _refresh_frame_collection(
+        self,
+        frames,
+        *,
+        start_row: int = 0,
+        columnspan: int = 1,
+        padx: int | tuple[int, int] = COL_PADX,
+        pady: int | tuple[int, int] = ROW_PADY,
+        sticky: str = "nsew",
+    ):
+        refresh_dynamic_rows(
+            frames,
+            start_row=start_row,
+            columnspan=columnspan,
+            padx=padx,
+            pady=pady,
+            sticky=sticky,
         )
+
+    def _renumber_clients(self):
+        self._refresh_frame_collection(self.client_frames)
 
     def update_client_options_global(self):
         """Actualiza la lista de clientes en todos los productos y envolvimientos."""
@@ -4079,14 +4091,7 @@ class FraudCaseApp:
         self._schedule_summary_refresh('colaboradores')
 
     def _renumber_team(self):
-        renumber_indexed_rows(
-            self.team_frames,
-            start_row=0,
-            columnspan=1,
-            padx=COL_PADX,
-            pady=ROW_PADY,
-            sticky="nsew",
-        )
+        self._refresh_frame_collection(self.team_frames)
 
     def update_team_options_global(self):
         """Actualiza listas de colaboradores en productos e involucra."""
@@ -4353,14 +4358,7 @@ class FraudCaseApp:
         self._schedule_summary_refresh({'productos', 'reclamos'})
 
     def _renumber_products(self):
-        renumber_indexed_rows(
-            self.product_frames,
-            start_row=0,
-            columnspan=1,
-            padx=COL_PADX,
-            pady=ROW_PADY,
-            sticky="nsew",
-        )
+        self._refresh_frame_collection(self.product_frames)
 
     def _set_active_product_frame(self, frame):
         self._active_product_frame = frame
@@ -4460,13 +4458,8 @@ class FraudCaseApp:
         self._refresh_shared_risk_tree()
 
     def _renumber_risks(self):
-        renumber_indexed_rows(
-            self.risk_frames,
-            start_row=0,
-            columnspan=1,
-            padx=COL_PADX,
-            pady=(ROW_PADY // 2, ROW_PADY),
-            sticky="nsew",
+        self._refresh_frame_collection(
+            self.risk_frames, pady=(ROW_PADY // 2, ROW_PADY)
         )
 
     def _generate_next_risk_id(self, used_ids=None):
@@ -4557,13 +4550,8 @@ class FraudCaseApp:
         self._refresh_shared_norm_tree()
 
     def _renumber_norms(self):
-        renumber_indexed_rows(
-            self.norm_frames,
-            start_row=0,
-            columnspan=1,
-            padx=COL_PADX,
-            pady=(ROW_PADY // 2, ROW_PADY),
-            sticky="nsew",
+        self._refresh_frame_collection(
+            self.norm_frames, pady=(ROW_PADY // 2, ROW_PADY)
         )
 
     def _build_shared_header_tree(self, parent, row_index, tree_builder):
