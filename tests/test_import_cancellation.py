@@ -58,14 +58,14 @@ def test_import_cancelled_from_dialog(monkeypatch, messagebox_spy, method_name, 
         (
             "import_risks",
             [{"id_riesgo": "R-1", "descripcion": "desc"}],
-            "Riesgos importados correctamente.",
+            "Importación completada de riesgos:",
             "Riesgos importados desde CSV",
             None,
         ),
         (
             "import_norms",
             [{"id_norma": "N-1", "descripcion": "desc"}],
-            "Normas importadas correctamente.",
+            "Importación completada de normas:",
             "Normas importadas desde CSV",
             None,
         ),
@@ -79,29 +79,29 @@ def test_import_cancelled_from_dialog(monkeypatch, messagebox_spy, method_name, 
                     "codigo_analitica": "4300000001",
                 }
             ],
-            "Reclamos importados correctamente.",
+            "Importación completada de reclamos:",
             "Reclamos importados desde CSV",
             "reclamos",
         ),
         (
             "import_clients",
             [{"id_cliente": "CLI-1", "tipo_id": "DNI"}],
-            "Se cargaron 1 clientes.",
-            "Clientes importados desde CSV: 1",
+            "Importación completada de clientes:",
+            "Clientes importados desde CSV: total=1",
             "clientes",
         ),
         (
             "import_team_members",
             [{"id_colaborador": "T00001"}],
-            "Colaboradores importados correctamente.",
-            "Colaboradores importados desde CSV: 1",
+            "Importación completada de colaboradores:",
+            "Colaboradores importados desde CSV: total=1",
             "colaboradores",
         ),
         (
             "import_products",
             [{"id_producto": "PR-1", "id_cliente": "CLI-1"}],
-            "Productos importados correctamente.",
-            "Productos importados desde CSV: 1",
+            "Importación completada de productos:",
+            "Productos importados desde CSV: total=1",
             "productos",
         ),
     ],
@@ -121,7 +121,7 @@ def test_import_success_paths(monkeypatch, messagebox_spy, method_name, rows, ex
     getattr(app, method_name)(filename="dummy.csv")
 
     assert dialog_invoked is False
-    assert expected_info in {msg for _title, msg in messagebox_spy.infos}
+    assert any(expected_info in msg for _title, msg in messagebox_spy.infos)
     assert messagebox_spy.errors == []
     assert messagebox_spy.warnings == []
     assert any(expected_log_fragment in log["mensaje"] for log in app.logs)
