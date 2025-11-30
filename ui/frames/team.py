@@ -490,6 +490,14 @@ class TeamMemberFrame:
         except Exception:
             self._place_section()
 
+    def refresh_indexed_state(self):
+        self._sync_section_title()
+        if getattr(self, "frame", None):
+            try:
+                self.frame.config(text=f"Colaborador {self.idx+1}")
+            except Exception:
+                pass
+
     def _register_title_traces(self):
         for var in (self.id_var, self.nombres_var, self.apellidos_var):
             var.trace_add("write", self._on_identity_field_change)

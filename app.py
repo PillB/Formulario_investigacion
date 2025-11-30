@@ -109,6 +109,7 @@ from ui.frames.utils import (
     GlobalScrollBinding,
     create_scrollable_container,
     ensure_grid_support,
+    renumber_grid_sections,
     resize_scrollable_to_content,
 )
 from ui.layout import ActionBar
@@ -3857,6 +3858,7 @@ class FraudCaseApp:
             header = getattr(anchor, "header", None)
             self._client_anchor_widget = header or anchor
         self.client_frames.append(client)
+        self._renumber_clients()
         self._maybe_show_milestone_badge(len(self.client_frames), "Clientes", user_initiated=user_initiated)
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
@@ -3871,17 +3873,21 @@ class FraudCaseApp:
     def remove_client(self, client_frame):
         self._handle_client_id_change(client_frame, client_frame.id_var.get(), None)
         self.client_frames.remove(client_frame)
-        # Renombrar las etiquetas
-        for i, cl in enumerate(self.client_frames):
-            cl.idx = i
-            cl.frame.config(text=f"Cliente {i+1}")
-            reposition = getattr(cl, "update_position", None)
-            if callable(reposition):
-                reposition(i)
+        self._renumber_clients()
         if self._client_summary_owner is client_frame:
             self._client_summary_owner = self.client_frames[0] if self.client_frames else None
         self.update_client_options_global()
         self._schedule_summary_refresh('clientes')
+
+    def _renumber_clients(self):
+        renumber_grid_sections(
+            self.client_frames,
+            start_row=0,
+            columnspan=1,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky="nsew",
+        )
 
     def update_client_options_global(self):
         """Actualiza la lista de clientes en todos los productos y envolvimientos."""
@@ -4051,6 +4057,7 @@ class FraudCaseApp:
             case_date_getter=lambda: self.fecha_caso_var.get(),
         )
         self.team_frames.append(team)
+        self._renumber_team()
         self._maybe_show_milestone_badge(len(self.team_frames), "Colaboradores", user_initiated=user_initiated)
         self.update_team_options_global()
         self._schedule_summary_refresh('colaboradores')
@@ -4065,17 +4072,21 @@ class FraudCaseApp:
     def remove_team(self, team_frame):
         self._handle_team_id_change(team_frame, team_frame.id_var.get(), None)
         self.team_frames.remove(team_frame)
-        # Renombrar
-        for i, tm in enumerate(self.team_frames):
-            tm.idx = i
-            tm.frame.config(text=f"Colaborador {i+1}")
-            reposition = getattr(tm, "update_position", None)
-            if callable(reposition):
-                reposition(i)
+        self._renumber_team()
         if self._team_summary_owner is team_frame:
             self._team_summary_owner = self.team_frames[0] if self.team_frames else None
         self.update_team_options_global()
         self._schedule_summary_refresh('colaboradores')
+
+    def _renumber_team(self):
+        renumber_grid_sections(
+            self.team_frames,
+            start_row=0,
+            columnspan=1,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky="nsew",
+        )
 
     def update_team_options_global(self):
         """Actualiza listas de colaboradores en productos e involucra."""
@@ -4322,22 +4333,9 @@ class FraudCaseApp:
             self._product_anchor_widget = header or anchor
         self._apply_case_taxonomy_defaults(prod)
         self.product_frames.append(prod)
+        self._renumber_products()
         self._maybe_show_milestone_badge(len(self.product_frames), "Productos", user_initiated=user_initiated)
         self._set_active_product_frame(prod)
-        # Renombrar
-        for i, p in enumerate(self.product_frames):
-            p.idx = i
-            sync_title = getattr(p, "_sync_section_title", None)
-            if callable(sync_title):
-                sync_title()
-                continue
-            section = getattr(p, "section", None)
-            set_title = getattr(section, "set_title", None)
-            if callable(set_title):
-                set_title(f"Producto {i+1}")
-            reposition = getattr(p, "update_position", None)
-            if callable(reposition):
-                reposition(i)
         self._schedule_summary_refresh({'productos', 'reclamos'})
         self._refresh_scrollable(getattr(self, "products_scrollable", None))
         prod.focus_first_field()
@@ -4349,22 +4347,20 @@ class FraudCaseApp:
     def remove_product(self, prod_frame):
         self._handle_product_id_change(prod_frame, prod_frame.id_var.get(), None)
         self.product_frames.remove(prod_frame)
-        for i, p in enumerate(self.product_frames):
-            p.idx = i
-            sync_title = getattr(p, "_sync_section_title", None)
-            if callable(sync_title):
-                sync_title()
-                continue
-            section = getattr(p, "section", None)
-            set_title = getattr(section, "set_title", None)
-            if callable(set_title):
-                set_title(f"Producto {i+1}")
-            reposition = getattr(p, "update_position", None)
-            if callable(reposition):
-                reposition(i)
+        self._renumber_products()
         if getattr(self, "_active_product_frame", None) is prod_frame:
             self._active_product_frame = self.product_frames[-1] if self.product_frames else None
         self._schedule_summary_refresh({'productos', 'reclamos'})
+
+    def _renumber_products(self):
+        renumber_grid_sections(
+            self.product_frames,
+            start_row=0,
+            columnspan=1,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky="nsew",
+        )
 
     def _set_active_product_frame(self, frame):
         self._active_product_frame = frame
@@ -4451,27 +4447,27 @@ class FraudCaseApp:
             summary_refresher=lambda: self._schedule_summary_refresh('riesgos'),
         )
         self.risk_frames.append(risk)
+        self._renumber_risks()
         self._maybe_show_milestone_badge(len(self.risk_frames), "Riesgos", user_initiated=user_initiated)
-        for i, r in enumerate(self.risk_frames):
-            r.idx = i
-            r.frame.config(text=f"Riesgo {i+1}")
-            reposition = getattr(r, "update_position", None)
-            if callable(reposition):
-                reposition(i)
         self._refresh_risk_auto_ids()
         self._refresh_shared_risk_tree()
         self._refresh_scrollable(getattr(self, "risks_scrollable", None))
 
     def remove_risk(self, risk_frame):
         self.risk_frames.remove(risk_frame)
-        for i, r in enumerate(self.risk_frames):
-            r.idx = i
-            r.frame.config(text=f"Riesgo {i+1}")
-            reposition = getattr(r, "update_position", None)
-            if callable(reposition):
-                reposition(i)
+        self._renumber_risks()
         self._refresh_risk_auto_ids()
         self._refresh_shared_risk_tree()
+
+    def _renumber_risks(self):
+        renumber_grid_sections(
+            self.risk_frames,
+            start_row=0,
+            columnspan=1,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY),
+            sticky="nsew",
+        )
 
     def _generate_next_risk_id(self, used_ids=None):
         """Obtiene el siguiente ID automático disponible para riesgos."""
@@ -4551,22 +4547,24 @@ class FraudCaseApp:
             header_tree=self.norm_header_tree,
         )
         self.norm_frames.append(norm)
-        for i, n in enumerate(self.norm_frames):
-            n.update_title(i)
-            reposition = getattr(n, "update_position", None)
-            if callable(reposition):
-                reposition(i)
+        self._renumber_norms()
         self._refresh_shared_norm_tree()
         self._refresh_scrollable(getattr(self, "norms_scrollable", None))
 
     def remove_norm(self, norm_frame):
         self.norm_frames.remove(norm_frame)
-        for i, n in enumerate(self.norm_frames):
-            n.update_title(i)
-            reposition = getattr(n, "update_position", None)
-            if callable(reposition):
-                reposition(i)
+        self._renumber_norms()
         self._refresh_shared_norm_tree()
+
+    def _renumber_norms(self):
+        renumber_grid_sections(
+            self.norm_frames,
+            start_row=0,
+            columnspan=1,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY),
+            sticky="nsew",
+        )
 
     def _build_shared_header_tree(self, parent, row_index, tree_builder):
         container = ttk.Frame(parent)

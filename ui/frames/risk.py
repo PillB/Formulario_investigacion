@@ -240,6 +240,14 @@ class RiskFrame:
         except Exception:
             self._place_section()
 
+    def refresh_indexed_state(self):
+        self._sync_section_title()
+        if getattr(self, "frame", None):
+            try:
+                self.frame.config(text=f"Riesgo {self.idx+1}")
+            except Exception:
+                pass
+
     @staticmethod
     def build_header_tree(parent, xscrollcommand=None):
         header_tree = ttk.Treeview(

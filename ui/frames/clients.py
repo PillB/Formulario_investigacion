@@ -498,6 +498,14 @@ class ClientFrame:
         except Exception:
             self._place_section()
 
+    def refresh_indexed_state(self):
+        self._sync_section_title()
+        if getattr(self, "frame", None):
+            try:
+                self.frame.config(text=f"Cliente {self.idx+1}")
+            except Exception:
+                pass
+
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
             return

@@ -19,6 +19,7 @@ from ui.frames.utils import (
     create_collapsible_card,
     ensure_grid_support,
     grid_section,
+    renumber_grid_sections,
 )
 from ui.layout import CollapsibleSection
 from validators import (FieldValidator, log_event, normalize_without_accents,
@@ -263,6 +264,15 @@ class InvolvementRow:
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
             self.section.set_title(self._build_section_title())
+
+    def refresh_indexed_state(self):
+        prefix = f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1}"
+        if getattr(self, "validators", None):
+            for validator in self.validators:
+                if getattr(validator, "field_name", None):
+                    suffix = " colaborador" if "colaborador" in validator.field_name else ""
+                    validator.field_name = f"{prefix}{suffix}"
+        self._sync_section_title()
 
     def _create_section(self, parent):
         return create_collapsible_card(
@@ -601,6 +611,20 @@ class ClaimRow:
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
             self.section.set_title(self._build_section_title())
+
+    def refresh_indexed_state(self):
+        prefix = f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1}"
+        for validator, suffix in (
+            (getattr(self, "id_validator", None), " ID"),
+            (getattr(self, "name_validator", None), " Nombre analítica"),
+            (getattr(self, "code_validator", None), " Código"),
+        ):
+            if validator is not None:
+                try:
+                    validator.field_name = f"{prefix}{suffix}"
+                except Exception:
+                    pass
+        self._sync_section_title()
 
     def _create_section(self, parent):
         return create_collapsible_card(
@@ -1689,6 +1713,7 @@ class ProductFrame:
         row = ClaimRow(self.claims_frame, self, idx, self.remove_claim, self.logs, self.tooltip_register)
         row.set_claim_requirement(self._claim_requirement_active, skip_refresh=True)
         self.claims.append(row)
+        self.renumber_claims()
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
         self.refresh_claim_guidance()
@@ -1704,9 +1729,20 @@ class ProductFrame:
             self.claims.remove(row)
         if not self.claims:
             self.add_claim()
+        self.renumber_claims()
         self.schedule_summary_refresh('reclamos')
         self.persist_lookup_snapshot()
         self.refresh_claim_guidance()
+
+    def renumber_claims(self):
+        renumber_grid_sections(
+            self.claims,
+            start_row=1,
+            columnspan=6,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky="we",
+        )
 
     def clear_claims(self):
         for claim in self.claims:
@@ -2401,13 +2437,25 @@ class ProductFrame:
         idx = len(self.involvements)
         row = InvolvementRow(self.invol_frame, self, idx, self.get_team_options, self.remove_involvement, self.logs, self.tooltip_register)
         self.involvements.append(row)
+        self.renumber_involvements()
         self.schedule_summary_refresh('involucramientos')
         return row
 
     def remove_involvement(self, row):
         if row in self.involvements:
             self.involvements.remove(row)
+        self.renumber_involvements()
         self.schedule_summary_refresh('involucramientos')
+
+    def renumber_involvements(self):
+        renumber_grid_sections(
+            self.involvements,
+            start_row=1,
+            columnspan=6,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky="we",
+        )
 
     def update_client_options(self):
         current = self.client_var.get().strip()
