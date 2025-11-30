@@ -9187,12 +9187,26 @@ class FraudCaseApp:
         ]
         return "\n".join(lines)
 
+    @staticmethod
+    def _collect_existing_ids(frames, attr_name="id_var"):
+        identifiers = set()
+        for frame in frames or []:
+            attr = getattr(frame, attr_name, None)
+            getter = getattr(attr, "get", None)
+            if getter is None:
+                continue
+            value = (getter() or "").strip()
+            if value:
+                identifiers.add(value)
+        return identifiers
+
     def _apply_client_import_payload(self, entries):
         nuevos = 0
         actualizados = 0
         duplicados = 0
         errores = 0
         missing_ids = []
+        existing_ids = self._collect_existing_ids(self.client_frames)
         seen_ids = set()
         for entry in entries or []:
             hydrated = entry.get('row', {})
@@ -9201,15 +9215,13 @@ class FraudCaseApp:
             if not id_cliente:
                 errores += 1
                 continue
-            if id_cliente in seen_ids:
+            if id_cliente in seen_ids or id_cliente in existing_ids:
                 duplicados += 1
                 continue
             seen_ids.add(id_cliente)
-            frame = self._find_client_frame(id_cliente)
-            created = False
-            if not frame:
-                frame = self._obtain_client_slot_for_import()
-                created = True
+            existing_ids.add(id_cliente)
+            frame = self._obtain_client_slot_for_import()
+            created = True
             self._populate_client_frame_from_row(frame, hydrated, preserve_existing=True)
             self._trigger_import_id_refresh(
                 frame,
@@ -9219,8 +9231,6 @@ class FraudCaseApp:
             )
             if created:
                 nuevos += 1
-            else:
-                actualizados += 1
             if not found and 'id_cliente' in self.detail_catalogs:
                 missing_ids.append(id_cliente)
         self._notify_dataset_changed(summary_sections="clientes")
@@ -9244,6 +9254,7 @@ class FraudCaseApp:
         duplicados = 0
         errores = 0
         missing_ids = []
+        existing_ids = self._collect_existing_ids(self.team_frames)
         seen_ids = set()
         for entry in entries or []:
             hydrated = entry.get('row', {})
@@ -9252,15 +9263,13 @@ class FraudCaseApp:
             if not collaborator_id:
                 errores += 1
                 continue
-            if collaborator_id in seen_ids:
+            if collaborator_id in seen_ids or collaborator_id in existing_ids:
                 duplicados += 1
                 continue
             seen_ids.add(collaborator_id)
-            frame = self._find_team_frame(collaborator_id)
-            created = False
-            if not frame:
-                frame = self._obtain_team_slot_for_import()
-                created = True
+            existing_ids.add(collaborator_id)
+            frame = self._obtain_team_slot_for_import()
+            created = True
             self._populate_team_frame_from_row(frame, hydrated)
             self._trigger_import_id_refresh(
                 frame,
@@ -9270,8 +9279,6 @@ class FraudCaseApp:
             )
             if created:
                 nuevos += 1
-            else:
-                actualizados += 1
             if not found and 'id_colaborador' in self.detail_catalogs:
                 missing_ids.append(collaborator_id)
         self._notify_dataset_changed(summary_sections="colaboradores")
@@ -9295,6 +9302,7 @@ class FraudCaseApp:
         duplicados = 0
         errores = 0
         missing_ids = []
+        existing_ids = self._collect_existing_ids(self.product_frames)
         seen_ids = set()
         for entry in entries or []:
             hydrated = entry.get('row', {})
@@ -9303,15 +9311,13 @@ class FraudCaseApp:
             if not product_id:
                 errores += 1
                 continue
-            if product_id in seen_ids:
+            if product_id in seen_ids or product_id in existing_ids:
                 duplicados += 1
                 continue
             seen_ids.add(product_id)
-            frame = self._find_product_frame(product_id)
-            created = False
-            if not frame:
-                frame = self._obtain_product_slot_for_import()
-                created = True
+            existing_ids.add(product_id)
+            frame = self._obtain_product_slot_for_import()
+            created = True
             client_id = (hydrated.get('id_cliente') or '').strip()
             if client_id:
                 client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
@@ -9325,8 +9331,6 @@ class FraudCaseApp:
             )
             if created:
                 nuevos += 1
-            else:
-                actualizados += 1
             if not found and 'id_producto' in self.detail_catalogs:
                 missing_ids.append(product_id)
         self._notify_dataset_changed(summary_sections="productos")
@@ -9459,14 +9463,21 @@ class FraudCaseApp:
         self._run_duplicate_check_post_load()
 
     def _apply_risk_import_payload(self, entries):
-        imported = 0
+        nuevos = 0
+        duplicados = 0
+        errores = 0
+        existing_ids = self._collect_existing_ids(self.risk_frames)
+        seen_ids = set()
         for hydrated in entries or []:
             rid = (hydrated.get('id_riesgo') or '').strip()
             if not rid:
+                errores += 1
                 continue
-            if any(r.id_var.get().strip() == rid for r in self.risk_frames):
-                log_event("validacion", f"Riesgo duplicado {rid} en importación", self.logs)
+            if rid in seen_ids or rid in existing_ids:
+                duplicados += 1
                 continue
+            seen_ids.add(rid)
+            existing_ids.add(rid)
             self.add_risk()
             rf = self.risk_frames[-1]
             rf.id_var.set(rid)
@@ -9477,45 +9488,79 @@ class FraudCaseApp:
                 rf.criticidad_var.set(crit)
             rf.exposicion_var.set((hydrated.get('exposicion_residual') or '').strip())
             rf.planes_var.set((hydrated.get('planes_accion') or '').strip())
-            imported += 1
+            nuevos += 1
         self._notify_dataset_changed(summary_sections="riesgos")
-        log_event("navegacion", "Riesgos importados desde CSV", self.logs)
-        if imported:
-            messagebox.showinfo("Importación completa", "Riesgos importados correctamente.")
+        total = nuevos
+        log_event(
+            "navegacion",
+            f"Riesgos importados desde CSV: total={total}, nuevos={nuevos}, actualizados=0, duplicados={duplicados}, errores={errores}",
+            self.logs,
+        )
+        if total:
+            summary = self._format_import_summary("riesgos", nuevos, 0, duplicados, errores)
+            messagebox.showinfo("Importación completa", summary)
         else:
             messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
 
     def _apply_norm_import_payload(self, entries):
-        imported = 0
+        nuevos = 0
+        duplicados = 0
+        errores = 0
+        existing_ids = self._collect_existing_ids(self.norm_frames)
+        seen_ids = set()
         for hydrated in entries or []:
             nid = (hydrated.get('id_norma') or '').strip()
             if not nid:
+                errores += 1
                 continue
-            if any(n.id_var.get().strip() == nid for n in self.norm_frames):
-                log_event("validacion", f"Norma duplicada {nid} en importación", self.logs)
+            if nid in seen_ids or nid in existing_ids:
+                duplicados += 1
                 continue
+            seen_ids.add(nid)
+            existing_ids.add(nid)
             self.add_norm()
             nf = self.norm_frames[-1]
             nf.id_var.set(nid)
             nf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
             nf.fecha_var.set((hydrated.get('fecha_vigencia') or '').strip())
-            imported += 1
+            nuevos += 1
         self._refresh_shared_norm_tree()
         self._notify_dataset_changed(summary_sections="normas")
-        log_event("navegacion", "Normas importadas desde CSV", self.logs)
-        if imported:
-            messagebox.showinfo("Importación completa", "Normas importadas correctamente.")
+        total = nuevos
+        log_event(
+            "navegacion",
+            f"Normas importadas desde CSV: total={total}, nuevos={nuevos}, actualizados=0, duplicados={duplicados}, errores={errores}",
+            self.logs,
+        )
+        if total:
+            summary = self._format_import_summary("normas", nuevos, 0, duplicados, errores)
+            messagebox.showinfo("Importación completa", summary)
         else:
             messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
 
     def _apply_claim_import_payload(self, entries):
-        imported = 0
+        nuevos = 0
+        duplicados = 0
+        errores = 0
         missing_products = []
+        existing_claims = set()
+        for product_frame in self.product_frames:
+            pid_var = getattr(product_frame, 'id_var', None)
+            pid_value = (pid_var.get() if hasattr(pid_var, 'get') else "").strip()
+            if not pid_value:
+                continue
+            for claim in getattr(product_frame, 'claims', []):
+                cid_var = getattr(claim, 'id_var', None)
+                cid_value = (cid_var.get() if hasattr(cid_var, 'get') else "").strip()
+                if cid_value:
+                    existing_claims.add((pid_value, cid_value))
+        seen_claims = set()
         for entry in entries or []:
             hydrated = entry.get('row', {})
             found = entry.get('found', False)
             product_id = (hydrated.get('id_producto') or '').strip()
             if not product_id:
+                errores += 1
                 continue
             product_frame = self._find_product_frame(product_id)
             new_product = False
@@ -9539,22 +9584,38 @@ class FraudCaseApp:
                 'nombre_analitica': (hydrated.get('nombre_analitica') or '').strip(),
                 'codigo_analitica': (hydrated.get('codigo_analitica') or '').strip(),
             }
+            claim_id = claim_payload['id_reclamo']
             if not any(claim_payload.values()):
                 continue
-            target = product_frame.find_claim_by_id(claim_payload['id_reclamo'])
+            if not claim_id:
+                errores += 1
+                continue
+            claim_key = (product_id, claim_id)
+            if claim_key in seen_claims or claim_key in existing_claims:
+                duplicados += 1
+                continue
+            seen_claims.add(claim_key)
+            existing_claims.add(claim_key)
+            target = product_frame.find_claim_by_id(claim_id)
             if not target:
                 target = product_frame.obtain_claim_slot()
             target.set_data(claim_payload)
             self._sync_product_lookup_claim_fields(product_frame, product_id)
             product_frame.persist_lookup_snapshot()
-            imported += 1
+            nuevos += 1
             if not found and 'id_producto' in self.detail_catalogs:
                 missing_products.append(product_id)
         self._notify_dataset_changed(summary_sections="reclamos")
-        log_event("navegacion", "Reclamos importados desde CSV", self.logs)
-        if imported:
+        total = nuevos
+        log_event(
+            "navegacion",
+            f"Reclamos importados desde CSV: total={total}, nuevos={nuevos}, actualizados=0, duplicados={duplicados}, errores={errores}",
+            self.logs,
+        )
+        if total:
             self.sync_main_form_after_import("reclamos")
-            messagebox.showinfo("Importación completa", "Reclamos importados correctamente.")
+            summary = self._format_import_summary("reclamos", nuevos, 0, duplicados, errores)
+            messagebox.showinfo("Importación completa", summary)
         else:
             messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
         self._report_missing_detail_ids("productos", missing_products)
