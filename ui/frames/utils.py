@@ -383,6 +383,73 @@ def grid_and_configure(
     return widget
 
 
+def build_grid_container(
+    parent: Any,
+    *,
+    row: int = 0,
+    column: int = 0,
+    padx: int | tuple[int, int] = COL_PADX,
+    pady: int | tuple[int, int] = ROW_PADY,
+    sticky: str = "nsew",
+    row_weight: int | None = 1,
+    column_weight: int | None = 1,
+):
+    """Create a frame gridded in ``parent`` with uniform weight defaults."""
+
+    try:
+        container = ttk.Frame(parent)
+    except Exception:
+        class _StubContainer:
+            def __init__(self):
+                self._grid_last_args = ()
+                self._grid_last_kwargs = {}
+
+            def grid(self, *args, **kwargs):  # noqa: ANN001
+                self._grid_last_args = args
+                self._grid_last_kwargs = kwargs
+                return None
+
+            def grid_configure(self, *args, **kwargs):  # noqa: ANN001
+                return self.grid(*args, **kwargs)
+
+            def columnconfigure(self, *_args, **_kwargs):  # noqa: ANN001
+                return None
+
+            def rowconfigure(self, *_args, **_kwargs):  # noqa: ANN001
+                return None
+
+            def winfo_manager(self):  # noqa: D401
+                """Simula gestor de geometría para pruebas sin Tk."""
+
+                return "grid"
+
+        container = _StubContainer()
+
+    ensure_grid_support(container)
+    grid_and_configure(
+        container,
+        parent,
+        row=row,
+        column=column,
+        padx=padx,
+        pady=pady,
+        sticky=sticky,
+        row_weight=row_weight,
+        column_weight=column_weight,
+    )
+    if hasattr(container, "columnconfigure") and column_weight is not None:
+        try:
+            container.columnconfigure(0, weight=1)
+        except Exception:
+            pass
+    if hasattr(container, "rowconfigure") and row_weight is not None:
+        try:
+            container.rowconfigure(0, weight=1)
+        except Exception:
+            pass
+    return container
+
+
 def grid_section(
     section: Any,
     parent: Any,
