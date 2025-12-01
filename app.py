@@ -110,6 +110,7 @@ from ui.frames.utils import (
     build_grid_container,
     create_scrollable_container,
     ensure_grid_support,
+    grid_and_configure,
     refresh_dynamic_rows,
     resize_scrollable_to_content,
 )
@@ -2200,29 +2201,97 @@ class FraudCaseApp:
             self.build_case_and_participants_tab(self.main_tab)
         """
 
+        ensure_grid_support(parent)
+        if hasattr(parent, "rowconfigure"):
+            try:
+                parent.rowconfigure(0, weight=1)
+            except Exception:
+                pass
+        if hasattr(parent, "columnconfigure"):
+            try:
+                parent.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+
         scroll_container, inner_frame = create_scrollable_container(
             parent, scroll_binder=self._scroll_binder, tab_id=parent
         )
-        scroll_container.pack(fill="both", expand=True)
+        grid_and_configure(
+            scroll_container,
+            parent,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+        )
         self.summary_scrollable = scroll_container
         self._register_scrollable(scroll_container)
 
         self._main_scrollable_frame = inner_frame
 
-        case_section = ttk.LabelFrame(self._main_scrollable_frame, text="1. Datos generales del caso")
-        case_section.pack(fill="x", expand=False, padx=5, pady=5)
+        ensure_grid_support(self._main_scrollable_frame)
+        if hasattr(self._main_scrollable_frame, "columnconfigure"):
+            try:
+                self._main_scrollable_frame.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+
+        case_section = ttk.LabelFrame(
+            self._main_scrollable_frame, text="1. Datos generales del caso"
+        )
+        grid_and_configure(
+            case_section,
+            self._main_scrollable_frame,
+            row=0,
+            column=0,
+            padx=5,
+            pady=5,
+            sticky="nsew",
+            row_weight=0,
+        )
         self.build_case_tab(case_section)
 
-        clients_section = ttk.LabelFrame(self._main_scrollable_frame, text="2. Clientes implicados")
-        clients_section.pack(fill="x", expand=True, padx=5, pady=5)
+        clients_section = ttk.LabelFrame(
+            self._main_scrollable_frame, text="2. Clientes implicados"
+        )
+        grid_and_configure(
+            clients_section,
+            self._main_scrollable_frame,
+            row=1,
+            column=0,
+            padx=5,
+            pady=5,
+            sticky="nsew",
+        )
         self.build_clients_tab(clients_section)
 
-        products_section = ttk.LabelFrame(self._main_scrollable_frame, text="3. Productos investigados")
-        products_section.pack(fill="x", expand=True, padx=5, pady=5)
+        products_section = ttk.LabelFrame(
+            self._main_scrollable_frame, text="3. Productos investigados"
+        )
+        grid_and_configure(
+            products_section,
+            self._main_scrollable_frame,
+            row=2,
+            column=0,
+            padx=5,
+            pady=5,
+            sticky="nsew",
+        )
         self.build_products_tab(products_section)
 
-        team_section = ttk.LabelFrame(self._main_scrollable_frame, text="4. Colaboradores involucrados")
-        team_section.pack(fill="x", expand=True, padx=5, pady=5)
+        team_section = ttk.LabelFrame(
+            self._main_scrollable_frame, text="4. Colaboradores involucrados"
+        )
+        grid_and_configure(
+            team_section,
+            self._main_scrollable_frame,
+            row=3,
+            column=0,
+            padx=5,
+            pady=5,
+            sticky="nsew",
+        )
         self.build_team_tab(team_section)
 
     def _safe_update_idletasks(self):
@@ -3853,8 +3922,16 @@ class FraudCaseApp:
 
     def build_clients_tab(self, parent):
         """Construye la pestaña de clientes con lista dinámica."""
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True)
+        frame = build_grid_container(
+            parent,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+            row_weight=1,
+            column_weight=1,
+        )
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
@@ -4099,8 +4176,16 @@ class FraudCaseApp:
                 pass
 
     def build_team_tab(self, parent):
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True)
+        frame = build_grid_container(
+            parent,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+            row_weight=1,
+            column_weight=1,
+        )
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         frame.rowconfigure(2, weight=1)
@@ -4282,8 +4367,16 @@ class FraudCaseApp:
                 pass
 
     def build_products_tab(self, parent):
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True)
+        frame = build_grid_container(
+            parent,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+            row_weight=1,
+            column_weight=1,
+        )
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
@@ -4523,8 +4616,16 @@ class FraudCaseApp:
         return [t.id_var.get().strip() for t in self.team_frames if t.id_var.get().strip()]
 
     def build_risk_tab(self, parent):
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True)
+        frame = build_grid_container(
+            parent,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+            row_weight=1,
+            column_weight=1,
+        )
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
 
@@ -4633,8 +4734,16 @@ class FraudCaseApp:
             used_ids.add(new_id)
 
     def build_norm_tab(self, parent):
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True)
+        frame = build_grid_container(
+            parent,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+            row_weight=1,
+            column_weight=1,
+        )
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
 
@@ -4768,7 +4877,15 @@ class FraudCaseApp:
         scrollable_tab, tab_container = create_scrollable_container(
             parent, scroll_binder=self._scroll_binder, tab_id=parent
         )
-        scrollable_tab.pack(fill="both", expand=True)
+        grid_and_configure(
+            scrollable_tab,
+            parent,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+        )
         self.analysis_scrollable = scrollable_tab
         self._register_scrollable(scrollable_tab)
         self._analysis_tab_container = tab_container

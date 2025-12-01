@@ -1737,6 +1737,18 @@ class ProductFrame:
         return row
 
     def remove_claim(self, row):
+        section = getattr(row, "section", None)
+        frame = getattr(row, "frame", None)
+        if section and hasattr(section, "destroy"):
+            try:
+                section.destroy()
+            except Exception:
+                pass
+        elif frame and hasattr(frame, "destroy"):
+            try:
+                frame.destroy()
+            except Exception:
+                pass
         if row in self.claims:
             self.claims.remove(row)
         self._refresh_claim_rows(min_rows=1)
@@ -2444,7 +2456,7 @@ class ProductFrame:
             self.tooltip_register,
         )
 
-    def _refresh_involvement_rows(self):
+    def _refresh_involvement_rows(self, *, min_rows: int = 1):
         refresh_dynamic_rows(
             self.involvements,
             start_row=1,
@@ -2452,6 +2464,7 @@ class ProductFrame:
             padx=COL_PADX,
             pady=ROW_PADY,
             sticky="we",
+            min_rows=min_rows,
         )
 
     def add_involvement(self):
@@ -2462,9 +2475,21 @@ class ProductFrame:
         return row
 
     def remove_involvement(self, row):
+        section = getattr(row, "section", None)
+        frame = getattr(row, "frame", None)
+        if section and hasattr(section, "destroy"):
+            try:
+                section.destroy()
+            except Exception:
+                pass
+        elif frame and hasattr(frame, "destroy"):
+            try:
+                frame.destroy()
+            except Exception:
+                pass
         if row in self.involvements:
             self.involvements.remove(row)
-        self._refresh_involvement_rows()
+        self._refresh_involvement_rows(min_rows=1)
         self.schedule_summary_refresh('involucramientos')
 
     def update_client_options(self):
