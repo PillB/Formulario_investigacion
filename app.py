@@ -9188,7 +9188,7 @@ class FraudCaseApp:
         return "\n".join(lines)
 
     @staticmethod
-    def _collect_existing_ids(frames, attr_name="id_var"):
+    def _collect_existing_ids(frames, attr_name="id_var", *, normalize=None):
         identifiers = set()
         for frame in frames or []:
             attr = getattr(frame, attr_name, None)
@@ -9197,7 +9197,7 @@ class FraudCaseApp:
                 continue
             value = (getter() or "").strip()
             if value:
-                identifiers.add(value)
+                identifiers.add(normalize(value) if normalize else value)
         return identifiers
 
     def _apply_client_import_payload(self, entries):
@@ -9302,20 +9302,23 @@ class FraudCaseApp:
         duplicados = 0
         errores = 0
         missing_ids = []
-        existing_ids = self._collect_existing_ids(self.product_frames)
+        existing_ids = self._collect_existing_ids(
+            self.product_frames, normalize=self._normalize_identifier
+        )
         seen_ids = set()
         for entry in entries or []:
             hydrated = entry.get('row', {})
             found = entry.get('found', False)
             product_id = (hydrated.get('id_producto') or '').strip()
+            normalized_product_id = self._normalize_identifier(product_id)
             if not product_id:
                 errores += 1
                 continue
-            if product_id in seen_ids or product_id in existing_ids:
+            if normalized_product_id in seen_ids or normalized_product_id in existing_ids:
                 duplicados += 1
                 continue
-            seen_ids.add(product_id)
-            existing_ids.add(product_id)
+            seen_ids.add(normalized_product_id)
+            existing_ids.add(normalized_product_id)
             frame = self._obtain_product_slot_for_import()
             created = True
             client_id = (hydrated.get('id_cliente') or '').strip()
