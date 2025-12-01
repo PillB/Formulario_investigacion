@@ -16,6 +16,7 @@ from ui.frames.utils import (
     ALERT_BADGE_ICON,
     SUCCESS_BADGE_ICON,
     BadgeManager,
+    build_grid_container,
     create_collapsible_card,
     ensure_grid_support,
     grid_section,
@@ -1475,18 +1476,14 @@ class ProductFrame:
 
     def _build_header_table(self, parent=None):
         host = parent or getattr(self.section, "content", None) or self.section
-        container = ttk.Frame(host)
-        packer = getattr(self.section, "pack_content", None)
-        if parent is None and callable(packer):
-            packer(container, fill="x", expand=False)
-        else:
-            try:
-                container.pack(fill="x", expand=True, padx=COL_PADX, pady=ROW_PADY)
-            except Exception:
-                pass
-        ensure_grid_support(container)
-        if hasattr(container, "columnconfigure"):
-            container.columnconfigure(0, weight=1)
+        container = build_grid_container(
+            host,
+            padx=COL_PADX,
+            pady=ROW_PADY,
+            sticky="nsew",
+            row_weight=1,
+            column_weight=1,
+        )
 
         columns = (
             ("id_producto", "ID"),

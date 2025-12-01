@@ -107,6 +107,7 @@ from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.frames.utils import (
     GlobalScrollBinding,
+    build_grid_container,
     create_scrollable_container,
     ensure_grid_support,
     refresh_dynamic_rows,
@@ -4692,10 +4693,16 @@ class FraudCaseApp:
         )
 
     def _build_shared_header_tree(self, parent, row_index, tree_builder):
-        container = ttk.Frame(parent)
-        container.grid(row=row_index, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY // 2))
-        container.columnconfigure(0, weight=1)
-        container.rowconfigure(0, weight=1)
+        container = build_grid_container(
+            parent,
+            row=row_index,
+            column=0,
+            padx=COL_PADX,
+            pady=(0, ROW_PADY // 2),
+            sticky="nsew",
+            row_weight=1,
+            column_weight=1,
+        )
 
         xscrollbar = ttk.Scrollbar(container, orient="horizontal")
 

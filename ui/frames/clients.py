@@ -13,9 +13,9 @@ from validators import (FieldValidator, log_event, should_autofill_field,
 from ui.frames.utils import (
     BadgeManager,
     build_required_label,
+    build_grid_container,
     create_collapsible_card,
     ensure_grid_support,
-    grid_and_configure,
     grid_section,
 )
 from ui.config import COL_PADX, ROW_PADY
@@ -664,10 +664,11 @@ class ClientFrame:
     # Resumen
     # ------------------------------------------------------------------
     def _build_summary(self, container):
-        summary_frame = ttk.Frame(container)
-        ensure_grid_support(summary_frame)
-        if hasattr(summary_frame, "columnconfigure"):
-            summary_frame.columnconfigure(0, weight=1)
+        summary_frame = build_grid_container(
+            container,
+            row_weight=1,
+            column_weight=1,
+        )
 
         columns = (
             ("id", "ID"),
@@ -699,14 +700,6 @@ class ClientFrame:
 
         tree.bind("<<TreeviewSelect>>", self._on_summary_select)
         tree.bind("<Double-1>", self._on_summary_double_click)
-        grid_and_configure(
-            summary_frame,
-            container,
-            padx=COL_PADX,
-            pady=ROW_PADY,
-            row_weight=1,
-            column_weight=1,
-        )
         return tree
 
     def refresh_summary(self):
