@@ -228,7 +228,7 @@ DETAIL_LOOKUP_ALIASES = {
     "id_producto": ("productos", "producto", "product", "products"),
     "id_reclamo": ("reclamos", "reclamo", "claim", "claims"),
     "id_riesgo": ("riesgos", "riesgo", "risk", "risks"),
-    "id_norma": ("normas", "norma", "rule", "rules"),
+    "id_norma": ("normas", "norma", "norm", "norms", "rule", "rules"),
 }
 
 __all__ = [
