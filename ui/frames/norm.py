@@ -96,6 +96,11 @@ class NormFrame:
         )
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        id_entry.bind(
+            "<Return>",
+            lambda _e: self.on_id_change(from_focus=True, explicit_lookup=True),
+            add="+",
+        )
 
         ttk.Label(self.frame, text="Fecha de vigencia (YYYY-MM-DD):").grid(
             row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -319,14 +324,22 @@ class NormFrame:
         self._populate_header_tree()
         self.on_id_change(preserve_existing=True, silent=True)
 
-    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
+    def on_id_change(
+        self, from_focus=False, preserve_existing=False, silent=False, explicit_lookup=False
+    ):
         norm_id = self.id_var.get().strip()
         if not norm_id:
             self._last_missing_lookup_id = None
             return
         data = self.norm_lookup.get(norm_id)
         if not data:
-            if from_focus and not silent and self.norm_lookup and self._last_missing_lookup_id != norm_id:
+            if (
+                explicit_lookup
+                and from_focus
+                and not silent
+                and self.norm_lookup
+                and self._last_missing_lookup_id != norm_id
+            ):
                 messagebox.showerror(
                     "Norma no encontrada",
                     (
@@ -335,6 +348,8 @@ class NormFrame:
                     ),
                 )
                 self._last_missing_lookup_id = norm_id
+            else:
+                self._last_missing_lookup_id = None
             return
 
         def set_if_present(var, key):
@@ -398,7 +413,7 @@ class NormFrame:
         if not values:
             return
         self.id_var.set(values[0])
-        self.on_id_change(from_focus=True)
+        self.on_id_change(from_focus=True, explicit_lookup=True)
 
     def _first_selected_item(self):
         selection = self.header_tree.selection() if self.header_tree else []

@@ -168,7 +168,7 @@ def test_norm_frame_preserves_manual_fields_with_preserve_flag():
     assert frame.fecha_var.get() == "2024-05-05"
 
 
-def test_norm_frame_shows_message_for_missing_lookup(monkeypatch):
+def test_norm_frame_shows_message_only_on_explicit_lookup(monkeypatch):
     frame = _build_norm_frame()
     captured = []
     monkeypatch.setattr(norm.messagebox, "showerror", lambda *args: captured.append(args))
@@ -180,4 +180,7 @@ def test_norm_frame_shows_message_for_missing_lookup(monkeypatch):
     frame.set_lookup({"111": {"descripcion": "x"}})
     frame.id_var.set("999")
     frame.on_id_change(from_focus=True)
+    assert captured == []
+
+    frame.on_id_change(from_focus=True, explicit_lookup=True)
     assert captured and "Norma no encontrada" in captured[0][0]
