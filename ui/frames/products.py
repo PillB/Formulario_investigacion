@@ -50,7 +50,7 @@ class InvolvementRow:
         self.tooltip_register = tooltip_register
         self.validators = []
         self.team_validator = None
-        self.badges: dict[str, object] = {}
+        self.badge_manager = None
 
         self.team_var = tk.StringVar()
         self.monto_var = tk.StringVar()
@@ -67,6 +67,7 @@ class InvolvementRow:
             self.frame.grid_columnconfigure(1, weight=1)
             self.frame.grid_columnconfigure(3, weight=1)
         self.section.pack_content(self.frame, fill="x", expand=True)
+        self.badge_manager = self._get_badge_manager(self.frame)
 
         ttk.Label(self.frame, text="Colaborador:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -84,7 +85,14 @@ class InvolvementRow:
         self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
         self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
         self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
-        self.badges["team"] = self._make_badge(row=0, column=5)
+        self.badge_manager.create_and_register(
+            self._badge_key("team"),
+            self.frame,
+            row=0,
+            column=5,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
+        )
 
         ttk.Label(self.frame, text="Monto asignado:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -95,7 +103,14 @@ class InvolvementRow:
         monto_entry.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
-        self.badges["amount"] = self._make_badge(row=0, column=6)
+        self.badge_manager.create_and_register(
+            self._badge_key("amount"),
+            self.frame,
+            row=0,
+            column=6,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
+        )
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -138,61 +153,23 @@ class InvolvementRow:
             collapsible_cls=CollapsibleSection,
         )
 
-    def _make_badge(self, row: int, *, column: int):
-        creator = getattr(self.product_frame, "_create_badge_label", None)
-        if callable(creator):
-            try:
-                return creator(row, column=column, parent=self.frame)
-            except Exception:
-                pass
-        try:
-            badge = ttk.Label(self.frame, text=ALERT_BADGE_ICON, anchor="w")
-            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
-            return badge
-        except Exception:
-            class _StubBadge:
-                def __init__(self):
-                    self.text = ALERT_BADGE_ICON
+    def _get_badge_manager(self, parent=None) -> BadgeManager:
+        manager = getattr(self.product_frame, "badge_manager", None)
+        if manager is None:
+            manager = BadgeManager(
+                parent=parent or getattr(self.product_frame, "frame", None) or self.parent,
+                pending_text=ALERT_BADGE_ICON,
+                success_text=SUCCESS_BADGE_ICON,
+            )
+            self.product_frame.badge_manager = manager
+        return manager
 
-                def config(self, **kwargs):  # noqa: D401, ANN001
-                    """Permite simular configure/config en pruebas sin Tk."""
-                    self.text = kwargs.get("text", self.text)
-
-                def configure(self, **kwargs):  # noqa: D401, ANN001
-                    """Alias de config para compatibilidad."""
-                    return self.config(**kwargs)
-
-            badge = _StubBadge()
-            ensure_grid_support(badge)
-            badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
-            return badge
-
-    def _apply_badge_state(self, badge, is_valid: bool, message: str | None):
-        setter = getattr(self.product_frame, "_set_badge_state", None)
-        if callable(setter):
-            setter(badge, is_valid, message, success_text=SUCCESS_BADGE_ICON)
-            return
-        text = SUCCESS_BADGE_ICON if is_valid else ALERT_BADGE_ICON
-        styles = getattr(self.product_frame, "_badge_styles", {}) or {"success": "TLabel", "warning": "TLabel"}
-        style_name = styles.get("success" if is_valid else "warning", "TLabel")
-        try:
-            badge.configure(text=text, style=style_name)
-        except Exception:
-            if hasattr(badge, "config"):
-                try:
-                    badge.config(text=text)
-                except Exception:
-                    pass
+    def _badge_key(self, name: str) -> str:
+        return f"product{self.product_frame.idx}_inv{self.idx}_{name}"
 
     def _wrap_involvement_validation(self, key: str, validate_fn):
-        def _wrapped():
-            message = validate_fn()
-            badge = self.badges.get(key)
-            if badge:
-                self._apply_badge_state(badge, message is None, message)
-            return message
-
-        return _wrapped
+        manager = self.badge_manager or self._get_badge_manager(self.frame)
+        return manager.wrap_validation(self._badge_key(key), validate_fn)
 
     def get_data(self):
         return {
@@ -371,9 +348,7 @@ class ClaimRow:
         self.id_var = tk.StringVar()
         self.name_var = tk.StringVar()
         self.code_var = tk.StringVar()
-        self.badges: dict[str, object] = {}
-        self._badge_updaters: dict[str, Callable] = {}
-        self._claim_field_errors: dict[str, str | None] = {}
+        self.badge_manager = None
 
         self.section = self._create_section(parent)
         self._sync_section_title()
@@ -387,6 +362,7 @@ class ClaimRow:
             self.frame.grid_columnconfigure(1, weight=1)
             self.frame.grid_columnconfigure(3, weight=1)
         self.section.pack_content(self.frame, fill="x", expand=True)
+        self.badge_manager = self._get_badge_manager(self.frame)
 
         ttk.Label(self.frame, text="ID reclamo:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -398,7 +374,14 @@ class ClaimRow:
         self.id_entry = id_entry
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
         self._bind_identifier_triggers(id_entry)
-        self.badges["id"] = self._make_badge(row=0, column=5)
+        self.badge_manager.create_and_register(
+            self._badge_key("id"),
+            self.frame,
+            row=0,
+            column=5,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
+        )
 
         ttk.Label(self.frame, text="Código:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -410,7 +393,14 @@ class ClaimRow:
         self.code_entry = code_entry
         self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
         self._bind_claim_field_triggers(code_entry)
-        self.badges["code"] = self._make_badge(row=0, column=6)
+        self.badge_manager.create_and_register(
+            self._badge_key("code"),
+            self.frame,
+            row=0,
+            column=6,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
+        )
 
         ttk.Label(self.frame, text="Analítica nombre:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -422,7 +412,14 @@ class ClaimRow:
         self.name_entry = name_entry
         self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
         self._bind_claim_field_triggers(name_entry)
-        self.badges["name"] = self._make_badge(row=1, column=5)
+        self.badge_manager.create_and_register(
+            self._badge_key("name"),
+            self.frame,
+            row=1,
+            column=5,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
+        )
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -640,54 +637,26 @@ class ClaimRow:
             collapsible_cls=CollapsibleSection,
         )
 
-    def _make_badge(self, row: int, column: int):
-        creator = getattr(self.product_frame, "_create_badge_label", None)
-        if callable(creator):
-            try:
-                return creator(row, column=column, parent=self.frame)
-            except TypeError:
-                return creator(row)
-        styles = getattr(self.product_frame, "_badge_styles", {}) or {"warning": "TLabel"}
-        style_name = styles.get("warning", "TLabel")
-        badge = ttk.Label(self.frame, text=ALERT_BADGE_ICON, style=style_name, anchor="w")
-        badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
-        return badge
+    def _get_badge_manager(self, parent=None) -> BadgeManager:
+        manager = getattr(self.product_frame, "badge_manager", None)
+        if manager is None:
+            manager = BadgeManager(
+                parent=parent or getattr(self.product_frame, "frame", None) or self.parent,
+                pending_text=ALERT_BADGE_ICON,
+                success_text=SUCCESS_BADGE_ICON,
+            )
+            self.product_frame.badge_manager = manager
+        return manager
 
-    def _apply_badge_state(self, badge, is_valid: bool, message: str | None):
-        setter = getattr(self.product_frame, "_set_badge_state", None)
-        if callable(setter):
-            setter(badge, is_valid, message, success_text=SUCCESS_BADGE_ICON)
-            return
-        styles = getattr(self.product_frame, "_badge_styles", {}) or {"success": "TLabel", "warning": "TLabel"}
-        style_name = styles.get("success" if is_valid else "warning", "TLabel")
-        text = SUCCESS_BADGE_ICON if is_valid else ALERT_BADGE_ICON
-        try:
-            badge.configure(text=text, style=style_name)
-        except Exception:
-            if hasattr(badge, "config"):
-                try:
-                    badge.config(text=text)
-                except Exception:
-                    pass
-
-    def _update_claim_badge(self, key: str, is_valid: bool, message: str | None):
-        badge = self.badges.get(key)
-        if badge:
-            self._apply_badge_state(badge, is_valid, message)
+    def _badge_key(self, name: str) -> str:
+        return f"product{self.product_frame.idx}_claim{self.idx}_{name}"
 
     def _wrap_claim_validation(self, key: str, validate_fn):
-        def _wrapped():
-            message = validate_fn()
-            self._claim_field_errors[key] = message
-            self._update_claim_badge(key, message is None, message)
-            return message
-
-        self._badge_updaters[key] = _wrapped
-        return _wrapped
+        manager = self.badge_manager or self._get_badge_manager(self.frame)
+        return manager.wrap_validation(self._badge_key(key), validate_fn)
 
     def refresh_badges(self):
-        for updater in self._badge_updaters.values():
-            updater()
+        self._get_badge_manager(self.frame).refresh()
 
     def _validate_claim_id(self):
         value = self.id_var.get()
