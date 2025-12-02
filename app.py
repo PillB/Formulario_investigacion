@@ -423,6 +423,8 @@ class FraudCaseApp:
     IMAGE_MAX_BYTES = 3 * 1024 * 1024
     IMAGE_MAX_DIMENSION = 2000
     IMAGE_DISPLAY_MAX = 1000
+    TEAM_ROW_DETAIL_WEIGHT = 3
+    TEAM_ROW_DETAIL_HIDDEN_WEIGHT = 0
     IMPORT_CONFIG = {
         "clientes": {
             "title": "Seleccionar CSV de clientes",
@@ -2323,6 +2325,24 @@ class FraudCaseApp:
         for container in self._scrollable_containers:
             self._refresh_scrollable(container)
 
+    def _set_team_row_weights(self, *, detail_visible: bool) -> None:
+        frame = getattr(self, "team_tab_frame", None)
+        if frame is None:
+            return
+
+        try:
+            frame.rowconfigure(0, weight=1)
+            frame.rowconfigure(
+                2,
+                weight=(
+                    self.TEAM_ROW_DETAIL_WEIGHT
+                    if detail_visible
+                    else self.TEAM_ROW_DETAIL_HIDDEN_WEIGHT
+                ),
+            )
+        except tk.TclError:
+            pass
+
     def _build_window_title(self, *, case_id: Optional[str] = None, streak_days: Optional[int] = None) -> str:
         """Devuelve el título normalizado de la ventana principal."""
 
@@ -4212,9 +4232,9 @@ class FraudCaseApp:
             row_weight=1,
             column_weight=1,
         )
+        self.team_tab_frame = frame
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
-        frame.rowconfigure(2, weight=1)
+        self._set_team_row_weights(detail_visible=False)
 
         summary_section = ttk.LabelFrame(frame, text="Resumen de colaboradores")
         summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
@@ -4277,7 +4297,20 @@ class FraudCaseApp:
         except Exception:
             pass
         self._team_detail_visible = True
-        self._refresh_scrollable(getattr(self, "team_scrollable", None))
+        self._set_team_row_weights(detail_visible=True)
+        scrollable = getattr(self, "team_scrollable", None)
+
+        def _refresh_after_idle():
+            resize_scrollable_to_content(scrollable)
+            self._refresh_scrollable(scrollable)
+
+        if scrollable is not None:
+            try:
+                self.root.after_idle(_refresh_after_idle)
+            except tk.TclError:
+                _refresh_after_idle()
+        else:
+            self._refresh_scrollable(scrollable)
         if getattr(self, "team_toggle_btn", None):
             try:
                 self.team_toggle_btn.config(text="Ocultar formulario")
@@ -4291,6 +4324,7 @@ class FraudCaseApp:
         if callable(remover):
             remover()
         self._team_detail_visible = False
+        self._set_team_row_weights(detail_visible=False)
         if getattr(self, "team_toggle_btn", None):
             try:
                 self.team_toggle_btn.config(text="Mostrar formulario")
