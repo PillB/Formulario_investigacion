@@ -3956,7 +3956,7 @@ class FraudCaseApp:
         self.clients_frame = frame
         self._clients_row_weights = {
             "default": {"summary": 1, "detail": 1},
-            "expanded": {"summary": 1, "detail": 2},
+            "expanded": {"summary": 1, "detail": 3},
         }
         self._apply_clients_row_weights(expanded=False)
 
@@ -4063,7 +4063,18 @@ class FraudCaseApp:
             scrollable = self.clients_scrollable
 
             def _resize_clients_scrollable():
-                resize_scrollable_to_content(scrollable, max_height=None)
+                max_height = None
+                root = getattr(self, "root", None)
+                if root is not None:
+                    try:
+                        root.update_idletasks()
+                        window_height = root.winfo_height() or root.winfo_reqheight()
+                        if window_height:
+                            max_height = int(window_height * 3)
+                    except Exception:
+                        pass
+
+                resize_scrollable_to_content(scrollable, max_height=max_height)
 
             try:
                 scrollable.after_idle(_resize_clients_scrollable)
