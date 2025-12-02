@@ -72,45 +72,37 @@ class InvolvementRow:
         ttk.Label(self.frame, text="Colaborador:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        self.team_cb = ttk.Combobox(
-            self.frame,
-            textvariable=self.team_var,
-            values=self.team_getter(),
-            state="readonly",
-            width=20,
-            style=COMBOBOX_STYLE,
+        team_container, self.team_cb = self._create_badged_container(
+            parent=self.frame,
+            badge_key=self._badge_key("team"),
+            widget_factory=lambda container: ttk.Combobox(
+                container,
+                textvariable=self.team_var,
+                values=self.team_getter(),
+                state="readonly",
+                width=20,
+                style=COMBOBOX_STYLE,
+            ),
         )
-        self.team_cb.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        team_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.team_cb.set('')
         self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
         self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
         self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
-        self.badge_manager.create_and_register(
-            self._badge_key("team"),
-            self.frame,
-            row=0,
-            column=5,
-            pending_text=ALERT_BADGE_ICON,
-            success_text=SUCCESS_BADGE_ICON,
-        )
 
         ttk.Label(self.frame, text="Monto asignado:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        monto_entry = ttk.Entry(
-            self.frame, textvariable=self.monto_var, width=15, style=ENTRY_STYLE
+        amount_container, monto_entry = self._create_badged_container(
+            parent=self.frame,
+            badge_key=self._badge_key("amount"),
+            widget_factory=lambda container: ttk.Entry(
+                container, textvariable=self.monto_var, width=15, style=ENTRY_STYLE
+            ),
         )
-        monto_entry.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        amount_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
-        self.badge_manager.create_and_register(
-            self._badge_key("amount"),
-            self.frame,
-            row=0,
-            column=6,
-            pending_text=ALERT_BADGE_ICON,
-            success_text=SUCCESS_BADGE_ICON,
-        )
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -265,6 +257,23 @@ class InvolvementRow:
             collapsible_cls=CollapsibleSection,
         )
 
+    def _create_badged_container(self, parent, badge_key: str, widget_factory):
+        container = ttk.Frame(parent)
+        ensure_grid_support(container)
+        if hasattr(container, "columnconfigure"):
+            container.columnconfigure(0, weight=1)
+        widget = widget_factory(container)
+        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
+        self.badge_manager.create_and_register(
+            badge_key,
+            container,
+            row=0,
+            column=1,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
+        )
+        return container, widget
+
     def _get_known_team_ids(self):
         return {option.strip() for option in self.team_getter() if option and option.strip()}
 
@@ -367,59 +376,49 @@ class ClaimRow:
         ttk.Label(self.frame, text="ID reclamo:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        id_entry = ttk.Entry(
-            self.frame, textvariable=self.id_var, width=15, style=ENTRY_STYLE
+        id_container, id_entry = self._create_badged_container(
+            parent=self.frame,
+            badge_key=self._badge_key("id"),
+            widget_factory=lambda container: ttk.Entry(
+                container, textvariable=self.id_var, width=15, style=ENTRY_STYLE
+            ),
         )
-        id_entry.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        id_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.id_entry = id_entry
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
         self._bind_identifier_triggers(id_entry)
-        self.badge_manager.create_and_register(
-            self._badge_key("id"),
-            self.frame,
-            row=0,
-            column=5,
-            pending_text=ALERT_BADGE_ICON,
-            success_text=SUCCESS_BADGE_ICON,
-        )
 
         ttk.Label(self.frame, text="Código:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        code_entry = ttk.Entry(
-            self.frame, textvariable=self.code_var, width=12, style=ENTRY_STYLE
+        code_container, code_entry = self._create_badged_container(
+            parent=self.frame,
+            badge_key=self._badge_key("code"),
+            widget_factory=lambda container: ttk.Entry(
+                container, textvariable=self.code_var, width=12, style=ENTRY_STYLE
+            ),
         )
-        code_entry.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        code_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.code_entry = code_entry
         self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
         self._bind_claim_field_triggers(code_entry)
-        self.badge_manager.create_and_register(
-            self._badge_key("code"),
-            self.frame,
-            row=0,
-            column=6,
-            pending_text=ALERT_BADGE_ICON,
-            success_text=SUCCESS_BADGE_ICON,
-        )
 
         ttk.Label(self.frame, text="Analítica nombre:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        name_entry = ttk.Entry(
-            self.frame, textvariable=self.name_var, width=20, style=ENTRY_STYLE
+        name_container, name_entry = self._create_badged_container(
+            parent=self.frame,
+            badge_key=self._badge_key("name"),
+            widget_factory=lambda container: ttk.Entry(
+                container, textvariable=self.name_var, width=20, style=ENTRY_STYLE
+            ),
         )
-        name_entry.grid(row=1, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        name_container.grid(
+            row=1, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we"
+        )
         self.name_entry = name_entry
         self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
         self._bind_claim_field_triggers(name_entry)
-        self.badge_manager.create_and_register(
-            self._badge_key("name"),
-            self.frame,
-            row=1,
-            column=5,
-            pending_text=ALERT_BADGE_ICON,
-            success_text=SUCCESS_BADGE_ICON,
-        )
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
@@ -647,6 +646,23 @@ class ClaimRow:
             )
             self.product_frame.badge_manager = manager
         return manager
+
+    def _create_badged_container(self, parent, badge_key: str, widget_factory):
+        container = ttk.Frame(parent)
+        ensure_grid_support(container)
+        if hasattr(container, "columnconfigure"):
+            container.columnconfigure(0, weight=1)
+        widget = widget_factory(container)
+        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
+        self.badge_manager.create_and_register(
+            badge_key,
+            container,
+            row=0,
+            column=1,
+            pending_text=ALERT_BADGE_ICON,
+            success_text=SUCCESS_BADGE_ICON,
+        )
+        return container, widget
 
     def _badge_key(self, name: str) -> str:
         return f"product{self.product_frame.idx}_claim{self.idx}_{name}"
