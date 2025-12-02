@@ -3933,8 +3933,12 @@ class FraudCaseApp:
             column_weight=1,
         )
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
+        self.clients_frame = frame
+        self._clients_row_weights = {
+            "default": {"summary": 1, "detail": 1},
+            "expanded": {"summary": 1, "detail": 2},
+        }
+        self._apply_clients_row_weights(expanded=False)
 
         summary_section = ttk.LabelFrame(frame, text="Resumen de clientes")
         summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
@@ -4004,6 +4008,16 @@ class FraudCaseApp:
 
         self._refresh_client_summary()
 
+    def _apply_clients_row_weights(self, *, expanded: bool) -> None:
+        """Actualiza la distribución vertical entre el resumen y el detalle."""
+
+        frame = getattr(self, "clients_frame", None)
+        if frame is None:
+            return
+        weights = self._clients_row_weights["expanded" if expanded else "default"]
+        frame.rowconfigure(0, weight=weights.get("summary", 1))
+        frame.rowconfigure(1, weight=weights.get("detail", 1))
+
     def _on_new_client(self):
         self._log_navigation_change("Agregó cliente")
         self.show_clients_detail()
@@ -4023,7 +4037,18 @@ class FraudCaseApp:
         except Exception:
             pass
         self._clients_detail_visible = True
+        self._apply_clients_row_weights(expanded=True)
         self._refresh_scrollable(getattr(self, "clients_scrollable", None))
+        if getattr(self, "clients_scrollable", None):
+            scrollable = self.clients_scrollable
+
+            def _resize_clients_scrollable():
+                resize_scrollable_to_content(scrollable, max_height=None)
+
+            try:
+                scrollable.after_idle(_resize_clients_scrollable)
+            except Exception:
+                _resize_clients_scrollable()
         if getattr(self, "clients_toggle_btn", None):
             try:
                 self.clients_toggle_btn.config(text="Ocultar formulario")
@@ -4037,6 +4062,7 @@ class FraudCaseApp:
         if callable(remover):
             remover()
         self._clients_detail_visible = False
+        self._apply_clients_row_weights(expanded=False)
         if getattr(self, "clients_toggle_btn", None):
             try:
                 self.clients_toggle_btn.config(text="Mostrar formulario")
