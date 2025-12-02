@@ -2309,12 +2309,12 @@ class FraudCaseApp:
             return
         self._scrollable_containers.append(container)
 
-    def _refresh_scrollable(self, container):
+    def _refresh_scrollable(self, container, *, max_height: int | None = None):
         if container is None:
             return
 
         def _sync():
-            resize_scrollable_to_content(container)
+            resize_scrollable_to_content(container, max_height=max_height)
 
         try:
             self.root.after_idle(_sync)
@@ -2331,7 +2331,7 @@ class FraudCaseApp:
             return
 
         try:
-            frame.rowconfigure(0, weight=1)
+            frame.rowconfigure(0, weight=0 if detail_visible else 1)
             frame.rowconfigure(
                 2,
                 weight=(
@@ -4301,8 +4301,35 @@ class FraudCaseApp:
         scrollable = getattr(self, "team_scrollable", None)
 
         def _refresh_after_idle():
-            resize_scrollable_to_content(scrollable)
-            self._refresh_scrollable(scrollable)
+            max_height = None
+            try:
+                window_height = int(self.root.winfo_height())
+            except Exception:
+                window_height = 0
+            if scrollable is not None:
+                try:
+                    scrollable.update_idletasks()
+                except Exception:
+                    pass
+                inner = getattr(scrollable, "_scroll_inner", None)
+                required_height = None
+                if inner is not None:
+                    try:
+                        required_height = int(inner.winfo_reqheight())
+                    except Exception:
+                        required_height = None
+                if window_height:
+                    allowance = window_height * 3
+                    max_height = (
+                        min(required_height, allowance)
+                        if required_height is not None
+                        else allowance
+                    )
+                elif required_height is not None:
+                    max_height = required_height
+
+            resize_scrollable_to_content(scrollable, max_height=max_height)
+            self._refresh_scrollable(scrollable, max_height=max_height)
 
         if scrollable is not None:
             try:
