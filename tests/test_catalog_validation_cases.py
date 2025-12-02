@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from models.catalog_service import CatalogService
 from models.catalogs import iter_massive_csv_rows, load_detail_catalogs
 from validators import (
     AGENCY_CODE_PATTERN,
@@ -118,6 +119,21 @@ def test_detail_catalogs_enforce_identifiers_and_dates():
                 )
                 is None
             )
+
+
+def test_detail_catalogs_include_risks_and_norms():
+    catalogs = load_detail_catalogs(REPO_ROOT)
+
+    assert catalogs.get("risk")
+    assert catalogs.get("norm")
+
+    service = CatalogService(REPO_ROOT)
+    detail_catalogs, detail_lookup_by_id = service.refresh()
+
+    assert detail_catalogs.get("risk")
+    assert detail_lookup_by_id.get("id_riesgo", {}).get("RSK-000001")
+    assert detail_catalogs.get("norm")
+    assert detail_lookup_by_id.get("id_norma", {}).get("043.12.10.01")
 
 
 def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
