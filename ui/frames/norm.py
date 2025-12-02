@@ -95,12 +95,7 @@ class NormFrame:
             column=1,
         )
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
-        id_entry.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
-        id_entry.bind(
-            "<Return>",
-            lambda _e: self.on_id_change(from_focus=True, explicit_lookup=True),
-            add="+",
-        )
+        self._bind_identifier_triggers(id_entry)
 
         ttk.Label(self.frame, text="Fecha de vigencia (YYYY-MM-DD):").grid(
             row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -288,6 +283,17 @@ class NormFrame:
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
+
+    def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
+        widget.bind(
+            "<Return>",
+            lambda _e: self.on_id_change(from_focus=True, explicit_lookup=True),
+            add="+",
+        )
+        widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
+        widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def _build_section_title(self) -> str:
         base_title = f"Norma {self.idx+1}"
