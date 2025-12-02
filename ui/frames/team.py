@@ -119,16 +119,28 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Nombres:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        nombres_entry = ttk.Entry(self.frame, textvariable=self.nombres_var, width=25)
-        nombres_entry.grid(row=1, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        nombres_entry = self._make_badged_field(
+            self.frame,
+            "team_nombres",
+            lambda parent: ttk.Entry(parent, textvariable=self.nombres_var, width=25),
+            row=1,
+            column=1,
+            columnspan=2,
+        )
         self._bind_dirty_tracking(nombres_entry, "nombres")
         self.tooltip_register(nombres_entry, "Ingresa los nombres del colaborador.")
 
         ttk.Label(self.frame, text="Apellidos:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        apellidos_entry = ttk.Entry(self.frame, textvariable=self.apellidos_var, width=25)
-        apellidos_entry.grid(row=2, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        apellidos_entry = self._make_badged_field(
+            self.frame,
+            "team_apellidos",
+            lambda parent: ttk.Entry(parent, textvariable=self.apellidos_var, width=25),
+            row=2,
+            column=1,
+            columnspan=2,
+        )
         self._bind_dirty_tracking(apellidos_entry, "apellidos")
         self.tooltip_register(apellidos_entry, "Ingresa los apellidos del colaborador.")
 
@@ -334,6 +346,34 @@ class TeamMemberFrame:
                 self.logs,
                 f"Colaborador {self.idx+1} - ID",
                 variables=[self.id_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                nombres_entry,
+                self.badges.wrap_validation(
+                    "team_nombres",
+                    lambda: validate_required_text(
+                        self.nombres_var.get(), "los nombres del colaborador"
+                    ),
+                ),
+                self.logs,
+                f"Colaborador {self.idx+1} - Nombres",
+                variables=[self.nombres_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                apellidos_entry,
+                self.badges.wrap_validation(
+                    "team_apellidos",
+                    lambda: validate_required_text(
+                        self.apellidos_var.get(), "los apellidos del colaborador"
+                    ),
+                ),
+                self.logs,
+                f"Colaborador {self.idx+1} - Apellidos",
+                variables=[self.apellidos_var],
             )
         )
         self.validators.append(

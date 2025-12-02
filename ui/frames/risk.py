@@ -7,7 +7,8 @@ from tkinter import messagebox, ttk
 
 from settings import CRITICIDAD_LIST
 from validators import (FieldValidator, log_event, should_autofill_field,
-                        validate_money_bounds, validate_risk_id)
+                        validate_money_bounds, validate_required_text,
+                        validate_risk_id)
 from ui.frames.utils import (
     BadgeManager,
     create_collapsible_card,
@@ -135,8 +136,13 @@ class RiskFrame:
         ttk.Label(self.frame, text="Líder:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        lider_entry = ttk.Entry(self.frame, textvariable=self.lider_var, width=20)
-        lider_entry.grid(row=2, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        lider_entry = self._make_badged_field(
+            self.frame,
+            "riesgo_lider",
+            lambda parent: ttk.Entry(parent, textvariable=self.lider_var, width=20),
+            row=2,
+            column=1,
+        )
         self.tooltip_register(lider_entry, "Responsable del seguimiento del riesgo.")
 
         ttk.Label(self.frame, text="Exposición residual (US$):").grid(
@@ -154,15 +160,27 @@ class RiskFrame:
         ttk.Label(self.frame, text="Descripción del riesgo:").grid(
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        desc_entry = ttk.Entry(self.frame, textvariable=self.descripcion_var, width=60)
-        desc_entry.grid(row=3, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        desc_entry = self._make_badged_field(
+            self.frame,
+            "riesgo_desc",
+            lambda parent: ttk.Entry(parent, textvariable=self.descripcion_var, width=60),
+            row=3,
+            column=1,
+            columnspan=3,
+        )
         self.tooltip_register(desc_entry, "Describe el riesgo de forma clara.")
 
         ttk.Label(self.frame, text="Planes de acción (IDs separados por ;):").grid(
             row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        planes_entry = ttk.Entry(self.frame, textvariable=self.planes_var, width=40)
-        planes_entry.grid(row=4, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        planes_entry = self._make_badged_field(
+            self.frame,
+            "riesgo_planes",
+            lambda parent: ttk.Entry(parent, textvariable=self.planes_var, width=40),
+            row=4,
+            column=1,
+            columnspan=3,
+        )
         self.tooltip_register(planes_entry, "Lista de planes registrados en OTRS o Aranda.")
 
         self.validators.append(
@@ -172,6 +190,21 @@ class RiskFrame:
                 self.logs,
                 f"Riesgo {self.idx+1} - ID",
                 variables=[self.id_var],
+            )
+        )
+
+        self.validators.append(
+            FieldValidator(
+                lider_entry,
+                self.badges.wrap_validation(
+                    "riesgo_lider",
+                    lambda: validate_required_text(
+                        self.lider_var.get(), "el líder del riesgo"
+                    ),
+                ),
+                self.logs,
+                f"Riesgo {self.idx+1} - Líder",
+                variables=[self.lider_var],
             )
         )
 
@@ -200,6 +233,36 @@ class RiskFrame:
                 self.logs,
                 f"Riesgo {self.idx+1} - Criticidad",
                 variables=[self.criticidad_var],
+            )
+        )
+
+        self.validators.append(
+            FieldValidator(
+                desc_entry,
+                self.badges.wrap_validation(
+                    "riesgo_desc",
+                    lambda: validate_required_text(
+                        self.descripcion_var.get(), "la descripción del riesgo"
+                    ),
+                ),
+                self.logs,
+                f"Riesgo {self.idx+1} - Descripción",
+                variables=[self.descripcion_var],
+            )
+        )
+
+        self.validators.append(
+            FieldValidator(
+                planes_entry,
+                self.badges.wrap_validation(
+                    "riesgo_planes",
+                    lambda: validate_required_text(
+                        self.planes_var.get(), "los planes de acción"
+                    ),
+                ),
+                self.logs,
+                f"Riesgo {self.idx+1} - Planes",
+                variables=[self.planes_var],
             )
         )
 
