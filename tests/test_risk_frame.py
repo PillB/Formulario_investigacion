@@ -167,7 +167,7 @@ def test_risk_frame_preserves_manual_fields(monkeypatch):
     assert frame.descripcion_var.get() == "Desc"
 
 
-def test_risk_frame_shows_message_for_missing_lookup(monkeypatch):
+def test_risk_frame_shows_message_only_on_explicit_lookup(monkeypatch):
     frame = _build_risk_frame()
     captured = []
     monkeypatch.setattr(risk.messagebox, "showerror", lambda *args: captured.append(args))
@@ -179,4 +179,7 @@ def test_risk_frame_shows_message_for_missing_lookup(monkeypatch):
     frame.set_lookup({"RSK-000003": {"descripcion": "X"}})
     frame.id_var.set("RSK-999999")
     frame.on_id_change(from_focus=True)
+    assert captured == []
+
+    frame.on_id_change(from_focus=True, explicit_lookup=True)
     assert captured and "Riesgo no encontrado" in captured[0][0]

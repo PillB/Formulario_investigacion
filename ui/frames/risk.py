@@ -371,14 +371,22 @@ class RiskFrame:
         self._populate_header_tree()
         self.on_id_change(preserve_existing=True, silent=True)
 
-    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
+    def on_id_change(
+        self, from_focus=False, preserve_existing=False, silent=False, explicit_lookup=False
+    ):
         rid = self.id_var.get().strip()
         if not rid:
             self._last_missing_lookup_id = None
             return
         data = self.risk_lookup.get(rid)
         if not data:
-            if from_focus and not silent and self.risk_lookup and self._last_missing_lookup_id != rid:
+            if (
+                explicit_lookup
+                and from_focus
+                and not silent
+                and self.risk_lookup
+                and self._last_missing_lookup_id != rid
+            ):
                 messagebox.showerror(
                     "Riesgo no encontrado",
                     (
@@ -387,6 +395,8 @@ class RiskFrame:
                     ),
                 )
                 self._last_missing_lookup_id = rid
+            else:
+                self._last_missing_lookup_id = None
             return
 
         def set_if_present(var, key):
@@ -456,7 +466,7 @@ class RiskFrame:
         if not values:
             return
         self.id_var.set(values[0])
-        self.on_id_change(from_focus=True)
+        self.on_id_change(from_focus=True, explicit_lookup=True)
 
     def _first_selected_item(self):
         selection = self.header_tree.selection() if self.header_tree else []
@@ -534,7 +544,11 @@ class RiskFrame:
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
-        widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
+        widget.bind(
+            "<Return>",
+            lambda _e: self.on_id_change(from_focus=True, explicit_lookup=True),
+            add="+",
+        )
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
