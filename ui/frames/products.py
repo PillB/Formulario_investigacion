@@ -19,6 +19,7 @@ from ui.frames.utils import (
     BadgeManager,
     build_grid_container,
     create_collapsible_card,
+    create_date_entry,
     ensure_grid_support,
     grid_section,
     refresh_dynamic_rows,
@@ -1019,7 +1020,9 @@ class ProductFrame:
         ttk.Label(self.frame, text="Fecha de ocurrencia (YYYY-MM-DD):").grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        focc_entry = ttk.Entry(self.frame, textvariable=self.fecha_oc_var, width=15)
+        focc_entry = create_date_entry(
+            self.frame, textvariable=self.fecha_oc_var, width=15, style=ENTRY_STYLE
+        )
         focc_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.focc_entry = focc_entry
         self.tooltip_register(focc_entry, "Fecha exacta del evento.")
@@ -1029,7 +1032,9 @@ class ProductFrame:
         ttk.Label(self.frame, text="Fecha de descubrimiento (YYYY-MM-DD):").grid(
             row=5, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        fdesc_entry = ttk.Entry(self.frame, textvariable=self.fecha_desc_var, width=15)
+        fdesc_entry = create_date_entry(
+            self.frame, textvariable=self.fecha_desc_var, width=15, style=ENTRY_STYLE
+        )
         fdesc_entry.grid(row=5, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.fdesc_entry = fdesc_entry
         self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")

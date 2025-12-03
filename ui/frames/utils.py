@@ -16,6 +16,123 @@ SUCCESS_BADGE_ICON = "✅"
 PENDING_BADGE_ICON = "⏳"
 
 
+def create_date_entry(
+    parent: Any,
+    *,
+    textvariable: tk.StringVar,
+    width: int = 12,
+    style: str | None = None,
+    **kwargs,
+):
+    """Build a date input that prefers a calendar picker when available.
+
+    The helper keeps the field blank on initialization to avoid disparar
+    validaciones tempranas y normaliza el formato seleccionado a ``YYYY-MM-DD``
+    en el ``textvariable`` asociado. Cuando ``tkcalendar`` no está disponible o
+    falla su inicialización, se retorna un ``ttk.Entry`` convencional.
+    """
+
+    min_width = max(11, width or 0)
+    options: dict[str, Any] = {"textvariable": textvariable, "width": min_width}
+    if style:
+        options["style"] = style
+    options.update(kwargs)
+
+    try:
+        from tkcalendar import DateEntry  # type: ignore
+    except Exception:
+        return _build_plain_entry(parent, textvariable, options)
+
+    try:
+        date_entry = DateEntry(
+            parent,
+            date_pattern="yyyy-mm-dd",
+            showweeknumbers=False,
+            **options,
+        )
+    except Exception:
+        return _build_plain_entry(parent, textvariable, options)
+
+    _clear_initial_value(date_entry, textvariable)
+
+    def _sync_calendar_selection(_event=None):  # noqa: ANN001
+        try:
+            selected_date = date_entry.get_date()
+        except Exception:
+            selected_date = None
+        if selected_date:
+            textvariable.set(selected_date.strftime("%Y-%m-%d"))
+        else:
+            textvariable.set(date_entry.get().strip())
+
+    date_entry.bind("<<DateEntrySelected>>", _sync_calendar_selection, add="+")
+    _normalize_on_focus_out(date_entry, textvariable)
+    return date_entry
+
+
+def _clear_initial_value(widget: Any, variable: tk.StringVar) -> None:
+    try:
+        existing = (variable.get() or "").strip()
+    except Exception:
+        existing = ""
+    if existing:
+        return
+    try:
+        widget.delete(0, "end")
+    except Exception:
+        variable.set("")
+
+
+def _build_plain_entry(parent: Any, textvariable: tk.StringVar, options: dict[str, Any]):
+    try:
+        entry = ttk.Entry(parent, **options)
+    except Exception:
+        entry = _StubEntry(textvariable)
+    _normalize_on_focus_out(entry, textvariable)
+    return entry
+
+
+def _normalize_on_focus_out(widget: Any, variable: tk.StringVar) -> None:
+    def _store_normalized(_event=None):  # noqa: ANN001
+        try:
+            raw_value = widget.get().strip()
+        except Exception:
+            raw_value = variable.get()
+        variable.set(raw_value)
+
+    widget.bind("<FocusOut>", _store_normalized, add="+")
+
+
+class _StubEntry:
+    def __init__(self, variable: tk.StringVar):
+        self._variable = variable
+        ensure_grid_support(self)
+
+    def bind(self, *_args, **_kwargs):  # noqa: ANN001
+        return None
+
+    def get(self):  # noqa: ANN001
+        try:
+            return self._variable.get()
+        except Exception:
+            return ""
+
+    def delete(self, *_args, **_kwargs):  # noqa: ANN001
+        try:
+            self._variable.set("")
+        except Exception:
+            pass
+
+    def after(self, *_args, **kwargs):  # noqa: ANN001
+        callback = kwargs.get("func") or (len(_args) > 1 and _args[1])
+        if callable(callback):
+            callback()
+        return None
+
+    def after_cancel(self, *_args, **_kwargs):  # noqa: ANN001
+        return None
+
+
 def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggle=None):
     """Create a minimal accordion-like container without ``CollapsibleSection``.
 
