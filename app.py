@@ -8511,6 +8511,8 @@ class FraudCaseApp:
         self, armed: bool = False, dataset_signature: Optional[str] = None
     ):
         status_message = "Clave técnica sin validar"
+        if not hasattr(self, "_duplicate_warning_dismissed"):
+            self._duplicate_warning_dismissed = False
         if armed:
             self._duplicate_checks_armed = True
         if not self._duplicate_checks_armed:
@@ -8665,7 +8667,7 @@ class FraudCaseApp:
                 self._activate_duplicate_warning_cooldown(signature, message)
             should_show_popup = (
                 not getattr(self, "_suppress_messagebox", False)
-                and not self._duplicate_warning_dismissed
+                and not getattr(self, "_duplicate_warning_dismissed", False)
             )
             if should_show_popup:
                 try:
