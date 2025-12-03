@@ -4618,6 +4618,10 @@ class FraudCaseApp:
             change_notifier=self._log_navigation_change,
             header_tree=self.norm_header_tree,
         )
+        norm.set_refresh_callbacks(
+            shared_tree_refresher=self._refresh_shared_norm_tree,
+            summary_refresher=lambda: self._schedule_summary_refresh('normas'),
+        )
         self.norm_frames.append(norm)
         self._renumber_norms()
         self._refresh_shared_norm_tree()
