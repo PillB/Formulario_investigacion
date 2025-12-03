@@ -45,6 +45,9 @@ class NormFrame:
         self.validators = []
         self.change_notifier = change_notifier
         self.header_tree = None
+        self._shared_tree_refresher = None
+        self._summary_refresher = None
+        self._refresh_after_id = None
 
         self.id_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
@@ -169,6 +172,7 @@ class NormFrame:
         self._sync_section_title()
         self.attach_header_tree(header_tree)
         self._register_header_tree_focus(id_entry, fecha_entry, desc_entry)
+        self._register_refresh_traces()
 
     def _place_section(self):
         grid_section(
@@ -327,7 +331,6 @@ class NormFrame:
     def set_lookup(self, lookup):
         self.norm_lookup = lookup or {}
         self._last_missing_lookup_id = None
-        self._populate_header_tree()
         self.on_id_change(preserve_existing=True, silent=True)
 
     def on_id_change(
@@ -371,22 +374,11 @@ class NormFrame:
         self._last_missing_lookup_id = None
         if not silent:
             self._log_change(f"Norma {self.idx+1}: autopoblada desde catálogo")
+        self._schedule_refresh()
 
-    def _populate_header_tree(self):
-        if not self.header_tree:
-            return
-
-        for child in self.header_tree.get_children(""):
-            self.header_tree.delete(child)
-
-        for row_index, (norm_id, data) in enumerate(sorted(self.norm_lookup.items())):
-            values = (
-                str(norm_id),
-                str(data.get("fecha_vigencia", "")),
-                str(data.get("descripcion", "")),
-            )
-            tag = "even" if row_index % 2 == 0 else "odd"
-            self.header_tree.insert("", "end", iid=str(norm_id), values=values, tags=(tag,))
+    def set_refresh_callbacks(self, shared_tree_refresher=None, summary_refresher=None):
+        self._shared_tree_refresher = shared_tree_refresher
+        self._summary_refresher = summary_refresher
 
     def _sort_treeview(self, column):
         if not self.header_tree:
@@ -474,6 +466,35 @@ class NormFrame:
             self.section.bind("<FocusIn>", self._activate_header_tree, add="+")
         except Exception:
             pass
+
+    def _register_refresh_traces(self):
+        for var in (self.id_var, self.descripcion_var, self.fecha_var):
+            var.trace_add("write", lambda *_args: self._schedule_refresh())
+
+    def _schedule_refresh(self):
+        current_after_id = getattr(self, "_refresh_after_id", None)
+        if current_after_id:
+            try:
+                self.frame.after_cancel(current_after_id)
+            except Exception:
+                self._refresh_after_id = None
+        frame = getattr(self, "frame", None)
+        if frame and hasattr(frame, "after"):
+            try:
+                self._refresh_after_id = frame.after(120, self._run_refresh_callbacks)
+                return
+            except Exception:
+                self._refresh_after_id = None
+        self._run_refresh_callbacks()
+
+    def _run_refresh_callbacks(self):
+        self._refresh_after_id = None
+        shared_refresher = getattr(self, "_shared_tree_refresher", None)
+        summary_refresher = getattr(self, "_summary_refresher", None)
+        if callable(shared_refresher):
+            shared_refresher()
+        if callable(summary_refresher):
+            summary_refresher()
 
 
 __all__ = ["NormFrame"]
