@@ -27,6 +27,7 @@ class TeamMemberFrame:
     """Representa un colaborador y su interfaz en la sección de colaboradores."""
 
     ENTITY_LABEL = "colaborador"
+    MIN_TEXT_ENTRY_WIDTH = 11
 
     def __init__(
         self,
@@ -109,7 +110,9 @@ class TeamMemberFrame:
         id_entry = self._make_badged_field(
             self.frame,
             "team_id",
-            lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=20),
+            lambda parent: ttk.Entry(
+                parent, textvariable=self.id_var, width=self._entry_width(20)
+            ),
             row=0,
             column=1,
             columnspan=2,
@@ -123,7 +126,9 @@ class TeamMemberFrame:
         nombres_entry = self._make_badged_field(
             self.frame,
             "team_nombres",
-            lambda parent: ttk.Entry(parent, textvariable=self.nombres_var, width=25),
+            lambda parent: ttk.Entry(
+                parent, textvariable=self.nombres_var, width=self._entry_width(25)
+            ),
             row=1,
             column=1,
             columnspan=2,
@@ -137,7 +142,9 @@ class TeamMemberFrame:
         apellidos_entry = self._make_badged_field(
             self.frame,
             "team_apellidos",
-            lambda parent: ttk.Entry(parent, textvariable=self.apellidos_var, width=25),
+            lambda parent: ttk.Entry(
+                parent, textvariable=self.apellidos_var, width=self._entry_width(25)
+            ),
             row=2,
             column=1,
             columnspan=2,
@@ -182,7 +189,9 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="División:").grid(
             row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        div_entry = ttk.Entry(self.frame, textvariable=self.division_var, width=20)
+        div_entry = ttk.Entry(
+            self.frame, textvariable=self.division_var, width=self._entry_width(20)
+        )
         div_entry.grid(row=4, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(div_entry, "division")
         self.tooltip_register(div_entry, "Ingresa la división o gerencia del colaborador.")
@@ -191,7 +200,9 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Área:").grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        area_entry = ttk.Entry(self.frame, textvariable=self.area_var, width=20)
+        area_entry = ttk.Entry(
+            self.frame, textvariable=self.area_var, width=self._entry_width(20)
+        )
         area_entry.grid(row=5, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(area_entry, "area")
         self.tooltip_register(area_entry, "Detalla el área específica.")
@@ -200,7 +211,9 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Servicio:").grid(
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        serv_entry = ttk.Entry(self.frame, textvariable=self.servicio_var, width=20)
+        serv_entry = ttk.Entry(
+            self.frame, textvariable=self.servicio_var, width=self._entry_width(20)
+        )
         serv_entry.grid(row=6, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(serv_entry, "servicio")
         self.tooltip_register(serv_entry, "Describe el servicio o célula.")
@@ -208,7 +221,9 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Puesto:").grid(
             row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        puesto_entry = ttk.Entry(self.frame, textvariable=self.puesto_var, width=20)
+        puesto_entry = ttk.Entry(
+            self.frame, textvariable=self.puesto_var, width=self._entry_width(20)
+        )
         puesto_entry.grid(row=7, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_dirty_tracking(puesto_entry, "puesto")
         self.tooltip_register(puesto_entry, "Define el cargo actual del colaborador.")
@@ -220,7 +235,9 @@ class TeamMemberFrame:
             self.frame,
             "team_fecha_inm",
             lambda parent: create_date_entry(
-                parent, textvariable=self.fecha_carta_inmediatez_var, width=20
+                parent,
+                textvariable=self.fecha_carta_inmediatez_var,
+                width=self._entry_width(20),
             ),
             row=8,
             column=1,
@@ -240,7 +257,9 @@ class TeamMemberFrame:
             self.frame,
             "team_fecha_ren",
             lambda parent: create_date_entry(
-                parent, textvariable=self.fecha_carta_renuncia_var, width=20
+                parent,
+                textvariable=self.fecha_carta_renuncia_var,
+                width=self._entry_width(20),
             ),
             row=9,
             column=1,
@@ -259,7 +278,9 @@ class TeamMemberFrame:
         nombre_ag_entry = self._make_badged_field(
             self.frame,
             "team_agencia_nombre",
-            lambda parent: ttk.Entry(parent, textvariable=self.nombre_agencia_var, width=25),
+            lambda parent: ttk.Entry(
+                parent, textvariable=self.nombre_agencia_var, width=self._entry_width(25)
+            ),
             row=10,
             column=1,
             columnspan=2,
@@ -273,7 +294,9 @@ class TeamMemberFrame:
         cod_ag_entry = self._make_badged_field(
             self.frame,
             "team_agencia_codigo",
-            lambda parent: ttk.Entry(parent, textvariable=self.codigo_agencia_var, width=10),
+            lambda parent: ttk.Entry(
+                parent, textvariable=self.codigo_agencia_var, width=self._entry_width(10)
+            ),
             row=11,
             column=1,
             columnspan=2,
@@ -476,6 +499,11 @@ class TeamMemberFrame:
                     variables=[variable],
                 )
             )
+
+    def _entry_width(self, width: int) -> int:
+        """Garantiza un ancho mínimo para los campos de texto."""
+
+        return max(width, self.MIN_TEXT_ENTRY_WIDTH)
 
     def _make_badged_field(
         self,
