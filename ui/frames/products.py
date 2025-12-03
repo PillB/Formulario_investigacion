@@ -833,6 +833,7 @@ class ProductFrame:
         self.amount_badge = None
         self.date_badge = None
         self._amount_validation_ready = False
+        self._amount_validation_gate_just_opened = False
         self._last_duplicate_result = "Pendiente"
         self._duplicate_status_var = tk.StringVar()
         self._duplicate_status_style = None
@@ -1388,20 +1389,42 @@ class ProductFrame:
             self.monto_pago_var,
         )
 
-    def _sync_amount_validation_state(self, *_args):
-        if getattr(self, "_amount_validation_ready", False):
+    def _reset_amount_badges(self):
+        badge_manager = getattr(self, "badges", None)
+        if badge_manager is None:
             return
+        if not hasattr(self, "_field_errors"):
+            self._field_errors = {}
+        for badge_key in AMOUNT_BADGE_KEYS.values():
+            self._field_errors[badge_key] = None
+            config = badge_manager._registry.get(badge_key, {})
+            badge_manager.set_badge_state(
+                config.get("badge"),
+                False,
+                None,
+                pending_text=config.get("pending", badge_manager.pending_text),
+            )
+
+    def _sync_amount_validation_state(self, *_args) -> bool:
+        if getattr(self, "_amount_validation_ready", False):
+            return False
         if any((var.get() or "").strip() for var in self._iter_amount_vars()):
             self._amount_validation_ready = True
+            self._amount_validation_gate_just_opened = True
+            return True
+        return False
 
-    def _enable_amount_validation(self, *_args):
-        if not getattr(self, "_amount_validation_ready", False):
-            self._amount_validation_ready = True
+    def _enable_amount_validation(self, *_args, force_refresh: bool = False):
+        previously_blocked = not getattr(self, "_amount_validation_ready", False)
+        gate_just_opened = getattr(self, "_amount_validation_gate_just_opened", False)
+        self._amount_validation_ready = True
+        self._amount_validation_gate_just_opened = False
+        if force_refresh or previously_blocked or gate_just_opened:
+            self._validate_montos_consistentes()
 
     def _refresh_amount_validation_after_programmatic_update(self):
         """Activa y reevalúa la consistencia de montos tras cambios automáticos."""
-        self._enable_amount_validation()
-        self._validate_montos_consistentes()
+        self._enable_amount_validation(force_refresh=True)
 
     def _attach_amount_listeners(self, amount_vars, amount_widgets):
         for var in amount_vars:
@@ -2663,6 +2686,7 @@ class ProductFrame:
     def _validate_montos_consistentes(self, target_key: str | None = None):
         self._sync_amount_validation_state()
         if not self._amount_validation_ready:
+            self._reset_amount_badges()
             return (None, False)
         values = self._collect_amount_values()
         if values is None:
