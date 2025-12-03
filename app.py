@@ -11846,7 +11846,7 @@ class FraudCaseApp:
                 'proceso',
                 'fecha_de_ocurrencia',
                 'fecha_de_descubrimiento',
-                'centro_costos',
+                'centro_costo',
                 'matricula_investigador',
                 'investigador_nombre',
                 'investigador_cargo',
