@@ -431,7 +431,6 @@ class RiskFrame:
     def set_lookup(self, lookup):
         self.risk_lookup = lookup or {}
         self._last_missing_lookup_id = None
-        self._populate_header_tree()
         self.on_id_change(preserve_existing=True, silent=True)
 
     def on_id_change(
@@ -479,24 +478,6 @@ class RiskFrame:
         if not silent:
             self._log_change(f"Riesgo {self.idx+1}: autopoblado desde catálogo")
         self._schedule_refresh()
-
-    def _populate_header_tree(self):
-        if not self.header_tree:
-            return
-
-        for child in self.header_tree.get_children(""):
-            self.header_tree.delete(child)
-
-        for row_index, (risk_id, data) in enumerate(sorted(self.risk_lookup.items())):
-            values = (
-                str(risk_id),
-                str(data.get("criticidad", "")),
-                str(data.get("exposicion_residual", "")),
-                str(data.get("lider", "")),
-                str(data.get("descripcion", "")),
-            )
-            tag = "even" if row_index % 2 == 0 else "odd"
-            self.header_tree.insert("", "end", iid=str(risk_id), values=values, tags=(tag,))
 
     def _sort_treeview(self, column):
         if not self.header_tree:

@@ -4707,8 +4707,6 @@ class FraudCaseApp:
             self.risk_header_tree.insert("", "end", values=values, tags=(tag,))
         self._schedule_summary_refresh('riesgos')
 
-        self._schedule_summary_refresh('riesgos')
-
     def build_analysis_tab(self, parent):
         scrollable_tab, tab_container = create_scrollable_container(
             parent, scroll_binder=self._scroll_binder, tab_id=parent

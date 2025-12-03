@@ -29,8 +29,13 @@ def patch_risk_widgets(monkeypatch):
             def heading(self, column, text=None, command=None):
                 self._config.setdefault("headings", {})[column] = {"text": text, "command": command}
 
-            def column(self, column, anchor=None, width=None):
-                self._config.setdefault("columns_cfg", {})[column] = {"anchor": anchor, "width": width}
+            def column(self, column, anchor=None, width=None, minwidth=None, stretch=None):
+                self._config.setdefault("columns_cfg", {})[column] = {
+                    "anchor": anchor,
+                    "width": width,
+                    "minwidth": minwidth,
+                    "stretch": stretch,
+                }
 
             def insert(self, parent, index, iid=None, values=None, tags=None):
                 iid = str(iid) if iid is not None else str(len(self._order))
@@ -183,3 +188,13 @@ def test_risk_frame_shows_message_only_on_explicit_lookup(monkeypatch):
 
     frame.on_id_change(from_focus=True, explicit_lookup=True)
     assert captured and "Riesgo no encontrado" in captured[0][0]
+
+
+def test_set_lookup_does_not_populate_shared_tree_with_catalog_data():
+    frame = _build_risk_frame()
+    header_tree = risk.RiskFrame.build_header_tree(DummyWidget())
+    frame.attach_header_tree(header_tree)
+
+    frame.set_lookup({"RSK-999999": {"descripcion": "Catálogo"}})
+
+    assert header_tree.get_children() == tuple()
