@@ -14,6 +14,28 @@ class DummyWidget:
         return f"bind_{len(self.bind_calls)}"
 
 
+class DummyWidgetWithAfter(DummyWidget):
+    def __init__(self):
+        super().__init__()
+        self._after_callbacks = {}
+        self._next_after_id = 0
+
+    def after(self, _delay, callback):
+        self._next_after_id += 1
+        job_id = f"after_{self._next_after_id}"
+        self._after_callbacks[job_id] = callback
+        return job_id
+
+    def after_cancel(self, job_id):
+        self._after_callbacks.pop(job_id, None)
+
+    def run_after_callbacks(self):
+        callbacks = list(self._after_callbacks.values())
+        self._after_callbacks.clear()
+        for callback in callbacks:
+            callback()
+
+
 class DummyTooltip:
     def __init__(self, widget):
         self.widget = widget
@@ -93,7 +115,7 @@ def test_focusout_after_value_change_runs_validation_once(monkeypatch):
 
     validator = validators.FieldValidator(widget, recorder, [], "id_field", variables=[variable])
     variable.set("pasted value")
-    assert calls == []
+    assert calls == ["pasted value"]
 
     focus_event = DummyEvent(widget, "FocusOut")
     validator._on_change(focus_event)
@@ -112,6 +134,27 @@ def test_focusout_without_changes_skips_validation(monkeypatch):
     validator._on_change(focus_event)
 
     assert calls == []
+
+
+def test_variable_trace_triggers_validation_without_event(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+    widget = DummyWidgetWithAfter()
+    variable = DummyVar("initial")
+    calls = []
+
+    def recorder():
+        calls.append(variable.get())
+
+    validators.FieldValidator(widget, recorder, [], "id_field", variables=[variable])
+
+    variable.set("first change")
+    variable.set("final value")
+
+    assert calls == []  # Debounced until callbacks are flushed
+
+    widget.run_after_callbacks()
+
+    assert calls == ["final value"]
 
 
 def test_modal_notification_shows_once_per_new_error(monkeypatch):
