@@ -85,6 +85,16 @@ def _clear_initial_value(
     initial = (initial_value or "").strip()
 
     if initial:
+        if existing != initial:
+            try:
+                variable.set(initial)
+                widget.delete(0, "end")
+                widget.insert(0, initial)
+            except Exception:
+                try:
+                    variable.set(initial)
+                except Exception:
+                    pass
         return
     if initial_value is None and existing:
         return
