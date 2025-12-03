@@ -380,6 +380,7 @@ class FieldValidator:
         self.last_error: Optional[str] = None
         self._suspend_count = 0
         self._validation_armed = False
+        self._debounce_job: Optional[str] = None
         self._last_validated_value = self._capture_current_value()
         for var in self.variables:
             self._traces.append(var.trace_add("write", self._on_change))
@@ -424,9 +425,25 @@ class FieldValidator:
         is_user_event = hasattr(event, "widget")
         is_focus_out = event_name == "<FocusOut>" or (is_user_event and self._is_focus_out(event))
         is_commit_event = event_name in {"<<ComboboxSelected>>", "<<Paste>>", "<<Cut>>"}
+        is_variable_trace = (
+            isinstance(event_name, str)
+            and not event_name.startswith("<")
+            and not event_name.startswith("<<")
+            and not is_user_event
+        )
 
         should_validate = False
         allow_modal_notifications = False
+
+        if is_variable_trace:
+            if value_changed_since_validation:
+                self._validation_armed = True
+                self._schedule_validation(
+                    allow_modal_notifications=False,
+                    transient=False,
+                    is_focus_out=False,
+                )
+            return
 
         if is_focus_out and (value_changed_since_validation or self._validation_armed):
             should_validate = True
@@ -441,15 +458,70 @@ class FieldValidator:
         if not should_validate:
             return
 
+        self._cancel_pending_validation()
+        self._run_validation(
+            allow_modal_notifications=allow_modal_notifications,
+            transient=is_focus_out,
+            is_focus_out=is_focus_out,
+        )
+
+    def _run_validation(
+        self,
+        *,
+        allow_modal_notifications: bool,
+        transient: bool,
+        is_focus_out: bool,
+    ) -> None:
+        self._debounce_job = None
         error = self.validate_callback()
         self._display_error(
             error,
             allow_modal=allow_modal_notifications,
-            transient=is_focus_out,
+            transient=transient,
         )
-        self._last_validated_value = current_value
+        self._last_validated_value = self._capture_current_value()
         if not is_focus_out:
             self._validation_armed = False
+
+    def _schedule_validation(
+        self,
+        *,
+        allow_modal_notifications: bool,
+        transient: bool,
+        is_focus_out: bool,
+        delay_ms: int = 120,
+    ) -> None:
+        self._cancel_pending_validation()
+        after = getattr(self.widget, "after", None)
+        if callable(after):
+            try:
+                self._debounce_job = after(
+                    delay_ms,
+                    lambda: self._run_validation(
+                        allow_modal_notifications=allow_modal_notifications,
+                        transient=transient,
+                        is_focus_out=is_focus_out,
+                    ),
+                )
+                return
+            except Exception:
+                self._debounce_job = None
+        self._run_validation(
+            allow_modal_notifications=allow_modal_notifications,
+            transient=transient,
+            is_focus_out=is_focus_out,
+        )
+
+    def _cancel_pending_validation(self) -> None:
+        if not self._debounce_job:
+            return
+        after_cancel = getattr(self.widget, "after_cancel", None)
+        if callable(after_cancel):
+            try:
+                after_cancel(self._debounce_job)
+            except Exception:
+                pass
+        self._debounce_job = None
 
     def _capture_current_value(self):
         if self.variables:
