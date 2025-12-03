@@ -1375,6 +1375,11 @@ class ProductFrame:
         if not self._amount_validation_ready:
             self._amount_validation_ready = True
 
+    def _refresh_amount_validation_after_programmatic_update(self):
+        """Activa y reevalúa la consistencia de montos tras cambios automáticos."""
+        self._enable_amount_validation()
+        self._validate_montos_consistentes()
+
     def _attach_amount_listeners(self, amount_vars, amount_widgets):
         for var in amount_vars:
             trace_add = getattr(var, "trace_add", None)
@@ -2465,6 +2470,7 @@ class ProductFrame:
         set_if_present(self.monto_cont_var, 'monto_contingencia')
         set_if_present(self.monto_rec_var, 'monto_recuperado')
         set_if_present(self.monto_pago_var, 'monto_pago_deuda')
+        self._refresh_amount_validation_after_programmatic_update()
         cat1 = data.get('categoria1')
         cat2 = data.get('categoria2')
         mod = data.get('modalidad')
@@ -2710,6 +2716,8 @@ class ProductFrame:
             for involvement in self.involvements:
                 if hasattr(involvement, "clear_values"):
                     involvement.clear_values()
+
+            self._refresh_amount_validation_after_programmatic_update()
 
         managed = False
         for validator in self.validators:

@@ -9072,6 +9072,7 @@ class FraudCaseApp:
         frame.monto_cont_var.set((row.get('monto_contingencia') or '').strip())
         frame.monto_rec_var.set((row.get('monto_recuperado') or '').strip())
         frame.monto_pago_var.set((row.get('monto_pago_deuda') or '').strip())
+        frame._refresh_amount_validation_after_programmatic_update()
         frame.set_claims_from_data(frame.extract_claims_from_payload(row))
         frame.persist_lookup_snapshot()
 
@@ -10513,6 +10514,7 @@ class FraudCaseApp:
             tipo_producto = prod.get('tipo_producto')
             if tipo_producto in TIPO_PRODUCTO_LIST:
                 pframe.tipo_prod_var.set(tipo_producto)
+            pframe._refresh_amount_validation_after_programmatic_update()
             pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
         # Involucramientos
         involvement_map = {}
