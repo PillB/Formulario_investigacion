@@ -742,6 +742,8 @@ class FraudCaseApp:
         self._client_summary_owner = None
         self._product_summary_owner = None
         self._team_summary_owner = None
+        self.autosave_tree = None
+        self._autosave_candidate_paths: list[Path] = []
         self.products_summary_section = None
         self._clients_detail_visible = False
         self._team_detail_visible = False
@@ -6134,7 +6136,9 @@ class FraudCaseApp:
         action_buttons = (
             ("Guardar y enviar", "save_send"),
             ("Guardar checkpoint", "checkpoint"),
+            ("Cargar checkpoint", "load_checkpoint"),
             ("Cargar versión", "load"),
+            ("Cargar autosave", "load_autosave"),
             ("Borrar todos los datos", "clear"),
             (None, None),
             ("Generar Word (.docx)", "docx"),
@@ -6143,7 +6147,9 @@ class FraudCaseApp:
         action_commands = {
             "save_send": self.save_and_send,
             "checkpoint": self.save_checkpoint,
+            "load_checkpoint": self.load_checkpoint,
             "load": self.load_version_dialog,
+            "load_autosave": self.load_selected_autosave,
             "clear": lambda: self.clear_all(notify=True),
             "docx": self.generate_docx_report,
             "md": self.generate_md_report,
@@ -6175,6 +6181,14 @@ class FraudCaseApp:
         self.register_tooltip(
             self.actions_action_bar.buttons.get("checkpoint"),
             "Guarda un archivo JSON con el estado actual sin enviar el caso.",
+        )
+        self.register_tooltip(
+            self.actions_action_bar.buttons.get("load_checkpoint"),
+            "Permite restaurar manualmente un checkpoint en formato JSON.",
+        )
+        self.register_tooltip(
+            self.actions_action_bar.buttons.get("load_autosave"),
+            "Carga el autosave seleccionado de la lista inferior.",
         )
 
         self.btn_docx = self.actions_action_bar.buttons.get("docx")
@@ -6218,12 +6232,62 @@ class FraudCaseApp:
                 justify="left",
             ).grid(row=2, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
 
+        autosave_frame = ttk.LabelFrame(action_group, text="Autosaves disponibles")
+        autosave_frame.grid(row=3, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
+        autosave_frame.columnconfigure(0, weight=1)
+        autosave_frame.rowconfigure(1, weight=1)
+
+        ttk.Label(
+            autosave_frame,
+            text=(
+                "Selecciona un autosave reciente para restaurar los datos. "
+                "Se muestra la fecha de modificación y el nombre del archivo encontrado."
+            ),
+            wraplength=520,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="we", pady=(ROW_PADY // 2, ROW_PADY // 2))
+
+        columns = ("timestamp", "filename")
+        self.autosave_tree = ttk.Treeview(
+            autosave_frame,
+            columns=columns,
+            show="headings",
+            height=5,
+            selectmode="browse",
+        )
+        self.autosave_tree.heading("timestamp", text="Última modificación")
+        self.autosave_tree.heading("filename", text="Archivo")
+        self.autosave_tree.column("timestamp", width=180, anchor="center")
+        self.autosave_tree.column("filename", width=260, anchor="w")
+        self.autosave_tree.grid(row=1, column=0, sticky="nsew")
+
+        autosave_scroll = ttk.Scrollbar(autosave_frame, orient="vertical", command=self.autosave_tree.yview)
+        autosave_scroll.grid(row=1, column=1, sticky="ns")
+        self.autosave_tree.configure(yscrollcommand=autosave_scroll.set)
+        self.autosave_tree.bind("<Double-1>", lambda *_args: self.load_selected_autosave())
+
+        autosave_actions = ttk.Frame(autosave_frame)
+        autosave_actions.grid(row=2, column=0, columnspan=2, sticky="e", pady=(ROW_PADY // 2, 0))
+        ttk.Button(
+            autosave_actions,
+            text="Actualizar lista",
+            command=self.refresh_autosave_list,
+            style="ActionBar.TButton",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            autosave_actions,
+            text="Cargar autosave seleccionado",
+            command=self.load_selected_autosave,
+            style="ActionBar.TButton",
+        ).pack(side="left")
+
         ttk.Label(
             action_group,
             text="El auto‑guardado se realiza automáticamente en un archivo JSON",
             wraplength=520,
             justify="left",
-        ).grid(row=3, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
+        ).grid(row=4, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
+        self.refresh_autosave_list()
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
 
     def _toggle_theme(self):
@@ -9677,60 +9741,104 @@ class FraudCaseApp:
                 json.dump(dataset.as_dict(), f, ensure_ascii=False, indent=2)
             self._handle_session_saved(dataset)
             self._show_success_toast(self._progress_bar, "Autoguardado listo")
+            self.refresh_autosave_list()
         except Exception as ex:
             log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
         self._schedule_summary_refresh(data=dataset)
         return dataset
 
+    def _load_dataset_from_path(self, path: Path):
+        with path.open('r', encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError("El autosave debe ser un objeto JSON válido")
+        return self._ensure_case_data(data)
+
+    def _apply_loaded_dataset(
+        self,
+        dataset,
+        *,
+        source_label: str,
+        autosave: bool = False,
+        show_toast: bool = False,
+        success_dialog: tuple[str, str] | None = None,
+    ) -> None:
+        self.populate_from_data(dataset)
+        case_id = (dataset.get("caso", {}) or {}).get("id_caso")
+        self._update_window_title(case_id=case_id)
+        self._schedule_summary_refresh(sections=self.summary_tables.keys(), data=dataset)
+        self._flush_summary_refresh(sections=self.summary_tables.keys(), data=dataset)
+        message = f"Se cargó {source_label}"
+        if autosave:
+            self._last_autosave_source = str(source_label)
+        log_event("navegacion", message, self.logs)
+        if show_toast:
+            self._display_toast(self.root, message, duration_ms=2200)
+        if success_dialog and not getattr(self, "_suppress_messagebox", False):
+            try:
+                messagebox.showinfo(*success_dialog)
+            except tk.TclError:
+                return
+
+    def _discover_autosave_candidates(self) -> list[tuple[float, Path]]:
+        seen: set[Path] = set()
+        autosave_path = Path(AUTOSAVE_FILE)
+        primary_root = autosave_path.parent if autosave_path.parent else Path(BASE_DIR)
+        search_roots = [primary_root]
+        external_base = self._get_external_drive_path()
+        if external_base:
+            search_roots.append(Path(external_base))
+        patterns = (autosave_path.name, "*autosave*.json", "*_temp_*.json")
+
+        def _yield_matches(root: Path):
+            for pattern in patterns:
+                yield from root.glob(pattern)
+
+        candidates: list[tuple[float, Path]] = []
+        for root in search_roots:
+            try:
+                root_path = root.resolve()
+            except OSError:
+                log_event("validacion", f"No se pudo resolver la ruta {root}", self.logs)
+                continue
+            for base in (root_path,) + tuple(p for p in root_path.iterdir() if p.is_dir()):
+                try:
+                    for path in _yield_matches(base):
+                        try:
+                            resolved = path.resolve()
+                        except OSError:
+                            continue
+                        if resolved in seen or not path.is_file():
+                            continue
+                        seen.add(resolved)
+                        try:
+                            mtime = path.stat().st_mtime
+                        except OSError as exc:
+                            log_event("validacion", f"No se pudo leer metadatos de {path}: {exc}", self.logs)
+                            continue
+                        candidates.append((mtime, path))
+                except OSError as exc:
+                    log_event("validacion", f"No se pudo explorar {base}: {exc}", self.logs)
+                    continue
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates
+
+    def refresh_autosave_list(self) -> None:
+        if not self.autosave_tree:
+            return
+        self.autosave_tree.delete(*self.autosave_tree.get_children())
+        self._autosave_candidate_paths.clear()
+        for index, (mtime, path) in enumerate(self._discover_autosave_candidates()):
+            timestamp = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+            self.autosave_tree.insert("", "end", iid=str(index), values=(timestamp, path.name))
+            self._autosave_candidate_paths.append(path)
+
     def load_autosave(self):
         """Carga el estado guardado automáticamente si el archivo existe."""
 
-        def _iter_candidates():
-            seen: set[Path] = set()
-            autosave_path = Path(AUTOSAVE_FILE)
-            primary_root = autosave_path.parent if autosave_path.parent else Path(BASE_DIR)
-            search_roots = [primary_root]
-            external_base = self._get_external_drive_path()
-            if external_base:
-                search_roots.append(Path(external_base))
-            patterns = (autosave_path.name, "*autosave*.json", "*_temp_*.json")
-
-            def _yield_matches(root: Path):
-                for pattern in patterns:
-                    yield from root.glob(pattern)
-
-            for root in search_roots:
-                try:
-                    root_path = root.resolve()
-                except OSError:
-                    log_event("validacion", f"No se pudo resolver la ruta {root}", self.logs)
-                    continue
-                for base in (root_path,) + tuple(p for p in root_path.iterdir() if p.is_dir()):
-                    try:
-                        for path in _yield_matches(base):
-                            try:
-                                resolved = path.resolve()
-                            except OSError:
-                                continue
-                            if resolved in seen or not path.is_file():
-                                continue
-                            seen.add(resolved)
-                            yield path
-                    except OSError as exc:
-                        log_event("validacion", f"No se pudo explorar {base}: {exc}", self.logs)
-                        continue
-
-        candidates: list[tuple[float, Path]] = []
-        for path in _iter_candidates():
-            try:
-                mtime = path.stat().st_mtime
-            except OSError as exc:
-                log_event("validacion", f"No se pudo leer metadatos de {path}: {exc}", self.logs)
-                continue
-            candidates.append((mtime, path))
+        candidates = self._discover_autosave_candidates()
         if not candidates:
             return
-        candidates.sort(key=lambda item: item[0], reverse=True)
 
         def _warn_user(title: str, message: str) -> None:
             log_event("validacion", message, self.logs)
@@ -9758,20 +9866,13 @@ class FraudCaseApp:
         errors_detected = False
         for index, (_mtime, path) in enumerate(candidates):
             try:
-                with path.open('r', encoding="utf-8") as f:
-                    data = json.load(f)
-                if not isinstance(data, dict):
-                    raise ValueError("El autosave debe ser un objeto JSON válido")
-                dataset = self._ensure_case_data(data)
-                self.populate_from_data(dataset)
-                case_id = (dataset.get("caso", {}) or {}).get("id_caso")
-                self._update_window_title(case_id=case_id)
-                self._schedule_summary_refresh(sections=self.summary_tables.keys(), data=dataset)
-                self._flush_summary_refresh(sections=self.summary_tables.keys(), data=dataset)
-                source_msg = f"Se cargó el autosave desde {path}"
-                self._last_autosave_source = str(path)
-                log_event("navegacion", source_msg, self.logs)
-                self._display_toast(self.root, source_msg, duration_ms=2200)
+                dataset = self._load_dataset_from_path(path)
+                self._apply_loaded_dataset(
+                    dataset,
+                    source_label=f"el autosave desde {path}",
+                    autosave=True,
+                    show_toast=True,
+                )
                 if errors_detected or index > 0:
                     _notify_fallback(path)
                 return
@@ -9781,7 +9882,54 @@ class FraudCaseApp:
                 continue
 
         self._clear_case_state(save_autosave=False)
-        _warn_user("Autosave no disponible", "No se pudo cargar ningún autosave válido; se restauró el formulario vacío.")
+        _warn_user(
+            "Autosave no disponible",
+            "No se pudo cargar ningún autosave válido; se restauró el formulario vacío.",
+        )
+
+    def load_selected_autosave(self) -> None:
+        """Carga el autosave seleccionado en la lista de autosaves disponibles."""
+
+        log_event("navegacion", "Usuario solicitó cargar un autosave desde la lista", self.logs)
+        if not self.autosave_tree:
+            return
+        selection = self.autosave_tree.selection()
+        if not selection:
+            if not getattr(self, "_suppress_messagebox", False):
+                try:
+                    messagebox.showinfo("Selecciona un autosave", "Elige un archivo de la lista para restaurar.")
+                except tk.TclError:
+                    pass
+            return
+        try:
+            index = int(selection[0])
+            path = self._autosave_candidate_paths[index]
+        except (ValueError, IndexError):
+            if not getattr(self, "_suppress_messagebox", False):
+                try:
+                    messagebox.showerror("Selección inválida", "No se pudo determinar el autosave seleccionado.")
+                except tk.TclError:
+                    pass
+            return
+
+        try:
+            dataset = self._load_dataset_from_path(path)
+            self._apply_loaded_dataset(
+                dataset,
+                source_label=f"el autosave {path}",
+                autosave=True,
+                show_toast=True,
+                success_dialog=("Autosave cargado", "El autosave seleccionado se cargó correctamente."),
+            )
+        except Exception as exc:
+            message = f"No se pudo cargar el autosave {path.name}: {exc}"
+            log_event("validacion", message, self.logs)
+            if getattr(self, "_suppress_messagebox", False):
+                return
+            try:
+                messagebox.showerror("Error al cargar autosave", message)
+            except tk.TclError:
+                return
 
     def _handle_window_close(self):
         self.flush_autosave()
@@ -10109,14 +10257,33 @@ class FraudCaseApp:
             log_event("navegacion", "Canceló cargar versión", self.logs)
             return
         try:
-            with open(filename, 'r', encoding="utf-8") as f:
-                data = json.load(f)
-            dataset = self._ensure_case_data(data)
-            self.populate_from_data(dataset)
-            log_event("navegacion", f"Se cargó versión desde {filename}", self.logs)
-            messagebox.showinfo("Versión cargada", "La versión se cargó correctamente.")
+            dataset = self._load_dataset_from_path(Path(filename))
+            self._apply_loaded_dataset(
+                dataset,
+                source_label=f"la versión desde {filename}",
+                success_dialog=("Versión cargada", "La versión se cargó correctamente."),
+            )
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo cargar la versión: {ex}")
+
+    def load_checkpoint(self):
+        """Carga manualmente un archivo de checkpoint seleccionado por el usuario."""
+
+        log_event("navegacion", "Usuario pulsó cargar checkpoint", self.logs)
+        filename = filedialog.askopenfilename(title="Seleccionar checkpoint", filetypes=[("JSON Files", "*.json")])
+        if not filename:
+            log_event("navegacion", "Canceló cargar checkpoint", self.logs)
+            return
+        try:
+            dataset = self._load_dataset_from_path(Path(filename))
+            self._apply_loaded_dataset(
+                dataset,
+                source_label=f"el checkpoint {filename}",
+                success_dialog=("Checkpoint cargado", "El checkpoint se cargó correctamente."),
+            )
+        except Exception as exc:
+            messagebox.showerror("Error", f"No se pudo cargar el checkpoint: {exc}")
+            log_event("validacion", f"Error al cargar checkpoint: {exc}", self.logs)
 
     def save_checkpoint(self):
         """Permite guardar manualmente el estado actual en un archivo JSON."""
