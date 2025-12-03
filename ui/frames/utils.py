@@ -32,6 +32,11 @@ def create_date_entry(
     falla su inicialización, se retorna un ``ttk.Entry`` convencional.
     """
 
+    try:
+        initial_value = (textvariable.get() or "").strip()
+    except Exception:
+        initial_value = ""
+
     min_width = max(11, width or 0)
     options: dict[str, Any] = {"textvariable": textvariable, "width": min_width}
     if style:
@@ -53,7 +58,7 @@ def create_date_entry(
     except Exception:
         return _build_plain_entry(parent, textvariable, options)
 
-    _clear_initial_value(date_entry, textvariable)
+    _clear_initial_value(date_entry, textvariable, initial_value)
 
     def _sync_calendar_selection(_event=None):  # noqa: ANN001
         try:
@@ -70,13 +75,20 @@ def create_date_entry(
     return date_entry
 
 
-def _clear_initial_value(widget: Any, variable: tk.StringVar) -> None:
+def _clear_initial_value(
+    widget: Any, variable: tk.StringVar, initial_value: str | None = None
+) -> None:
     try:
         existing = (variable.get() or "").strip()
     except Exception:
         existing = ""
-    if existing:
+    initial = (initial_value or "").strip()
+
+    if initial:
         return
+    if initial_value is None and existing:
+        return
+
     try:
         widget.delete(0, "end")
     except Exception:
