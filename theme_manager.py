@@ -1510,7 +1510,7 @@ class ThemeManager:
 
         hover_background = cls._shade_color(theme["accent"], 0.12)
         base_button_padding = ttk_style.configure(cls.BUTTON_STYLE).get("padding", (12, 8))
-        padded_hover = cls._bump_padding(base_button_padding, delta=1)
+        padded_hover = base_button_padding
 
         cls._clone_style(
             ttk_style,
