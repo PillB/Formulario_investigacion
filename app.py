@@ -636,6 +636,7 @@ class FraudCaseApp:
         self.autofill_service = AutofillService(
             self.catalog_service, warning_handler=self._log_autofill_warning
         )
+        self.team_catalog = self.catalog_service.team_hierarchy
         self.team_lookup = {}
         self.client_lookup = {}
         self.product_lookup = {}
@@ -4122,6 +4123,7 @@ class FraudCaseApp:
             id_change_callback=self._handle_team_id_change,
             autofill_service=self.autofill_service,
             case_date_getter=lambda: self.fecha_caso_var.get(),
+            team_catalog=self.team_catalog,
         )
         self.team_frames.append(team)
         self._renumber_team()
@@ -6903,6 +6905,7 @@ class FraudCaseApp:
             for key, value in raw_team_lookup.items()
             if (normalized := self._normalize_identifier(key))
         }
+        self.team_catalog = self.catalog_service.team_hierarchy
         self.product_lookup = self._extract_lookup_or_empty("id_producto")
         self.claim_lookup = self._extract_lookup_or_empty("id_reclamo")
         self.risk_lookup = self._extract_lookup_or_empty("id_riesgo")
@@ -6915,6 +6918,8 @@ class FraudCaseApp:
             if hasattr(frame, 'set_lookup'):
                 frame.set_lookup(self.team_lookup)
                 frame.on_id_change(preserve_existing=True, silent=True)
+            if hasattr(frame, 'set_team_catalog'):
+                frame.set_team_catalog(self.team_catalog)
         for frame in self.product_frames:
             if hasattr(frame, 'set_product_lookup'):
                 frame.set_product_lookup(self.product_lookup)
