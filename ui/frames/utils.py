@@ -18,6 +18,36 @@ WARNING_BADGE_STYLE = "WarningBadge.TLabel"
 WARNING_CONTAINER_STYLE = "WarningBadge.TFrame"
 
 
+def format_warning_preview(message: str, *, max_chars_per_line: int = 15, max_lines: int = 2) -> str:
+    """Return a compact, two-line warning preview capped at ``max_chars_per_line``.
+
+    The helper keeps whitespace compacted, slices the text into segments of at
+    most ``max_chars_per_line`` characters and limits the output to
+    ``max_lines`` lines. When the source text exceeds the allowed lines, the
+    final segment is trimmed and suffixed with an ellipsis to indicate there is
+    more content available in the expanded view.
+    """
+
+    if max_chars_per_line <= 0 or max_lines <= 0:
+        return message or ""
+
+    text = " ".join((message or "").split())
+    if not text:
+        return ""
+
+    segments = []
+    cursor = 0
+    while cursor < len(text) and len(segments) < max_lines:
+        segments.append(text[cursor : cursor + max_chars_per_line])
+        cursor += max_chars_per_line
+
+    if cursor < len(text):
+        trimmed = segments[-1][: max_chars_per_line - 3].rstrip()
+        segments[-1] = f"{trimmed}..." if trimmed else "..."
+
+    return "\n".join(segments)
+
+
 def create_date_entry(
     parent: Any,
     *,
@@ -1105,7 +1135,8 @@ class BadgeManager:
             style_name = styles.get("warning", "TLabel")
             hint = message.strip()
             prefix = "" if hint.startswith(ALERT_BADGE_ICON) else f"{ALERT_BADGE_ICON} "
-            text = f"{prefix}{hint}".strip()
+            full_warning = f"{prefix}{hint}".strip()
+            text = format_warning_preview(full_warning)
         else:
             style_name = styles.get("pending", styles.get("warning", "TLabel"))
             text = pending_text if pending_text is not None else self.pending_text
@@ -1223,6 +1254,13 @@ class ToggleWarningBadge:
         self._ttk = ttk_module or ttk
         self._wraplength = wraplength
         self.message_var = textvariable
+        try:
+            self._display_var = (self._tk.StringVar)(value="")
+        except Exception:
+            try:
+                self._display_var = type(textvariable)(value="")  # type: ignore[call-arg]
+            except Exception:
+                self._display_var = textvariable
         self._current_units = 0
         self._is_mapped = False
         container_style, label_style = _configure_warning_badge_styles(parent)
@@ -1246,7 +1284,7 @@ class ToggleWarningBadge:
         try:
             self._text_label = self._ttk.Label(
                 self._frame,
-                textvariable=self.message_var,
+                textvariable=self._display_var,
                 style=label_style,
                 wraplength=wraplength,
                 anchor="w",
@@ -1254,12 +1292,14 @@ class ToggleWarningBadge:
             )
         except Exception:
             self._text_label = tk.Label(  # type: ignore[arg-type]
-                self._frame, textvariable=self.message_var, anchor="w", justify="left", wraplength=wraplength
+                self._frame, textvariable=self._display_var, anchor="w", justify="left", wraplength=wraplength
             )
 
         self._icon_label.grid(row=0, column=0, padx=(4, 6), pady=(2, 2), sticky="n")
         self._text_label.grid(row=0, column=1, padx=(0, 4), pady=(2, 2), sticky="we")
         self._expanded = True
+        self._full_message_cache = self._safe_get_message()
+        self._bind_source_var()
         if initially_collapsed:
             self.collapse(animate=False)
         else:
@@ -1301,6 +1341,55 @@ class ToggleWarningBadge:
         except Exception:
             pass
 
+    def _safe_get_message(self) -> str:
+        getter = getattr(self.message_var, "get", None)
+        if callable(getter):
+            try:
+                return getter() or ""
+            except Exception:
+                return ""
+        return ""
+
+    def _set_display_text(self, text: str) -> None:
+        setter = getattr(self._display_var, "set", None)
+        if callable(setter):
+            try:
+                setter(text)
+                return
+            except Exception:
+                pass
+        if hasattr(self._display_var, "_value"):
+            try:
+                self._display_var._value = text
+            except Exception:
+                pass
+
+    def _get_display_text(self) -> str:
+        getter = getattr(self._display_var, "get", None)
+        if callable(getter):
+            try:
+                return getter() or ""
+            except Exception:
+                return ""
+        return ""
+
+    def _preview_units(self, preview_text: str | None = None) -> int:
+        preview = preview_text if preview_text is not None else self._get_display_text()
+        lines = (preview or "").splitlines() or [preview]
+        longest = max((len(line or "") for line in lines), default=0)
+        return max(1, longest)
+
+    def _bind_source_var(self) -> None:
+        tracer = getattr(self.message_var, "trace_add", None)
+        if callable(tracer):
+            try:
+                tracer("write", lambda *_: self._on_source_change())
+            except Exception:
+                return
+
+    def _on_source_change(self) -> None:
+        self._refresh_display()
+
     def _target_units(self) -> int:
         try:
             self._text_label.update_idletasks()
@@ -1308,6 +1397,13 @@ class ToggleWarningBadge:
         except Exception:
             req_width = self._wraplength
         return max(1, min(int(req_width / 6), int(self._wraplength / 6)))
+
+    def _refresh_display(self) -> str:
+        message = self._safe_get_message()
+        self._full_message_cache = message
+        display_text = message if self._expanded else format_warning_preview(message)
+        self._set_display_text(display_text)
+        return display_text
 
     def _animate_units(self, target_units: int, *, animate: bool, on_complete=None) -> None:
         if not animate or not hasattr(self._frame, "after"):
@@ -1347,20 +1443,14 @@ class ToggleWarningBadge:
     def expand(self, *, animate: bool = True) -> None:
         self._expanded = True
         self._restore_text()
+        self._refresh_display()
         self._animate_units(self._target_units(), animate=animate)
 
     def collapse(self, *, animate: bool = True) -> None:
         self._expanded = False
         self._restore_text()
-
-        def _hide_text():
-            hide_fn = getattr(self._text_label, "grid_remove", None) or getattr(
-                self._text_label, "pack_forget", None
-            )
-            if callable(hide_fn):
-                hide_fn()
-
-        self._animate_units(0, animate=animate, on_complete=_hide_text)
+        preview = self._refresh_display()
+        self._animate_units(self._preview_units(preview), animate=animate)
 
     def toggle(self, _event=None, *, animate: bool = True) -> None:  # noqa: ANN001
         if self._expanded:
@@ -1368,10 +1458,13 @@ class ToggleWarningBadge:
         else:
             self.expand(animate=animate)
 
-    def set_message(self, message: str, *, expand: bool = True) -> None:
+    def set_message(self, message: str, *, expand: bool = False) -> None:
         self.message_var.set(message)
+        self._refresh_display()
         if expand:
             self.expand(animate=False)
+        else:
+            self.collapse(animate=False)
 
     def hide(self) -> None:
         manager = self.winfo_manager()
