@@ -50,6 +50,7 @@ class InvolvementRow:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self.validator_keys: set[str] = set()
         self.team_validator = None
         self.badge_manager = None
 
@@ -130,6 +131,8 @@ class InvolvementRow:
         self.team_validator.add_widget(monto_entry)
         self.validators.append(self.team_validator)
 
+        self._capture_validator_keys(amount_validator, self.team_validator)
+
         self._register_title_traces()
         self._sync_section_title()
 
@@ -192,10 +195,6 @@ class InvolvementRow:
             self.product_frame.log_change(
                 f"Se eliminó asignación de colaborador en producto {self.product_frame.idx+1}"
             )
-            if getattr(self, "section", None):
-                self.section.destroy()
-            else:
-                self.frame.destroy()
             self.remove_callback(self)
 
     def _handle_amount_focus_out(self):
@@ -243,7 +242,26 @@ class InvolvementRow:
                 if getattr(validator, "field_name", None):
                     suffix = " colaborador" if "colaborador" in validator.field_name else ""
                     validator.field_name = f"{prefix}{suffix}"
+            self._capture_validator_keys()
         self._sync_section_title()
+
+    def _capture_validator_keys(self, *validators):
+        targets = validators or tuple(getattr(self, "validators", []) or [])
+        for validator in targets:
+            key = self._build_validation_key(validator)
+            if key:
+                self.validator_keys.add(key)
+
+    @staticmethod
+    def _build_validation_key(validator):
+        if not validator:
+            return None
+        field_name = getattr(validator, "field_name", None)
+        widget = getattr(validator, "widget", None)
+        if not field_name:
+            return None
+        target_id = id(widget) if widget is not None else field_name
+        return f"field:{field_name}:{target_id}"
 
     def _create_section(self, parent):
         return create_collapsible_card(
@@ -2313,6 +2331,7 @@ class ProductFrame:
         return row
 
     def remove_involvement(self, row):
+        self._unregister_involvement_validations(row)
         section = getattr(row, "section", None)
         frame = getattr(row, "frame", None)
         if section and hasattr(section, "destroy"):
@@ -2329,6 +2348,23 @@ class ProductFrame:
             self.involvements.remove(row)
         self._refresh_involvement_rows(min_rows=1)
         self.schedule_summary_refresh('involucramientos')
+
+    def _unregister_involvement_validations(self, row):
+        if not hasattr(self.owner, "_validation_panel"):
+            return
+        panel = getattr(self.owner, "_validation_panel", None)
+        if not panel:
+            return
+        unregister = getattr(panel, "remove_entries", None)
+        if not callable(unregister):
+            return
+        keys = getattr(row, "validator_keys", None)
+        if not keys:
+            return
+        try:
+            unregister(keys)
+        except Exception:
+            return
 
     def update_client_options(self):
         current = self.client_var.get().strip()
