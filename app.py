@@ -576,6 +576,8 @@ class FraudCaseApp:
     _external_log_file_initialized: bool = False
     _extended_sections_enabled: bool = ENABLE_EXTENDED_ANALYSIS_SECTIONS
     _validation_panel: Optional[ValidationPanel] = None
+    AUTOSAVE_CYCLE_INTERVAL_MS = 300_000
+    AUTOSAVE_CYCLE_LIMIT = 10
 
     """Clase que encapsula la aplicación de gestión de casos de fraude."""
 
@@ -744,6 +746,9 @@ class FraudCaseApp:
         self._team_summary_owner = None
         self.autosave_tree = None
         self._autosave_candidate_paths: list[Path] = []
+        self._autosave_cycle_job_id: Optional[str] = None
+        self._autosave_cycle_slots: dict[str, int] = {}
+        self._autosave_cycle_last_run: dict[str, datetime] = {}
         self.products_summary_section = None
         self._clients_detail_visible = False
         self._team_detail_visible = False
@@ -787,6 +792,7 @@ class FraudCaseApp:
         self.load_autosave()
         self._trim_all_temp_versions()
         self._schedule_walkthrough()
+        self._schedule_autosave_cycle()
         self.root.after(250, self._prompt_initial_catalog_loading)
         self._startup_complete = True
 
@@ -9748,8 +9754,15 @@ class FraudCaseApp:
         return dataset
 
     def _load_dataset_from_path(self, path: Path):
-        with path.open('r', encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with path.open('r', encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as exc:
+            log_event("validacion", f"Autosave corrupto {path}: {exc}", self.logs)
+            raise ValueError(f"El autosave {path.name} está dañado o incompleto") from exc
+        except UnicodeDecodeError as exc:
+            log_event("validacion", f"Autosave ilegible {path}: {exc}", self.logs)
+            raise ValueError(f"El autosave {path.name} no se pudo leer correctamente") from exc
         if not isinstance(data, dict):
             raise ValueError("El autosave debe ser un objeto JSON válido")
         return self._ensure_case_data(data)
@@ -9784,11 +9797,12 @@ class FraudCaseApp:
         seen: set[Path] = set()
         autosave_path = Path(AUTOSAVE_FILE)
         primary_root = autosave_path.parent if autosave_path.parent else Path(BASE_DIR)
-        search_roots = [primary_root]
+        autosave_root = Path(BASE_DIR) / "autosaves"
+        search_roots = [primary_root, autosave_root]
         external_base = self._get_external_drive_path()
         if external_base:
             search_roots.append(Path(external_base))
-        patterns = (autosave_path.name, "*autosave*.json", "*_temp_*.json")
+        patterns = (autosave_path.name, "*autosave*.json", "*_temp_*.json", "auto_*.json")
 
         def _yield_matches(root: Path):
             for pattern in patterns:
@@ -9800,6 +9814,8 @@ class FraudCaseApp:
                 root_path = root.resolve()
             except OSError:
                 log_event("validacion", f"No se pudo resolver la ruta {root}", self.logs)
+                continue
+            if not root_path.exists():
                 continue
             for base in (root_path,) + tuple(p for p in root_path.iterdir() if p.is_dir()):
                 try:
@@ -9935,6 +9951,10 @@ class FraudCaseApp:
         self.flush_autosave()
         self._cancel_summary_refresh_job()
         self.flush_logs_now(reschedule=False)
+        if self._autosave_cycle_job_id is not None:
+            with suppress(tk.TclError):
+                self.root.after_cancel(self._autosave_cycle_job_id)
+            self._autosave_cycle_job_id = None
         with suppress(tk.TclError):
             self.root.destroy()
 
@@ -10142,6 +10162,85 @@ class FraudCaseApp:
             self._autosave_dirty = False
             dataset = self.save_auto()
             self.save_temp_version(dataset)
+
+    def _schedule_autosave_cycle(self) -> None:
+        if not hasattr(self, "root") or self.root is None:
+            return
+        if self._autosave_cycle_job_id is not None:
+            return
+        try:
+            self._autosave_cycle_job_id = self.root.after(
+                self.AUTOSAVE_CYCLE_INTERVAL_MS,
+                self.autosave_cycle,
+            )
+        except tk.TclError:
+            self._autosave_cycle_job_id = None
+
+    def _autosave_cycle_target(self, case_id: str) -> Path:
+        sanitized_case = case_id or "caso"
+        return Path(BASE_DIR) / "autosaves" / sanitized_case
+
+    def autosave_cycle(self) -> None:
+        self._autosave_cycle_job_id = None
+        try:
+            dataset = self._ensure_case_data(self.gather_data())
+        except Exception as exc:  # pragma: no cover - fallback defensivo
+            log_event("validacion", f"Autosave periódico omitido: {exc}", self.logs)
+            self._schedule_autosave_cycle()
+            return
+
+        case_id = (dataset.get("caso", {}) or {}).get("id_caso", "")
+        case_key = case_id or "caso"
+        target_dir = self._autosave_cycle_target(case_key)
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            log_event(
+                "validacion",
+                f"No se pudo preparar la carpeta de autosaves periódicos {target_dir}: {exc}",
+                self.logs,
+            )
+            self._schedule_autosave_cycle()
+            return
+
+        slot = (self._autosave_cycle_slots.get(case_key, 0) % self.AUTOSAVE_CYCLE_LIMIT) + 1
+        target_path = target_dir / f"auto_{slot}.json"
+        payload = json.dumps(dataset.as_dict(), ensure_ascii=False, indent=2)
+
+        try:
+            target_path.write_text(payload, encoding="utf-8")
+        except Exception as exc:  # pragma: no cover - entorno de IO
+            log_event(
+                "validacion",
+                f"Error guardando autosave periódico en {target_path}: {exc}",
+                self.logs,
+            )
+        else:
+            self._autosave_cycle_slots[case_key] = slot
+            self._autosave_cycle_last_run[case_key] = datetime.now()
+            self._autosave_dirty = False
+            log_event(
+                "navegacion",
+                f"Autosave periódico almacenado en {target_path.name} (slot {slot}).",
+                self.logs,
+            )
+            self._prune_autosave_cycle_files(target_dir)
+
+        self._schedule_autosave_cycle()
+
+    def _prune_autosave_cycle_files(self, case_folder: Path) -> None:
+        try:
+            files = sorted(
+                case_folder.glob("auto_*.json"),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            return
+
+        for stale in files[self.AUTOSAVE_CYCLE_LIMIT :]:
+            with suppress(FileNotFoundError, OSError):
+                stale.unlink()
 
     def _trim_all_temp_versions(self) -> None:
         base_dir = Path(BASE_DIR)
