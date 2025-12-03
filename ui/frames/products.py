@@ -17,6 +17,7 @@ from ui.frames.utils import (
     SUCCESS_BADGE_ICON,
     PENDING_BADGE_ICON,
     BadgeManager,
+    ToggleWarningBadge,
     build_grid_container,
     create_collapsible_card,
     create_date_entry,
@@ -2008,14 +2009,14 @@ class ProductFrame:
         hide_fn = getattr(frame, "grid_remove", None) or getattr(frame, "grid_forget", None)
         if callable(hide_fn):
             hide_fn()
-        label = ttk.Label(
+        badge = ToggleWarningBadge(
             frame,
             textvariable=self.claim_hint_var,
-            wraplength=520,
-            justify="left",
-            anchor="w",
+            initially_collapsed=False,
+            tk_module=tk,
+            ttk_module=ttk,
         )
-        label.grid(row=0, column=0, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY // 4), sticky="w")
+        badge.grid(row=0, column=0, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY // 4), sticky="w")
         actions = ttk.Frame(frame)
         ensure_grid_support(actions)
         actions.grid(row=0, column=1, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY // 4), sticky="e")
@@ -2033,6 +2034,7 @@ class ProductFrame:
         )
         template_btn.grid(row=0, column=1, sticky="e")
         self.claim_template_btn = template_btn
+        self.claim_hint_badge = badge
         self.claim_hint_frame = frame
         self._refresh_claim_template_button_state()
 
@@ -2098,6 +2100,8 @@ class ProductFrame:
                     "destrabar el proceso. Puedes usar la plantilla de analítica cuando haya catálogo disponible."
                 )
             )
+            if getattr(self, "claim_hint_badge", None):
+                self.claim_hint_badge.expand(animate=False)
             self.claim_hint_frame.grid()
         else:
             hide_fn = getattr(self.claim_hint_frame, "grid_remove", None) or getattr(
@@ -2105,6 +2109,8 @@ class ProductFrame:
             )
             if callable(hide_fn):
                 hide_fn()
+            if getattr(self, "claim_hint_badge", None):
+                self.claim_hint_badge.collapse(animate=False)
 
     def _first_incomplete_claim(self):
         labels = {

@@ -13,6 +13,7 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         validate_team_member_id)
 from ui.frames.utils import (
     BadgeManager,
+    ToggleWarningBadge,
     build_grid_container,
     create_collapsible_card,
     create_date_entry,
@@ -183,17 +184,11 @@ class TeamMemberFrame:
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
 
-        self._fallback_label = tk.Label(
+        self._fallback_label = ToggleWarningBadge(
             self.frame,
             textvariable=self._fallback_message_var,
-            background="#fff3cd",
-            foreground="#664d03",
-            anchor="w",
-            justify="left",
-            wraplength=520,
-            relief="groove",
-            padx=6,
-            pady=3,
+            tk_module=tk,
+            ttk_module=ttk,
         )
 
         ttk.Label(self.frame, text="División:").grid(
@@ -417,6 +412,7 @@ class TeamMemberFrame:
             pady=ROW_PADY,
             sticky="we",
         )
+        self._fallback_label.hide()
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
@@ -936,40 +932,8 @@ class TeamMemberFrame:
 
     def _clear_fallback_warning(self) -> None:
         self._fallback_message_var.set("")
-        exists_fn = getattr(self._fallback_label, "winfo_exists", None)
         try:
-            label_exists = exists_fn() if callable(exists_fn) else True
-        except tk.TclError as exc:
-            log_event(
-                "validacion",
-                f"Error verificando existencia de etiqueta de fallback: {exc}",
-                self.logs,
-            )
-            label_exists = False
-        if not label_exists:
-            log_event(
-                "validacion",
-                "No se pudo ocultar advertencia: la etiqueta de fallback no existe",
-                self.logs,
-            )
-            return
-        try:
-            if self._fallback_label.winfo_ismapped():
-                manager = getattr(self._fallback_label, "winfo_manager", lambda: "")()
-                if manager == "grid" and hasattr(self._fallback_label, "grid_remove"):
-                    self._fallback_label.grid_remove()
-                elif manager == "pack" and hasattr(self._fallback_label, "pack_forget"):
-                    self._fallback_label.pack_forget()
-                elif hasattr(self._fallback_label, "pack_forget"):
-                    self._fallback_label.pack_forget()
-                elif hasattr(self._fallback_label, "grid_remove"):
-                    self._fallback_label.grid_remove()
-                else:
-                    log_event(
-                        "validacion",
-                        "No se pudo ocultar advertencia: no hay método para desacoplar la etiqueta",
-                        self.logs,
-                    )
+            self._fallback_label.hide()
         except tk.TclError as exc:
             log_event(
                 "validacion",
@@ -982,34 +946,9 @@ class TeamMemberFrame:
             self._clear_fallback_warning()
             return
         self._fallback_message_var.set(message)
-        exists_fn = getattr(self._fallback_label, "winfo_exists", None)
         try:
-            label_exists = exists_fn() if callable(exists_fn) else True
-        except tk.TclError as exc:
-            log_event(
-                "validacion",
-                f"Error verificando existencia de etiqueta de fallback: {exc}",
-                self.logs,
-            )
-            label_exists = False
-        if not label_exists:
-            log_event(
-                "validacion",
-                "No se pudo mostrar advertencia: la etiqueta de fallback no existe",
-                self.logs,
-            )
-            return
-        try:
-            if not self._fallback_label.winfo_ismapped():
-                manager = getattr(self._fallback_label, "winfo_manager", lambda: "")()
-                if manager == "grid" and hasattr(self._fallback_label, "grid"):
-                    self._fallback_label.grid()
-                elif manager == "pack" and hasattr(self._fallback_label, "pack"):
-                    self._fallback_label.pack(fill="x", padx=COL_PADX, pady=(0, ROW_PADY // 2))
-                elif hasattr(self._fallback_label, "pack"):
-                    self._fallback_label.pack(fill="x", padx=COL_PADX, pady=(0, ROW_PADY // 2))
-                elif hasattr(self._fallback_label, "grid"):
-                    self._fallback_label.grid()
+            self._fallback_label.show()
+            self._fallback_label.expand(animate=False)
         except tk.TclError as exc:
             log_event(
                 "validacion",
