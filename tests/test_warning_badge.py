@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from ui.frames.utils import ToggleWarningBadge
+from ui.frames.utils import BadgeManager, ToggleWarningBadge
 
 
 class DummyVar:
@@ -111,3 +111,49 @@ def test_warning_badge_click_flow_updates_mapping_state():
     badge.toggle(animate=False)
     assert badge.is_collapsed is False
     assert badge.winfo_ismapped() is True
+
+
+def test_warning_badge_compacts_text_when_collapsed():
+    long_message = "ABCDEFGHIJKLMNO12345678901234567890"
+    message_var = DummyVar(long_message)
+    badge = ToggleWarningBadge(
+        StubWidget(),
+        textvariable=message_var,
+        initially_collapsed=True,
+        tk_module=TK,
+        ttk_module=TTK,
+    )
+    badge.pack()
+
+    preview = badge._display_var.get()
+    preview_lines = preview.splitlines()
+
+    assert badge.is_collapsed is True
+    assert len(preview_lines) <= 2
+    assert all(len(line) <= 15 for line in preview_lines)
+    assert preview_lines[-1].endswith("...")
+
+    badge.expand(animate=False)
+    assert badge._display_var.get() == long_message
+
+
+def test_badge_manager_uses_compact_warning_preview():
+    class CaptureBadge:
+        def __init__(self):
+            self.text = None
+            self.style = None
+
+        def configure(self, **kwargs):  # noqa: D401, ANN001
+            """Capture the configured attributes for assertions."""
+
+            self.text = kwargs.get("text", self.text)
+            self.style = kwargs.get("style", self.style)
+
+    badge = CaptureBadge()
+    manager = BadgeManager()
+    manager.set_badge_state(badge, False, "ABCDEFGHIJKLMNO123456789012345")
+
+    assert badge.text is not None
+    lines = badge.text.splitlines()
+    assert len(lines) <= 2
+    assert all(len(line) <= 15 for line in lines)

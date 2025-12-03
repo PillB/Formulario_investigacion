@@ -953,10 +953,9 @@ class TeamMemberFrame:
         if not message:
             self._clear_fallback_warning()
             return
-        self._fallback_message_var.set(message)
         try:
+            self._fallback_label.set_message(message or "", expand=False)
             self._fallback_label.show()
-            self._fallback_label.expand(animate=False)
         except tk.TclError as exc:
             log_event(
                 "validacion",
