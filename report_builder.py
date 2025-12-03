@@ -750,8 +750,32 @@ def build_md(case_data: CaseData) -> str:
         "## Encabezado Institucional",
     ]
 
+    header_values = dict(zip(context["header_headers"], context["header_row"]))
+
+    md_header_rows = [
+        ["Campo", "Valor"],
+        ["Dirigido a", header_values.get("Dirigido a", PLACEHOLDER)],
+        ["Referencia", header_values.get("Referencia", PLACEHOLDER)],
+        ["Área de Reporte", header_values.get("Área de Reporte", PLACEHOLDER)],
+        ["Fecha de reporte", header_values.get("Fecha de reporte", PLACEHOLDER)],
+        ["Categoría del evento", header_values.get("Categoría del evento", PLACEHOLDER)],
+        ["Tipología de evento", header_values.get("Tipología de evento", PLACEHOLDER)],
+        ["Importe investigado", header_values.get("Importe investigado", PLACEHOLDER)],
+        ["Contingencia", header_values.get("Contingencia", PLACEHOLDER)],
+        ["Pérdida total", header_values.get("Pérdida total", PLACEHOLDER)],
+        ["Normal", header_values.get("Normal", PLACEHOLDER)],
+        ["Vencido", header_values.get("Vencido", PLACEHOLDER)],
+        ["Judicial", header_values.get("Judicial", PLACEHOLDER)],
+        ["Castigo", header_values.get("Castigo", PLACEHOLDER)],
+        ["Analítica Contable", header_values.get("Analítica Contable", PLACEHOLDER)],
+        ["Centro de Costos", header_values.get("Centro de Costos", PLACEHOLDER)],
+        ["Producto", header_values.get("Producto", PLACEHOLDER)],
+        ["Procesos impactados", header_values.get("Procesos impactados", PLACEHOLDER)],
+        ["N° de Reclamos", header_values.get("N° de Reclamos", PLACEHOLDER)],
+    ]
+
     lines = list(header_lines)
-    lines.extend(_md_table(context["header_headers"], [context["header_row"]]))
+    lines.extend(_md_table(md_header_rows[0], md_header_rows[1:]))
     lines.extend(
         [
             "",
@@ -902,7 +926,56 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
 
     add_paragraphs(header_lines)
     document.add_heading("Encabezado Institucional", level=2)
-    append_table(context["header_headers"], [context["header_row"]])
+    header_values = dict(zip(context["header_headers"], context["header_row"]))
+    header_table = document.add_table(rows=11, cols=4)
+    header_table.style = "Table Grid"
+
+    def _set_cells(row_idx: int, col_idx: int, label: str, value: Any) -> None:
+        header_table.rows[row_idx].cells[col_idx].text = label
+        header_table.rows[row_idx].cells[col_idx + 1].text = str(value or "")
+
+    def _merge_value(row_idx: int, start_col: int, end_col: int) -> None:
+        if start_col < end_col:
+            header_table.cell(row_idx, start_col).merge(header_table.cell(row_idx, end_col))
+
+    _set_cells(0, 0, "Dirigido a", header_values.get("Dirigido a", PLACEHOLDER))
+    _merge_value(0, 1, 3)
+    _set_cells(1, 0, "Referencia", header_values.get("Referencia", PLACEHOLDER))
+    _merge_value(1, 1, 3)
+
+    _set_cells(2, 0, "Área de Reporte", header_values.get("Área de Reporte", PLACEHOLDER))
+    header_table.rows[2].cells[2].text = "Fecha de reporte"
+    header_table.rows[2].cells[3].text = str(header_values.get("Fecha de reporte", PLACEHOLDER) or "")
+
+    _set_cells(3, 0, "Categoría del evento", header_values.get("Categoría del evento", PLACEHOLDER))
+    header_table.rows[3].cells[2].text = "Tipología de evento"
+    header_table.rows[3].cells[3].text = str(header_values.get("Tipología de evento", PLACEHOLDER) or "")
+
+    _set_cells(4, 0, "Importe investigado", header_values.get("Importe investigado", PLACEHOLDER))
+    header_table.rows[4].cells[2].text = "Contingencia"
+    header_table.rows[4].cells[3].text = str(header_values.get("Contingencia", PLACEHOLDER) or "")
+
+    _set_cells(5, 0, "Pérdida total", header_values.get("Pérdida total", PLACEHOLDER))
+    header_table.rows[5].cells[2].text = "Normal"
+    header_table.rows[5].cells[3].text = str(header_values.get("Normal", PLACEHOLDER) or "")
+
+    _set_cells(6, 0, "Vencido", header_values.get("Vencido", PLACEHOLDER))
+    header_table.rows[6].cells[2].text = "Judicial"
+    header_table.rows[6].cells[3].text = str(header_values.get("Judicial", PLACEHOLDER) or "")
+
+    _set_cells(7, 0, "Castigo", header_values.get("Castigo", PLACEHOLDER))
+    _merge_value(7, 1, 3)
+
+    _set_cells(8, 0, "Analítica Contable", header_values.get("Analítica Contable", PLACEHOLDER))
+    header_table.rows[8].cells[2].text = "Centro de Costos"
+    header_table.rows[8].cells[3].text = str(header_values.get("Centro de Costos", PLACEHOLDER) or "")
+
+    _set_cells(9, 0, "Producto", header_values.get("Producto", PLACEHOLDER))
+    header_table.rows[9].cells[2].text = "Procesos impactados"
+    header_table.rows[9].cells[3].text = str(header_values.get("Procesos impactados", PLACEHOLDER) or "")
+
+    _set_cells(10, 0, "N° de Reclamos", header_values.get("N° de Reclamos", PLACEHOLDER))
+    _merge_value(10, 1, 3)
     document.add_heading("Antecedentes", level=2)
     _add_rich_text_paragraphs(document, raw_analysis.get("antecedentes"))
     document.add_heading("Detalle de los Colaboradores Involucrados", level=2)

@@ -149,7 +149,7 @@ def test_md_headings_and_tables(sample_case_data):
         "## Resumen de Secciones y Tablas del Informe",
     ]
 
-    assert "| Dirigido a | Referencia | Área de Reporte | Fecha de reporte |" in md
+    assert "| Campo | Valor |" in md
     assert "| Nombres y Apellidos | Matrícula | Cargo | Falta cometida | Fecha Carta de Inmediatez | Fecha Carta de Renuncia |" in md
     assert "| N° | Fecha de aprobación | Cliente / DNI | Ingreso Bruto Mensual | Empresa Empleadora | Vendedor del Inmueble | Vendedor del Crédito | Producto | Importe Desembolsado | Saldo Deudor | Status (BCP/SBS) |" in md
     assert "| Líder del riesgo | ID Riesgo (GRC) | Descripción del riesgo de fraude | Criticidad del riesgo | Exposición residual (USD) | ID Plan de Acción |" in md
