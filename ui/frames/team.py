@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from models import TeamHierarchyCatalog
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
 from validators import (FieldValidator, log_event, normalize_team_member_identifier,
                         normalize_without_accents, should_autofill_field,
@@ -45,6 +46,7 @@ class TeamMemberFrame:
         id_change_callback=None,
         autofill_service=None,
         case_date_getter=None,
+        team_catalog: TeamHierarchyCatalog | None = None,
     ):
         self.parent = parent
         self.owner = owner
@@ -68,6 +70,8 @@ class TeamMemberFrame:
         self._fallback_message_var = tk.StringVar(value="")
         self.summary_tree = None
         self._summary_tree_sort_state: dict[str, bool] = {}
+        self.team_catalog = team_catalog or TeamHierarchyCatalog()
+        self._selection_error_cache: set[str] = set()
 
         self.id_var = tk.StringVar()
         self.nombres_var = tk.StringVar()
@@ -83,6 +87,12 @@ class TeamMemberFrame:
         self.codigo_agencia_var = tk.StringVar()
         self.tipo_falta_var = tk.StringVar()
         self.tipo_sancion_var = tk.StringVar()
+        self._division_combo = None
+        self._area_combo = None
+        self._servicio_combo = None
+        self._puesto_combo = None
+        self._agencia_nombre_combo = None
+        self._agencia_codigo_combo = None
 
         self.section = self._create_section(parent)
         self._sync_section_title()
@@ -189,44 +199,86 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="División:").grid(
             row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        div_entry = ttk.Entry(
-            self.frame, textvariable=self.division_var, width=self._entry_width(20)
+        div_cb = self._make_badged_field(
+            self.frame,
+            "team_division",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.division_var,
+                width=self._entry_width(20),
+            ),
+            row=4,
+            column=1,
+            columnspan=2,
         )
-        div_entry.grid(row=4, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self._bind_dirty_tracking(div_entry, "division")
-        self.tooltip_register(div_entry, "Ingresa la división o gerencia del colaborador.")
-        div_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
+        self._division_combo = div_cb
+        self._bind_dirty_tracking(div_cb, "division")
+        self.tooltip_register(div_cb, "Ingresa la división o gerencia del colaborador.")
+        for sequence in ("<FocusOut>", "<<ComboboxSelected>>", "<KeyRelease>"):
+            div_cb.bind(sequence, lambda _e=None: self._on_division_change(), add="+")
 
         ttk.Label(self.frame, text="Área:").grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        area_entry = ttk.Entry(
-            self.frame, textvariable=self.area_var, width=self._entry_width(20)
+        area_cb = self._make_badged_field(
+            self.frame,
+            "team_area",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.area_var,
+                width=self._entry_width(20),
+            ),
+            row=5,
+            column=1,
+            columnspan=2,
         )
-        area_entry.grid(row=5, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self._bind_dirty_tracking(area_entry, "area")
-        self.tooltip_register(area_entry, "Detalla el área específica.")
-        area_entry.bind("<FocusOut>", lambda _e: self._handle_location_change(), add="+")
+        self._area_combo = area_cb
+        self._bind_dirty_tracking(area_cb, "area")
+        self.tooltip_register(area_cb, "Detalla el área específica.")
+        for sequence in ("<FocusOut>", "<<ComboboxSelected>>", "<KeyRelease>"):
+            area_cb.bind(sequence, lambda _e=None: self._on_area_change(), add="+")
 
         ttk.Label(self.frame, text="Servicio:").grid(
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        serv_entry = ttk.Entry(
-            self.frame, textvariable=self.servicio_var, width=self._entry_width(20)
+        serv_cb = self._make_badged_field(
+            self.frame,
+            "team_servicio",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.servicio_var,
+                width=self._entry_width(20),
+            ),
+            row=6,
+            column=1,
+            columnspan=2,
         )
-        serv_entry.grid(row=6, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self._bind_dirty_tracking(serv_entry, "servicio")
-        self.tooltip_register(serv_entry, "Describe el servicio o célula.")
+        self._servicio_combo = serv_cb
+        self._bind_dirty_tracking(serv_cb, "servicio")
+        self.tooltip_register(serv_cb, "Describe el servicio o célula.")
+        for sequence in ("<FocusOut>", "<<ComboboxSelected>>", "<KeyRelease>"):
+            serv_cb.bind(sequence, lambda _e=None: self._on_service_change(), add="+")
 
         ttk.Label(self.frame, text="Puesto:").grid(
             row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        puesto_entry = ttk.Entry(
-            self.frame, textvariable=self.puesto_var, width=self._entry_width(20)
+        puesto_cb = self._make_badged_field(
+            self.frame,
+            "team_puesto",
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.puesto_var,
+                width=self._entry_width(20),
+            ),
+            row=7,
+            column=1,
+            columnspan=2,
         )
-        puesto_entry.grid(row=7, column=1, columnspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        self._bind_dirty_tracking(puesto_entry, "puesto")
-        self.tooltip_register(puesto_entry, "Define el cargo actual del colaborador.")
+        self._puesto_combo = puesto_cb
+        self._bind_dirty_tracking(puesto_cb, "puesto")
+        self.tooltip_register(puesto_cb, "Define el cargo actual del colaborador.")
+        for sequence in ("<FocusOut>", "<<ComboboxSelected>>", "<KeyRelease>"):
+            puesto_cb.bind(sequence, lambda _e=None: self._on_puesto_change(), add="+")
 
         ttk.Label(self.frame, text="Fecha carta inmediatez:").grid(
             row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -275,36 +327,47 @@ class TeamMemberFrame:
         ttk.Label(self.frame, text="Nombre agencia:").grid(
             row=10, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        nombre_ag_entry = self._make_badged_field(
+        nombre_ag_cb = self._make_badged_field(
             self.frame,
             "team_agencia_nombre",
-            lambda parent: ttk.Entry(
-                parent, textvariable=self.nombre_agencia_var, width=self._entry_width(25)
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.nombre_agencia_var,
+                width=self._entry_width(25),
             ),
             row=10,
             column=1,
             columnspan=2,
         )
-        self._bind_dirty_tracking(nombre_ag_entry, "nombre_agencia")
-        self.tooltip_register(nombre_ag_entry, "Especifica la agencia u oficina de trabajo.")
+        self._agencia_nombre_combo = nombre_ag_cb
+        self._bind_dirty_tracking(nombre_ag_cb, "nombre_agencia")
+        self.tooltip_register(nombre_ag_cb, "Especifica la agencia u oficina de trabajo.")
+        for sequence in ("<FocusOut>", "<<ComboboxSelected>>", "<KeyRelease>"):
+            nombre_ag_cb.bind(sequence, lambda _e=None: self._on_agency_name_change(), add="+")
 
         ttk.Label(self.frame, text="Código agencia:").grid(
             row=11, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        cod_ag_entry = self._make_badged_field(
+        cod_ag_cb = self._make_badged_field(
             self.frame,
             "team_agencia_codigo",
-            lambda parent: ttk.Entry(
-                parent, textvariable=self.codigo_agencia_var, width=self._entry_width(10)
+            lambda parent: ttk.Combobox(
+                parent,
+                textvariable=self.codigo_agencia_var,
+                width=self._entry_width(10),
             ),
             row=11,
             column=1,
             columnspan=2,
         )
-        self._bind_dirty_tracking(cod_ag_entry, "codigo_agencia")
-        self.tooltip_register(cod_ag_entry, "Código interno de la agencia (solo números).")
-        self._division_entry = div_entry
-        self._area_entry = area_entry
+        self._agencia_codigo_combo = cod_ag_cb
+        self._bind_dirty_tracking(cod_ag_cb, "codigo_agencia")
+        self.tooltip_register(cod_ag_cb, "Código interno de la agencia (solo números).")
+        for sequence in ("<FocusOut>", "<<ComboboxSelected>>", "<KeyRelease>"):
+            cod_ag_cb.bind(sequence, lambda _e=None: self._on_agency_code_change(), add="+")
+        self._division_entry = div_cb
+        self._area_entry = area_cb
+        self._apply_team_catalog_state(preserve_values=True, silent=True)
 
         ttk.Label(self.frame, text="Tipo de falta:").grid(
             row=12, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -418,8 +481,27 @@ class TeamMemberFrame:
                 variables=[self.flag_var],
             )
         )
+        location_validations = [
+            (div_cb, self.division_var, "división", "team_division", "division"),
+            (area_cb, self.area_var, "área", "team_area", "area"),
+            (serv_cb, self.servicio_var, "servicio", "team_servicio", "servicio"),
+            (puesto_cb, self.puesto_var, "puesto", "team_puesto", "puesto"),
+        ]
+        for widget, variable, label, badge_key, level in location_validations:
+            self.validators.append(
+                FieldValidator(
+                    widget,
+                    self.badges.wrap_validation(
+                        badge_key, lambda lvl=level: self._validate_location_field(lvl)
+                    ),
+                    self.logs,
+                    f"Colaborador {self.idx+1} - {label.capitalize()}",
+                    variables=[variable],
+                )
+            )
+
         nombre_validator = FieldValidator(
-            nombre_ag_entry,
+            nombre_ag_cb,
             self.badges.wrap_validation(
                 "team_agencia_nombre", lambda: self._validate_agency_fields("nombre")
             ),
@@ -428,7 +510,7 @@ class TeamMemberFrame:
             variables=[self.nombre_agencia_var],
         )
         codigo_validator = FieldValidator(
-            cod_ag_entry,
+            cod_ag_cb,
             self.badges.wrap_validation(
                 "team_agencia_codigo", lambda: self._validate_agency_fields("codigo")
             ),
@@ -616,6 +698,223 @@ class TeamMemberFrame:
             add="+",
         )
 
+    def _normalize_catalog_key(self, value: str) -> str:
+        return normalize_without_accents((value or "").strip()).lower()
+
+    def _set_combobox_state(self, widget, values, *, enabled: bool = True, allow_free_text: bool = False) -> None:
+        if widget is None:
+            return
+        try:
+            widget["values"] = values
+        except Exception:
+            try:
+                widget.configure(values=values)
+            except Exception:
+                pass
+        if not enabled:
+            target_state = "disabled"
+        elif self.team_catalog.has_data and not allow_free_text:
+            target_state = "readonly"
+        else:
+            target_state = "normal"
+        state_method = getattr(widget, "state", None)
+        if callable(state_method):
+            try:
+                state_method([target_state])
+                return
+            except Exception:
+                pass
+        try:
+            widget.configure(state=target_state)
+        except Exception:
+            pass
+
+    def _reset_selection_error_cache(self) -> None:
+        self._selection_error_cache.clear()
+
+    def _notify_catalog_error(self, message: str) -> None:
+        if not message or message in self._selection_error_cache:
+            return
+        self._selection_error_cache.add(message)
+        try:
+            messagebox.showerror("Catálogo de colaboradores", message)
+        except tk.TclError:
+            log_event("validacion", message, self.logs)
+
+    def _apply_team_catalog_state(self, *, preserve_values: bool = True, silent: bool = False) -> None:
+        self._update_division_options()
+        self._update_area_options(preserve_value=preserve_values, silent=silent)
+        self._update_service_options(preserve_value=preserve_values, silent=silent)
+        self._update_puesto_options(preserve_value=preserve_values, silent=silent)
+        self._update_agency_options(preserve_value=preserve_values, silent=silent)
+
+    def _update_division_options(self) -> None:
+        values = self.team_catalog.list_divisions() if self.team_catalog else []
+        self._set_combobox_state(
+            self._division_combo,
+            values,
+            enabled=True,
+            allow_free_text=not bool(values),
+        )
+
+    def _has_valid_division(self) -> bool:
+        division = self.division_var.get().strip()
+        if not division:
+            return False
+        return not self.team_catalog.has_data or self.team_catalog.contains_division(division)
+
+    def _has_valid_area(self) -> bool:
+        return self._has_valid_division() and bool(
+            self.area_var.get().strip()
+            and (
+                not self.team_catalog.has_data
+                or self.team_catalog.contains_area(self.division_var.get(), self.area_var.get())
+            )
+        )
+
+    def _has_valid_service(self) -> bool:
+        return self._has_valid_area() and bool(
+            self.servicio_var.get().strip()
+            and (
+                not self.team_catalog.has_data
+                or self.team_catalog.contains_service(
+                    self.division_var.get(), self.area_var.get(), self.servicio_var.get()
+                )
+            )
+        )
+
+    def _update_area_options(self, *, preserve_value: bool = False, silent: bool = False) -> None:
+        if not self._has_valid_division():
+            if not preserve_value:
+                self.area_var.set("")
+            self.servicio_var.set("")
+            self.puesto_var.set("")
+            self._set_combobox_state(self._area_combo, [], enabled=False)
+            self._set_combobox_state(self._servicio_combo, [], enabled=False)
+            self._set_combobox_state(self._puesto_combo, [], enabled=False)
+            self._update_agency_options(preserve_value=False, silent=silent)
+            return
+        areas = self.team_catalog.list_areas(self.division_var.get()) if self.team_catalog else []
+        self._set_combobox_state(self._area_combo, areas, enabled=True, allow_free_text=not bool(areas))
+        if self.area_var.get().strip() and self.team_catalog.has_data:
+            if not self.team_catalog.contains_area(self.division_var.get(), self.area_var.get()):
+                if not silent:
+                    self._notify_catalog_error(
+                        "El área seleccionada no pertenece a la división dentro del catálogo CM."
+                    )
+                self.area_var.set("")
+        if not self.area_var.get().strip():
+            self.servicio_var.set("")
+            self.puesto_var.set("")
+            self._set_combobox_state(self._servicio_combo, [], enabled=False)
+            self._set_combobox_state(self._puesto_combo, [], enabled=False)
+            self._update_agency_options(preserve_value=False, silent=silent)
+            return
+        self._update_service_options(preserve_value=preserve_value, silent=silent)
+        self._update_agency_options(preserve_value=preserve_value, silent=silent)
+
+    def _update_service_options(self, *, preserve_value: bool = False, silent: bool = False) -> None:
+        if not self._has_valid_area():
+            self.servicio_var.set("")
+            self.puesto_var.set("")
+            self._set_combobox_state(self._servicio_combo, [], enabled=False)
+            self._set_combobox_state(self._puesto_combo, [], enabled=False)
+            return
+        services = (
+            self.team_catalog.list_services(self.division_var.get(), self.area_var.get())
+            if self.team_catalog
+            else []
+        )
+        self._set_combobox_state(self._servicio_combo, services, enabled=True, allow_free_text=not bool(services))
+        if self.servicio_var.get().strip() and self.team_catalog.has_data:
+            if not self.team_catalog.contains_service(
+                self.division_var.get(), self.area_var.get(), self.servicio_var.get()
+            ):
+                if not silent:
+                    self._notify_catalog_error(
+                        "El servicio seleccionado no existe para la división y área en el catálogo CM."
+                    )
+                self.servicio_var.set("")
+        if not self.servicio_var.get().strip():
+            self.puesto_var.set("")
+            self._set_combobox_state(self._puesto_combo, [], enabled=False)
+            return
+        self._update_puesto_options(preserve_value=preserve_value, silent=silent)
+
+    def _update_puesto_options(self, *, preserve_value: bool = False, silent: bool = False) -> None:
+        if not self._has_valid_service():
+            self.puesto_var.set("")
+            self._set_combobox_state(self._puesto_combo, [], enabled=False)
+            return
+        puestos = (
+            self.team_catalog.list_roles(
+                self.division_var.get(), self.area_var.get(), self.servicio_var.get()
+            )
+            if self.team_catalog
+            else []
+        )
+        self._set_combobox_state(
+            self._puesto_combo,
+            puestos,
+            enabled=True,
+            allow_free_text=not bool(puestos),
+        )
+        if self.puesto_var.get().strip() and self.team_catalog.has_data:
+            if not self.team_catalog.contains_role(
+                self.division_var.get(), self.area_var.get(), self.servicio_var.get(), self.puesto_var.get()
+            ):
+                if not silent:
+                    self._notify_catalog_error(
+                        "El puesto seleccionado no pertenece al servicio registrado en el catálogo CM."
+                    )
+                self.puesto_var.set("")
+
+    def _update_agency_options(self, *, preserve_value: bool = False, silent: bool = False) -> None:
+        if not self._has_valid_area():
+            if not preserve_value:
+                self.nombre_agencia_var.set("")
+                self.codigo_agencia_var.set("")
+            self._set_combobox_state(self._agencia_nombre_combo, [], enabled=False)
+            self._set_combobox_state(self._agencia_codigo_combo, [], enabled=False)
+            return
+        names = self.team_catalog.list_agency_names(self.division_var.get(), self.area_var.get())
+        codes = self.team_catalog.list_agency_codes(self.division_var.get(), self.area_var.get())
+        self._set_combobox_state(
+            self._agencia_nombre_combo,
+            names,
+            enabled=True,
+            allow_free_text=not bool(names),
+        )
+        self._set_combobox_state(
+            self._agencia_codigo_combo,
+            codes,
+            enabled=True,
+            allow_free_text=not bool(codes),
+        )
+        if self.team_catalog.has_data and self.nombre_agencia_var.get().strip():
+            match = self.team_catalog.match_agency_by_name(
+                self.division_var.get(), self.area_var.get(), self.nombre_agencia_var.get()
+            )
+            if not match:
+                if not silent:
+                    self._notify_catalog_error(
+                        "La agencia seleccionada no pertenece a la división y área dentro del catálogo CM."
+                    )
+                self.nombre_agencia_var.set("")
+        if self.team_catalog.has_data and self.codigo_agencia_var.get().strip():
+            match = self.team_catalog.match_agency_by_code(
+                self.division_var.get(), self.area_var.get(), self.codigo_agencia_var.get()
+            )
+            if not match:
+                if not silent:
+                    self._notify_catalog_error(
+                        "El código de agencia no pertenece a la división y área dentro del catálogo CM."
+                    )
+                self.codigo_agencia_var.set("")
+
+    def _refresh_location_options(self, *, preserve_values: bool = False, silent: bool = False) -> None:
+        self._apply_team_catalog_state(preserve_values=preserve_values, silent=silent)
+
     def _mark_dirty(self, field_key: str) -> None:
         self._clear_fallback_warning()
         if field_key:
@@ -734,27 +1033,172 @@ class TeamMemberFrame:
             return f"Se usó un registro alternativo del colaborador ({reason})."
         return None
 
+    def _set_location_values(
+        self,
+        *,
+        division: str | None = None,
+        area: str | None = None,
+        servicio: str | None = None,
+        puesto: str | None = None,
+        silent: bool = False,
+    ) -> None:
+        if division is not None:
+            self.division_var.set(division)
+        self._update_division_options()
+        if area is not None:
+            self.area_var.set(area)
+        self._update_area_options(preserve_value=True, silent=silent)
+        if servicio is not None:
+            self.servicio_var.set(servicio)
+        self._update_service_options(preserve_value=True, silent=silent)
+        if puesto is not None:
+            self.puesto_var.set(puesto)
+        self._update_puesto_options(preserve_value=True, silent=silent)
+        if not silent:
+            self._handle_location_change()
+
+    def _set_agency_values(
+        self, nombre: str | None = None, codigo: str | None = None, *, silent: bool = False
+    ) -> None:
+        if nombre is not None:
+            self.nombre_agencia_var.set(nombre)
+        if codigo is not None:
+            self.codigo_agencia_var.set(codigo)
+        self._update_agency_options(preserve_value=True, silent=silent)
+        if not silent:
+            self._handle_location_change()
+
+    def _on_division_change(self, *, silent: bool = False) -> None:
+        self._reset_selection_error_cache()
+        if silent:
+            self._refresh_location_options(preserve_values=True, silent=True)
+            return
+        self._refresh_location_options(preserve_values=True)
+        self._handle_location_change()
+        self._log_change(f"Colaborador {self.idx+1}: modificó división")
+
+    def _on_area_change(self, *, silent: bool = False) -> None:
+        self._reset_selection_error_cache()
+        if silent:
+            self._refresh_location_options(preserve_values=True, silent=True)
+            return
+        if not self.division_var.get().strip():
+            self.area_var.set("")
+            self.servicio_var.set("")
+            self.puesto_var.set("")
+            self._notify_catalog_error("Selecciona la división antes de elegir un área.")
+            self._refresh_location_options(preserve_values=False)
+            return
+        self._refresh_location_options(preserve_values=True)
+        self._handle_location_change()
+        self._log_change(f"Colaborador {self.idx+1}: modificó área")
+
+    def _on_service_change(self, *, silent: bool = False) -> None:
+        self._reset_selection_error_cache()
+        if silent:
+            self._refresh_location_options(preserve_values=True, silent=True)
+            return
+        if not self.area_var.get().strip():
+            self.servicio_var.set("")
+            self._notify_catalog_error("Selecciona el área antes de elegir un servicio.")
+            self._refresh_location_options(preserve_values=False)
+            return
+        self._refresh_location_options(preserve_values=True)
+        self._handle_location_change()
+        self._log_change(f"Colaborador {self.idx+1}: modificó servicio")
+
+    def _on_puesto_change(self, *, silent: bool = False) -> None:
+        self._reset_selection_error_cache()
+        if silent:
+            self._update_puesto_options(preserve_value=True, silent=True)
+            return
+        if not self.servicio_var.get().strip():
+            self.puesto_var.set("")
+            self._notify_catalog_error("Selecciona el servicio antes de elegir un puesto.")
+            self._update_puesto_options(preserve_value=False, silent=True)
+            return
+        self._update_puesto_options(preserve_value=True)
+        self._handle_location_change()
+        self._log_change(f"Colaborador {self.idx+1}: modificó puesto")
+
+    def _on_agency_name_change(self, *, silent: bool = False) -> None:
+        self._reset_selection_error_cache()
+        if silent:
+            self._update_agency_options(preserve_value=True, silent=True)
+            return
+        if not self._has_valid_area():
+            self.nombre_agencia_var.set("")
+            self.codigo_agencia_var.set("")
+            self._notify_catalog_error("Selecciona división y área antes de elegir una agencia.")
+            self._update_agency_options(preserve_value=False, silent=True)
+            return
+        self._update_agency_options(preserve_value=True)
+        if self.team_catalog.has_data and self.nombre_agencia_var.get().strip():
+            match = self.team_catalog.match_agency_by_name(
+                self.division_var.get(), self.area_var.get(), self.nombre_agencia_var.get()
+            )
+            expected_code = (match.get("codigo") or "") if match else ""
+            current_code = self.codigo_agencia_var.get().strip()
+            if expected_code and current_code != expected_code:
+                self.codigo_agencia_var.set(expected_code)
+        self._handle_location_change()
+        self._log_change(f"Colaborador {self.idx+1}: modificó agencia")
+
+    def _on_agency_code_change(self, *, silent: bool = False) -> None:
+        self._reset_selection_error_cache()
+        if silent:
+            self._update_agency_options(preserve_value=True, silent=True)
+            return
+        if not self._has_valid_area():
+            self.nombre_agencia_var.set("")
+            self.codigo_agencia_var.set("")
+            self._notify_catalog_error("Selecciona división y área antes de elegir una agencia.")
+            self._update_agency_options(preserve_value=False, silent=True)
+            return
+        self._update_agency_options(preserve_value=True)
+        if self.team_catalog.has_data and self.codigo_agencia_var.get().strip():
+            match = self.team_catalog.match_agency_by_code(
+                self.division_var.get(), self.area_var.get(), self.codigo_agencia_var.get()
+            )
+            expected_name = (match.get("nombre") or "") if match else ""
+            current_name = self.nombre_agencia_var.get().strip()
+            if expected_name and self._normalize_catalog_key(current_name) != self._normalize_catalog_key(expected_name):
+                self.nombre_agencia_var.set(expected_name)
+        self._handle_location_change()
+        self._log_change(f"Colaborador {self.idx+1}: modificó código de agencia")
+
     def _apply_autofill_result(self, result) -> None:
-        field_map = {
-            "division": self.division_var,
-            "area": self.area_var,
-            "servicio": self.servicio_var,
-            "puesto": self.puesto_var,
+        location_kwargs = {k: v for k, v in result.applied.items() if k in {"division", "area", "servicio", "puesto"}}
+        if location_kwargs:
+            self._set_location_values(
+                division=location_kwargs.get("division"),
+                area=location_kwargs.get("area"),
+                servicio=location_kwargs.get("servicio"),
+                puesto=location_kwargs.get("puesto"),
+                silent=True,
+            )
+        if "nombre_agencia" in result.applied or "codigo_agencia" in result.applied:
+            self._set_agency_values(
+                nombre=result.applied.get("nombre_agencia"),
+                codigo=result.applied.get("codigo_agencia"),
+                silent=True,
+            )
+        for key, var in {
             "nombres": self.nombres_var,
             "apellidos": self.apellidos_var,
             "fecha_carta_inmediatez": self.fecha_carta_inmediatez_var,
             "fecha_carta_renuncia": self.fecha_carta_renuncia_var,
-            "nombre_agencia": self.nombre_agencia_var,
-            "codigo_agencia": self.codigo_agencia_var,
-        }
-        for key, value in result.applied.items():
-            var = field_map.get(key)
-            if var is not None:
-                var.set(value)
+        }.items():
+            if key in result.applied:
+                var.set(result.applied[key])
 
     def set_lookup(self, lookup):
         self.team_lookup = lookup or {}
         self._last_missing_lookup_id = None
+
+    def set_team_catalog(self, catalog: TeamHierarchyCatalog | None) -> None:
+        self.team_catalog = catalog or TeamHierarchyCatalog()
+        self._apply_team_catalog_state(preserve_values=True, silent=True)
 
     def _requires_agency_details(self) -> bool:
         division_norm = normalize_without_accents(self.division_var.get()).lower()
@@ -766,18 +1210,47 @@ class TeamMemberFrame:
 
     def _validate_agency_fields(self, field: str) -> str | None:
         requires_agency = self._requires_agency_details()
+        division = self.division_var.get().strip()
+        area = self.area_var.get().strip()
+        agency_name = self.nombre_agencia_var.get().strip()
+        agency_code = self.codigo_agencia_var.get().strip()
         if field == "nombre":
-            if not requires_agency:
+            if not requires_agency and not agency_name:
                 return None
-            return validate_required_text(
-                self.nombre_agencia_var.get(),
-                "el nombre de la agencia",
-            )
+            if requires_agency and not agency_name:
+                return "Debe ingresar el nombre de la agencia."
+            if self.team_catalog.has_data and agency_name:
+                if not division or not area:
+                    return "Selecciona división y área para validar la agencia."
+                match = self.team_catalog.match_agency_by_name(division, area, agency_name)
+                if not match:
+                    return (
+                        f"La agencia '{agency_name}' no está registrada para la división y área seleccionadas."
+                    )
+                expected_code = (match.get("codigo") or "").strip()
+                if expected_code and agency_code and expected_code != agency_code:
+                    return "El código de agencia no coincide con el catálogo CM."
+            return None
         if field == "codigo":
-            return validate_agency_code(
-                self.codigo_agencia_var.get(),
+            code_error = validate_agency_code(
+                agency_code,
                 allow_blank=not requires_agency,
             )
+            if code_error:
+                return code_error
+            if not agency_code:
+                return None
+            if self.team_catalog.has_data:
+                if not division or not area:
+                    return "Selecciona división y área para validar la agencia."
+                match = self.team_catalog.match_agency_by_code(division, area, agency_code)
+                if not match:
+                    return (
+                        f"El código de agencia '{agency_code}' no está registrado para la división y área seleccionadas."
+                    )
+                expected_name = (match.get("nombre") or "").strip()
+                if expected_name and agency_name and self._normalize_catalog_key(agency_name) != self._normalize_catalog_key(expected_name):
+                    return "El nombre de agencia no coincide con el catálogo CM."
         return None
 
     def _handle_location_change(self) -> None:
@@ -824,23 +1297,49 @@ class TeamMemberFrame:
             if not result or not result.found:
                 data = self.team_lookup.get(cid)
                 if data:
-                    def set_if_present(var, key):
+                    def choose_value(var, key):
                         value = data.get(key, "").strip()
                         if self._dirty_fields.get(key):
-                            return
+                            return None
                         if value and should_autofill_field(var.get(), preserve_existing):
-                            var.set(value)
+                            return value
+                        return None
 
-                    set_if_present(self.division_var, "division")
-                    set_if_present(self.area_var, "area")
-                    set_if_present(self.servicio_var, "servicio")
-                    set_if_present(self.puesto_var, "puesto")
-                    set_if_present(self.nombres_var, "nombres")
-                    set_if_present(self.apellidos_var, "apellidos")
-                    set_if_present(self.fecha_carta_inmediatez_var, "fecha_carta_inmediatez")
-                    set_if_present(self.fecha_carta_renuncia_var, "fecha_carta_renuncia")
-                    set_if_present(self.nombre_agencia_var, "nombre_agencia")
-                    set_if_present(self.codigo_agencia_var, "codigo_agencia")
+                    location_payload = {
+                        key: choose_value(var, key)
+                        for key, var in (
+                            ("division", self.division_var),
+                            ("area", self.area_var),
+                            ("servicio", self.servicio_var),
+                            ("puesto", self.puesto_var),
+                        )
+                    }
+                    agency_name = choose_value(self.nombre_agencia_var, "nombre_agencia")
+                    agency_code = choose_value(self.codigo_agencia_var, "codigo_agencia")
+
+                    for key, var in (
+                        ("nombres", self.nombres_var),
+                        ("apellidos", self.apellidos_var),
+                        ("fecha_carta_inmediatez", self.fecha_carta_inmediatez_var),
+                        ("fecha_carta_renuncia", self.fecha_carta_renuncia_var),
+                    ):
+                        chosen = choose_value(var, key)
+                        if chosen:
+                            var.set(chosen)
+
+                    self._set_location_values(
+                        division=location_payload.get("division"),
+                        area=location_payload.get("area"),
+                        servicio=location_payload.get("servicio"),
+                        puesto=location_payload.get("puesto"),
+                        silent=True,
+                    )
+                    if agency_name or agency_code:
+                        self._set_agency_values(
+                            nombre=agency_name,
+                            codigo=agency_code,
+                            silent=True,
+                        )
                     self._last_missing_lookup_id = None
                     if not silent:
                         self._log_change(
@@ -1111,12 +1610,54 @@ class TeamMemberFrame:
         else:
             log_event("navegacion", message, self.logs)
 
-    @staticmethod
-    def _validate_catalog_selection(value: str, label: str, catalog) -> str | None:
+    def _validate_location_field(self, level: str) -> str | None:
+        if not self.team_catalog.has_data:
+            return None
+        division = self.division_var.get().strip()
+        area = self.area_var.get().strip()
+        servicio = self.servicio_var.get().strip()
+        puesto = self.puesto_var.get().strip()
+        if level == "division":
+            if not division:
+                return None
+            if not self.team_catalog.contains_division(division):
+                return f"La división '{division}' no está en el catálogo CM de team_details."
+            return None
+        if level == "area":
+            if not area:
+                return None
+            if not division:
+                return "Selecciona la división antes de validar el área."
+            if not self.team_catalog.contains_area(division, area):
+                return f"El área '{area}' no pertenece a la división seleccionada en el catálogo CM."
+            return None
+        if level == "servicio":
+            if not servicio:
+                return None
+            if not area or not division:
+                return "Completa división y área antes de validar el servicio."
+            if not self.team_catalog.contains_service(division, area, servicio):
+                return (
+                    f"El servicio '{servicio}' no existe para la división y área seleccionadas en el catálogo CM."
+                )
+            return None
+        if level == "puesto":
+            if not puesto:
+                return None
+            if not servicio or not area or not division:
+                return "Completa división, área y servicio antes de validar el puesto."
+            if not self.team_catalog.contains_role(division, area, servicio, puesto):
+                return (
+                    f"El puesto '{puesto}' no pertenece al servicio seleccionado en el catálogo CM."
+                )
+        return None
+
+    def _validate_catalog_selection(self, value: str, label: str, catalog) -> str | None:
         text = (value or "").strip()
         if not text:
             return f"Debe seleccionar {label}."
-        if text not in catalog:
+        normalized_catalog = {self._normalize_catalog_key(item) for item in catalog}
+        if self._normalize_catalog_key(text) not in normalized_catalog:
             return f"El {label} '{text}' no está en el catálogo CM."
         return None
 
