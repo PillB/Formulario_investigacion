@@ -6133,6 +6133,7 @@ class FraudCaseApp:
 
         action_buttons = (
             ("Guardar y enviar", "save_send"),
+            ("Guardar checkpoint", "checkpoint"),
             ("Cargar versión", "load"),
             ("Borrar todos los datos", "clear"),
             (None, None),
@@ -6141,6 +6142,7 @@ class FraudCaseApp:
         )
         action_commands = {
             "save_send": self.save_and_send,
+            "checkpoint": self.save_checkpoint,
             "load": self.load_version_dialog,
             "clear": lambda: self.clear_all(notify=True),
             "docx": self.generate_docx_report,
@@ -6169,6 +6171,10 @@ class FraudCaseApp:
         self.register_tooltip(
             self.actions_action_bar.buttons.get("clear"),
             "Limpia el formulario completo para iniciar desde cero.",
+        )
+        self.register_tooltip(
+            self.actions_action_bar.buttons.get("checkpoint"),
+            "Guarda un archivo JSON con el estado actual sin enviar el caso.",
         )
 
         self.btn_docx = self.actions_action_bar.buttons.get("docx")
@@ -10111,6 +10117,31 @@ class FraudCaseApp:
             messagebox.showinfo("Versión cargada", "La versión se cargó correctamente.")
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo cargar la versión: {ex}")
+
+    def save_checkpoint(self):
+        """Permite guardar manualmente el estado actual en un archivo JSON."""
+
+        log_event("navegacion", "Usuario pulsó guardar checkpoint", self.logs)
+        filename = filedialog.asksaveasfilename(
+            title="Guardar checkpoint",
+            defaultextension=".json",
+            filetypes=[("JSON Files", "*.json")],
+        )
+        if not filename:
+            message = "Guardado cancelado por el usuario."
+            messagebox.showinfo("Guardado cancelado", message)
+            log_event("cancelado", message, self.logs)
+            return
+
+        try:
+            data = self.gather_data()
+            with open(filename, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2, ensure_ascii=False)
+            messagebox.showinfo("Checkpoint guardado", "El estado se guardó correctamente.")
+            log_event("navegacion", f"Checkpoint guardado en {filename}", self.logs)
+        except Exception as exc:
+            messagebox.showerror("Error al guardar", f"No se pudo guardar el checkpoint: {exc}")
+            log_event("validacion", f"Error al guardar checkpoint: {exc}", self.logs)
 
     def _clear_case_state(self, *, save_autosave: bool = True) -> None:
         """Elimina los datos cargados y restablece los frames dinámicos."""
