@@ -822,6 +822,9 @@ class ProductFrame:
         self.badges: BadgeManager | None = None
         self._field_errors: dict[str, str | None] = {}
         self._last_date_errors: dict[str, str | None] = {"fecha_oc": None, "fecha_desc": None}
+        self._last_pair_error: str | None = None
+        self.fecha_oc_validator: FieldValidator | None = None
+        self.fecha_desc_validator: FieldValidator | None = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
@@ -1187,6 +1190,20 @@ class ProductFrame:
             moneda_cb,
         )
 
+        self.fecha_oc_validator = FieldValidator(
+            focc_entry,
+            self.badges.wrap_validation("fecha_oc", self._validate_fecha_ocurrencia),
+            self.logs,
+            f"Producto {self.idx+1} - Fecha ocurrencia",
+            variables=[self.fecha_oc_var, self.fecha_desc_var, self.id_var],
+        )
+        self.fecha_desc_validator = FieldValidator(
+            fdesc_entry,
+            self.badges.wrap_validation("fecha_desc", self._validate_fecha_descubrimiento),
+            self.logs,
+            f"Producto {self.idx+1} - Fecha descubrimiento",
+            variables=[self.fecha_desc_var, self.fecha_oc_var, self.id_var],
+        )
         self.validators.extend(
             [
                 FieldValidator(
@@ -1229,20 +1246,8 @@ class ProductFrame:
                     f"Producto {self.idx+1} - Tipo de producto",
                     variables=[self.tipo_prod_var],
                 ),
-                FieldValidator(
-                    focc_entry,
-                    self.badges.wrap_validation("fecha_oc", self._validate_fecha_ocurrencia),
-                    self.logs,
-                    f"Producto {self.idx+1} - Fecha ocurrencia",
-                    variables=[self.fecha_oc_var, self.fecha_desc_var, self.id_var],
-                ),
-                FieldValidator(
-                    fdesc_entry,
-                    self.badges.wrap_validation("fecha_desc", self._validate_fecha_descubrimiento),
-                    self.logs,
-                    f"Producto {self.idx+1} - Fecha descubrimiento",
-                    variables=[self.fecha_desc_var, self.fecha_oc_var, self.id_var],
-                ),
+                self.fecha_oc_validator,
+                self.fecha_desc_validator,
                 FieldValidator(
                     inv_entry,
                     self.badges.wrap_validation(
@@ -1384,13 +1389,13 @@ class ProductFrame:
         )
 
     def _sync_amount_validation_state(self, *_args):
-        if self._amount_validation_ready:
+        if getattr(self, "_amount_validation_ready", False):
             return
         if any((var.get() or "").strip() for var in self._iter_amount_vars()):
             self._amount_validation_ready = True
 
     def _enable_amount_validation(self, *_args):
-        if not self._amount_validation_ready:
+        if not getattr(self, "_amount_validation_ready", False):
             self._amount_validation_ready = True
 
     def _refresh_amount_validation_after_programmatic_update(self):
@@ -1906,10 +1911,25 @@ class ProductFrame:
         self.badges.update_badge("fecha_oc", occ_message is None, occ_message)
         self.badges.update_badge("fecha_desc", desc_message is None, desc_message)
 
+    def _update_date_pair_state(self, pair_message: str | None, pair_ok: bool) -> None:
+        previous_pair_error = self._last_pair_error
+        self._last_pair_error = None if pair_ok else pair_message
+        if not pair_ok:
+            return
+        if (
+            previous_pair_error
+            and self._last_date_errors.get("fecha_oc") is None
+            and self._last_date_errors.get("fecha_desc") is None
+        ):
+            for validator in (self.fecha_oc_validator, self.fecha_desc_validator):
+                if validator:
+                    validator.show_custom_error(None)
+
     def _refresh_badges(self) -> None:
         if self.badges:
             self.badges.refresh()
         pair_message, pair_ok = self._validate_product_date_pair()
+        self._update_date_pair_state(pair_message, pair_ok)
         self._refresh_date_badges(pair_message, pair_ok)
         self._validate_montos_consistentes()
 
@@ -2584,6 +2604,7 @@ class ProductFrame:
         )
         self._last_date_errors["fecha_oc"] = message
         pair_message, pair_ok = self._validate_product_date_pair()
+        self._update_date_pair_state(pair_message, pair_ok)
         final_message = message or (None if pair_ok else pair_message)
         self._refresh_date_badges(pair_message, pair_ok)
         return final_message
@@ -2598,6 +2619,7 @@ class ProductFrame:
         )
         self._last_date_errors["fecha_desc"] = msg
         pair_message, pair_ok = self._validate_product_date_pair()
+        self._update_date_pair_state(pair_message, pair_ok)
         final_message = msg or (None if pair_ok else pair_message)
         self._refresh_date_badges(pair_message, pair_ok)
         return final_message
@@ -2623,6 +2645,8 @@ class ProductFrame:
 
     def _collect_amount_values(self):
         values = {}
+        if not hasattr(self, "_field_errors"):
+            self._field_errors = {}
         for _, var_attr, label, allow_blank, key in PRODUCT_MONEY_SPECS:
             var = getattr(self, var_attr)
             message, decimal_value = self._validate_amount_field(var, label, allow_blank)
@@ -2675,12 +2699,15 @@ class ProductFrame:
                 )
         badge_message = next(iter(errors.values()), None)
         is_consistent = not errors
-        self.badges.update_badge("monto_inv", is_consistent, badge_message)
+        badge_manager = getattr(self, "badges", None)
+        if badge_manager:
+            badge_manager.update_badge("monto_inv", is_consistent, badge_message)
         for key, badge_key in AMOUNT_BADGE_KEYS.items():
             message = errors.get(key)
             if message is None:
                 message = self._field_errors.get(badge_key)
-            self.badges.update_badge(badge_key, message is None, message)
+            if badge_manager:
+                badge_manager.update_badge(badge_key, message is None, message)
         target = target_key or 'inv'
         return (errors.get(target), is_consistent)
 
