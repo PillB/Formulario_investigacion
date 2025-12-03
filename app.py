@@ -728,6 +728,7 @@ class FraudCaseApp:
         self._duplicate_warning_signature: Optional[str] = None
         self._duplicate_warning_cooldown_until: Optional[datetime] = None
         self._last_duplicate_warning_message: Optional[str] = None
+        self._duplicate_warning_dismissed: bool = False
         self._rich_text_images = defaultdict(list)
         self._rich_text_image_sources = {}
         self._rich_text_fonts = {}
@@ -8662,9 +8663,14 @@ class FraudCaseApp:
             self._update_duplicate_validation_entry(message, severity=severity)
             if duplicate_messages and not cooldown_active:
                 self._activate_duplicate_warning_cooldown(signature, message)
-            if not getattr(self, "_suppress_messagebox", False):
+            should_show_popup = (
+                not getattr(self, "_suppress_messagebox", False)
+                and not self._duplicate_warning_dismissed
+            )
+            if should_show_popup:
                 try:
                     messagebox.showerror("Validación de clave técnica", message)
+                    self._duplicate_warning_dismissed = True
                 except tk.TclError:
                     return "Validación interrumpida"
             return status
