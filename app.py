@@ -9741,10 +9741,11 @@ class FraudCaseApp:
     def save_auto(self, data=None):
         """Guarda automáticamente el estado actual en un archivo JSON."""
 
-        dataset = self._ensure_case_data(data or self.gather_data())
+        payload = self._serialize_full_form_state(data)
+        dataset = self._ensure_case_data(payload.get("dataset", {}))
         try:
             with open(AUTOSAVE_FILE, 'w', encoding="utf-8") as f:
-                json.dump(dataset.as_dict(), f, ensure_ascii=False, indent=2)
+                json.dump(payload, f, ensure_ascii=False, indent=2)
             self._handle_session_saved(dataset)
             self._show_success_toast(self._progress_bar, "Autoguardado listo")
             self.refresh_autosave_list()
@@ -9753,7 +9754,7 @@ class FraudCaseApp:
         self._schedule_summary_refresh(data=dataset)
         return dataset
 
-    def _load_dataset_from_path(self, path: Path):
+    def _load_dataset_from_path(self, path: Path) -> tuple[CaseData, dict[str, object]]:
         try:
             with path.open('r', encoding="utf-8") as f:
                 data = json.load(f)
@@ -9763,20 +9764,24 @@ class FraudCaseApp:
         except UnicodeDecodeError as exc:
             log_event("validacion", f"Autosave ilegible {path}: {exc}", self.logs)
             raise ValueError(f"El autosave {path.name} no se pudo leer correctamente") from exc
-        if not isinstance(data, dict):
+        if not isinstance(data, Mapping):
             raise ValueError("El autosave debe ser un objeto JSON válido")
-        return self._ensure_case_data(data)
+        form_state = data.get("form_state") if isinstance(data, Mapping) else {}
+        dataset_payload = data.get("dataset") if "dataset" in data else data
+        return self._ensure_case_data(dataset_payload), form_state or {}
 
     def _apply_loaded_dataset(
         self,
-        dataset,
+        dataset: CaseData,
         *,
         source_label: str,
         autosave: bool = False,
         show_toast: bool = False,
         success_dialog: tuple[str, str] | None = None,
+        form_state: Mapping[str, object] | None = None,
     ) -> None:
         self.populate_from_data(dataset)
+        self._restore_form_state(form_state)
         case_id = (dataset.get("caso", {}) or {}).get("id_caso")
         self._update_window_title(case_id=case_id)
         self._schedule_summary_refresh(sections=self.summary_tables.keys(), data=dataset)
@@ -9882,9 +9887,10 @@ class FraudCaseApp:
         errors_detected = False
         for index, (_mtime, path) in enumerate(candidates):
             try:
-                dataset = self._load_dataset_from_path(path)
+                dataset, form_state = self._load_dataset_from_path(path)
                 self._apply_loaded_dataset(
                     dataset,
+                    form_state=form_state,
                     source_label=f"el autosave desde {path}",
                     autosave=True,
                     show_toast=True,
@@ -9929,9 +9935,10 @@ class FraudCaseApp:
             return
 
         try:
-            dataset = self._load_dataset_from_path(path)
+            dataset, form_state = self._load_dataset_from_path(path)
             self._apply_loaded_dataset(
                 dataset,
+                form_state=form_state,
                 source_label=f"el autosave {path}",
                 autosave=True,
                 show_toast=True,
@@ -10356,9 +10363,10 @@ class FraudCaseApp:
             log_event("navegacion", "Canceló cargar versión", self.logs)
             return
         try:
-            dataset = self._load_dataset_from_path(Path(filename))
+            dataset, form_state = self._load_dataset_from_path(Path(filename))
             self._apply_loaded_dataset(
                 dataset,
+                form_state=form_state,
                 source_label=f"la versión desde {filename}",
                 success_dialog=("Versión cargada", "La versión se cargó correctamente."),
             )
@@ -10374,9 +10382,10 @@ class FraudCaseApp:
             log_event("navegacion", "Canceló cargar checkpoint", self.logs)
             return
         try:
-            dataset = self._load_dataset_from_path(Path(filename))
+            dataset, form_state = self._load_dataset_from_path(Path(filename))
             self._apply_loaded_dataset(
                 dataset,
+                form_state=form_state,
                 source_label=f"el checkpoint {filename}",
                 success_dialog=("Checkpoint cargado", "El checkpoint se cargó correctamente."),
             )
@@ -10400,9 +10409,9 @@ class FraudCaseApp:
             return
 
         try:
-            data = self.gather_data()
+            payload = self._serialize_full_form_state()
             with open(filename, "w", encoding="utf-8") as fh:
-                json.dump(data, fh, indent=2, ensure_ascii=False)
+                json.dump(payload, fh, indent=2, ensure_ascii=False)
             messagebox.showinfo("Checkpoint guardado", "El estado se guardó correctamente.")
             log_event("navegacion", f"Checkpoint guardado en {filename}", self.logs)
         except Exception as exc:
@@ -10608,12 +10617,14 @@ class FraudCaseApp:
             "canal": self._sanitize_text(self.canal_caso_var.get()),
             "proceso": self._sanitize_text(self.proceso_caso_var.get()),
             "fecha_de_ocurrencia": self._sanitize_text(self.fecha_caso_var.get()),
+            "fecha_de_descubrimiento": self._sanitize_text(self.fecha_descubrimiento_caso_var.get()),
             "matricula_investigador": investigator_id,
             "investigador": {
                 "matricula": investigator_id,
                 "nombre": investigator_name,
                 "cargo": investigator_role or "Investigador Principal",
             },
+            "centro_costo": self._sanitize_text(self.centro_costo_caso_var.get()),
         }
         data['clientes'] = [c.get_data() for c in self.client_frames]
         data['colaboradores'] = [t.get_data() for t in self.team_frames]
@@ -10684,6 +10695,77 @@ class FraudCaseApp:
         )
         sanitized_data = self._sanitize_payload_strings(data, skip_keys={"analisis"})
         return CaseData.from_mapping(sanitized_data)
+
+    def _snapshot_var_dict(self, values: Mapping[str, tk.Variable] | None) -> dict[str, object]:
+        snapshot: dict[str, object] = {}
+        if not values:
+            return snapshot
+        for key, var in values.items():
+            try:
+                snapshot[str(key)] = var.get()
+            except Exception:
+                continue
+        return snapshot
+
+    def _collect_form_state_snapshot(self) -> dict[str, object]:
+        """Captura los valores actuales de las variables Tk y formularios auxiliares.
+
+        Esta instantánea permite restaurar campos que aún no se han persistido en las
+        tablas internas (por ejemplo, formularios de operaciones o anexos sin guardar),
+        asegurando que el checkpoint refleje fielmente todos los widgets de la interfaz.
+        """
+
+        state: dict[str, object] = {"tk_variables": {}}
+        for name, value in self.__dict__.items():
+            if isinstance(value, tk.Variable):
+                try:
+                    state["tk_variables"][name] = value.get()
+                except Exception:
+                    continue
+        state["encabezado_vars"] = self._snapshot_var_dict(getattr(self, "_encabezado_vars", {}))
+        state["operacion_vars"] = self._snapshot_var_dict(getattr(self, "_operation_vars", {}))
+        state["anexo_vars"] = self._snapshot_var_dict(getattr(self, "_anexo_vars", {}))
+        state["firma_vars"] = self._snapshot_var_dict(getattr(self, "_firmas_vars", {}))
+        return state
+
+    def _restore_form_state(self, form_state: Mapping[str, object] | None) -> None:
+        """Restaura los valores de las variables Tk almacenadas en un checkpoint."""
+
+        if not isinstance(form_state, Mapping):
+            return
+
+        def _restore_named_vars(target: Mapping[str, tk.Variable] | None, values: Mapping[str, object] | None) -> None:
+            if not target or not isinstance(values, Mapping):
+                return
+            for key, value in values.items():
+                var = target.get(key)
+                if isinstance(var, tk.Variable):
+                    with suppress(Exception):
+                        var.set(value)
+
+        tk_state = form_state.get("tk_variables", {})
+        if isinstance(tk_state, Mapping):
+            for name, value in tk_state.items():
+                var = getattr(self, name, None)
+                if isinstance(var, tk.Variable):
+                    with suppress(Exception):
+                        var.set(value)
+
+        _restore_named_vars(getattr(self, "_encabezado_vars", {}), form_state.get("encabezado_vars"))
+        _restore_named_vars(getattr(self, "_operation_vars", {}), form_state.get("operacion_vars"))
+        _restore_named_vars(getattr(self, "_anexo_vars", {}), form_state.get("anexo_vars"))
+        _restore_named_vars(getattr(self, "_firmas_vars", {}), form_state.get("firma_vars"))
+
+    def _serialize_full_form_state(self, data=None) -> dict[str, object]:
+        """Serializa el formulario completo, incluyendo variables Tk auxiliares."""
+
+        dataset = self._ensure_case_data(data or self.gather_data())
+        dataset_dict = dataset.as_dict()
+        return {
+            **dataset_dict,
+            "dataset": dataset_dict,
+            "form_state": self._collect_form_state_snapshot(),
+        }
 
     def _normalize_export_amount_strings(self, products):
         if not products:
