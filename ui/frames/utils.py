@@ -13,6 +13,7 @@ from ui.layout import CollapsibleSection, register_styles
 
 ALERT_BADGE_ICON = "⚠️"
 SUCCESS_BADGE_ICON = "✅"
+PENDING_BADGE_ICON = "⏳"
 
 
 def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggle=None):
@@ -840,7 +841,7 @@ class BadgeManager:
         self,
         *,
         parent=None,
-        pending_text: str = ALERT_BADGE_ICON,
+        pending_text: str = PENDING_BADGE_ICON,
         success_text: str = SUCCESS_BADGE_ICON,
     ) -> None:
         self.parent = parent
@@ -862,11 +863,12 @@ class BadgeManager:
                 except Exception:
                     style = None
         if not style or not hasattr(style, "configure"):
-            self._badge_styles = {"success": "TLabel", "warning": "TLabel"}
+            self._badge_styles = {"success": "TLabel", "warning": "TLabel", "pending": "TLabel"}
             return
         palette = ThemeManager.current()
         success_style = "SuccessBadge.TLabel"
         warning_style = "WarningBadge.TLabel"
+        pending_style = "PendingBadge.TLabel"
         style.configure(
             success_style,
             background=palette.get("accent", "#2e7d32"),
@@ -885,15 +887,28 @@ class BadgeManager:
             relief="solid",
             font=("TkDefaultFont", 9, "bold"),
         )
-        self._badge_styles = {"success": success_style, "warning": warning_style}
+        style.configure(
+            pending_style,
+            background=palette.get("secondary", "#e0e0e0"),
+            foreground=palette.get("foreground", "#000000"),
+            padding=(6, 2),
+            borderwidth=1,
+            relief="solid",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self._badge_styles = {
+            "success": success_style,
+            "warning": warning_style,
+            "pending": pending_style,
+        }
 
     def create_badge(self, parent, *, row: int, column: int, text: str | None = None):
-        styles = self._badge_styles or {"warning": "TLabel"}
+        styles = self._badge_styles or {"warning": "TLabel", "pending": "TLabel"}
         try:
             badge = ttk.Label(
                 parent,
                 text=text or self.pending_text,
-                style=styles.get("warning", "TLabel"),
+                style=styles.get("pending", styles.get("warning", "TLabel")),
                 anchor="w",
             )
             badge.grid(row=row, column=column, padx=COL_PADX, pady=ROW_PADY, sticky="w")
@@ -955,12 +970,26 @@ class BadgeManager:
         message: str | None,
         *,
         success_text: str | None = None,
+        pending_text: str | None = None,
     ) -> None:
         if badge is None:
             return
-        styles = self._badge_styles or {"success": "TLabel", "warning": "TLabel"}
-        style_name = styles["success"] if is_ok else styles["warning"]
-        text = success_text if is_ok else self.pending_text
+        styles = self._badge_styles or {
+            "success": "TLabel",
+            "warning": "TLabel",
+            "pending": "TLabel",
+        }
+        if is_ok:
+            style_name = styles.get("success", "TLabel")
+            text = success_text if success_text is not None else self.success_text
+        elif message:
+            style_name = styles.get("warning", "TLabel")
+            hint = message.strip()
+            prefix = "" if hint.startswith(ALERT_BADGE_ICON) else f"{ALERT_BADGE_ICON} "
+            text = f"{prefix}{hint}".strip()
+        else:
+            style_name = styles.get("pending", styles.get("warning", "TLabel"))
+            text = pending_text if pending_text is not None else self.pending_text
         try:
             badge.configure(text=text, style=style_name)
         except Exception:
@@ -985,7 +1014,14 @@ class BadgeManager:
         success_label = success_text or config.get("success", self.success_text)
         pending_label = pending_text or config.get("pending", self.pending_text)
         badge = config.get("badge")
-        self.set_badge_state(badge, is_ok, message or pending_label, success_text=success_label)
+        warning_label = message or pending_label
+        self.set_badge_state(
+            badge,
+            is_ok,
+            warning_label,
+            success_text=success_label,
+            pending_text=pending_label,
+        )
 
     def wrap_validation(
         self,

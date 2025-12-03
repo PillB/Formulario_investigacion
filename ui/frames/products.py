@@ -15,6 +15,7 @@ from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import (
     ALERT_BADGE_ICON,
     SUCCESS_BADGE_ICON,
+    PENDING_BADGE_ICON,
     BadgeManager,
     build_grid_container,
     create_collapsible_card,
@@ -150,7 +151,7 @@ class InvolvementRow:
         if manager is None:
             manager = BadgeManager(
                 parent=parent or getattr(self.product_frame, "frame", None) or self.parent,
-                pending_text=ALERT_BADGE_ICON,
+                pending_text=PENDING_BADGE_ICON,
                 success_text=SUCCESS_BADGE_ICON,
             )
             self.product_frame.badge_manager = manager
@@ -1839,12 +1840,12 @@ class ProductFrame:
         row: int,
         column: int = 4,
         parent=None,
-        pending_text: str = ALERT_BADGE_ICON,
+        pending_text: str = PENDING_BADGE_ICON,
         success_text: str = SUCCESS_BADGE_ICON,
     ):
         manager = self.badge_manager or BadgeManager(
             parent=parent or self.frame,
-            pending_text=ALERT_BADGE_ICON,
+            pending_text=PENDING_BADGE_ICON,
             success_text=SUCCESS_BADGE_ICON,
         )
         self.badge_manager = manager
@@ -1869,7 +1870,7 @@ class ProductFrame:
         key: str,
         *,
         success_text: str | None = SUCCESS_BADGE_ICON,
-        pending_text: str | None = ALERT_BADGE_ICON,
+        pending_text: str | None = PENDING_BADGE_ICON,
     ):
         if key in self._badge_setters:
             return self._badge_setters[key]
@@ -1896,14 +1897,14 @@ class ProductFrame:
         message: str | None,
         *,
         success_text: str | None = SUCCESS_BADGE_ICON,
-        pending_text: str | None = ALERT_BADGE_ICON,
+        pending_text: str | None = PENDING_BADGE_ICON,
     ):
         config = self._badge_registry.get(key)
         if not config:
             return
         badge = config.get("badge")
         success_label = success_text or config.get("success", SUCCESS_BADGE_ICON)
-        fallback_warning = pending_text or config.get("pending") or ALERT_BADGE_ICON
+        fallback_warning = pending_text or config.get("pending") or PENDING_BADGE_ICON
         self._set_badge_state(badge, is_ok, message or fallback_warning, success_text=success_label)
 
     def _wrap_validation_with_badge(
@@ -1935,7 +1936,7 @@ class ProductFrame:
         if manager is None:
             manager = BadgeManager(
                 parent=self.frame,
-                pending_text=ALERT_BADGE_ICON,
+                pending_text=PENDING_BADGE_ICON,
                 success_text=SUCCESS_BADGE_ICON,
             )
             self.badge_manager = manager
