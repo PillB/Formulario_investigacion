@@ -373,6 +373,24 @@ class ValidationPanel(ttk.Frame):
                 return
         self.tree.selection_remove(self.tree.selection())
 
+    def remove_entries(self, keys: Iterable[str]) -> None:
+        removed = False
+        for key in keys:
+            item_id = self._entries.pop(key, None)
+            if not item_id:
+                continue
+            self.tree.delete(item_id)
+            self._targets.pop(item_id, None)
+            self._entry_status.pop(key, None)
+            removed = True
+        if not removed:
+            return
+        if not self._entries:
+            self._ensure_placeholder()
+        self._refresh_issue_count()
+        self._update_focus_button_state()
+        self._select_first_actionable()
+
     def _clear_batch_entries(self) -> None:
         to_delete = [key for key in self._entries if key.startswith("batch:")]
         for key in to_delete:
