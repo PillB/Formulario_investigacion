@@ -275,8 +275,12 @@ class TeamMemberFrame:
         for sequence in ("<FocusOut>", "<<ComboboxSelected>>", "<KeyRelease>"):
             puesto_cb.bind(sequence, lambda _e=None: self._on_puesto_change(), add="+")
 
-        ttk.Label(self.frame, text="Fecha carta inmediatez:").grid(
-            row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        ttk.Label(self.frame, text="Fecha carta inmediatez:\n(YYYY-MM-DD)").grid(
+            row=8,
+            column=0,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="e",
         )
         fecha_inm_entry = self._make_badged_field(
             self.frame,
@@ -297,8 +301,12 @@ class TeamMemberFrame:
             "Registrar en formato YYYY-MM-DD. Puede quedar vacío si no aplica.",
         )
 
-        ttk.Label(self.frame, text="Fecha carta renuncia:").grid(
-            row=9, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        ttk.Label(self.frame, text="Fecha carta renuncia:\n(YYYY-MM-DD)").grid(
+            row=9,
+            column=0,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="e",
         )
         fecha_ren_entry = self._make_badged_field(
             self.frame,

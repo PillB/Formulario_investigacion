@@ -101,8 +101,12 @@ class NormFrame:
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         self._bind_identifier_triggers(id_entry)
 
-        ttk.Label(self.frame, text="Fecha de vigencia (YYYY-MM-DD):").grid(
-            row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        ttk.Label(self.frame, text="Fecha de vigencia:\n(YYYY-MM-DD)").grid(
+            row=1,
+            column=2,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="e",
         )
         fecha_entry = self._make_badged_field(
             self.frame,
