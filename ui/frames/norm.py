@@ -10,6 +10,7 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_required_text)
 from ui.frames.utils import (
     BadgeManager,
+    create_date_entry,
     create_collapsible_card,
     ensure_grid_support,
     grid_section,
@@ -106,7 +107,7 @@ class NormFrame:
         fecha_entry = self._make_badged_field(
             self.frame,
             "norm_fecha",
-            lambda parent: ttk.Entry(parent, textvariable=self.fecha_var, width=15),
+            lambda parent: create_date_entry(parent, textvariable=self.fecha_var, width=15),
             row=1,
             column=3,
         )

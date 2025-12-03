@@ -10,6 +10,7 @@ from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import (
     BadgeManager,
     build_required_label,
+    create_date_entry,
     ensure_grid_support,
     grid_and_configure,
 )
@@ -348,7 +349,7 @@ class CaseFrame:
         occ_container, fecha_case_entry, _ = self._make_badged_field(
             dates_container,
             "case_fecha_oc",
-            lambda parent: ttk.Entry(
+            lambda parent: create_date_entry(
                 parent, textvariable=owner.fecha_caso_var, width=16, style=ENTRY_STYLE
             ),
         )
@@ -369,7 +370,7 @@ class CaseFrame:
         desc_container, fecha_desc_entry, _ = self._make_badged_field(
             dates_container,
             "case_fecha_desc",
-            lambda parent: ttk.Entry(
+            lambda parent: create_date_entry(
                 parent,
                 textvariable=owner.fecha_descubrimiento_caso_var,
                 width=16,

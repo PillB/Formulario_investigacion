@@ -14,6 +14,7 @@ from ui.frames.utils import (
     BadgeManager,
     build_grid_container,
     create_collapsible_card,
+    create_date_entry,
     ensure_grid_support,
     grid_section,
 )
@@ -218,7 +219,9 @@ class TeamMemberFrame:
         fecha_inm_entry = self._make_badged_field(
             self.frame,
             "team_fecha_inm",
-            lambda parent: ttk.Entry(parent, textvariable=self.fecha_carta_inmediatez_var, width=20),
+            lambda parent: create_date_entry(
+                parent, textvariable=self.fecha_carta_inmediatez_var, width=20
+            ),
             row=8,
             column=1,
             columnspan=2,
@@ -236,7 +239,9 @@ class TeamMemberFrame:
         fecha_ren_entry = self._make_badged_field(
             self.frame,
             "team_fecha_ren",
-            lambda parent: ttk.Entry(parent, textvariable=self.fecha_carta_renuncia_var, width=20),
+            lambda parent: create_date_entry(
+                parent, textvariable=self.fecha_carta_renuncia_var, width=20
+            ),
             row=9,
             column=1,
             columnspan=2,
