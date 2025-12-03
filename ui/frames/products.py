@@ -164,6 +164,11 @@ class InvolvementRow:
         manager = self.badge_manager or self._get_badge_manager(self.frame)
         return manager.wrap_validation(self._badge_key(key), validate_fn)
 
+    def unregister_badges(self):
+        manager = self.badge_manager or self._get_badge_manager(self.frame)
+        for key in (self._badge_key("team"), self._badge_key("amount")):
+            manager.unregister(key, destroy=True)
+
     def get_data(self):
         return {
             "id_colaborador": self.team_var.get().strip(),
@@ -192,6 +197,8 @@ class InvolvementRow:
             self.product_frame.log_change(
                 f"Se eliminó asignación de colaborador en producto {self.product_frame.idx+1}"
             )
+            if hasattr(self, "unregister_badges"):
+                self.unregister_badges()
             if getattr(self, "section", None):
                 self.section.destroy()
             else:
@@ -572,6 +579,8 @@ class ClaimRow:
             self.product_frame.log_change(
                 f"Se eliminó reclamo del producto {self.product_frame.idx+1}"
             )
+            if hasattr(self, "unregister_badges"):
+                self.unregister_badges()
             if getattr(self, "section", None):
                 self.section.destroy()
             else:
@@ -671,6 +680,15 @@ class ClaimRow:
     def _wrap_claim_validation(self, key: str, validate_fn):
         manager = self.badge_manager or self._get_badge_manager(self.frame)
         return manager.wrap_validation(self._badge_key(key), validate_fn)
+
+    def unregister_badges(self):
+        manager = self.badge_manager or self._get_badge_manager(self.frame)
+        for key in (
+            self._badge_key("id"),
+            self._badge_key("code"),
+            self._badge_key("name"),
+        ):
+            manager.unregister(key, destroy=True)
 
     def refresh_badges(self):
         self._get_badge_manager(self.frame).refresh()
@@ -1722,6 +1740,8 @@ class ProductFrame:
     def remove_claim(self, row):
         section = getattr(row, "section", None)
         frame = getattr(row, "frame", None)
+        if hasattr(row, "unregister_badges"):
+            row.unregister_badges()
         if section and hasattr(section, "destroy"):
             try:
                 section.destroy()
@@ -1741,6 +1761,8 @@ class ProductFrame:
 
     def clear_claims(self):
         for claim in self.claims:
+            if hasattr(claim, "unregister_badges"):
+                claim.unregister_badges()
             if getattr(claim, "section", None):
                 claim.section.destroy()
             else:
@@ -1749,6 +1771,8 @@ class ProductFrame:
 
     def clear_involvements(self):
         for inv in self.involvements:
+            if hasattr(inv, "unregister_badges"):
+                inv.unregister_badges()
             if getattr(inv, "section", None):
                 inv.section.destroy()
             else:
@@ -2315,6 +2339,8 @@ class ProductFrame:
     def remove_involvement(self, row):
         section = getattr(row, "section", None)
         frame = getattr(row, "frame", None)
+        if hasattr(row, "unregister_badges"):
+            row.unregister_badges()
         if section and hasattr(section, "destroy"):
             try:
                 section.destroy()

@@ -1048,3 +1048,24 @@ class BadgeManager:
     def refresh(self) -> None:
         for updater in self._updaters.values():
             updater()
+
+    def unregister(self, key: str, *, destroy: bool = False) -> None:
+        """Remove a badge registration and its updater.
+
+        Parameters
+        ----------
+        key: str
+            Identifier used when the badge was registered.
+        destroy: bool, default False
+            Whether to call ``destroy`` on the badge widget if available.
+        """
+
+        config = self._registry.pop(key, None)
+        self._updaters.pop(key, None)
+        if destroy and config:
+            badge = config.get("badge")
+            if badge and hasattr(badge, "destroy"):
+                try:
+                    badge.destroy()
+                except Exception:
+                    return
