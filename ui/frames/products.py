@@ -1018,25 +1018,45 @@ class ProductFrame:
         self.tooltip_register(tipo_prod_cb, "Clasificación comercial del producto.")
         self.badges.create_and_register("producto_tipo", self.frame, row=4, column=5)
 
-        ttk.Label(self.frame, text="Fecha de ocurrencia (YYYY-MM-DD):").grid(
-            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        ttk.Label(self.frame, text="Fecha de ocurrencia:\n(YYYY-MM-DD)").grid(
+            row=5,
+            column=0,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="e",
         )
         focc_entry = create_date_entry(
             self.frame, textvariable=self.fecha_oc_var, width=15, style=ENTRY_STYLE
         )
-        focc_entry.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        focc_entry.grid(
+            row=5,
+            column=1,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="we",
+        )
         self.focc_entry = focc_entry
         self.tooltip_register(focc_entry, "Fecha exacta del evento.")
         self._register_duplicate_triggers(focc_entry)
         self.badges.create_and_register("fecha_oc", self.frame, row=5, column=4)
 
-        ttk.Label(self.frame, text="Fecha de descubrimiento (YYYY-MM-DD):").grid(
-            row=5, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        ttk.Label(self.frame, text="Fecha de descubrimiento:\n(YYYY-MM-DD)").grid(
+            row=5,
+            column=2,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="e",
         )
         fdesc_entry = create_date_entry(
             self.frame, textvariable=self.fecha_desc_var, width=15, style=ENTRY_STYLE
         )
-        fdesc_entry.grid(row=5, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        fdesc_entry.grid(
+            row=5,
+            column=3,
+            padx=COL_PADX,
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="we",
+        )
         self.fdesc_entry = fdesc_entry
         self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")
         self.date_badge = self.badges.create_and_register("fecha_desc", self.frame, row=5, column=5)

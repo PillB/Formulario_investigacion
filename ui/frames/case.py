@@ -340,11 +340,15 @@ class CaseFrame:
         dates_container.columnconfigure(3, weight=1)
         occurrence_label = build_required_label(
             dates_container,
-            "Ocurrencia (YYYY-MM-DD):",
+            "Ocurrencia:\n(YYYY-MM-DD)",
             tooltip_register=owner.register_tooltip,
         )
         occurrence_label.grid(
-            row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+            row=0,
+            column=0,
+            padx=(0, COL_PADX // 2),
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="e",
         )
         occ_container, fecha_case_entry, _ = self._make_badged_field(
             dates_container,
@@ -354,18 +358,26 @@ class CaseFrame:
             ),
         )
         occ_container.grid(
-            row=0, column=1, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
+            row=0,
+            column=1,
+            padx=(0, COL_PADX),
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="we",
         )
         owner.register_tooltip(
             fecha_case_entry, "Fecha en que se originó el caso a nivel general."
         )
         discovery_label = build_required_label(
             dates_container,
-            "Descubrimiento (YYYY-MM-DD):",
+            "Descubrimiento:\n(YYYY-MM-DD)",
             tooltip_register=owner.register_tooltip,
         )
         discovery_label.grid(
-            row=0, column=2, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
+            row=0,
+            column=2,
+            padx=(0, COL_PADX // 2),
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="e",
         )
         desc_container, fecha_desc_entry, _ = self._make_badged_field(
             dates_container,
@@ -378,7 +390,11 @@ class CaseFrame:
             ),
         )
         desc_container.grid(
-            row=0, column=3, padx=(0, COL_PADX), pady=(0, ROW_PADY // 2), sticky="we"
+            row=0,
+            column=3,
+            padx=(0, COL_PADX),
+            pady=(ROW_PADY // 2, ROW_PADY // 2),
+            sticky="we",
         )
         owner.register_tooltip(
             fecha_desc_entry,
