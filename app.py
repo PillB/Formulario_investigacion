@@ -9191,6 +9191,15 @@ class FraudCaseApp:
             payload = dict(row_data)
             payload['id_cliente'] = client_id
             self._populate_client_frame_from_row(frame, payload)
+        elif created:
+            frame.id_var.set(client_id)
+        if created:
+            self._trigger_import_id_refresh(
+                frame,
+                client_id,
+                notify_on_missing=False,
+                preserve_existing=False,
+            )
         return frame, created
 
     def _ensure_team_member_exists(self, collaborator_id, row_data=None):
@@ -9404,14 +9413,7 @@ class FraudCaseApp:
                     value = client_row.get(key)
                     if not value and raw_row.get(key):
                         client_row[key] = raw_row[key]
-                client_frame, created_client = self._ensure_client_exists(client_id, client_row)
-                if created_client:
-                    self._trigger_import_id_refresh(
-                        client_frame,
-                        client_id,
-                        notify_on_missing=False,
-                        preserve_existing=False,
-                    )
+                _client_frame, created_client = self._ensure_client_exists(client_id, client_row)
                 created_records = created_records or created_client
                 if not client_found and 'id_cliente' in self.detail_catalogs:
                     missing_clients.append(client_id)

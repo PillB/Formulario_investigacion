@@ -1,5 +1,7 @@
 import pytest
 
+import types
+
 import app as app_module
 from settings import (CRITICIDAD_LIST, FLAG_CLIENTE_LIST, TIPO_ID_LIST,
                       TIPO_SANCION_LIST)
@@ -76,6 +78,48 @@ def test_import_combined_creates_entities_and_prevents_duplicates(monkeypatch, m
 
     assert sum(1 for frame in app.team_frames if frame.id_var.get() == 'T12345') == 1
     assert len(app.product_frames) == 1
+
+
+def test_import_combined_reuses_client_frame_for_multiple_products(monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+
+    duplicate_checks = []
+
+    def _record_duplicate_check(self, from_background=None):
+        duplicate_checks.append(from_background)
+
+    app._run_duplicate_check_post_load = types.MethodType(_record_duplicate_check, app)
+
+    rows = [
+        {
+            'id_cliente': 'CLI-SHARED',
+            'id_producto': 'PRD-ONE',
+            'tipo_producto': 'Crédito personal',
+            'monto_investigado': '100.00',
+        },
+        {
+            'id_cliente': 'CLI-SHARED',
+            'id_producto': 'PRD-TWO',
+            'tipo_producto': 'Crédito personal',
+            'monto_investigado': '200.00',
+        },
+    ]
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter(rows),
+    )
+
+    app.import_combined(filename="dummy.csv")
+
+    client_ids = [frame.id_var.get() for frame in app.client_frames if frame.id_var.get()]
+    assert client_ids == ['CLI-SHARED']
+    assert app._client_frames_by_id.get('CLI-SHARED') is app.client_frames[0]
+    assert sorted(frame.id_var.get() for frame in app.product_frames if frame.id_var.get()) == [
+        'PRD-ONE',
+        'PRD-TWO',
+    ]
+    assert len(duplicate_checks) == 1
 
 
 def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebox_spy):
