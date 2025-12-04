@@ -1668,9 +1668,6 @@ class TeamMemberFrame:
             log_event("navegacion", message, self.logs)
 
     def _validate_location_field(self, level: str) -> str | None:
-        if not self.team_catalog.has_data:
-            return None
-
         def _in_hierarchy(pairs: list[tuple[str, str]], value: str) -> bool:
             normalized = self._normalize_catalog_key(value)
             for key, label in pairs:
@@ -1682,9 +1679,12 @@ class TeamMemberFrame:
         area = self.area_var.get().strip()
         servicio = self.servicio_var.get().strip()
         puesto = self.puesto_var.get().strip()
+        has_catalog = self.team_catalog.has_data
 
         if level == "division":
             if not division:
+                return "Debe seleccionar la división del colaborador."
+            if not has_catalog:
                 return None
             if self.team_catalog.contains_division(division) or self.team_catalog.hierarchy_contains_division(division):
                 return None
@@ -1692,9 +1692,11 @@ class TeamMemberFrame:
 
         if level == "area":
             if not area:
-                return None
+                return "Debe seleccionar el área del colaborador."
             if not division:
                 return "Selecciona la división antes de validar el área."
+            if not has_catalog:
+                return None
             if self.team_catalog.contains_area(division, area):
                 return None
             area_pairs = self.team_catalog.list_hierarchy_areas(division)
@@ -1704,9 +1706,11 @@ class TeamMemberFrame:
 
         if level == "servicio":
             if not servicio:
-                return None
+                return "Debe seleccionar el servicio del colaborador."
             if not area or not division:
                 return "Completa división y área antes de validar el servicio."
+            if not has_catalog:
+                return None
             if self.team_catalog.contains_service(division, area, servicio):
                 return None
             service_pairs = self.team_catalog.list_hierarchy_services(division, area)
@@ -1718,9 +1722,11 @@ class TeamMemberFrame:
 
         if level == "puesto":
             if not puesto:
-                return None
+                return "Debe seleccionar el puesto del colaborador."
             if not servicio or not area or not division:
                 return "Completa división, área y servicio antes de validar el puesto."
+            if not has_catalog:
+                return None
             if self.team_catalog.contains_role(division, area, servicio, puesto):
                 return None
             puesto_pairs = self.team_catalog.list_hierarchy_roles(division, area, servicio)
