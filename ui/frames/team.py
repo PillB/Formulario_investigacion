@@ -294,6 +294,7 @@ class TeamMemberFrame:
             column=1,
             columnspan=2,
         )
+        self.fecha_inm_entry = fecha_inm_entry
         self._bind_dirty_tracking(fecha_inm_entry, "fecha_carta_inmediatez")
         self._bind_date_validation(fecha_inm_entry, self.fecha_carta_inmediatez_var, "la fecha de carta de inmediatez")
         self.tooltip_register(
@@ -320,6 +321,7 @@ class TeamMemberFrame:
             column=1,
             columnspan=2,
         )
+        self.fecha_ren_entry = fecha_ren_entry
         self._bind_dirty_tracking(fecha_ren_entry, "fecha_carta_renuncia")
         self._bind_date_validation(fecha_ren_entry, self.fecha_carta_renuncia_var, "la fecha de carta de renuncia")
         self.tooltip_register(
