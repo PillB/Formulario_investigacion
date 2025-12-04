@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ui.frames import clients, team
+from ui.frames import clients, norm, risk, team
 from tests import test_products_frame as tpf
 
 
@@ -184,13 +184,15 @@ def patch_client_and_team_widgets(monkeypatch):
         Button = FocusDummyWidget
         Scrollbar = DummyScrollbar
 
-    for module in (clients, team):
+    for module in (clients, team, risk, norm):
         monkeypatch.setattr(module, "tk", _TkStub())
         monkeypatch.setattr(module, "ttk", _TtkStub())
         monkeypatch.setattr(module, "CollapsibleSection", DummyCollapsible)
         monkeypatch.setattr(module, "FieldValidator", tpf.RecordingValidator)
         monkeypatch.setattr(module, "BadgeManager", DummyBadgeManager)
         monkeypatch.setattr(module, "ToggleWarningBadge", DummyToggleWarningBadge, raising=False)
+
+    monkeypatch.setattr(norm, "create_date_entry", lambda parent, **_: FocusDummyWidget(parent=parent))
 
     tpf.RecordingValidator.instances.clear()
     yield
@@ -202,6 +204,10 @@ def _owner_namespace():
         inline_summary_trees={},
         clients_summary_tree=None,
         team_summary_tree=None,
+        risk_summary_tree=None,
+        norm_summary_tree=None,
+        _risk_summary_owner=None,
+        _norm_summary_owner=None,
     )
 
 
@@ -231,6 +237,32 @@ def _build_team_frame(owner, idx=0):
         owner=owner,
         summary_parent=FocusDummyWidget(),
         summary_refresh_callback=lambda *_args, **_kwargs: None,
+    )
+
+
+def _build_risk_frame(owner, header_tree):
+    return risk.RiskFrame(
+        parent=FocusDummyWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+        change_notifier=None,
+        header_tree=header_tree,
+        owner=owner,
+    )
+
+
+def _build_norm_frame(owner, header_tree):
+    return norm.NormFrame(
+        parent=FocusDummyWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+        change_notifier=None,
+        header_tree=header_tree,
+        owner=owner,
     )
 
 
@@ -276,3 +308,57 @@ def test_team_summary_owner_follows_focus(monkeypatch):
     team_b.section.toggle(None)
 
     assert owner._team_summary_owner is team_b
+
+
+def test_risk_summary_owner_tracks_focus_and_tree(monkeypatch):
+    owner = _owner_namespace()
+    tree = risk.RiskFrame.build_header_tree(FocusDummyWidget())
+    risk_a = _build_risk_frame(owner, tree)
+    risk_b = _build_risk_frame(owner, tree)
+
+    assert owner._risk_summary_owner is risk_b
+
+    owner._risk_summary_owner = risk_a
+    focus_callback = _first_focus_binding(risk_b.id_entry)
+    focus_callback(SimpleNamespace(widget=risk_b.id_entry))
+
+    assert owner._risk_summary_owner is risk_b
+
+    tree.insert("", "end", iid="R2", values=("R2", "Alta", "100", "Lid", "Desc"))
+    tree._selection = ("R2",)
+    risk_a._on_tree_select()
+
+    assert risk_b.id_var.get() == "R2"
+
+    risk_b.id_var.set("")
+    tree._selection = ("R2",)
+    risk_b._on_tree_double_click()
+
+    assert risk_b.id_var.get() == "R2"
+
+
+def test_norm_summary_owner_tracks_focus_and_tree(monkeypatch):
+    owner = _owner_namespace()
+    tree = norm.NormFrame.build_header_tree(FocusDummyWidget())
+    norm_a = _build_norm_frame(owner, tree)
+    norm_b = _build_norm_frame(owner, tree)
+
+    assert owner._norm_summary_owner is norm_b
+
+    owner._norm_summary_owner = norm_a
+    focus_callback = _first_focus_binding(norm_b.id_entry)
+    focus_callback(SimpleNamespace(widget=norm_b.id_entry))
+
+    assert owner._norm_summary_owner is norm_b
+
+    tree.insert("", "end", iid="N2", values=("N2", "2024-01-01", "Desc"))
+    tree._selection = ("N2",)
+    norm_a._on_tree_select()
+
+    assert norm_b.id_var.get() == "N2"
+
+    norm_b.id_var.set("")
+    tree._selection = ("N2",)
+    norm_b._on_tree_double_click()
+
+    assert norm_b.id_var.get() == "N2"

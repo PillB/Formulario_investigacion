@@ -798,9 +798,13 @@ class FraudCaseApp:
         self.clients_summary_tree = None
         self.product_summary_tree = None
         self.team_summary_tree = None
+        self.risk_summary_tree = None
+        self.norm_summary_tree = None
         self._client_summary_owner = None
         self._product_summary_owner = None
         self._team_summary_owner = None
+        self._risk_summary_owner = None
+        self._norm_summary_owner = None
         self.autosave_tree = None
         self._autosave_candidate_paths: list[Path] = []
         self._autosave_cycle_job_id: Optional[str] = None
@@ -4545,6 +4549,7 @@ class FraudCaseApp:
             change_notifier=self._log_navigation_change,
             default_risk_id=default_risk_id,
             header_tree=self.risk_header_tree,
+            owner=self,
         )
         risk.set_refresh_callbacks(
             shared_tree_refresher=self._refresh_shared_risk_tree,
@@ -4654,6 +4659,7 @@ class FraudCaseApp:
             self.register_tooltip,
             change_notifier=self._log_navigation_change,
             header_tree=self.norm_header_tree,
+            owner=self,
         )
         norm.set_refresh_callbacks(
             shared_tree_refresher=self._refresh_shared_norm_tree,

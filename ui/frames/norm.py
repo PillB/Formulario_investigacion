@@ -37,6 +37,7 @@ class NormFrame:
         tooltip_register,
         change_notifier=None,
         header_tree=None,
+        owner=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -49,6 +50,9 @@ class NormFrame:
         self._shared_tree_refresher = None
         self._summary_refresher = None
         self._refresh_after_id = None
+        self.owner = owner
+        self._focus_widgets: set[object] = set()
+        self._focus_binding_target = None
 
         self.id_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
@@ -59,7 +63,7 @@ class NormFrame:
         self.section = create_collapsible_card(
             parent,
             title="",
-            on_toggle=lambda _section: self._sync_section_title(),
+            on_toggle=self._handle_toggle,
             log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear acordeón para norma {idx+1}: {exc}",
@@ -69,6 +73,7 @@ class NormFrame:
         )
         self._sync_section_title()
         self._place_section()
+        self._install_focus_binding()
 
         self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
@@ -98,6 +103,7 @@ class NormFrame:
             row=1,
             column=1,
         )
+        self.id_entry = id_entry
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         self._bind_identifier_triggers(id_entry)
 
@@ -129,6 +135,7 @@ class NormFrame:
             column=1,
             columnspan=3,
         )
+        self.desc_entry = desc_entry
         self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
 
         self.validators.append(
@@ -179,6 +186,15 @@ class NormFrame:
         self.attach_header_tree(header_tree)
         self._register_header_tree_focus(id_entry, fecha_entry, desc_entry)
         self._register_refresh_traces()
+        self._register_focusable_widgets(
+            id_entry,
+            fecha_entry,
+            desc_entry,
+            remove_btn,
+            self.section,
+            self.frame,
+        )
+        self._set_as_summary_target()
 
     def _place_section(self):
         grid_section(
@@ -247,6 +263,9 @@ class NormFrame:
 
     def attach_header_tree(self, header_tree):
         self.header_tree = header_tree
+        owner = getattr(self, "owner", None)
+        if owner and not getattr(owner, "norm_summary_tree", None):
+            owner.norm_summary_tree = header_tree
         if not self.header_tree:
             return
         tree_sort_state = getattr(self.header_tree, "_tree_sort_state", {})
@@ -295,6 +314,7 @@ class NormFrame:
                 trace_add("write", self._sync_section_title)
 
     def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusIn>", lambda _e: self._set_as_summary_target(), add="+")
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
         widget.bind(
@@ -321,6 +341,10 @@ class NormFrame:
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
             self.section.set_title(self._build_section_title())
+
+    def _handle_toggle(self, _section):
+        self._sync_section_title()
+        self._set_as_summary_target()
 
     def get_data(self):
         norm_id = self.id_var.get().strip()
@@ -399,6 +423,11 @@ class NormFrame:
             self.header_tree.item(item, tags=(tag,))
         self._tree_sort_state[column] = not reverse
 
+    def _get_target_norm_frame(self):
+        owner = getattr(self, "owner", None)
+        target = getattr(owner, "_norm_summary_owner", None) if owner else None
+        return target or self
+
     def _on_tree_select(self, _event=None):
         item = self._first_selected_item()
         if not item:
@@ -406,8 +435,9 @@ class NormFrame:
         values = self.header_tree.item(item, "values")
         if not values:
             return
-        self.id_var.set(values[0])
-        self.on_id_change(preserve_existing=True, silent=True)
+        target = self._get_target_norm_frame()
+        target.id_var.set(values[0])
+        target.on_id_change(preserve_existing=True, silent=True)
 
     def _on_tree_double_click(self, _event=None):
         item = self._first_selected_item()
@@ -416,8 +446,9 @@ class NormFrame:
         values = self.header_tree.item(item, "values")
         if not values:
             return
-        self.id_var.set(values[0])
-        self.on_id_change(from_focus=True, explicit_lookup=True)
+        target = self._get_target_norm_frame()
+        target.id_var.set(values[0])
+        target.on_id_change(from_focus=True, explicit_lookup=True)
 
     def _first_selected_item(self):
         selection = self.header_tree.selection() if self.header_tree else []
@@ -472,6 +503,74 @@ class NormFrame:
             self.section.bind("<FocusIn>", self._activate_header_tree, add="+")
         except Exception:
             pass
+
+    def _install_focus_binding(self):
+        container = getattr(self.section, "content", None) or getattr(self, "section", None)
+        if not container:
+            return
+        bind_all = getattr(container, "bind_all", None)
+        if callable(bind_all):
+            try:
+                bind_all("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("all", container)
+                return
+            except Exception:
+                self._focus_binding_target = None
+        binder = getattr(container, "bind", None)
+        if callable(binder):
+            try:
+                binder("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("local", container)
+            except Exception:
+                self._focus_binding_target = None
+
+    def _register_focusable_widgets(self, *widgets):
+        for widget in widgets:
+            if widget is None:
+                continue
+            self._focus_widgets.add(widget)
+            binder = getattr(widget, "bind", None)
+            if callable(binder):
+                try:
+                    binder("<FocusIn>", lambda _e, frame=self: frame._set_as_summary_target(), add="+")
+                except Exception:
+                    continue
+
+    def _widget_belongs_to_norm(self, widget) -> bool:
+        if widget is None:
+            return False
+        if widget in self._focus_widgets:
+            return True
+        containers = [
+            getattr(self, "frame", None),
+            getattr(self, "section", None),
+            getattr(getattr(self, "section", None), "content", None),
+        ]
+        if widget in containers:
+            return True
+        visited: set[object] = set()
+        parent = widget
+        while parent and parent not in visited:
+            visited.add(parent)
+            parent = getattr(parent, "master", None) or getattr(parent, "parent", None)
+            if parent in containers:
+                return True
+        return False
+
+    def _handle_focus_in(self, event):
+        widget = getattr(event, "widget", None)
+        if widget is None or self._widget_belongs_to_norm(widget):
+            self._set_as_summary_target()
+
+    def _set_as_summary_target(self):
+        owner = getattr(self, "owner", None)
+        if not owner:
+            return self
+        try:
+            owner._norm_summary_owner = self
+        except Exception:
+            pass
+        return self
 
     def _register_refresh_traces(self):
         for var in (self.id_var, self.descripcion_var, self.fecha_var):
