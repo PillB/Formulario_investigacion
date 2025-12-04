@@ -3719,9 +3719,8 @@ class FraudCaseApp:
         ensure_grid_support(self.clients_container)
         if hasattr(self.clients_container, "columnconfigure"):
             self.clients_container.columnconfigure(0, weight=1)
-        # Inicialmente un cliente en blanco
-        self.add_client()
-        self.hide_clients_detail()
+        # Inicialmente un cliente en blanco y visible para evitar confusión
+        self.add_client(keep_detail_visible=True)
         actions_container = ttk.Frame(frame)
         actions_container.grid(row=2, column=0, sticky="ew")
         actions_container.columnconfigure(0, weight=1)
@@ -3729,9 +3728,10 @@ class FraudCaseApp:
         toggle_row = ttk.Frame(actions_container)
         toggle_row.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, ROW_PADY // 2))
         toggle_row.columnconfigure(0, weight=1)
+        toggle_label = "Ocultar formulario" if self._clients_detail_visible else "Mostrar formulario"
         self.clients_toggle_btn = ttk.Button(
             toggle_row,
-            text="Mostrar formulario",
+            text=toggle_label,
             command=self.toggle_clients_detail,
         )
         self.clients_toggle_btn.grid(row=0, column=1, sticky="e", padx=5)
@@ -3840,7 +3840,13 @@ class FraudCaseApp:
             except Exception:
                 pass
 
-    def add_client(self, summary_parent=None, user_initiated: bool = False):
+    def add_client(
+        self,
+        summary_parent=None,
+        user_initiated: bool = False,
+        *,
+        keep_detail_visible: bool = False,
+    ):
         """Crea y añade un nuevo marco de cliente a la interfaz.
 
         Se utiliza ``self.client_lookup`` para proporcionar datos de autopoblado
@@ -3876,7 +3882,7 @@ class FraudCaseApp:
         self._schedule_summary_refresh('clientes')
         if self._clients_detail_visible:
             self._refresh_scrollable(getattr(self, "clients_scrollable", None))
-        if not was_visible:
+        if not was_visible and not keep_detail_visible:
             self.hide_clients_detail()
         if user_initiated:
             self._mark_user_edited()

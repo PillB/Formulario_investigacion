@@ -26,6 +26,25 @@ def _build_app():
     return root, FraudCaseApp(root)
 
 
+def test_clients_section_starts_visible_with_placeholder(messagebox_spy):
+    root, app = _build_app()
+    try:
+        assert app._clients_detail_visible is True
+        assert app.clients_toggle_btn["text"] == "Ocultar formulario"
+
+        assert app.client_frames, "Debe existir un cliente inicial para editar"
+        first_client = app.client_frames[0]
+        section = getattr(first_client, "section", None)
+        if section is not None:
+            assert getattr(section, "is_open", True) is True
+
+        summary = getattr(app, "clients_summary_tree", None)
+        assert summary is not None
+        assert summary.get_children(), "El resumen debe mostrar la fila inicial vacía"
+    finally:
+        root.destroy()
+
+
 def test_real_gui_post_edit_validations_and_claim_requirements(messagebox_spy):
     root, app = _build_app()
     try:
