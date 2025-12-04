@@ -1,4 +1,4 @@
 id_riesgo,lider,descripcion,exposicion_residual,criticidad,planes_accion,pda
-RSK-000001,María Gutiérrez,Control de acceso deficiente en sedes,12500.50,Alta,PDA-2024-001;PDA-2024-005,PDA-2024-001
-RSK-000002,Juan Pérez,Integridad de datos en conciliaciones,7500.00,Media,PDA-2024-003,
-RSK-000003,Ana Torres,Dependencia de proveedor crítico,0.00,Baja,,
+RSK-000001,María Gutiérrez,Control de acceso deficiente en sedes,12500.50,Alto,PDA-2024-001;PDA-2024-005,PDA-2024-001
+RSK-000002,Juan Pérez,Integridad de datos en conciliaciones,7500.00,Moderado,PDA-2024-003,
+RSK-000003,Ana Torres,Dependencia de proveedor crítico,0.00,Bajo,,
