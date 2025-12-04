@@ -16,7 +16,7 @@
         "nombre": "María Pérez",
         "cargo": "Investigador Principal"
       },
-      "centro_costo": "CC-12345"
+      "centro_costo": "12345"
     },
     "clientes": [
       {
@@ -24,7 +24,7 @@
         "id_caso": "",
         "nombres": "Carlos",
         "apellidos": "Quispe",
-        "tipo_id": "dni",
+        "tipo_id": "DNI",
         "flag": "Involucrado",
         "telefonos": "+51999888777",
         "correos": "carlos@example.com",
@@ -36,7 +36,7 @@
         "id_caso": "",
         "nombres": "Finanzas",
         "apellidos": "Industriales SAC",
-        "tipo_id": "ruc",
+        "tipo_id": "RUC",
         "flag": "Afectado",
         "telefonos": "+5112345678",
         "correos": "contacto@finanzas.pe",
@@ -48,7 +48,7 @@
       {
         "id_colaborador": "T12345",
         "id_caso": "",
-        "flag": "Investigado",
+        "flag": "Involucrado",
         "nombres": "Ana",
         "apellidos": "López",
         "division": "Riesgos",
@@ -59,13 +59,13 @@
         "fecha_carta_renuncia": "",
         "nombre_agencia": "",
         "codigo_agencia": "",
-        "tipo_falta": "Leve",
-        "tipo_sancion": "Suspensión"
+        "tipo_falta": "Inconducta funcional",
+        "tipo_sancion": "Suspensión 3 días"
       },
       {
         "id_colaborador": "R67890",
         "id_caso": "",
-        "flag": "Investigado",
+        "flag": "Relacionado",
         "nombres": "Bruno",
         "apellidos": "Salazar",
         "division": "DCA",
@@ -184,7 +184,7 @@
         "id_riesgo": "RSK-000001",
         "lider": "Líder Control",
         "descripcion": "Riesgo de repetición de patrones en canales digitales",
-        "criticidad": "Alta",
+        "criticidad": "Alto",
         "exposicion_residual": "1500.00",
         "planes_accion": "Monitoreo semanal; Ajuste de límites"
       }
@@ -228,7 +228,7 @@
       "area_reporte": "Fraude",
       "fecha_reporte": "2024-02-10",
       "tipologia_evento": "Fraude interno",
-      "centro_costos": "CC-12345",
+      "centro_costos": "12345",
       "procesos_impactados": "Créditos digitales",
       "numero_reclamos": "3",
       "analitica_contable": "4300000000"
@@ -263,7 +263,7 @@
       "investigator_id_var": "INV001",
       "investigator_nombre_var": "María Pérez",
       "investigator_cargo_var": "Investigador Principal",
-      "centro_costo_caso_var": "CC-12345"
+      "centro_costo_caso_var": "12345"
     },
     "encabezado_vars": {
       "dirigido_a": "Gerencia de Riesgos",
