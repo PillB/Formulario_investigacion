@@ -112,6 +112,12 @@ class InvolvementRow:
         )
         remove_btn.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(remove_btn, "Elimina esta asignación específica.")
+        if hasattr(self.product_frame, "_register_focusable_widgets"):
+            self.product_frame._register_focusable_widgets(
+                self.team_cb,
+                monto_entry,
+                remove_btn,
+            )
 
         amount_validator = FieldValidator(
             monto_entry,
@@ -445,6 +451,13 @@ class ClaimRow:
         )
         remove_btn.grid(row=0, column=4, rowspan=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(remove_btn, "Elimina este reclamo del producto.")
+        if hasattr(self.product_frame, "_register_focusable_widgets"):
+            self.product_frame._register_focusable_widgets(
+                id_entry,
+                code_entry,
+                name_entry,
+                remove_btn,
+            )
 
         self.product_frame._register_lookup_sync(id_entry)
         self.product_frame._register_lookup_sync(name_entry)
@@ -817,6 +830,7 @@ class ProductFrame:
         self.client_validator = None
         self.involvements = []
         self.claims = []
+        self._focus_widgets: set[object] = set()
         self._last_missing_lookup_id = None
         self._claim_requirement_active = False
         self._claim_nudge_shown = False
@@ -840,6 +854,7 @@ class ProductFrame:
         self._duplicate_status_style = None
         self.duplicate_status_label = None
         self.header_tree = None
+        self._focus_binding_target = None
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -877,6 +892,7 @@ class ProductFrame:
         self._initialize_header_table(summary_parent)
         self._register_title_traces()
         self._sync_section_title()
+        self._install_focus_binding()
 
         self.frame = ttk.Frame(self.section.content)
         self.section.pack_content(self.frame, fill="x", expand=True)
@@ -1392,6 +1408,27 @@ class ProductFrame:
             self.add_involvement()
 
         self._populate_header_tree()
+        self._register_focusable_widgets(
+            id_entry,
+            self.client_cb,
+            cat1_cb,
+            self.cat2_cb,
+            self.mod_cb,
+            canal_cb,
+            proc_cb,
+            tipo_prod_cb,
+            focc_entry,
+            fdesc_entry,
+            inv_entry,
+            moneda_cb,
+            perdida_entry,
+            falla_entry,
+            cont_entry,
+            rec_entry,
+            pago_entry,
+            self.claims_frame,
+        )
+        self._set_as_summary_target()
 
     def _calculate_combobox_width(self, options, *, min_width: int = 10, padding: int = 2) -> int:
         try:
@@ -1469,11 +1506,15 @@ class ProductFrame:
             widget.bind("<<Paste>>", self._enable_amount_validation, add="+")
             widget.bind("<<Cut>>", self._enable_amount_validation, add="+")
 
+    def _handle_section_toggle(self, _section=None):
+        self._sync_section_title()
+        self._set_as_summary_target()
+
     def _create_section(self, parent):
         return create_collapsible_card(
             parent,
             title="",
-            on_toggle=lambda _section: self._sync_section_title(),
+            on_toggle=self._handle_section_toggle,
             log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para producto {self.idx+1}: {exc}",
@@ -2683,6 +2724,66 @@ class ProductFrame:
         widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
+
+    def _install_focus_binding(self):
+        container = getattr(self, "section", None)
+        if container:
+            container = getattr(container, "content", None) or container
+        if not container:
+            return
+        bind_all = getattr(container, "bind_all", None)
+        if callable(bind_all):
+            try:
+                bind_all("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("all", container)
+                return
+            except Exception:
+                self._focus_binding_target = None
+        binder = getattr(container, "bind", None)
+        if callable(binder):
+            try:
+                binder("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("local", container)
+            except Exception:
+                self._focus_binding_target = None
+
+    def _register_focusable_widgets(self, *widgets):
+        for widget in widgets:
+            if widget is None:
+                continue
+            self._focus_widgets.add(widget)
+            binder = getattr(widget, "bind", None)
+            if callable(binder):
+                try:
+                    binder("<FocusIn>", lambda _e, frame=self: frame._set_as_summary_target(), add="+")
+                except Exception:
+                    continue
+
+    def _widget_belongs_to_product(self, widget) -> bool:
+        if widget is None:
+            return False
+        if widget in self._focus_widgets:
+            return True
+        containers = [
+            getattr(self, "frame", None),
+            getattr(self, "section", None),
+            getattr(getattr(self, "section", None), "content", None),
+        ]
+        if widget in containers:
+            return True
+        visited: set[object] = set()
+        parent = widget
+        while parent and parent not in visited:
+            visited.add(parent)
+            parent = getattr(parent, "master", None) or getattr(parent, "parent", None)
+            if parent in containers:
+                return True
+        return False
+
+    def _handle_focus_in(self, event):
+        widget = getattr(event, "widget", None)
+        if widget is None or self._widget_belongs_to_product(widget):
+            self._set_as_summary_target()
 
     def _set_as_summary_target(self):
         owner = getattr(self, "owner", None)

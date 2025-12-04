@@ -56,6 +56,8 @@ class ClientFrame:
         self.tooltip_register = tooltip_register
         self.client_lookup = client_lookup or {}
         self.validators = []
+        self._focus_widgets: set[object] = set()
+        self._focus_binding_target = None
         self._last_missing_lookup_id = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
@@ -79,7 +81,7 @@ class ClientFrame:
         self.section = create_collapsible_card(
             parent,
             title="",
-            on_toggle=lambda _section: self._sync_section_title(),
+            on_toggle=self._handle_toggle,
             log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear acordeón para cliente {idx+1}: {exc}",
@@ -90,6 +92,7 @@ class ClientFrame:
         self._sync_section_title()
         self._place_section()
         self._register_title_traces()
+        self._install_focus_binding()
 
         if summary_parent is not None and owner is not None and not getattr(owner, "clients_summary_tree", None):
             self.summary_tree = self._build_summary(summary_parent)
@@ -98,6 +101,7 @@ class ClientFrame:
             owner._client_summary_owner = self
         else:
             self.summary_tree = getattr(owner, "clients_summary_tree", None)
+        self._set_as_summary_target()
 
         self.frame = ttk.LabelFrame(self.section.content)
         self.section.pack_content(self.frame, fill="x", expand=True)
@@ -131,6 +135,7 @@ class ClientFrame:
         tipo_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         tipo_id_cb.set('')
         self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
+        self._register_focusable_widgets(tipo_id_cb)
 
         client_id_label = build_required_label(
             self.frame,
@@ -145,9 +150,11 @@ class ClientFrame:
             "cliente_id",
             lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=20, style=ENTRY_STYLE),
         )
+        self.id_entry = id_entry
         id_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
+        self._register_focusable_widgets(id_entry)
 
         nombres_label = build_required_label(
             self.frame,
@@ -169,6 +176,7 @@ class ClientFrame:
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó nombres"), add="+"
         )
         self.tooltip_register(nombres_entry, "Ingresa los nombres del cliente.")
+        self._register_focusable_widgets(nombres_entry)
 
         apellidos_label = build_required_label(
             self.frame,
@@ -190,6 +198,7 @@ class ClientFrame:
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó apellidos"), add="+"
         )
         self.tooltip_register(apellidos_entry, "Ingresa los apellidos del cliente.")
+        self._register_focusable_widgets(apellidos_entry)
 
         flag_label = build_required_label(
             self.frame,
@@ -214,6 +223,7 @@ class ClientFrame:
         flag_container.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
+        self._register_focusable_widgets(flag_cb)
 
         accionado_label = build_required_label(
             self.frame,
@@ -283,6 +293,7 @@ class ClientFrame:
             tel_entry,
             "Campo obligatorio. Ingresa al menos un número telefónico separado por ; sin guiones.",
         )
+        self._register_focusable_widgets(tel_entry)
 
         correo_label = build_required_label(
             self.frame,
@@ -303,6 +314,7 @@ class ClientFrame:
             cor_entry,
             "Campo obligatorio. Coloca al menos un correo electrónico separado por ;.",
         )
+        self._register_focusable_widgets(cor_entry)
 
         ttk.Label(self.frame, text="Direcciones (separados por ;):").grid(
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -313,6 +325,7 @@ class ClientFrame:
         dir_entry.grid(row=6, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
         self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
+        self._register_focusable_widgets(dir_entry)
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
@@ -323,6 +336,7 @@ class ClientFrame:
         remove_btn = ttk.Button(action_row, text="Eliminar cliente", command=self.remove)
         remove_btn.grid(row=0, column=1, sticky="e")
         self.tooltip_register(remove_btn, "Quita al cliente y sus datos del caso.")
+        self._register_focusable_widgets(remove_btn)
 
         self.validators.append(
             FieldValidator(
@@ -524,7 +538,71 @@ class ClientFrame:
     def _on_identity_field_change(self, *_args):
         self._sync_section_title()
 
+    def _handle_toggle(self, _section):
+        self._sync_section_title()
+        self._set_as_summary_target()
+
+    def _install_focus_binding(self):
+        container = getattr(self.section, "content", None) or getattr(self, "section", None)
+        if not container:
+            return
+        bind_all = getattr(container, "bind_all", None)
+        if callable(bind_all):
+            try:
+                bind_all("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("all", container)
+                return
+            except Exception:
+                self._focus_binding_target = None
+        binder = getattr(container, "bind", None)
+        if callable(binder):
+            try:
+                binder("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("local", container)
+            except Exception:
+                self._focus_binding_target = None
+
+    def _register_focusable_widgets(self, *widgets):
+        for widget in widgets:
+            if widget is None:
+                continue
+            self._focus_widgets.add(widget)
+            binder = getattr(widget, "bind", None)
+            if callable(binder):
+                try:
+                    binder("<FocusIn>", lambda _e, frame=self: frame._set_as_summary_target(), add="+")
+                except Exception:
+                    continue
+
+    def _widget_belongs_to_client(self, widget) -> bool:
+        if widget is None:
+            return False
+        if widget in self._focus_widgets:
+            return True
+        containers = [
+            getattr(self, "frame", None),
+            getattr(self, "section", None),
+            getattr(getattr(self, "section", None), "content", None),
+        ]
+        return widget in containers
+
+    def _handle_focus_in(self, event):
+        widget = getattr(event, "widget", None)
+        if widget is None or self._widget_belongs_to_client(widget):
+            self._set_as_summary_target()
+
+    def _set_as_summary_target(self):
+        owner = getattr(self, "owner", None)
+        if not owner:
+            return self
+        try:
+            owner._client_summary_owner = self
+        except Exception:
+            pass
+        return self
+
     def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusIn>", lambda _e: self._set_as_summary_target(), add="+")
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
