@@ -1297,11 +1297,11 @@ class ToggleWarningBadge:
 
         self._icon_label.grid(row=0, column=0, padx=(4, 6), pady=(2, 2), sticky="n")
         self._text_label.grid(row=0, column=1, padx=(0, 4), pady=(2, 2), sticky="we")
-        self._expanded = True
+        self._display_mode = "expanded"
         self._full_message_cache = self._safe_get_message()
         self._bind_source_var()
         if initially_collapsed:
-            self.collapse(animate=False)
+            self.collapse(animate=False, compact_mode="preview")
         else:
             self.expand(animate=False)
 
@@ -1312,7 +1312,7 @@ class ToggleWarningBadge:
 
     @property
     def is_collapsed(self) -> bool:
-        return not self._expanded
+        return self._display_mode != "expanded"
 
     def grid(self, *args, **kwargs):  # noqa: ANN001
         self._is_mapped = True
@@ -1401,7 +1401,12 @@ class ToggleWarningBadge:
     def _refresh_display(self) -> str:
         message = self._safe_get_message()
         self._full_message_cache = message
-        display_text = message if self._expanded else format_warning_preview(message)
+        if self._display_mode == "expanded":
+            display_text = message
+        elif self._display_mode == "icon":
+            display_text = ""
+        else:
+            display_text = format_warning_preview(message)
         self._set_display_text(display_text)
         return display_text
 
@@ -1440,21 +1445,40 @@ class ToggleWarningBadge:
             if callable(show):
                 show(row=0, column=1, padx=(0, 4), pady=(2, 2), sticky="we")
 
+    def _hide_text(self) -> None:
+        manager = getattr(self._text_label, "winfo_manager", lambda: "")()
+        if manager == "grid":
+            hider = getattr(self._text_label, "grid_remove", None)
+        elif manager == "pack":
+            hider = getattr(self._text_label, "pack_forget", None)
+        else:
+            hider = getattr(self._text_label, "grid_remove", None) or getattr(self._text_label, "pack_forget", None)
+        if callable(hider):
+            hider()
+
     def expand(self, *, animate: bool = True) -> None:
-        self._expanded = True
+        self._display_mode = "expanded"
         self._restore_text()
         self._refresh_display()
         self._animate_units(self._target_units(), animate=animate)
 
-    def collapse(self, *, animate: bool = True) -> None:
-        self._expanded = False
+    def collapse(self, *, animate: bool = True, compact_mode: str = "preview") -> None:
+        self._display_mode = "icon" if compact_mode == "icon" else "preview"
+        if self._display_mode == "icon":
+            self._hide_text()
+            self._refresh_display()
+            self._animate_units(0, animate=animate)
+            return
+
         self._restore_text()
         preview = self._refresh_display()
         self._animate_units(self._preview_units(preview), animate=animate)
 
     def toggle(self, _event=None, *, animate: bool = True) -> None:  # noqa: ANN001
-        if self._expanded:
-            self.collapse(animate=animate)
+        if self._display_mode == "expanded":
+            self.collapse(animate=animate, compact_mode="icon")
+        elif self._display_mode == "icon":
+            self.collapse(animate=animate, compact_mode="preview")
         else:
             self.expand(animate=animate)
 
@@ -1464,7 +1488,7 @@ class ToggleWarningBadge:
         if expand:
             self.expand(animate=False)
         else:
-            self.collapse(animate=False)
+            self.collapse(animate=False, compact_mode="preview")
 
     def hide(self) -> None:
         manager = self.winfo_manager()

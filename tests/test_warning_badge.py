@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from ui.frames.utils import BadgeManager, ToggleWarningBadge
+from ui.frames.utils import BadgeManager, ToggleWarningBadge, format_warning_preview
 
 
 class DummyVar:
@@ -90,7 +90,13 @@ def test_warning_badge_toggles_and_preserves_message():
 
     badge.toggle(animate=False)
     assert badge.is_collapsed is True
+    assert badge._display_var.get() == ""
+    assert badge._text_label.winfo_manager() == ""
     assert message_var.get() == "Mensaje de prueba"
+
+    badge.toggle(animate=False)
+    assert badge.is_collapsed is True
+    assert badge._display_var.get() == format_warning_preview(message_var.get())
 
 
 def test_warning_badge_click_flow_updates_mapping_state():
