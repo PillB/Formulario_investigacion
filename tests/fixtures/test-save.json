@@ -60,7 +60,7 @@
         "nombre_agencia": "",
         "codigo_agencia": "",
         "tipo_falta": "Inconducta funcional",
-        "tipo_sancion": "Suspensión 3 días"
+        "tipo_sancion": "Suspensión de 3 días"
       },
       {
         "id_colaborador": "R67890",
@@ -76,7 +76,7 @@
         "fecha_carta_renuncia": "",
         "nombre_agencia": "Agencia Trujillo Centro",
         "codigo_agencia": "123456",
-        "tipo_falta": "Grave",
+        "tipo_falta": "Negligencia funcional",
         "tipo_sancion": "Amonestación"
       }
     ],
