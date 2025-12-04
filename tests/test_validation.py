@@ -1884,6 +1884,30 @@ def test_team_frame_inline_agency_validation_clears_when_optional(monkeypatch):
     assert codigo_validator.last_custom_error is None
 
 
+def test_location_validation_marks_missing_selections(monkeypatch):
+    team_module, _ = _patch_team_module(monkeypatch)
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    assert "división" in (frame._validate_location_field("division") or "")
+
+    frame.division_var.set("GCIA DE DIVISION CANALES DE ATENCION")
+    assert "área" in (frame._validate_location_field("area") or "")
+
+    frame.area_var.set("Área Comercial Lima 1")
+    assert "servicio" in (frame._validate_location_field("servicio") or "")
+
+    frame.servicio_var.set("Servicio Lima")
+    assert "puesto" in (frame._validate_location_field("puesto") or "")
+
+
 def test_location_validation_uses_hierarchy_catalog(monkeypatch):
     team_module, _ = _patch_team_module(monkeypatch)
     frame = team_module.TeamMemberFrame(
