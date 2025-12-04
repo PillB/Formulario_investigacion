@@ -88,7 +88,7 @@ graph TD
 
 ### Guardar, exportar y respaldar
 - **Guardar y enviar** valida todo, genera CSV por entidad, un JSON completo, Markdown y Word; además espeja los artefactos en `external drive/<id_caso>/`.
-- **Cargar versión** restaura el formulario desde un JSON previo.
+- **Cargar formulario** permite restaurar cualquier respaldo JSON (versión enviada, checkpoint manual o autosave guardado).
 - **Autosave** crea `autosave.json` y versiones temporales `<id_caso>_temp_<timestamp>.json` sin interrumpir el flujo.
 
 ### Pegado rápido en Resumen
@@ -104,7 +104,7 @@ graph TD
 | Riesgos | Registrar riesgos | ID `RSK-XXXXXX`, líder, descripción, criticidad, exposición, planes | IDs únicos; criticidad de catálogo; planes separados por `;`. |
 | Normas | Registrar normas violadas | Código `XXXX.XXX.XX.XX` (o autogenerado), descripción, fecha de vigencia | Fecha no futura; código deduplicado o autogenerado. |
 | Análisis | Narrativas | Antecedentes, modus operandi, hallazgos, descargos, conclusiones, recomendaciones | Texto libre almacenado y exportado tal cual. |
-| Acciones | Gestión de archivos | Importar CSV, guardar/exportar, cargar versión, borrar datos | Ejecuta validaciones globales y sincroniza vistas tras importar. |
+| Acciones | Gestión de archivos | Importar CSV, guardar/exportar, cargar formulario, borrar datos | Ejecuta validaciones globales y sincroniza vistas tras importar. |
 | Resumen | Tablas consolidadas | Vista rápida y pegado masivo | Mantiene consistencia con las secciones principales. |
 
 ## Validaciones clave

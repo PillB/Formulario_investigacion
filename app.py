@@ -6188,8 +6188,7 @@ class FraudCaseApp:
         action_buttons = (
             ("Guardar y enviar", "save_send"),
             ("Guardar checkpoint", "checkpoint"),
-            ("Cargar checkpoint", "load_checkpoint"),
-            ("Cargar versión", "load"),
+            ("Cargar formulario", "load_form"),
             ("Cargar autosave", "load_autosave"),
             ("Borrar todos los datos", "clear"),
             (None, None),
@@ -6199,8 +6198,7 @@ class FraudCaseApp:
         action_commands = {
             "save_send": self.save_and_send,
             "checkpoint": self.save_checkpoint,
-            "load_checkpoint": self.load_checkpoint,
-            "load": self.load_version_dialog,
+            "load_form": self.load_form_dialog,
             "load_autosave": self.load_selected_autosave,
             "clear": lambda: self.clear_all(notify=True),
             "docx": self.generate_docx_report,
@@ -6223,8 +6221,8 @@ class FraudCaseApp:
             "Valida el formulario, previene duplicados y genera los archivos obligatorios.",
         )
         self.register_tooltip(
-            self.actions_action_bar.buttons.get("load"),
-            "Restaura una versión previa en formato JSON.",
+            self.actions_action_bar.buttons.get("load_form"),
+            "Carga un respaldo JSON ya guardado (versión, checkpoint o autosave manual).",
         )
         self.register_tooltip(
             self.actions_action_bar.buttons.get("clear"),
@@ -6233,10 +6231,6 @@ class FraudCaseApp:
         self.register_tooltip(
             self.actions_action_bar.buttons.get("checkpoint"),
             "Guarda un archivo JSON con el estado actual sin enviar el caso.",
-        )
-        self.register_tooltip(
-            self.actions_action_bar.buttons.get("load_checkpoint"),
-            "Permite restaurar manualmente un checkpoint en formato JSON.",
         )
         self.register_tooltip(
             self.actions_action_bar.buttons.get("load_autosave"),
@@ -10397,52 +10391,39 @@ class FraudCaseApp:
                 continue
             kept += 1
 
-    def load_version_dialog(self):
-        """Abre un diálogo para cargar una versión previa del formulario.
+    def load_form_dialog(self, *, label: str = "formulario", article: str = "el"):
+        """Carga un respaldo JSON del formulario (versión, checkpoint o autosave manual).
 
-        Esta función solicita al usuario que seleccione un archivo ``.json``
-        previamente generado mediante la opción «Guardar y enviar» o un
-        autosave temporal.  Tras seleccionar el archivo, se invoca
-        ``load_version`` con la ruta escogida para restaurar el estado
-        completo del formulario.  Si el usuario cancela la operación no
-        se realizan cambios.
-
+        Parameters
+        ----------
+        label:
+            Etiqueta descriptiva usada en los mensajes de éxito y bitácora.
+        article:
+            Artículo que acompaña a la etiqueta (``el`` o ``la``) para mantener la
+            redacción consistente en los mensajes.
         """
-        log_event("navegacion", "Usuario pulsó cargar versión", self.logs)
-        filename = filedialog.askopenfilename(title="Seleccionar versión JSON", filetypes=[("JSON Files", "*.json")])
+
+        display_label = f"{article} {label}".strip()
+        log_event("navegacion", f"Usuario pulsó cargar {display_label}", self.logs)
+        filename = filedialog.askopenfilename(
+            title="Seleccionar respaldo JSON", filetypes=[("JSON Files", "*.json")]
+        )
         if not filename:
-            log_event("navegacion", "Canceló cargar versión", self.logs)
+            log_event("navegacion", f"Canceló cargar {display_label}", self.logs)
             return
         try:
             dataset, form_state = self._load_dataset_from_path(Path(filename))
+            success_title = f"{label.capitalize()} cargado"
+            success_message = f"{display_label.capitalize()} se cargó correctamente."
             self._apply_loaded_dataset(
                 dataset,
                 form_state=form_state,
-                source_label=f"la versión desde {filename}",
-                success_dialog=("Versión cargada", "La versión se cargó correctamente."),
-            )
-        except Exception as ex:
-            messagebox.showerror("Error", f"No se pudo cargar la versión: {ex}")
-
-    def load_checkpoint(self):
-        """Carga manualmente un archivo de checkpoint seleccionado por el usuario."""
-
-        log_event("navegacion", "Usuario pulsó cargar checkpoint", self.logs)
-        filename = filedialog.askopenfilename(title="Seleccionar checkpoint", filetypes=[("JSON Files", "*.json")])
-        if not filename:
-            log_event("navegacion", "Canceló cargar checkpoint", self.logs)
-            return
-        try:
-            dataset, form_state = self._load_dataset_from_path(Path(filename))
-            self._apply_loaded_dataset(
-                dataset,
-                form_state=form_state,
-                source_label=f"el checkpoint {filename}",
-                success_dialog=("Checkpoint cargado", "El checkpoint se cargó correctamente."),
+                source_label=f"{display_label} desde {filename}",
+                success_dialog=(success_title, success_message),
             )
         except Exception as exc:
-            messagebox.showerror("Error", f"No se pudo cargar el checkpoint: {exc}")
-            log_event("validacion", f"Error al cargar checkpoint: {exc}", self.logs)
+            messagebox.showerror("Error", f"No se pudo cargar {display_label}: {exc}")
+            log_event("validacion", f"Error al cargar {display_label}: {exc}", self.logs)
 
     def save_checkpoint(self):
         """Permite guardar manualmente el estado actual en un archivo JSON."""
