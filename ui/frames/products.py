@@ -1757,7 +1757,9 @@ class ProductFrame:
         self._tree_sort_state[column] = not reverse
 
     def _get_target_product_frame(self):
-        return self
+        owner = getattr(self, "owner", None)
+        target = getattr(owner, "_product_summary_owner", None) if owner else None
+        return target or self
 
     def _on_tree_select(self, _event=None):
         item = self._first_selected_item()
@@ -2675,11 +2677,22 @@ class ProductFrame:
         return result
 
     def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusIn>", lambda _e: self._set_as_summary_target(), add="+")
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
+
+    def _set_as_summary_target(self):
+        owner = getattr(self, "owner", None)
+        if not owner:
+            return self
+        try:
+            owner._product_summary_owner = self
+        except Exception:
+            pass
+        return self
 
     def _validate_product_date_pair(self):
         fecha_oc = (self.fecha_oc_var.get() or "").strip()
