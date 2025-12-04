@@ -128,6 +128,12 @@ def _build_risk_frame():
     )
 
 
+def test_risk_frame_starts_with_empty_id():
+    frame = _build_risk_frame()
+
+    assert frame.id_var.get() == ""
+
+
 def test_risk_frame_autofills_from_lookup():
     frame = _build_risk_frame()
     frame.set_lookup(

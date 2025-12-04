@@ -4511,9 +4511,8 @@ class FraudCaseApp:
         self._log_navigation_change("Agregó riesgo")
         self.add_risk(user_initiated=True)
 
-    def add_risk(self, user_initiated: bool = False):
+    def add_risk(self, user_initiated: bool = False, default_risk_id: str | None = None):
         idx = len(self.risk_frames)
-        default_risk_id = self._generate_next_risk_id()
         risk = RiskFrame(
             self.risk_container,
             idx,
@@ -4567,7 +4566,9 @@ class FraudCaseApp:
         frames_to_update = []
         for frame in self.risk_frames:
             rid = frame.id_var.get().strip()
-            if rid and rid not in used_ids:
+            if not rid:
+                continue
+            if rid not in used_ids:
                 used_ids.add(rid)
                 continue
             frames_to_update.append(frame)

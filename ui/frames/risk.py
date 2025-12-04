@@ -61,7 +61,8 @@ class RiskFrame:
         self._id_user_modified = False
         self._suppress_id_trace = False
         self.id_var.trace_add("write", self._on_id_var_change)
-        self.assign_new_auto_id(default_risk_id or f"RSK-{idx+1:06d}")
+        if default_risk_id:
+            self.assign_new_auto_id(default_risk_id)
         self.lider_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
         self.criticidad_var = tk.StringVar()
