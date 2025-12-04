@@ -314,6 +314,16 @@ class ClientFrame:
         dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
         self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
 
+        action_row = ttk.Frame(self.frame)
+        ensure_grid_support(action_row)
+        action_row.grid(row=7, column=0, columnspan=4, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
+        if hasattr(action_row, "columnconfigure"):
+            action_row.columnconfigure(0, weight=1)
+            action_row.columnconfigure(1, weight=0)
+        remove_btn = ttk.Button(action_row, text="Eliminar cliente", command=self.remove)
+        remove_btn.grid(row=0, column=1, sticky="e")
+        self.tooltip_register(remove_btn, "Quita al cliente y sus datos del caso.")
+
         self.validators.append(
             FieldValidator(
                 id_entry,

@@ -491,6 +491,11 @@ class FraudCaseApp:
     IMAGE_DISPLAY_MAX = 1000
     TEAM_ROW_DETAIL_WEIGHT = 3
     TEAM_ROW_DETAIL_HIDDEN_WEIGHT = 0
+    CLIENT_ACTION_BUTTONS: tuple[tuple[str, str], ...] = (("Agregar cliente", "add"),)
+    PRODUCT_ACTION_BUTTONS: tuple[tuple[str, str], ...] = (
+        ("Crear producto nuevo (vacío)", "add_empty"),
+        ("Crear producto heredando del caso", "inherit_case"),
+    )
     IMPORT_CONFIG = {
         "clientes": {
             "title": "Seleccionar CSV de clientes",
@@ -759,7 +764,6 @@ class FraudCaseApp:
         self.client_frames = []
         self.team_frames = []
         self.product_frames = []
-        self._active_product_frame = None
         self.risk_frames = []
         self.norm_frames = []
         self._badge_window: Optional[tk.Toplevel] = None
@@ -3840,15 +3844,9 @@ class FraudCaseApp:
         )
         self.clients_toggle_btn.grid(row=0, column=1, sticky="e", padx=5)
 
-        client_actions = (
-            ("Agregar cliente", "add"),
-            ("Editar seleccionado", "edit"),
-            ("Eliminar seleccionado", "delete"),
-        )
+        client_actions = self.CLIENT_ACTION_BUTTONS
         client_commands = {
             "add": self._on_new_client,
-            "edit": self._edit_selected_client,
-            "delete": self._remove_selected_client,
         }
         client_action_parent = ttk.Frame(actions_container)
         client_action_parent.grid(row=1, column=0, sticky="ew")
@@ -3860,14 +3858,6 @@ class FraudCaseApp:
         self._client_action_anchor = self.clients_action_bar.buttons.get("add")
         self.register_tooltip(
             self.clients_action_bar.buttons.get("add"), "Añade un nuevo cliente implicado en el caso."
-        )
-        self.register_tooltip(
-            self.clients_action_bar.buttons.get("edit"),
-            "Abre el formulario del cliente resaltado en el listado.",
-        )
-        self.register_tooltip(
-            self.clients_action_bar.buttons.get("delete"),
-            "Elimina el cliente seleccionado del resumen.",
         )
 
         self._refresh_client_summary()
@@ -4034,37 +4024,6 @@ class FraudCaseApp:
     def _on_add_client_click(self):
         self.show_clients_detail()
         self.add_client(user_initiated=True)
-
-    def _edit_selected_client(self):
-        table = self.clients_summary_tree
-        if not table:
-            return
-        selection = table.selection()
-        if not selection:
-            return
-        values = table.item(selection[0], "values")
-        client_id = values[0] if values else ""
-        frame = self._find_client_frame(client_id)
-        if frame:
-            self.show_clients_detail()
-            try:
-                frame.frame.focus_set()
-            except tk.TclError:
-                pass
-
-    def _remove_selected_client(self):
-        table = self.clients_summary_tree
-        if not table:
-            return
-        selection = table.selection()
-        if not selection:
-            return
-        values = table.item(selection[0], "values")
-        client_id = values[0] if values else ""
-        frame = self._find_client_frame(client_id)
-        if frame:
-            self._log_navigation_change("Eliminó cliente desde resumen")
-            self.remove_client(frame)
 
     def _on_client_selected(self, _event=None):
         table = self.clients_summary_tree
@@ -4347,17 +4306,10 @@ class FraudCaseApp:
         if hasattr(self.product_container, "columnconfigure"):
             self.product_container.columnconfigure(0, weight=1)
 
-        product_actions = (
-            ("Crear producto nuevo (vacío)", "add_empty"),
-            ("Crear producto heredando del caso", "inherit_case"),
-            ("Editar producto activo", "edit"),
-            ("Eliminar producto activo", "delete"),
-        )
+        product_actions = self.PRODUCT_ACTION_BUTTONS
         product_commands = {
             "add_empty": self._on_add_empty_product,
             "inherit_case": self._on_add_inherited_product,
-            "edit": self._focus_active_product,
-            "delete": self._remove_active_product_from_action,
         }
         product_action_parent = ttk.Frame(frame)
         product_action_parent.grid(row=2, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
@@ -4374,14 +4326,6 @@ class FraudCaseApp:
             self.product_action_bar.buttons.get("inherit_case"),
             "Crea un producto precargado con los datos del caso actual.",
         )
-        self.register_tooltip(
-            self.product_action_bar.buttons.get("edit"),
-            "Lleva el foco al producto que estás editando actualmente.",
-        )
-        self.register_tooltip(
-            self.product_action_bar.buttons.get("delete"),
-            "Elimina el producto activo tras confirmar la acción.",
-        )
         # No añadimos automáticamente un producto porque los productos están asociados a clientes
 
     def _on_add_empty_product(self):
@@ -4391,10 +4335,6 @@ class FraudCaseApp:
     def _on_add_inherited_product(self):
         self._log_navigation_change("Agregó producto heredado")
         return self.add_product_inheriting_case(user_initiated=True)
-
-    def _remove_active_product_from_action(self):
-        self._log_navigation_change("Eliminó producto activo")
-        self._remove_active_product()
 
     def _apply_case_taxonomy_defaults(self, product_frame):
         """Configura un producto nuevo con la taxonomía seleccionada en el caso."""
@@ -4520,7 +4460,6 @@ class FraudCaseApp:
         self.product_frames.append(prod)
         self._renumber_products()
         self._maybe_show_milestone_badge(len(self.product_frames), "Productos", user_initiated=user_initiated)
-        self._set_active_product_frame(prod)
         self._schedule_summary_refresh({'productos', 'reclamos'})
         self._refresh_scrollable(getattr(self, "products_scrollable", None))
         prod.focus_first_field()
@@ -4533,30 +4472,10 @@ class FraudCaseApp:
         self._handle_product_id_change(prod_frame, prod_frame.id_var.get(), None)
         self.product_frames.remove(prod_frame)
         self._renumber_products()
-        if getattr(self, "_active_product_frame", None) is prod_frame:
-            self._active_product_frame = self.product_frames[-1] if self.product_frames else None
         self._schedule_summary_refresh({'productos', 'reclamos'})
 
     def _renumber_products(self):
         self._refresh_frame_collection(self.product_frames)
-
-    def _set_active_product_frame(self, frame):
-        self._active_product_frame = frame
-
-    def _focus_active_product(self):
-        frame = getattr(self, "_active_product_frame", None) or (self.product_frames[0] if self.product_frames else None)
-        if frame:
-            self.show_tab(self.products_tab)
-            self.show_products_tab()
-            try:
-                frame.focus_first_field()
-            except Exception:
-                pass
-
-    def _remove_active_product(self):
-        frame = getattr(self, "_active_product_frame", None) or (self.product_frames[-1] if self.product_frames else None)
-        if frame:
-            frame.remove()
 
     def get_client_ids(self):
         return [c.id_var.get().strip() for c in self.client_frames if c.id_var.get().strip()]
