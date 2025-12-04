@@ -3335,6 +3335,7 @@ class FraudCaseApp:
         is_last = self._walkthrough_step_index == len(self._walkthrough_steps) - 1
         self._walkthrough_next_btn.configure(text="Listo" if is_last else "Siguiente")
 
+        self._refresh_walkthrough_overlay_visibility()
         self._safe_update_idletasks()
         self._revalidate_walkthrough_anchor_geometry(anchor)
         self._position_walkthrough(anchor, geometry)
@@ -3386,6 +3387,25 @@ class FraudCaseApp:
         except Exception:
             pass
         self._safe_update_idletasks()
+
+    def _refresh_walkthrough_overlay_visibility(self) -> None:
+        overlay = self._walkthrough_overlay
+        if not overlay or not overlay.winfo_exists():
+            return
+        try:
+            overlay.withdraw()
+            overlay.deiconify()
+        except tk.TclError:
+            pass
+        try:
+            overlay.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        try:
+            overlay.lift()
+            overlay.after_idle(overlay.lift)
+        except tk.TclError:
+            pass
 
     def _advance_walkthrough(self) -> None:
         if self._walkthrough_step_index + 1 >= len(self._walkthrough_steps):
