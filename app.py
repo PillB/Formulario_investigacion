@@ -693,6 +693,9 @@ class FraudCaseApp:
         self.norm_lookup = {}
         self._extended_sections_enabled = ENABLE_EXTENDED_ANALYSIS_SECTIONS
         self._reset_extended_sections()
+        self._encabezado_autofill_keys: set[str] = set()
+        self._syncing_case_to_header = False
+        self._suppress_case_header_sync = False
         self._post_edit_validators = []
         self._rich_text_limiters: dict[tk.Text, "FraudCaseApp._RichTextLimiter"] = {}
         self._encabezado_vars: dict[str, tk.StringVar] = {}
@@ -828,6 +831,8 @@ class FraudCaseApp:
         self.investigator_nombre_var = tk.StringVar()
         self.investigator_cargo_var = tk.StringVar(value="Investigador Principal")
 
+        self._setup_case_header_autofill()
+
         # Referencias a cuadros de texto de análisis
         self.antecedentes_text = None
         self.modus_text = None
@@ -845,6 +850,7 @@ class FraudCaseApp:
         self._schedule_autosave_cycle()
         self.root.after(250, self._prompt_initial_catalog_loading)
         self._startup_complete = True
+        self._suppress_case_header_sync = False
 
     class _PostEditValidator:
         def __init__(
@@ -3725,6 +3731,25 @@ class FraudCaseApp:
             _fallback("fecha_descubrimiento_caso_var")
             _fallback("centro_costo_caso_var")
 
+    def _setup_case_header_autofill(self) -> None:
+        """Sincroniza campos compartidos del caso hacia el encabezado extendido."""
+
+        mapping = {
+            "proceso_caso_var": "procesos_impactados",
+            "centro_costo_caso_var": "centro_costos",
+        }
+        for source_attr, target_key in mapping.items():
+            var = getattr(self, source_attr, None)
+            if var is None:
+                continue
+            try:
+                var.trace_add(
+                    "write",
+                    lambda *_args, s=source_attr, t=target_key: self._sync_case_field_to_header(s, t),
+                )
+            except Exception:
+                continue
+
     def on_case_cat1_change(self):
         """Actualiza las opciones de categoría 2 y modalidad cuando cambia cat1 del caso."""
         cat1 = self.cat_caso1_var.get()
@@ -5270,8 +5295,14 @@ class FraudCaseApp:
             value = self._sanitize_cost_centers_text(raw_value)
         else:
             value = self._sanitize_text(raw_value)
+        changed = self._encabezado_data.get(key) != value
         self._encabezado_data[key] = value
-        self._notify_dataset_changed()
+        if self._syncing_case_to_header:
+            self._encabezado_autofill_keys.add(key)
+        else:
+            self._encabezado_autofill_keys.discard(key)
+        if changed:
+            self._notify_dataset_changed()
 
     def _sanitize_cost_centers_text(self, raw_value: str) -> str:
         entries = [item.strip() for item in (raw_value or "").split(";") if item.strip()]
@@ -5564,6 +5595,41 @@ class FraudCaseApp:
             self._anexo_vars["descripcion"].set(payload.get("descripcion", ""))
         finally:
             self._suppress_post_edit_validation = False
+
+    def _sync_case_field_to_header(self, source_attr: str, target_key: str) -> None:
+        if self._suppress_case_header_sync or not getattr(self, "_startup_complete", False):
+            return
+
+        var = getattr(self, source_attr, None)
+        try:
+            raw_value = var.get() if var is not None else ""
+        except Exception:
+            return
+
+        if target_key == "centro_costos":
+            sanitized = self._sanitize_cost_centers_text(raw_value)
+        else:
+            sanitized = self._sanitize_text(raw_value)
+
+        if not sanitized:
+            return
+
+        current_value = self._encabezado_data.get(target_key, "")
+        user_owned_value = current_value and target_key not in self._encabezado_autofill_keys
+        if user_owned_value and current_value != sanitized:
+            return
+
+        self._syncing_case_to_header = True
+        try:
+            self._encabezado_data[target_key] = sanitized
+            self._encabezado_autofill_keys.add(target_key)
+            target_var = self._encabezado_vars.get(target_key)
+            if target_var is not None and getattr(target_var, "get", lambda: "")() != sanitized:
+                target_var.set(sanitized)
+            else:
+                self._notify_dataset_changed()
+        finally:
+            self._syncing_case_to_header = False
 
     def _sync_extended_sections_to_ui(self) -> None:
         if not (self._extended_sections_enabled and self._extended_analysis_group):
@@ -10592,6 +10658,7 @@ class FraudCaseApp:
         self._anexos_data: list[dict[str, str]] = []
         self._firmas_data: list[dict[str, str]] = []
         self._recomendaciones_categorias: dict[str, list[str]] = {}
+        self._encabezado_autofill_keys = set()
         for var_dict in (getattr(self, "_encabezado_vars", {}), getattr(self, "_operation_vars", {}), getattr(self, "_anexo_vars", {})):
             for var in var_dict.values():
                 try:
@@ -10879,206 +10946,215 @@ class FraudCaseApp:
         dataset = self._ensure_case_data(data)
         data = dataset.as_dict()
         self._ensure_case_vars()
-        # Limpiar primero sin confirmar ni sobrescribir el autosave
-        self._clear_case_state(save_autosave=False)
-        self._ensure_investigator_vars()
-        # Datos de caso
-        def _set_dropdown_value(var, value, valid_values):
-            """Establece el valor de un combobox solo si está en el catálogo."""
+        self._suppress_case_header_sync = True
+        try:
+            # Limpiar primero sin confirmar ni sobrescribir el autosave
+            self._clear_case_state(save_autosave=False)
+            self._ensure_investigator_vars()
+            # Datos de caso
+            def _set_dropdown_value(var, value, valid_values):
+                """Establece el valor de un combobox solo si está en el catálogo."""
 
-            normalized = value.strip() if isinstance(value, str) else value
-            if normalized and normalized in valid_values:
-                var.set(normalized)
+                normalized = value.strip() if isinstance(value, str) else value
+                if normalized and normalized in valid_values:
+                    var.set(normalized)
+                else:
+                    var.set('')
+
+            caso = data.get('caso', {})
+            self.id_caso_var.set(caso.get('id_caso', ''))
+            if caso.get('tipo_informe') in TIPO_INFORME_LIST:
+                self.tipo_informe_var.set(caso.get('tipo_informe'))
+            if caso.get('categoria1') in TAXONOMIA:
+                self.cat_caso1_var.set(caso.get('categoria1'))
+                self.on_case_cat1_change()
+                cat2_list = list(TAXONOMIA[self.cat_caso1_var.get()].keys())
+                if caso.get('categoria2') in cat2_list:
+                    self.cat_caso2_var.set(caso.get('categoria2'))
+                    self.on_case_cat2_change()
+                    mod_list = TAXONOMIA[self.cat_caso1_var.get()][self.cat_caso2_var.get()]
+                    if caso.get('modalidad') in mod_list:
+                        self.mod_caso_var.set(caso.get('modalidad'))
+            _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
+            _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
+            self.fecha_caso_var.set(caso.get('fecha_de_ocurrencia', ''))
+            self.fecha_descubrimiento_caso_var.set(caso.get('fecha_de_descubrimiento', ''))
+            investigator_payload = caso.get('investigador', {}) if isinstance(caso, Mapping) else {}
+            matricula_investigador = caso.get('matricula_investigador') or investigator_payload.get('matricula')
+            self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
+            nombre_investigador = investigator_payload.get('nombre')
+            if nombre_investigador:
+                self.investigator_nombre_var.set(nombre_investigador)
             else:
-                var.set('')
+                self.investigator_nombre_var.set("")
+            cargo_investigador = investigator_payload.get('cargo') or "Investigador Principal"
+            self.investigator_cargo_var.set(cargo_investigador)
+            self._autofill_investigator(show_errors=False)
+            centro_costo = caso.get('centro_costo') or caso.get('centro_costos')
+            self.centro_costo_caso_var.set(centro_costo or '')
+            # Clientes
+            for i, cliente in enumerate(data.get('clientes', [])):
+                if i >= len(self.client_frames):
+                    self.add_client()
+                cl = self.client_frames[i]
+                cl.tipo_id_var.set(cliente.get('tipo_id', ''))
+                cl.id_var.set(cliente.get('id_cliente', ''))
+                cl.flag_var.set(cliente.get('flag', ''))
+                cl.telefonos_var.set(cliente.get('telefonos', ''))
+                cl.correos_var.set(cliente.get('correos', ''))
+                cl.direcciones_var.set(cliente.get('direcciones', ''))
+                cl.set_accionado_from_text(cliente.get('accionado', ''))
+                if hasattr(cl, "on_id_change"):
+                    cl.on_id_change(preserve_existing=True, silent=True)
+            # Colaboradores
+            for i, col in enumerate(data.get('colaboradores', [])):
+                if i >= len(self.team_frames):
+                    self.add_team()
+                tm = self.team_frames[i]
+                tm.id_var.set(col.get('id_colaborador', ''))
+                tm.flag_var.set(col.get('flag', ''))
+                tm.nombres_var.set(col.get('nombres', ''))
+                tm.apellidos_var.set(col.get('apellidos', ''))
+                tm.division_var.set(col.get('division', ''))
+                tm.area_var.set(col.get('area', ''))
+                tm.servicio_var.set(col.get('servicio', ''))
+                tm.puesto_var.set(col.get('puesto', ''))
+                tm.fecha_carta_inmediatez_var.set(col.get('fecha_carta_inmediatez', ''))
+                tm.fecha_carta_renuncia_var.set(col.get('fecha_carta_renuncia', ''))
+                tm.nombre_agencia_var.set(col.get('nombre_agencia', ''))
+                tm.codigo_agencia_var.set(col.get('codigo_agencia', ''))
+                tm.tipo_falta_var.set(col.get('tipo_falta', ''))
+                tm.tipo_sancion_var.set(col.get('tipo_sancion', ''))
+                if hasattr(tm, "on_id_change"):
+                    tm.on_id_change(preserve_existing=True, silent=True)
+            # Productos y sus reclamos e involuc
+            claims_map = {}
+            for rec in data.get('reclamos', []):
+                pid = (rec.get('id_producto') or '').strip()
+                if not pid:
+                    continue
+                claims_map.setdefault(pid, []).append(
+                    {
+                        'id_reclamo': (rec.get('id_reclamo') or '').strip(),
+                        'nombre_analitica': (rec.get('nombre_analitica') or '').strip(),
+                        'codigo_analitica': (rec.get('codigo_analitica') or '').strip(),
+                    }
+                )
+            for i, prod in enumerate(data.get('productos', [])):
+                if i >= len(self.product_frames):
+                    self.add_product(initialize_rows=False)
+                pframe = self.product_frames[i]
+                pframe.id_var.set(prod.get('id_producto', ''))
+                pframe.client_var.set(prod.get('id_cliente', ''))
+                cat1 = prod.get('categoria1')
+                if cat1 in TAXONOMIA:
+                    pframe.cat1_var.set(cat1)
+                    pframe.on_cat1_change()
+                    cat2 = prod.get('categoria2')
+                    if cat2 in TAXONOMIA[cat1]:
+                        pframe.cat2_var.set(cat2)
+                        pframe.on_cat2_change()
+                        mod = prod.get('modalidad')
+                        if mod in TAXONOMIA[cat1][cat2]:
+                            pframe.mod_var.set(mod)
+                _set_dropdown_value(pframe.canal_var, prod.get('canal'), CANAL_LIST)
+                _set_dropdown_value(pframe.proceso_var, prod.get('proceso'), PROCESO_LIST)
+                pframe.fecha_oc_var.set(prod.get('fecha_ocurrencia', ''))
+                pframe.fecha_desc_var.set(prod.get('fecha_descubrimiento', ''))
+                pframe.monto_inv_var.set(prod.get('monto_investigado', ''))
+                _set_dropdown_value(pframe.moneda_var, prod.get('tipo_moneda'), TIPO_MONEDA_LIST)
+                pframe.monto_perdida_var.set(prod.get('monto_perdida_fraude', ''))
+                pframe.monto_falla_var.set(prod.get('monto_falla_procesos', ''))
+                pframe.monto_cont_var.set(prod.get('monto_contingencia', ''))
+                pframe.monto_rec_var.set(prod.get('monto_recuperado', ''))
+                pframe.monto_pago_var.set(prod.get('monto_pago_deuda', ''))
+                tipo_producto = prod.get('tipo_producto')
+                if tipo_producto in TIPO_PRODUCTO_LIST:
+                    pframe.tipo_prod_var.set(tipo_producto)
+                refresh_amounts = getattr(
+                    pframe, "_refresh_amount_validation_after_programmatic_update", None
+                )
+                if callable(refresh_amounts):
+                    refresh_amounts()
+                pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
+                if hasattr(pframe, "on_id_change"):
+                    pframe.on_id_change(preserve_existing=True, silent=True)
+            # Involucramientos
+            involvement_map = {}
+            for inv in data.get('involucramientos', []):
+                pid = (inv.get('id_producto') or '').strip()
+                if not pid:
+                    continue
+                involvement_map.setdefault(pid, []).append(inv)
 
-        caso = data.get('caso', {})
-        self.id_caso_var.set(caso.get('id_caso', ''))
-        if caso.get('tipo_informe') in TIPO_INFORME_LIST:
-            self.tipo_informe_var.set(caso.get('tipo_informe'))
-        if caso.get('categoria1') in TAXONOMIA:
-            self.cat_caso1_var.set(caso.get('categoria1'))
-            self.on_case_cat1_change()
-            cat2_list = list(TAXONOMIA[self.cat_caso1_var.get()].keys())
-            if caso.get('categoria2') in cat2_list:
-                self.cat_caso2_var.set(caso.get('categoria2'))
-                self.on_case_cat2_change()
-                mod_list = TAXONOMIA[self.cat_caso1_var.get()][self.cat_caso2_var.get()]
-                if caso.get('modalidad') in mod_list:
-                    self.mod_caso_var.set(caso.get('modalidad'))
-        _set_dropdown_value(self.canal_caso_var, caso.get('canal'), CANAL_LIST)
-        _set_dropdown_value(self.proceso_caso_var, caso.get('proceso'), PROCESO_LIST)
-        self.fecha_caso_var.set(caso.get('fecha_de_ocurrencia', ''))
-        self.fecha_descubrimiento_caso_var.set(caso.get('fecha_de_descubrimiento', ''))
-        investigator_payload = caso.get('investigador', {}) if isinstance(caso, Mapping) else {}
-        matricula_investigador = caso.get('matricula_investigador') or investigator_payload.get('matricula')
-        self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
-        nombre_investigador = investigator_payload.get('nombre')
-        if nombre_investigador:
-            self.investigator_nombre_var.set(nombre_investigador)
-        else:
-            self.investigator_nombre_var.set("")
-        cargo_investigador = investigator_payload.get('cargo') or "Investigador Principal"
-        self.investigator_cargo_var.set(cargo_investigador)
-        self._autofill_investigator(show_errors=False)
-        centro_costo = caso.get('centro_costo') or caso.get('centro_costos')
-        self.centro_costo_caso_var.set(centro_costo or '')
-        # Clientes
-        for i, cliente in enumerate(data.get('clientes', [])):
-            if i >= len(self.client_frames):
-                self.add_client()
-            cl = self.client_frames[i]
-            cl.tipo_id_var.set(cliente.get('tipo_id', ''))
-            cl.id_var.set(cliente.get('id_cliente', ''))
-            cl.flag_var.set(cliente.get('flag', ''))
-            cl.telefonos_var.set(cliente.get('telefonos', ''))
-            cl.correos_var.set(cliente.get('correos', ''))
-            cl.direcciones_var.set(cliente.get('direcciones', ''))
-            cl.set_accionado_from_text(cliente.get('accionado', ''))
-            cl.on_id_change(preserve_existing=True, silent=True)
-        # Colaboradores
-        for i, col in enumerate(data.get('colaboradores', [])):
-            if i >= len(self.team_frames):
-                self.add_team()
-            tm = self.team_frames[i]
-            tm.id_var.set(col.get('id_colaborador', ''))
-            tm.flag_var.set(col.get('flag', ''))
-            tm.nombres_var.set(col.get('nombres', ''))
-            tm.apellidos_var.set(col.get('apellidos', ''))
-            tm.division_var.set(col.get('division', ''))
-            tm.area_var.set(col.get('area', ''))
-            tm.servicio_var.set(col.get('servicio', ''))
-            tm.puesto_var.set(col.get('puesto', ''))
-            tm.fecha_carta_inmediatez_var.set(col.get('fecha_carta_inmediatez', ''))
-            tm.fecha_carta_renuncia_var.set(col.get('fecha_carta_renuncia', ''))
-            tm.nombre_agencia_var.set(col.get('nombre_agencia', ''))
-            tm.codigo_agencia_var.set(col.get('codigo_agencia', ''))
-            tm.tipo_falta_var.set(col.get('tipo_falta', ''))
-            tm.tipo_sancion_var.set(col.get('tipo_sancion', ''))
-            tm.on_id_change(preserve_existing=True, silent=True)
-        # Productos y sus reclamos e involuc
-        claims_map = {}
-        for rec in data.get('reclamos', []):
-            pid = (rec.get('id_producto') or '').strip()
-            if not pid:
-                continue
-            claims_map.setdefault(pid, []).append(
-                {
-                    'id_reclamo': (rec.get('id_reclamo') or '').strip(),
-                    'nombre_analitica': (rec.get('nombre_analitica') or '').strip(),
-                    'codigo_analitica': (rec.get('codigo_analitica') or '').strip(),
-                }
+            for pframe in self.product_frames:
+                pid = pframe.id_var.get().strip()
+                if pid not in involvement_map:
+                    continue
+                pframe.clear_involvements()
+                for inv in involvement_map[pid]:
+                    assign = pframe.add_involvement()
+                    assign.team_var.set(inv.get('id_colaborador', ''))
+                    assign.monto_var.set(inv.get('monto_asignado', ''))
+            # Riesgos
+            for i, risk in enumerate(data.get('riesgos', [])):
+                if i >= len(self.risk_frames):
+                    self.add_risk()
+                rf = self.risk_frames[i]
+                rf.id_var.set(risk.get('id_riesgo', ''))
+                rf.lider_var.set(risk.get('lider', ''))
+                rf.descripcion_var.set(risk.get('descripcion', ''))
+                rf.criticidad_var.set(risk.get('criticidad', CRITICIDAD_LIST[0]))
+                rf.exposicion_var.set(risk.get('exposicion_residual', ''))
+                rf.planes_var.set(risk.get('planes_accion', ''))
+                if hasattr(rf, "on_id_change"):
+                    rf.on_id_change(preserve_existing=True, silent=True)
+            # Normas
+            for i, norm in enumerate(data.get('normas', [])):
+                if i >= len(self.norm_frames):
+                    self.add_norm()
+                nf = self.norm_frames[i]
+                nf.id_var.set(norm.get('id_norma', ''))
+                nf.descripcion_var.set(norm.get('descripcion', ''))
+                nf.fecha_var.set(norm.get('fecha_vigencia', ''))
+                if hasattr(nf, "on_id_change"):
+                    nf.on_id_change(preserve_existing=True, silent=True)
+            self._refresh_shared_norm_tree()
+            # Analisis
+            analisis = data.get('analisis', {})
+            analysis_widgets = self._analysis_text_widgets()
+            self._set_rich_text_content(analysis_widgets['antecedentes'], analisis.get('antecedentes', ''))
+            self._set_rich_text_content(analysis_widgets['modus_operandi'], analisis.get('modus_operandi', ''))
+            self._set_rich_text_content(analysis_widgets['hallazgos'], analisis.get('hallazgos', ''))
+            self._set_rich_text_content(analysis_widgets['descargos'], analisis.get('descargos', ''))
+            self._set_rich_text_content(analysis_widgets['conclusiones'], analisis.get('conclusiones', ''))
+            self._set_rich_text_content(analysis_widgets['recomendaciones'], analisis.get('recomendaciones', ''))
+            self._encabezado_data = self._normalize_mapping_strings(
+                data.get('encabezado', {}),
+                [
+                    "dirigido_a",
+                    "referencia",
+                    "area_reporte",
+                    "fecha_reporte",
+                    "tipologia_evento",
+                    "centro_costos",
+                    "procesos_impactados",
+                    "numero_reclamos",
+                    "analitica_contable",
+                ],
             )
-        for i, prod in enumerate(data.get('productos', [])):
-            if i >= len(self.product_frames):
-                self.add_product(initialize_rows=False)
-            pframe = self.product_frames[i]
-            pframe.id_var.set(prod.get('id_producto', ''))
-            pframe.client_var.set(prod.get('id_cliente', ''))
-            cat1 = prod.get('categoria1')
-            if cat1 in TAXONOMIA:
-                pframe.cat1_var.set(cat1)
-                pframe.on_cat1_change()
-                cat2 = prod.get('categoria2')
-                if cat2 in TAXONOMIA[cat1]:
-                    pframe.cat2_var.set(cat2)
-                    pframe.on_cat2_change()
-                    mod = prod.get('modalidad')
-                    if mod in TAXONOMIA[cat1][cat2]:
-                        pframe.mod_var.set(mod)
-            _set_dropdown_value(pframe.canal_var, prod.get('canal'), CANAL_LIST)
-            _set_dropdown_value(pframe.proceso_var, prod.get('proceso'), PROCESO_LIST)
-            pframe.fecha_oc_var.set(prod.get('fecha_ocurrencia', ''))
-            pframe.fecha_desc_var.set(prod.get('fecha_descubrimiento', ''))
-            pframe.monto_inv_var.set(prod.get('monto_investigado', ''))
-            _set_dropdown_value(pframe.moneda_var, prod.get('tipo_moneda'), TIPO_MONEDA_LIST)
-            pframe.monto_perdida_var.set(prod.get('monto_perdida_fraude', ''))
-            pframe.monto_falla_var.set(prod.get('monto_falla_procesos', ''))
-            pframe.monto_cont_var.set(prod.get('monto_contingencia', ''))
-            pframe.monto_rec_var.set(prod.get('monto_recuperado', ''))
-            pframe.monto_pago_var.set(prod.get('monto_pago_deuda', ''))
-            tipo_producto = prod.get('tipo_producto')
-            if tipo_producto in TIPO_PRODUCTO_LIST:
-                pframe.tipo_prod_var.set(tipo_producto)
-            refresh_amounts = getattr(
-                pframe, "_refresh_amount_validation_after_programmatic_update", None
+            self._operaciones_data = self._normalize_table_rows(data.get('operaciones', []))
+            self._anexos_data = self._normalize_table_rows(data.get('anexos', []))
+            self._firmas_data = self._normalize_table_rows(data.get('firmas', []))
+            self._recomendaciones_categorias = self._normalize_recommendation_categories(
+                data.get('recomendaciones_categorias', {})
             )
-            if callable(refresh_amounts):
-                refresh_amounts()
-            pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
-            pframe.on_id_change(preserve_existing=True, silent=True)
-        # Involucramientos
-        involvement_map = {}
-        for inv in data.get('involucramientos', []):
-            pid = (inv.get('id_producto') or '').strip()
-            if not pid:
-                continue
-            involvement_map.setdefault(pid, []).append(inv)
-
-        for pframe in self.product_frames:
-            pid = pframe.id_var.get().strip()
-            if pid not in involvement_map:
-                continue
-            pframe.clear_involvements()
-            for inv in involvement_map[pid]:
-                assign = pframe.add_involvement()
-                assign.team_var.set(inv.get('id_colaborador', ''))
-                assign.monto_var.set(inv.get('monto_asignado', ''))
-        # Riesgos
-        for i, risk in enumerate(data.get('riesgos', [])):
-            if i >= len(self.risk_frames):
-                self.add_risk()
-            rf = self.risk_frames[i]
-            rf.id_var.set(risk.get('id_riesgo', ''))
-            rf.lider_var.set(risk.get('lider', ''))
-            rf.descripcion_var.set(risk.get('descripcion', ''))
-            rf.criticidad_var.set(risk.get('criticidad', CRITICIDAD_LIST[0]))
-            rf.exposicion_var.set(risk.get('exposicion_residual', ''))
-            rf.planes_var.set(risk.get('planes_accion', ''))
-            rf.on_id_change(preserve_existing=True, silent=True)
-        # Normas
-        for i, norm in enumerate(data.get('normas', [])):
-            if i >= len(self.norm_frames):
-                self.add_norm()
-            nf = self.norm_frames[i]
-            nf.id_var.set(norm.get('id_norma', ''))
-            nf.descripcion_var.set(norm.get('descripcion', ''))
-            nf.fecha_var.set(norm.get('fecha_vigencia', ''))
-            nf.on_id_change(preserve_existing=True, silent=True)
-        self._refresh_shared_norm_tree()
-        # Analisis
-        analisis = data.get('analisis', {})
-        analysis_widgets = self._analysis_text_widgets()
-        self._set_rich_text_content(analysis_widgets['antecedentes'], analisis.get('antecedentes', ''))
-        self._set_rich_text_content(analysis_widgets['modus_operandi'], analisis.get('modus_operandi', ''))
-        self._set_rich_text_content(analysis_widgets['hallazgos'], analisis.get('hallazgos', ''))
-        self._set_rich_text_content(analysis_widgets['descargos'], analisis.get('descargos', ''))
-        self._set_rich_text_content(analysis_widgets['conclusiones'], analisis.get('conclusiones', ''))
-        self._set_rich_text_content(analysis_widgets['recomendaciones'], analisis.get('recomendaciones', ''))
-        self._encabezado_data = self._normalize_mapping_strings(
-            data.get('encabezado', {}),
-            [
-                "dirigido_a",
-                "referencia",
-                "area_reporte",
-                "fecha_reporte",
-                "tipologia_evento",
-                "centro_costos",
-                "procesos_impactados",
-                "numero_reclamos",
-                "analitica_contable",
-            ],
-        )
-        self._operaciones_data = self._normalize_table_rows(data.get('operaciones', []))
-        self._anexos_data = self._normalize_table_rows(data.get('anexos', []))
-        self._firmas_data = self._normalize_table_rows(data.get('firmas', []))
-        self._recomendaciones_categorias = self._normalize_recommendation_categories(
-            data.get('recomendaciones_categorias', {})
-        )
-        self._sync_extended_sections_to_ui()
-        self._rebuild_frame_id_indexes()
-        self._run_duplicate_check_post_load()
-        self._schedule_summary_refresh(data=data)
+            self._sync_extended_sections_to_ui()
+            self._rebuild_frame_id_indexes()
+            self._run_duplicate_check_post_load()
+            self._schedule_summary_refresh(data=data)
+        finally:
+            self._suppress_case_header_sync = False
 
     # ---------------------------------------------------------------------
     # Validación de reglas de negocio
