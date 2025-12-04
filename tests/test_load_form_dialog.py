@@ -115,6 +115,7 @@ class _LoadingAppFactory:
         self.app._anexos_data = []
         self.app._firmas_data = []
         self.app._recomendaciones_categorias = {}
+        self.app.summary_tables = {}
         self.app.client_frames = []
         self.app.team_frames = []
         self.app.product_frames = []
@@ -195,6 +196,7 @@ def test_load_form_dialog_populates_from_fixture(monkeypatch, messagebox_spy):
 
     app.load_form_dialog()
 
+    assert not messagebox_spy.errors
     assert len(app.client_frames) == 2
     assert [frame.id_var.get() for frame in app.client_frames] == ["12345678", "20123456789"]
     assert app.client_frames[0].telefonos_var.get() == "+51999888777"
