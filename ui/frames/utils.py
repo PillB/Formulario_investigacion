@@ -1477,8 +1477,6 @@ class ToggleWarningBadge:
     def toggle(self, _event=None, *, animate: bool = True) -> None:  # noqa: ANN001
         if self._display_mode == "expanded":
             self.collapse(animate=animate, compact_mode="icon")
-        elif self._display_mode == "icon":
-            self.collapse(animate=animate, compact_mode="preview")
         else:
             self.expand(animate=animate)
 
