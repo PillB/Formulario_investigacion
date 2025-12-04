@@ -14,6 +14,8 @@ from ui.layout import CollapsibleSection, register_styles
 ALERT_BADGE_ICON = "⚠️"
 SUCCESS_BADGE_ICON = "✅"
 PENDING_BADGE_ICON = "⏳"
+WARNING_BADGE_STYLE = "WarningBadge.TLabel"
+WARNING_CONTAINER_STYLE = "WarningBadge.TFrame"
 
 
 def create_date_entry(
@@ -1165,3 +1167,242 @@ class BadgeManager:
     def refresh(self) -> None:
         for updater in self._updaters.values():
             updater()
+
+
+def _configure_warning_badge_styles(master=None) -> tuple[str, str]:
+    style = None
+    try:
+        style = ThemeManager.build_style(master)
+    except Exception:
+        style = None
+
+    palette = ThemeManager.current()
+    if style and hasattr(style, "configure"):
+        style.configure(
+            WARNING_CONTAINER_STYLE,
+            background=palette.get("warning_background", "#fff3cd"),
+            borderwidth=1,
+            relief="solid",
+            padding=(4, 2),
+        )
+        style.configure(
+            WARNING_BADGE_STYLE,
+            background=palette.get("warning_background", "#fff3cd"),
+            foreground=palette.get("warning_foreground", "#664d03"),
+            padding=(4, 1),
+            wraplength=520,
+            anchor="w",
+            justify="left",
+        )
+        return WARNING_CONTAINER_STYLE, WARNING_BADGE_STYLE
+
+    return "TFrame", "TLabel"
+
+
+class ToggleWarningBadge:
+    """Badge compacto que se expande para mostrar detalles al hacer clic.
+
+    El contenedor mantiene el mensaje en un ``StringVar`` existente para que
+    otros componentes (validadores, logs, etc.) puedan enlazarlo fácilmente.
+    Cuando el texto se colapsa, solo se muestra el ícono de advertencia; al
+    expandirlo, se anima el ancho de la columna para revelar el mensaje
+    completo.
+    """
+
+    def __init__(
+        self,
+        parent: Any,
+        *,
+        textvariable: tk.StringVar,
+        wraplength: int = 520,
+        initially_collapsed: bool = True,
+        tk_module=None,
+        ttk_module=None,
+    ) -> None:
+        self._tk = tk_module or tk
+        self._ttk = ttk_module or ttk
+        self._wraplength = wraplength
+        self.message_var = textvariable
+        self._current_units = 0
+        self._is_mapped = False
+        container_style, label_style = _configure_warning_badge_styles(parent)
+
+        try:
+            self._frame = self._ttk.Frame(parent, style=container_style)
+        except Exception:
+            self._frame = tk.Label(parent) if hasattr(self._tk, "Label") else _StubEntry(self.message_var)  # type: ignore[arg-type]
+
+        ensure_grid_support(self._frame)
+        try:
+            self._frame.columnconfigure(1, weight=1)
+        except Exception:
+            pass
+
+        try:
+            self._icon_label = self._ttk.Label(self._frame, text=ALERT_BADGE_ICON, style=label_style)
+        except Exception:
+            self._icon_label = _StubEntry(self.message_var)
+
+        try:
+            self._text_label = self._ttk.Label(
+                self._frame,
+                textvariable=self.message_var,
+                style=label_style,
+                wraplength=wraplength,
+                anchor="w",
+                justify="left",
+            )
+        except Exception:
+            self._text_label = tk.Label(  # type: ignore[arg-type]
+                self._frame, textvariable=self.message_var, anchor="w", justify="left", wraplength=wraplength
+            )
+
+        self._icon_label.grid(row=0, column=0, padx=(4, 6), pady=(2, 2), sticky="n")
+        self._text_label.grid(row=0, column=1, padx=(0, 4), pady=(2, 2), sticky="we")
+        self._expanded = True
+        if initially_collapsed:
+            self.collapse(animate=False)
+        else:
+            self.expand(animate=False)
+
+        for widget in (self._frame, self._icon_label, self._text_label):
+            bind = getattr(widget, "bind", None)
+            if callable(bind):
+                bind("<Button-1>", lambda _e=None: self.toggle(), add="+")
+
+    @property
+    def is_collapsed(self) -> bool:
+        return not self._expanded
+
+    def grid(self, *args, **kwargs):  # noqa: ANN001
+        self._is_mapped = True
+        return getattr(self._frame, "grid", lambda *_a, **_k: None)(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):  # noqa: ANN001
+        self._is_mapped = True
+        return getattr(self._frame, "pack", lambda *_a, **_k: None)(*args, **kwargs)
+
+    def winfo_ismapped(self):  # noqa: ANN001
+        probe = getattr(self._frame, "winfo_ismapped", None)
+        return self._is_mapped or (probe() if callable(probe) else False)
+
+    def winfo_manager(self):  # noqa: ANN001
+        probe = getattr(self._frame, "winfo_manager", None)
+        return probe() if callable(probe) else ""
+
+    def _apply_units(self, units: int) -> None:
+        self._current_units = max(0, units)
+        try:
+            self._text_label.configure(width=self._current_units)
+        except Exception:
+            pass
+        try:
+            self._frame.update_idletasks()
+        except Exception:
+            pass
+
+    def _target_units(self) -> int:
+        try:
+            self._text_label.update_idletasks()
+            req_width = self._text_label.winfo_reqwidth()
+        except Exception:
+            req_width = self._wraplength
+        return max(1, min(int(req_width / 6), int(self._wraplength / 6)))
+
+    def _animate_units(self, target_units: int, *, animate: bool, on_complete=None) -> None:
+        if not animate or not hasattr(self._frame, "after"):
+            self._apply_units(target_units)
+            if callable(on_complete):
+                on_complete()
+            return
+
+        step = max(1, abs(target_units - self._current_units) // 4 or 1)
+        direction = 1 if target_units > self._current_units else -1
+
+        def _step():
+            self._current_units += step * direction
+            boundary_reached = (
+                direction > 0 and self._current_units >= target_units
+            ) or (direction < 0 and self._current_units <= target_units)
+            if boundary_reached:
+                self._apply_units(target_units)
+                if callable(on_complete):
+                    on_complete()
+                return
+            self._apply_units(self._current_units)
+            try:
+                self._frame.after(16, _step)
+            except Exception:
+                if callable(on_complete):
+                    on_complete()
+
+        _step()
+
+    def _restore_text(self) -> None:
+        if getattr(self._text_label, "winfo_manager", lambda: "")() == "":
+            show = getattr(self._text_label, "grid", None) or getattr(self._text_label, "pack", None)
+            if callable(show):
+                show(row=0, column=1, padx=(0, 4), pady=(2, 2), sticky="we")
+
+    def expand(self, *, animate: bool = True) -> None:
+        self._expanded = True
+        self._restore_text()
+        self._animate_units(self._target_units(), animate=animate)
+
+    def collapse(self, *, animate: bool = True) -> None:
+        self._expanded = False
+        self._restore_text()
+
+        def _hide_text():
+            hide_fn = getattr(self._text_label, "grid_remove", None) or getattr(
+                self._text_label, "pack_forget", None
+            )
+            if callable(hide_fn):
+                hide_fn()
+
+        self._animate_units(0, animate=animate, on_complete=_hide_text)
+
+    def toggle(self, _event=None, *, animate: bool = True) -> None:  # noqa: ANN001
+        if self._expanded:
+            self.collapse(animate=animate)
+        else:
+            self.expand(animate=animate)
+
+    def set_message(self, message: str, *, expand: bool = True) -> None:
+        self.message_var.set(message)
+        if expand:
+            self.expand(animate=False)
+
+    def hide(self) -> None:
+        manager = self.winfo_manager()
+        if manager == "grid":
+            remover = getattr(self._frame, "grid_remove", None) or getattr(self._frame, "grid_forget", None)
+        elif manager == "pack":
+            remover = getattr(self._frame, "pack_forget", None)
+        else:
+            remover = getattr(self._frame, "pack_forget", None) or getattr(self._frame, "grid_remove", None)
+        if callable(remover):
+            remover()
+        self._is_mapped = False
+
+    def show(self) -> None:
+        manager = self.winfo_manager()
+        if manager == "grid":
+            shower = getattr(self._frame, "grid", None)
+        elif manager == "pack":
+            shower = getattr(self._frame, "pack", None)
+        else:
+            shower = getattr(self._frame, "grid", None) or getattr(self._frame, "pack", None)
+        if callable(shower):
+            if manager == "grid":
+                shower()
+            elif manager == "pack":
+                shower()
+            else:
+                shower()
+        self._is_mapped = True
+        if self.is_collapsed:
+            self.collapse(animate=False)
+
+    def __getattr__(self, item: str):
+        return getattr(self._frame, item)
