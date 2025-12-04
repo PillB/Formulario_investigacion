@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from models import TeamHierarchyCatalog
+from models.static_team_catalog import AGENCY_CATALOG
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
 from validators import (FieldValidator, log_event, normalize_team_member_identifier,
                         normalize_without_accents, should_autofill_field,
@@ -75,6 +76,8 @@ class TeamMemberFrame:
         self._selection_error_cache: set[str] = set()
         self._area_option_map: dict[str, str] = {}
         self._service_option_map: dict[str, str] = {}
+        self._agency_lookup: dict[str, tuple[str, str]] = self._build_agency_lookup()
+        self._agency_sync_in_progress = False
 
         self.id_var = tk.StringVar()
         self.nombres_var = tk.StringVar()
@@ -709,6 +712,17 @@ class TeamMemberFrame:
     def _normalize_catalog_key(self, value: str) -> str:
         return normalize_without_accents((value or "").strip()).lower()
 
+    def _build_agency_lookup(self) -> dict[str, tuple[str, str]]:
+        lookup: dict[str, tuple[str, str]] = {}
+        for agency_name, agency_code in (AGENCY_CATALOG or {}).items():
+            normalized_name = self._normalize_catalog_key(agency_name)
+            normalized_code = (agency_code or "").strip()
+            if normalized_name:
+                lookup[normalized_name] = (agency_name, normalized_code)
+            if normalized_code:
+                lookup[normalized_code] = (agency_name, normalized_code)
+        return lookup
+
     def _set_combobox_state(self, widget, values, *, enabled: bool = True, allow_free_text: bool = False) -> None:
         if widget is None:
             return
@@ -949,47 +963,23 @@ class TeamMemberFrame:
             self._puesto_combo.set("")
 
     def _update_agency_options(self, *, preserve_value: bool = False, silent: bool = False) -> None:
-        if not self._has_valid_area():
-            if not preserve_value:
-                self.nombre_agencia_var.set("")
-                self.codigo_agencia_var.set("")
-            self._set_combobox_state(self._agencia_nombre_combo, [], enabled=False)
-            self._set_combobox_state(self._agencia_codigo_combo, [], enabled=False)
-            return
-        names = self.team_catalog.list_agency_names(self.division_var.get(), self.area_var.get())
-        codes = self.team_catalog.list_agency_codes(self.division_var.get(), self.area_var.get())
+        names = sorted({pair[0] for pair in self._agency_lookup.values()}, key=str.casefold)
+        codes = sorted({pair[1] for pair in self._agency_lookup.values() if pair[1]})
+        if not preserve_value:
+            self.nombre_agencia_var.set("")
+            self.codigo_agencia_var.set("")
         self._set_combobox_state(
             self._agencia_nombre_combo,
             names,
             enabled=True,
-            allow_free_text=not bool(names),
+            allow_free_text=True,
         )
         self._set_combobox_state(
             self._agencia_codigo_combo,
             codes,
             enabled=True,
-            allow_free_text=not bool(codes),
+            allow_free_text=True,
         )
-        if self.team_catalog.has_data and self.nombre_agencia_var.get().strip():
-            match = self.team_catalog.match_agency_by_name(
-                self.division_var.get(), self.area_var.get(), self.nombre_agencia_var.get()
-            )
-            if not match:
-                if not silent:
-                    self._notify_catalog_error(
-                        "La agencia seleccionada no pertenece a la división y área dentro del catálogo CM."
-                    )
-                self.nombre_agencia_var.set("")
-        if self.team_catalog.has_data and self.codigo_agencia_var.get().strip():
-            match = self.team_catalog.match_agency_by_code(
-                self.division_var.get(), self.area_var.get(), self.codigo_agencia_var.get()
-            )
-            if not match:
-                if not silent:
-                    self._notify_catalog_error(
-                        "El código de agencia no pertenece a la división y área dentro del catálogo CM."
-                    )
-                self.codigo_agencia_var.set("")
 
     def _refresh_location_options(self, *, preserve_values: bool = False, silent: bool = False) -> None:
         self._apply_team_catalog_state(preserve_values=preserve_values, silent=silent)
@@ -1147,21 +1137,8 @@ class TeamMemberFrame:
         if silent:
             self._update_agency_options(preserve_value=True, silent=True)
             return
-        if not self._has_valid_area():
-            self.nombre_agencia_var.set("")
-            self.codigo_agencia_var.set("")
-            self._notify_catalog_error("Selecciona división y área antes de elegir una agencia.")
-            self._update_agency_options(preserve_value=False, silent=True)
-            return
         self._update_agency_options(preserve_value=True)
-        if self.team_catalog.has_data and self.nombre_agencia_var.get().strip():
-            match = self.team_catalog.match_agency_by_name(
-                self.division_var.get(), self.area_var.get(), self.nombre_agencia_var.get()
-            )
-            expected_code = (match.get("codigo") or "") if match else ""
-            current_code = self.codigo_agencia_var.get().strip()
-            if expected_code and current_code != expected_code:
-                self.codigo_agencia_var.set(expected_code)
+        self._sync_agency_pair(source="nombre")
         self._handle_location_change()
         self._log_change(f"Colaborador {self.idx+1}: modificó agencia")
 
@@ -1170,23 +1147,40 @@ class TeamMemberFrame:
         if silent:
             self._update_agency_options(preserve_value=True, silent=True)
             return
-        if not self._has_valid_area():
-            self.nombre_agencia_var.set("")
-            self.codigo_agencia_var.set("")
-            self._notify_catalog_error("Selecciona división y área antes de elegir una agencia.")
-            self._update_agency_options(preserve_value=False, silent=True)
-            return
         self._update_agency_options(preserve_value=True)
-        if self.team_catalog.has_data and self.codigo_agencia_var.get().strip():
-            match = self.team_catalog.match_agency_by_code(
-                self.division_var.get(), self.area_var.get(), self.codigo_agencia_var.get()
-            )
-            expected_name = (match.get("nombre") or "") if match else ""
-            current_name = self.nombre_agencia_var.get().strip()
-            if expected_name and self._normalize_catalog_key(current_name) != self._normalize_catalog_key(expected_name):
-                self.nombre_agencia_var.set(expected_name)
+        self._sync_agency_pair(source="codigo")
         self._handle_location_change()
         self._log_change(f"Colaborador {self.idx+1}: modificó código de agencia")
+
+    def _sync_agency_pair(self, *, source: str) -> None:
+        if self._agency_sync_in_progress:
+            return
+
+        if source == "nombre":
+            incoming_value = self.nombre_agencia_var.get().strip()
+            lookup_key = self._normalize_catalog_key(incoming_value)
+        else:
+            incoming_value = self.codigo_agencia_var.get().strip()
+            lookup_key = incoming_value
+
+        if not lookup_key:
+            return
+
+        match = self._agency_lookup.get(lookup_key)
+        if not match:
+            return
+
+        target_name, target_code = match
+        self._agency_sync_in_progress = True
+        try:
+            if source == "nombre" and target_code and self.codigo_agencia_var.get().strip() != target_code:
+                self.codigo_agencia_var.set(target_code)
+            elif source == "codigo" and target_name:
+                current_name_norm = self._normalize_catalog_key(self.nombre_agencia_var.get())
+                if current_name_norm != self._normalize_catalog_key(target_name):
+                    self.nombre_agencia_var.set(target_name)
+        finally:
+            self._agency_sync_in_progress = False
 
     def _apply_autofill_result(self, result) -> None:
         location_kwargs = {k: v for k, v in result.applied.items() if k in {"division", "area", "servicio", "puesto"}}
