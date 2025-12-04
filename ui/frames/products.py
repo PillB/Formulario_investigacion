@@ -1562,6 +1562,9 @@ class ProductFrame:
         owner_tree = getattr(self.owner, "product_summary_tree", None) if self.owner else None
         if owner_tree is not None:
             self.header_tree = owner_tree
+            if hasattr(self.header_tree, "bind"):
+                self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+                self.header_tree.bind("<Double-1>", self._on_tree_double_click)
             self._populate_header_tree()
             return
 
@@ -1756,8 +1759,15 @@ class ProductFrame:
             self.header_tree.item(item, tags=(tag,))
         self._tree_sort_state[column] = not reverse
 
-    def _get_target_product_frame(self):
-        return self
+    def _get_target_product_frame(self, product_id=None):
+        if product_id and hasattr(self.owner, "_find_product_frame"):
+            finder = getattr(self.owner, "_find_product_frame", None)
+            if callable(finder):
+                target = finder(product_id)
+                if target:
+                    return target
+        owner_target = getattr(self.owner, "_product_summary_owner", None)
+        return owner_target or self
 
     def _on_tree_select(self, _event=None):
         item = self._first_selected_item()
@@ -1766,8 +1776,9 @@ class ProductFrame:
         values = self.header_tree.item(item, "values")
         if not values:
             return
-        target = self._get_target_product_frame()
-        target.id_var.set(values[0])
+        product_id = values[0]
+        target = self._get_target_product_frame(product_id)
+        target.id_var.set(product_id)
         target.on_id_change(preserve_existing=True, silent=True)
         target.trigger_duplicate_check()
 
@@ -1778,8 +1789,9 @@ class ProductFrame:
         values = self.header_tree.item(item, "values")
         if not values:
             return
-        target = self._get_target_product_frame()
-        target.id_var.set(values[0])
+        product_id = values[0]
+        target = self._get_target_product_frame(product_id)
+        target.id_var.set(product_id)
         target.on_id_change(from_focus=True)
         target.trigger_duplicate_check()
 
