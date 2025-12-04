@@ -229,7 +229,20 @@ class TeamHierarchyCatalog:
         return None, None, None
 
     def list_hierarchy_divisions(self) -> list[tuple[str, str]]:
-        return self._sorted_option_pairs(self._hierarchy_dict)
+        pairs = self._sorted_option_pairs(self._hierarchy_dict)
+        if not self._divisions:
+            return pairs
+
+        known = {self._normalize(label) for _, label in pairs}
+        extras = sorted(
+            (
+                (label, label)
+                for label in self._divisions.values()
+                if self._normalize(label) not in known
+            ),
+            key=lambda item: item[1].casefold(),
+        )
+        return pairs + extras
 
     def hierarchy_contains_division(self, division: str) -> bool:
         key, _, _ = self._match_entry(self._hierarchy_dict, division)
@@ -238,6 +251,11 @@ class TeamHierarchyCatalog:
     def list_hierarchy_areas(self, division: str) -> list[tuple[str, str]]:
         div_key, entry, _ = self._match_entry(self._hierarchy_dict, division)
         if not div_key or entry is None:
+            if self.contains_division(division):
+                return sorted(
+                    ((label, label) for label in self.list_areas(division)),
+                    key=lambda item: item[1].casefold(),
+                )
             return []
         areas = entry.get("areas") or {}
         services = entry.get("services") or {}
@@ -262,18 +280,29 @@ class TeamHierarchyCatalog:
     def list_hierarchy_services(self, division: str, area: str) -> list[tuple[str, str]]:
         div_key, entry, _ = self._match_entry(self._hierarchy_dict, division)
         if not div_key:
+            if self.contains_division(division):
+                return sorted(
+                    ((label, label) for label in self.list_services(division, area)),
+                    key=lambda item: item[1].casefold(),
+                )
             return []
         areas = entry.get("areas") or {}
         services = entry.get("services") or {}
         if areas:
             area_key, area_entry, _ = self._match_entry(areas, area)
             if not area_key:
-                return []
+                return sorted(
+                    ((label, label) for label in self.list_services(division, area)),
+                    key=lambda item: item[1].casefold(),
+                )
             nested_services = area_entry.get("services") or {}
             if nested_services:
                 return self._sorted_option_pairs(nested_services)
             if area_entry.get("positions"):
                 return [(area_key, self._label_for(area_entry, area_key))]
+        fallback_services = self.list_services(division, area)
+        if fallback_services:
+            return sorted(((label, label) for label in fallback_services), key=lambda item: item[1].casefold())
         return self._sorted_option_pairs(services)
 
     def hierarchy_contains_service(self, division: str, area: str, servicio: str) -> bool:

@@ -36,6 +36,40 @@ def _build_services(tmp_path):
     return service, autofill, warnings
 
 
+def test_hierarchy_lists_include_csv_entries_outside_static_catalog(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            (
+                "T-FIN-1",
+                "Ana",
+                "Pérez",
+                "Finanzas",
+                "Área Operativa",
+                "Servicio Operativo",
+                "",
+                "",
+                "",
+                "2024-07-01",
+            )
+        ],
+    )
+
+    service, _, _ = _build_services(tmp_path)
+    hierarchy = service.team_hierarchy
+
+    division_labels = [label for _, label in hierarchy.list_hierarchy_divisions()]
+    assert "Finanzas" in division_labels
+
+    area_labels = [label for _, label in hierarchy.list_hierarchy_areas("Finanzas")]
+    assert "Área Operativa" in area_labels
+
+    service_labels = [
+        label for _, label in hierarchy.list_hierarchy_services("Finanzas", "Área Operativa")
+    ]
+    assert "Servicio Operativo" in service_labels
+
+
 def test_lookup_team_member_skips_malformed_dates():
     service = CatalogService(BASE_DIR)
     service.refresh()
