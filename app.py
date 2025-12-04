@@ -5621,12 +5621,13 @@ class FraudCaseApp:
 
         self._syncing_case_to_header = True
         try:
+            data_changed = current_value != sanitized
             self._encabezado_data[target_key] = sanitized
             self._encabezado_autofill_keys.add(target_key)
             target_var = self._encabezado_vars.get(target_key)
             if target_var is not None and getattr(target_var, "get", lambda: "")() != sanitized:
                 target_var.set(sanitized)
-            else:
+            if data_changed:
                 self._notify_dataset_changed()
         finally:
             self._syncing_case_to_header = False
