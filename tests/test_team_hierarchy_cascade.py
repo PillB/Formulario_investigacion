@@ -1,3 +1,4 @@
+from models import TeamHierarchyCatalog
 from tests.test_validation import _UIStubWidget, _patch_team_module
 
 
@@ -58,3 +59,33 @@ def test_cascade_preserves_valid_selections(monkeypatch):
 
     assert frame.area_var.get() == area_choice
     assert frame.servicio_var.get() == service_choice
+
+
+def test_manual_entry_enabled_when_catalog_missing_children(monkeypatch):
+    team_module, _ = _patch_team_module(monkeypatch)
+    catalog = TeamHierarchyCatalog([], {"D0": {"nbr": "División sin áreas"}})
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+        team_catalog=catalog,
+    )
+
+    frame.division_var.set("División sin áreas")
+    frame._on_division_change()
+
+    assert frame._area_combo._config.get("state") == "normal"
+
+    frame.area_var.set("Área nueva")
+    frame._on_area_change()
+
+    assert frame._servicio_combo._config.get("state") == "normal"
+
+    frame.servicio_var.set("Servicio nuevo")
+    frame._on_service_change()
+
+    assert frame._puesto_combo._config.get("state") == "normal"
