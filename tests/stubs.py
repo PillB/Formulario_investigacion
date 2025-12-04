@@ -170,6 +170,10 @@ def build_involvement_slot():
 def build_populate_method(id_field):
     def _populate(self, frame, row, preserve_existing=False):
         value = (row.get(id_field) or "").strip()
+        if preserve_existing and (frame.id_var.get().strip() or frame.populated_rows):
+            if not frame.id_var.get().strip():
+                frame.id_var.set(value)
+            return
         frame.id_var.set(value)
         frame.populated_rows.append(dict(row))
 
