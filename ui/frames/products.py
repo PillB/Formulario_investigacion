@@ -7,6 +7,7 @@ from typing import Callable
 
 import tkinter as tk
 from tkinter import messagebox, ttk
+from tkinter import font as tkfont
 
 from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
                       TIPO_PRODUCTO_LIST)
@@ -885,9 +886,7 @@ class ProductFrame:
         self.badges = BadgeManager(
             parent=self.frame, pending_text=ALERT_BADGE_ICON, success_text=SUCCESS_BADGE_ICON
         )
-        if hasattr(self.frame, "columnconfigure"):
-            self.frame.columnconfigure(1, weight=1)
-            self.frame.columnconfigure(3, weight=1)
+        self._configure_grid_columns()
         if hasattr(self.owner, "_set_active_product_frame"):
             self.frame.bind("<FocusIn>", lambda _e: self.owner._set_active_product_frame(self), add="+")
 
@@ -1496,6 +1495,50 @@ class ProductFrame:
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
+
+    def _configure_grid_columns(self):
+        columnconfigure = getattr(self.frame, "columnconfigure", None)
+        if not callable(columnconfigure):
+            return
+
+        date_column_minsize = self._compute_date_column_minsize()
+        for col_idx in range(4):
+            try:
+                columnconfigure(
+                    col_idx,
+                    weight=1 if col_idx in (1, 3) else 0,
+                    minsize=date_column_minsize,
+                )
+            except Exception:
+                continue
+
+        badge_minsize = self._compute_badge_minsize()
+        for col_idx in (4, 5):
+            try:
+                columnconfigure(col_idx, weight=0, minsize=badge_minsize)
+            except Exception:
+                continue
+
+    def _compute_date_column_minsize(self) -> int:
+        try:
+            base_font = tkfont.nametofont("TkDefaultFont")
+            required_texts = (
+                "Fecha de ocurrencia:",
+                "Fecha de descubrimiento:",
+                "(YYYY-MM-DD)",
+                "0" * 12,
+            )
+            widest_text = max(base_font.measure(text) for text in required_texts)
+            return widest_text + COL_PADX
+        except Exception:
+            return 180
+
+    def _compute_badge_minsize(self) -> int:
+        try:
+            base_font = tkfont.nametofont("TkDefaultFont")
+            return base_font.measure(f"{ALERT_BADGE_ICON}{ALERT_BADGE_ICON}") + COL_PADX
+        except Exception:
+            return 40
 
     def _build_section_title(self) -> str:
         base_title = f"Producto {self.idx+1}"
