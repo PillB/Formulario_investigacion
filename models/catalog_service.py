@@ -18,6 +18,7 @@ from validators import normalize_team_member_identifier, normalize_without_accen
 
 from .catalogs import (build_detail_catalog_id_index, load_detail_catalogs,
                        normalize_detail_catalog_key)
+from .static_team_catalog import build_team_catalog_rows
 
 
 class CatalogService:
@@ -28,7 +29,9 @@ class CatalogService:
         self.detail_catalogs: Dict[str, Dict[str, Dict[str, str]]] = {}
         self.detail_lookup_by_id: Dict[str, Dict[str, Dict[str, str]]] = {}
         self.team_snapshots: Dict[str, list[dict]] = {}
-        self.team_hierarchy: TeamHierarchyCatalog = TeamHierarchyCatalog()
+        self.team_hierarchy: TeamHierarchyCatalog = TeamHierarchyCatalog(
+            build_team_catalog_rows()
+        )
 
     def refresh(self) -> Tuple[Dict[str, Dict[str, Dict[str, str]]], Dict[str, Dict[str, Dict[str, str]]]]:
         raw_catalogs = load_detail_catalogs(self.base_dir)
@@ -70,24 +73,26 @@ class CatalogService:
 
     def _build_team_resources(self) -> tuple[Dict[str, list[dict]], "TeamHierarchyCatalog"]:
         path = self.base_dir / "team_details.csv"
-        if not path.exists():
-            return {}, TeamHierarchyCatalog()
-
-        rows = list(self._iter_rows(path))
+        static_rows = build_team_catalog_rows()
         snapshots: Dict[str, list[dict]] = {}
-        for row in rows:
-            normalized_id = normalize_team_member_identifier(row.get("id_colaborador", ""))
-            if not normalized_id:
-                continue
-            parsed_date = self._parse_date(row.get("fecha_actualizacion"))
-            snapshots.setdefault(normalized_id, []).append(
-                {
-                    "data": row,
-                    "fecha": parsed_date,
-                }
-            )
 
-        return snapshots, TeamHierarchyCatalog(rows)
+        csv_rows: list[dict] = []
+        if path.exists():
+            csv_rows = list(self._iter_rows(path))
+            for row in csv_rows:
+                normalized_id = normalize_team_member_identifier(row.get("id_colaborador", ""))
+                if not normalized_id:
+                    continue
+                parsed_date = self._parse_date(row.get("fecha_actualizacion"))
+                snapshots.setdefault(normalized_id, []).append(
+                    {
+                        "data": row,
+                        "fecha": parsed_date,
+                    }
+                )
+
+        merged_rows = static_rows + csv_rows
+        return snapshots, TeamHierarchyCatalog(merged_rows)
 
     def _iter_rows(self, path: Path) -> Iterable[Dict[str, str]]:
         if pd is not None:
