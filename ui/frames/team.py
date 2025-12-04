@@ -73,6 +73,8 @@ class TeamMemberFrame:
         self._summary_tree_sort_state: dict[str, bool] = {}
         self.team_catalog = team_catalog or TeamHierarchyCatalog()
         self._selection_error_cache: set[str] = set()
+        self._area_option_map: dict[str, str] = {}
+        self._service_option_map: dict[str, str] = {}
 
         self.id_var = tk.StringVar()
         self.nombres_var = tk.StringVar()
@@ -755,26 +757,39 @@ class TeamMemberFrame:
         self._update_agency_options(preserve_value=preserve_values, silent=silent)
 
     def _update_division_options(self) -> None:
-        values = self.team_catalog.list_divisions() if self.team_catalog else []
+        division_pairs = []
+        if self.team_catalog:
+            division_pairs = self.team_catalog.list_hierarchy_divisions()
+            if not division_pairs:
+                values = self.team_catalog.list_divisions()
+                division_pairs = [(value, value) for value in values]
+        values = [label for _, label in division_pairs]
         self._set_combobox_state(
             self._division_combo,
             values,
             enabled=True,
-            allow_free_text=not bool(values),
+            allow_free_text=not self.team_catalog.has_data and not bool(values),
         )
 
     def _has_valid_division(self) -> bool:
         division = self.division_var.get().strip()
         if not division:
             return False
-        return not self.team_catalog.has_data or self.team_catalog.contains_division(division)
+        if not self.team_catalog.has_data:
+            return True
+        return bool(
+            self.team_catalog.contains_division(division)
+            or self.team_catalog.hierarchy_contains_division(division)
+        )
 
     def _has_valid_area(self) -> bool:
         return self._has_valid_division() and bool(
             self.area_var.get().strip()
             and (
                 not self.team_catalog.has_data
-                or self.team_catalog.contains_area(self.division_var.get(), self.area_var.get())
+                or self.team_catalog.hierarchy_contains_area(
+                    self.division_var.get(), self.area_var.get()
+                )
             )
         )
 
@@ -783,7 +798,7 @@ class TeamMemberFrame:
             self.servicio_var.get().strip()
             and (
                 not self.team_catalog.has_data
-                or self.team_catalog.contains_service(
+                or self.team_catalog.hierarchy_contains_service(
                     self.division_var.get(), self.area_var.get(), self.servicio_var.get()
                 )
             )
@@ -798,17 +813,38 @@ class TeamMemberFrame:
             self._set_combobox_state(self._area_combo, [], enabled=False)
             self._set_combobox_state(self._servicio_combo, [], enabled=False)
             self._set_combobox_state(self._puesto_combo, [], enabled=False)
-            self._update_agency_options(preserve_value=False, silent=silent)
+            self._update_agency_options(preserve_value=preserve_value, silent=silent)
             return
-        areas = self.team_catalog.list_areas(self.division_var.get()) if self.team_catalog else []
-        self._set_combobox_state(self._area_combo, areas, enabled=True, allow_free_text=not bool(areas))
-        if self.area_var.get().strip() and self.team_catalog.has_data:
-            if not self.team_catalog.contains_area(self.division_var.get(), self.area_var.get()):
-                if not silent:
-                    self._notify_catalog_error(
-                        "El área seleccionada no pertenece a la división dentro del catálogo CM."
-                    )
-                self.area_var.set("")
+        area_pairs = []
+        if self.team_catalog:
+            area_pairs = self.team_catalog.list_hierarchy_areas(self.division_var.get())
+        area_labels = [label for _, label in area_pairs]
+        self._area_option_map = {label: key for key, label in area_pairs}
+        self._set_combobox_state(
+            self._area_combo,
+            area_labels,
+            enabled=bool(area_labels),
+            allow_free_text=not self.team_catalog.has_data and not bool(area_labels),
+        )
+        previous_area = self.area_var.get().strip()
+        if (
+            previous_area
+            and area_labels
+            and self.team_catalog.has_data
+            and previous_area not in self._area_option_map
+        ):
+            if not silent:
+                self._notify_catalog_error(
+                    "El área seleccionada no pertenece a la división dentro del catálogo CM."
+                )
+            self.area_var.set("")
+            previous_area = ""
+        if previous_area in self._area_option_map:
+            self.area_var.set(previous_area)
+            self._area_combo.set(previous_area)
+        elif area_labels:
+            self.area_var.set("")
+            self._area_combo.set("")
         if not self.area_var.get().strip():
             self.servicio_var.set("")
             self.puesto_var.set("")
@@ -826,21 +862,43 @@ class TeamMemberFrame:
             self._set_combobox_state(self._servicio_combo, [], enabled=False)
             self._set_combobox_state(self._puesto_combo, [], enabled=False)
             return
-        services = (
-            self.team_catalog.list_services(self.division_var.get(), self.area_var.get())
-            if self.team_catalog
-            else []
+        service_pairs = []
+        if self.team_catalog:
+            service_pairs = self.team_catalog.list_hierarchy_services(
+                self.division_var.get(), self.area_var.get()
+            )
+            if not service_pairs:
+                service_pairs = self.team_catalog.list_services(
+                    self.division_var.get(), self.area_var.get()
+                )
+                service_pairs = [(value, value) for value in service_pairs]
+        service_labels = [label for _, label in service_pairs]
+        self._service_option_map = {label: key for key, label in service_pairs}
+        self._set_combobox_state(
+            self._servicio_combo,
+            service_labels,
+            enabled=bool(service_labels),
+            allow_free_text=not self.team_catalog.has_data and not bool(service_labels),
         )
-        self._set_combobox_state(self._servicio_combo, services, enabled=True, allow_free_text=not bool(services))
-        if self.servicio_var.get().strip() and self.team_catalog.has_data:
-            if not self.team_catalog.contains_service(
-                self.division_var.get(), self.area_var.get(), self.servicio_var.get()
-            ):
-                if not silent:
-                    self._notify_catalog_error(
-                        "El servicio seleccionado no existe para la división y área en el catálogo CM."
-                    )
-                self.servicio_var.set("")
+        previous_service = self.servicio_var.get().strip()
+        if (
+            previous_service
+            and service_labels
+            and self.team_catalog.has_data
+            and previous_service not in self._service_option_map
+        ):
+            if not silent:
+                self._notify_catalog_error(
+                    "El servicio seleccionado no existe para la división y área en el catálogo CM."
+                )
+            self.servicio_var.set("")
+            previous_service = ""
+        if previous_service in self._service_option_map:
+            self.servicio_var.set(previous_service)
+            self._servicio_combo.set(previous_service)
+        elif service_labels:
+            self.servicio_var.set("")
+            self._servicio_combo.set("")
         if not self.servicio_var.get().strip():
             self.puesto_var.set("")
             self._set_combobox_state(self._puesto_combo, [], enabled=False)
@@ -852,28 +910,43 @@ class TeamMemberFrame:
             self.puesto_var.set("")
             self._set_combobox_state(self._puesto_combo, [], enabled=False)
             return
-        puestos = (
-            self.team_catalog.list_roles(
+        puestos = []
+        if self.team_catalog:
+            puestos = self.team_catalog.list_hierarchy_roles(
                 self.division_var.get(), self.area_var.get(), self.servicio_var.get()
             )
-            if self.team_catalog
-            else []
-        )
+            if not puestos:
+                puestos = self.team_catalog.list_roles(
+                    self.division_var.get(), self.area_var.get(), self.servicio_var.get()
+                )
+                puestos = [(value, value) for value in puestos]
+        puesto_labels = [label for _, label in puestos]
         self._set_combobox_state(
             self._puesto_combo,
-            puestos,
-            enabled=True,
-            allow_free_text=not bool(puestos),
+            puesto_labels,
+            enabled=bool(puesto_labels),
+            allow_free_text=not self.team_catalog.has_data and not bool(puesto_labels),
         )
-        if self.puesto_var.get().strip() and self.team_catalog.has_data:
-            if not self.team_catalog.contains_role(
-                self.division_var.get(), self.area_var.get(), self.servicio_var.get(), self.puesto_var.get()
-            ):
-                if not silent:
-                    self._notify_catalog_error(
-                        "El puesto seleccionado no pertenece al servicio registrado en el catálogo CM."
-                    )
-                self.puesto_var.set("")
+        previous_puesto = self.puesto_var.get().strip()
+        valid_positions = {label for label in puesto_labels}
+        if (
+            previous_puesto
+            and puesto_labels
+            and self.team_catalog.has_data
+            and previous_puesto not in valid_positions
+        ):
+            if not silent:
+                self._notify_catalog_error(
+                    "El puesto seleccionado no pertenece al servicio registrado en el catálogo CM."
+                )
+            self.puesto_var.set("")
+            previous_puesto = ""
+        if previous_puesto in valid_positions:
+            self.puesto_var.set(previous_puesto)
+            self._puesto_combo.set(previous_puesto)
+        elif puesto_labels:
+            self.puesto_var.set("")
+            self._puesto_combo.set("")
 
     def _update_agency_options(self, *, preserve_value: bool = False, silent: bool = False) -> None:
         if not self._has_valid_area():
@@ -1168,6 +1241,8 @@ class TeamMemberFrame:
             if requires_agency and not agency_name:
                 return "Debe ingresar el nombre de la agencia."
             if self.team_catalog.has_data and agency_name:
+                if not self._has_valid_area():
+                    return None
                 if not division or not area:
                     return "Selecciona división y área para validar la agencia."
                 match = self.team_catalog.match_agency_by_name(division, area, agency_name)
@@ -1189,6 +1264,8 @@ class TeamMemberFrame:
             if not agency_code:
                 return None
             if self.team_catalog.has_data:
+                if not self._has_valid_area():
+                    return None
                 if not division or not area:
                     return "Selecciona división y área para validar la agencia."
                 match = self.team_catalog.match_agency_by_code(division, area, agency_code)
