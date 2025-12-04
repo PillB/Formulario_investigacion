@@ -885,8 +885,6 @@ class ProductFrame:
             parent=self.frame, pending_text=ALERT_BADGE_ICON, success_text=SUCCESS_BADGE_ICON
         )
         self._configure_grid_columns()
-        if hasattr(self.owner, "_set_active_product_frame"):
-            self.frame.bind("<FocusIn>", lambda _e: self.owner._set_active_product_frame(self), add="+")
 
         ttk.Label(self.frame, text="ID del producto:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1759,8 +1757,6 @@ class ProductFrame:
         self._tree_sort_state[column] = not reverse
 
     def _get_target_product_frame(self):
-        if getattr(self, "owner", None) and getattr(self.owner, "_active_product_frame", None):
-            return self.owner._active_product_frame
         return self
 
     def _on_tree_select(self, _event=None):
