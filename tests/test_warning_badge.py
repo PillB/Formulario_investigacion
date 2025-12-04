@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from ui.frames.utils import BadgeManager, ToggleWarningBadge
+from ui.frames.utils import BadgeManager, ToggleWarningBadge, format_warning_preview
 
 
 class DummyVar:
@@ -90,7 +90,13 @@ def test_warning_badge_toggles_and_preserves_message():
 
     badge.toggle(animate=False)
     assert badge.is_collapsed is True
+    assert badge._display_var.get() == ""
+    assert badge._text_label.winfo_manager() == ""
     assert message_var.get() == "Mensaje de prueba"
+
+    badge.toggle(animate=False)
+    assert badge.is_collapsed is False
+    assert badge._display_var.get() == "Mensaje de prueba"
 
 
 def test_warning_badge_click_flow_updates_mapping_state():
@@ -134,6 +140,36 @@ def test_warning_badge_compacts_text_when_collapsed():
     assert preview_lines[-1].endswith("...")
 
     badge.expand(animate=False)
+    assert badge._display_var.get() == long_message
+
+
+def test_warning_badge_cycles_from_preview_to_icon_and_back_to_full():
+    long_message = "Necesitas completar la fecha de ocurrencia para continuar con el registro"
+    message_var = DummyVar(long_message)
+    badge = ToggleWarningBadge(
+        StubWidget(),
+        textvariable=message_var,
+        initially_collapsed=True,
+        tk_module=TK,
+        ttk_module=TTK,
+    )
+    badge.pack()
+
+    preview_value = badge._display_var.get()
+    assert badge.is_collapsed is True
+    assert preview_value == format_warning_preview(long_message)
+
+    badge.toggle(animate=False)
+    assert badge.is_collapsed is False
+    assert badge._display_var.get() == long_message
+
+    badge.toggle(animate=False)
+    assert badge.is_collapsed is True
+    assert badge._display_var.get() == ""
+    assert badge._text_label.winfo_manager() == ""
+
+    badge.toggle(animate=False)
+    assert badge.is_collapsed is False
     assert badge._display_var.get() == long_message
 
 
