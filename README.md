@@ -165,5 +165,7 @@ pytest --cov=app --cov=ui --cov=models --cov-report=term-missing
 ```
 Asegúrate de contar con `python-docx`, `pytest` y `pytest-cov`, y con la carpeta `external drive/` accesible.
 
+Para probar la restauración completa del formulario y la generación de reportes con datos válidos según las reglas del design doc, carga el fixture `tests/fixtures/test-save.json` desde **Acciones → Cargar formulario**; luego usa **Guardar y enviar** para producir los CSV/JSON/Markdown/Word de ejemplo.
+
 ## Contribución y licencia
 Las contribuciones son bienvenidas mediante issues o PRs. No hay licencia declarada; úsese bajo su propio criterio.
