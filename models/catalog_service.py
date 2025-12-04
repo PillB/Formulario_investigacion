@@ -302,7 +302,17 @@ class TeamHierarchyCatalog:
                 return [(area_key, self._label_for(area_entry, area_key))]
         fallback_services = self.list_services(division, area)
         if fallback_services:
-            return sorted(((label, label) for label in fallback_services), key=lambda item: item[1].casefold())
+            fallback_pairs = [(label, label) for label in fallback_services]
+            if services:
+                static_pairs = self._sorted_option_pairs(services)
+                known = {self._normalize(label) for _, label in static_pairs}
+                extras = [
+                    (value, value)
+                    for value in fallback_services
+                    if self._normalize(value) not in known
+                ]
+                return sorted(static_pairs + extras, key=lambda item: item[1].casefold())
+            return sorted(fallback_pairs, key=lambda item: item[1].casefold())
         return self._sorted_option_pairs(services)
 
     def hierarchy_contains_service(self, division: str, area: str, servicio: str) -> bool:

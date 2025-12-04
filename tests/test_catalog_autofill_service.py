@@ -70,6 +70,40 @@ def test_hierarchy_lists_include_csv_entries_outside_static_catalog(tmp_path):
     assert "Servicio Operativo" in service_labels
 
 
+def test_hierarchy_services_preserve_static_when_csv_present(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            (
+                "T-GCIA-1",
+                "Ana",
+                "Pérez",
+                "GERENCIA DE NEGOCIOS 528",
+                "General",
+                "Servicio CSV Root",
+                "",
+                "",
+                "",
+                "2024-07-15",
+            )
+        ],
+    )
+
+    service, _, _ = _build_services(tmp_path)
+    hierarchy = service.team_hierarchy
+
+    labels = [
+        label
+        for _, label in hierarchy.list_hierarchy_services(
+            "GERENCIA DE NEGOCIOS 528", "General"
+        )
+    ]
+
+    assert "GERENCIA DE VENTAS TRANSACCIONALES I" in labels
+    assert "REGION 61 - CENTRO" in labels
+    assert "Servicio CSV Root" in labels
+
+
 def test_lookup_team_member_skips_malformed_dates():
     service = CatalogService(BASE_DIR)
     service.refresh()
