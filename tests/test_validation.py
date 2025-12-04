@@ -1884,6 +1884,30 @@ def test_team_frame_inline_agency_validation_clears_when_optional(monkeypatch):
     assert codigo_validator.last_custom_error is None
 
 
+def test_location_validation_marks_missing_selections(monkeypatch):
+    team_module, _ = _patch_team_module(monkeypatch)
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    assert "división" in (frame._validate_location_field("division") or "")
+
+    frame.division_var.set("GCIA DE DIVISION CANALES DE ATENCION")
+    assert "área" in (frame._validate_location_field("area") or "")
+
+    frame.area_var.set("Área Comercial Lima 1")
+    assert "servicio" in (frame._validate_location_field("servicio") or "")
+
+    frame.servicio_var.set("Servicio Lima")
+    assert "puesto" in (frame._validate_location_field("puesto") or "")
+
+
 def test_location_validation_uses_hierarchy_catalog(monkeypatch):
     team_module, _ = _patch_team_module(monkeypatch)
     frame = team_module.TeamMemberFrame(
@@ -1930,9 +1954,44 @@ def test_agency_validation_works_without_location_scope(monkeypatch):
     name_error = frame._validate_agency_fields("nombre")
     assert "no coincide" in (name_error or "")
 
-    frame.nombre_agencia_var.set("Agencia Aeropuerto")
-    frame.codigo_agencia_var.set("192007")
-    assert frame._validate_agency_fields("codigo") is None
+
+class _ComboboxStub:
+    def __init__(self, value: str = "", values: tuple[str, ...] = ("uno", "dos")):
+        self._value = value
+        self.values = values
+
+    def get(self):
+        return self._value
+
+    def focus_set(self):
+        return None
+
+    def __getitem__(self, key):
+        if key == "values":
+            return self.values
+        raise KeyError(key)
+
+
+def test_validation_payload_marks_blank_combobox_as_error():
+    from app import _derive_validation_payload
+
+    widget = _ComboboxStub("")
+    message, severity, target = _derive_validation_payload("la división", None, widget)
+
+    assert severity == "error"
+    assert "división" in (message or "").lower()
+    assert target is widget
+
+
+def test_validation_payload_respects_filled_combobox():
+    from app import _derive_validation_payload
+
+    widget = _ComboboxStub("Banca", values=("Banca",))
+    message, severity, target = _derive_validation_payload("la división", None, widget)
+
+    assert message is None
+    assert severity == "ok"
+    assert target is widget
 
 
 def test_team_frame_shows_and_clears_fallback_warning(monkeypatch):

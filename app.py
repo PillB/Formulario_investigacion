@@ -153,6 +153,54 @@ CONFIRMATION_WAV_B64 = (
 
 
 
+def _extract_widget_value(widget) -> str | None:
+    if widget is None:
+        return None
+    getter = getattr(widget, "get", None)
+    if callable(getter):
+        try:
+            return getter()
+        except Exception:
+            pass
+    textvariable = getattr(widget, "textvariable", None)
+    if textvariable and hasattr(textvariable, "get"):
+        try:
+            return textvariable.get()
+        except Exception:
+            pass
+    return None
+
+
+def _is_combobox_like(widget) -> bool:
+    if widget is None:
+        return False
+    class_name = widget.__class__.__name__.lower()
+    if "combobox" in class_name:
+        return True
+    for attr in ("__getitem__", "cget"):
+        accessor = getattr(widget, attr, None)
+        if callable(accessor):
+            try:
+                values = accessor("values")
+            except Exception:
+                continue
+            if values:
+                return True
+    values_attr = getattr(widget, "values", None)
+    return bool(values_attr)
+
+
+def _derive_validation_payload(field_name: str, message: Optional[str], widget):
+    target_widget = widget if hasattr(widget, "focus_set") else None
+    severity = "error" if message else "ok"
+    widget_value = _extract_widget_value(widget)
+    if message is None and _is_combobox_like(widget):
+        if isinstance(widget_value, str) and not widget_value.strip():
+            message = f"Debe seleccionar {field_name}."
+            severity = "error"
+    return message, severity, target_widget
+
+
 class ValidationPanel(ttk.Frame):
     """Panel compacto para mostrar errores y advertencias de validación."""
 
@@ -1834,7 +1882,9 @@ class FraudCaseApp:
     ) -> None:
         if not self._validation_panel:
             return
-        target_widget = widget if hasattr(widget, "focus_set") else None
+        message, severity, target_widget = _derive_validation_payload(
+            field_name, message, widget
+        )
         if target_widget is not None:
             try:
                 setattr(target_widget, "_validation_origin", field_name)
@@ -1842,7 +1892,6 @@ class FraudCaseApp:
                 pass
         target_id = id(target_widget) if target_widget is not None else field_name
         key = f"field:{field_name}:{target_id}"
-        severity = "error" if message else "ok"
         self._validation_panel.update_entry(
             key,
             message,
@@ -10886,6 +10935,7 @@ class FraudCaseApp:
             cl.correos_var.set(cliente.get('correos', ''))
             cl.direcciones_var.set(cliente.get('direcciones', ''))
             cl.set_accionado_from_text(cliente.get('accionado', ''))
+            cl.on_id_change(preserve_existing=True, silent=True)
         # Colaboradores
         for i, col in enumerate(data.get('colaboradores', [])):
             if i >= len(self.team_frames):
@@ -10905,6 +10955,7 @@ class FraudCaseApp:
             tm.codigo_agencia_var.set(col.get('codigo_agencia', ''))
             tm.tipo_falta_var.set(col.get('tipo_falta', ''))
             tm.tipo_sancion_var.set(col.get('tipo_sancion', ''))
+            tm.on_id_change(preserve_existing=True, silent=True)
         # Productos y sus reclamos e involuc
         claims_map = {}
         for rec in data.get('reclamos', []):
@@ -10955,6 +11006,7 @@ class FraudCaseApp:
             if callable(refresh_amounts):
                 refresh_amounts()
             pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
+            pframe.on_id_change(preserve_existing=True, silent=True)
         # Involucramientos
         involvement_map = {}
         for inv in data.get('involucramientos', []):
@@ -10983,6 +11035,7 @@ class FraudCaseApp:
             rf.criticidad_var.set(risk.get('criticidad', CRITICIDAD_LIST[0]))
             rf.exposicion_var.set(risk.get('exposicion_residual', ''))
             rf.planes_var.set(risk.get('planes_accion', ''))
+            rf.on_id_change(preserve_existing=True, silent=True)
         # Normas
         for i, norm in enumerate(data.get('normas', [])):
             if i >= len(self.norm_frames):
@@ -10991,6 +11044,7 @@ class FraudCaseApp:
             nf.id_var.set(norm.get('id_norma', ''))
             nf.descripcion_var.set(norm.get('descripcion', ''))
             nf.fecha_var.set(norm.get('fecha_vigencia', ''))
+            nf.on_id_change(preserve_existing=True, silent=True)
         self._refresh_shared_norm_tree()
         # Analisis
         analisis = data.get('analisis', {})
