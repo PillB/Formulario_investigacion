@@ -153,6 +153,54 @@ CONFIRMATION_WAV_B64 = (
 
 
 
+def _extract_widget_value(widget) -> str | None:
+    if widget is None:
+        return None
+    getter = getattr(widget, "get", None)
+    if callable(getter):
+        try:
+            return getter()
+        except Exception:
+            pass
+    textvariable = getattr(widget, "textvariable", None)
+    if textvariable and hasattr(textvariable, "get"):
+        try:
+            return textvariable.get()
+        except Exception:
+            pass
+    return None
+
+
+def _is_combobox_like(widget) -> bool:
+    if widget is None:
+        return False
+    class_name = widget.__class__.__name__.lower()
+    if "combobox" in class_name:
+        return True
+    for attr in ("__getitem__", "cget"):
+        accessor = getattr(widget, attr, None)
+        if callable(accessor):
+            try:
+                values = accessor("values")
+            except Exception:
+                continue
+            if values:
+                return True
+    values_attr = getattr(widget, "values", None)
+    return bool(values_attr)
+
+
+def _derive_validation_payload(field_name: str, message: Optional[str], widget):
+    target_widget = widget if hasattr(widget, "focus_set") else None
+    severity = "error" if message else "ok"
+    widget_value = _extract_widget_value(widget)
+    if message is None and _is_combobox_like(widget):
+        if isinstance(widget_value, str) and not widget_value.strip():
+            message = f"Debe seleccionar {field_name}."
+            severity = "error"
+    return message, severity, target_widget
+
+
 class ValidationPanel(ttk.Frame):
     """Panel compacto para mostrar errores y advertencias de validación."""
 
@@ -1834,7 +1882,9 @@ class FraudCaseApp:
     ) -> None:
         if not self._validation_panel:
             return
-        target_widget = widget if hasattr(widget, "focus_set") else None
+        message, severity, target_widget = _derive_validation_payload(
+            field_name, message, widget
+        )
         if target_widget is not None:
             try:
                 setattr(target_widget, "_validation_origin", field_name)
@@ -1842,7 +1892,6 @@ class FraudCaseApp:
                 pass
         target_id = id(target_widget) if target_widget is not None else field_name
         key = f"field:{field_name}:{target_id}"
-        severity = "error" if message else "ok"
         self._validation_panel.update_entry(
             key,
             message,
