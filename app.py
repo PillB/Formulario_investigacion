@@ -10886,6 +10886,7 @@ class FraudCaseApp:
             cl.correos_var.set(cliente.get('correos', ''))
             cl.direcciones_var.set(cliente.get('direcciones', ''))
             cl.set_accionado_from_text(cliente.get('accionado', ''))
+            cl.on_id_change(preserve_existing=True, silent=True)
         # Colaboradores
         for i, col in enumerate(data.get('colaboradores', [])):
             if i >= len(self.team_frames):
@@ -10905,6 +10906,7 @@ class FraudCaseApp:
             tm.codigo_agencia_var.set(col.get('codigo_agencia', ''))
             tm.tipo_falta_var.set(col.get('tipo_falta', ''))
             tm.tipo_sancion_var.set(col.get('tipo_sancion', ''))
+            tm.on_id_change(preserve_existing=True, silent=True)
         # Productos y sus reclamos e involuc
         claims_map = {}
         for rec in data.get('reclamos', []):
@@ -10955,6 +10957,7 @@ class FraudCaseApp:
             if callable(refresh_amounts):
                 refresh_amounts()
             pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
+            pframe.on_id_change(preserve_existing=True, silent=True)
         # Involucramientos
         involvement_map = {}
         for inv in data.get('involucramientos', []):
@@ -10983,6 +10986,7 @@ class FraudCaseApp:
             rf.criticidad_var.set(risk.get('criticidad', CRITICIDAD_LIST[0]))
             rf.exposicion_var.set(risk.get('exposicion_residual', ''))
             rf.planes_var.set(risk.get('planes_accion', ''))
+            rf.on_id_change(preserve_existing=True, silent=True)
         # Normas
         for i, norm in enumerate(data.get('normas', [])):
             if i >= len(self.norm_frames):
@@ -10991,6 +10995,7 @@ class FraudCaseApp:
             nf.id_var.set(norm.get('id_norma', ''))
             nf.descripcion_var.set(norm.get('descripcion', ''))
             nf.fecha_var.set(norm.get('fecha_vigencia', ''))
+            nf.on_id_change(preserve_existing=True, silent=True)
         self._refresh_shared_norm_tree()
         # Analisis
         analisis = data.get('analisis', {})
