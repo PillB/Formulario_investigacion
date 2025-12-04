@@ -9173,23 +9173,25 @@ class FraudCaseApp:
                 'codigo_agencia': frame.codigo_agencia_var.get(),
             }
 
-    def _populate_product_frame_from_row(self, frame, row):
+    def _populate_product_frame_from_row(self, frame, row, preserve_existing: bool = False):
         product_id = (row.get('id_producto') or row.get('IdProducto') or '').strip()
         if not product_id:
             return
-        frame.id_var.set(product_id)
+        if should_autofill_field(frame.id_var.get(), preserve_existing):
+            frame.id_var.set(product_id)
         client_id = (row.get('id_cliente') or row.get('IdCliente') or '').strip()
         if client_id:
             values = list(frame.client_cb['values'])
             if client_id not in values:
                 values.append(client_id)
                 frame.client_cb['values'] = values
-            frame.client_var.set(client_id)
-            frame.client_cb.set(client_id)
+            if should_autofill_field(frame.client_var.get(), preserve_existing):
+                frame.client_var.set(client_id)
+                frame.client_cb.set(client_id)
         cat1 = (row.get('categoria1') or '').strip()
         cat2 = (row.get('categoria2') or '').strip()
         mod = (row.get('modalidad') or '').strip()
-        if cat1:
+        if cat1 and should_autofill_field(frame.cat1_var.get(), preserve_existing):
             if cat1 in TAXONOMIA:
                 if frame.cat1_var.get() != cat1:
                     frame.cat1_var.set(cat1)
@@ -9199,7 +9201,7 @@ class FraudCaseApp:
                     f"Producto {product_id}: la categoría 1 '{cat1}' no está en la taxonomía."
                 )
                 frame.cat1_var.set(cat1)
-        if cat2:
+        if cat2 and should_autofill_field(frame.cat2_var.get(), preserve_existing):
             if cat1 in TAXONOMIA and cat2 in TAXONOMIA[cat1]:
                 frame.cat2_var.set(cat2)
                 frame.cat2_cb.set(cat2)
@@ -9209,7 +9211,7 @@ class FraudCaseApp:
                     f"Producto {product_id}: la categoría 2 '{cat2}' no corresponde a {cat1}."
                 )
                 frame.cat2_var.set(cat2)
-        if mod:
+        if mod and should_autofill_field(frame.mod_var.get(), preserve_existing):
             valid_mods = TAXONOMIA.get(cat1, {}).get(cat2, [])
             if mod in valid_mods:
                 frame.mod_var.set(mod)
@@ -9220,37 +9222,46 @@ class FraudCaseApp:
                 )
                 frame.mod_var.set(mod)
         canal = (row.get('canal') or '').strip()
-        if canal in CANAL_LIST:
+        if canal in CANAL_LIST and should_autofill_field(frame.canal_var.get(), preserve_existing):
             frame.canal_var.set(canal)
         proceso = (row.get('proceso') or '').strip()
-        if proceso in PROCESO_LIST:
+        if proceso in PROCESO_LIST and should_autofill_field(frame.proceso_var.get(), preserve_existing):
             frame.proceso_var.set(proceso)
         tipo_prod = (row.get('tipo_producto') or row.get('tipoProducto') or '').strip()
         if tipo_prod:
             resolved_tipo = resolve_catalog_product_type(tipo_prod)
-            if resolved_tipo:
+            if resolved_tipo and should_autofill_field(frame.tipo_prod_var.get(), preserve_existing):
                 frame.tipo_prod_var.set(resolved_tipo)
-            else:
+            elif not resolved_tipo and not preserve_existing:
                 self._notify_taxonomy_warning(
                     f"Producto {product_id}: el tipo de producto '{tipo_prod}' no está en el catálogo CM."
                 )
         fecha_occ = (row.get('fecha_ocurrencia') or '').strip()
-        if fecha_occ:
+        if fecha_occ and should_autofill_field(frame.fecha_oc_var.get(), preserve_existing):
             frame.fecha_oc_var.set(fecha_occ)
         fecha_desc = (row.get('fecha_descubrimiento') or '').strip()
-        if fecha_desc:
+        if fecha_desc and should_autofill_field(frame.fecha_desc_var.get(), preserve_existing):
             frame.fecha_desc_var.set(fecha_desc)
-        frame.monto_inv_var.set((row.get('monto_investigado') or '').strip())
+        monto_investigado = (row.get('monto_investigado') or '').strip()
+        if monto_investigado and should_autofill_field(frame.monto_inv_var.get(), preserve_existing):
+            frame.monto_inv_var.set(monto_investigado)
         moneda = (row.get('tipo_moneda') or '').strip()
-        if moneda in TIPO_MONEDA_LIST:
+        if moneda in TIPO_MONEDA_LIST and should_autofill_field(frame.moneda_var.get(), preserve_existing):
             frame.moneda_var.set(moneda)
-        frame.monto_perdida_var.set((row.get('monto_perdida_fraude') or '').strip())
-        frame.monto_falla_var.set((row.get('monto_falla_procesos') or '').strip())
-        frame.monto_cont_var.set((row.get('monto_contingencia') or '').strip())
-        frame.monto_rec_var.set((row.get('monto_recuperado') or '').strip())
-        frame.monto_pago_var.set((row.get('monto_pago_deuda') or '').strip())
+        for key, target in (
+            ('monto_perdida_fraude', frame.monto_perdida_var),
+            ('monto_falla_procesos', frame.monto_falla_var),
+            ('monto_contingencia', frame.monto_cont_var),
+            ('monto_recuperado', frame.monto_rec_var),
+            ('monto_pago_deuda', frame.monto_pago_var),
+        ):
+            value = (row.get(key) or '').strip()
+            if value and should_autofill_field(target.get(), preserve_existing):
+                target.set(value)
         frame._refresh_amount_validation_after_programmatic_update()
-        frame.set_claims_from_data(frame.extract_claims_from_payload(row))
+        claims_payload = frame.extract_claims_from_payload(row)
+        if not preserve_existing or not getattr(frame, 'claims', None):
+            frame.set_claims_from_data(claims_payload)
         frame.persist_lookup_snapshot()
 
     def _ensure_client_exists(self, client_id, row_data=None):
@@ -9514,6 +9525,7 @@ class FraudCaseApp:
             if product_id:
                 product_frame = self._find_product_frame(product_id)
                 new_product = False
+                preserve_existing_product = bool(product_frame)
                 if not product_frame:
                     product_frame = self._obtain_product_slot_for_import()
                     new_product = True
@@ -9521,12 +9533,16 @@ class FraudCaseApp:
                 if client_for_product:
                     client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
                     self._ensure_client_exists(client_for_product, client_details)
-                self._populate_product_frame_from_row(product_frame, product_row)
+                self._populate_product_frame_from_row(
+                    product_frame,
+                    product_row,
+                    preserve_existing=preserve_existing_product,
+                )
                 self._trigger_import_id_refresh(
                     product_frame,
                     product_id,
                     notify_on_missing=False,
-                    preserve_existing=False,
+                    preserve_existing=preserve_existing_product,
                 )
                 created_records = created_records or new_product
                 if not product_found and 'id_producto' in self.detail_catalogs:

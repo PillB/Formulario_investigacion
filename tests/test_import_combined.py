@@ -328,6 +328,47 @@ def test_import_combined_normalizes_involvement_amounts_without_two_decimals(
     assert messagebox_spy.errors == []
 
 
+def test_import_combined_preserves_existing_product_fields(monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+    existing_product = ProductFrameStub()
+    existing_product.id_var.set('PRD-KEPT')
+    existing_product.populated_rows.append({'tipo_producto': 'Manual', 'monto_investigado': '999.99'})
+    existing_product.id_change_callback = app._handle_product_id_change
+    app._handle_product_id_change(existing_product, None, 'PRD-KEPT')
+    app.product_frames.append(existing_product)
+
+    combined_rows = [
+        {
+            'id_cliente': 'CLI-NEW',
+            'id_colaborador': 'TNEW01',
+            'id_producto': 'PRD-KEPT',
+            'tipo_producto': 'Tarjeta de crédito',
+            'monto_investigado': '100.00',
+            'monto_asignado': '25.00',
+        }
+    ]
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter(combined_rows),
+    )
+
+    app.import_combined(filename="dummy.csv")
+
+    product_frame = app._find_product_frame('PRD-KEPT')
+    assert product_frame is existing_product
+    assert product_frame.populated_rows == [
+        {'tipo_producto': 'Manual', 'monto_investigado': '999.99'}
+    ]
+
+    involvement_records = [
+        (inv.team_var.get(), inv.monto_var.get())
+        for inv in product_frame.involvements
+        if inv.team_var.get()
+    ]
+    assert involvement_records == [('TNEW01', '25.00')]
+
+
 def test_import_risks_and_norms_hydrate_from_catalogs(monkeypatch, messagebox_spy):
     app = build_import_app(monkeypatch)
     app.detail_catalogs.update(
