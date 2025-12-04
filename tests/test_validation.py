@@ -1884,6 +1884,57 @@ def test_team_frame_inline_agency_validation_clears_when_optional(monkeypatch):
     assert codigo_validator.last_custom_error is None
 
 
+def test_location_validation_uses_hierarchy_catalog(monkeypatch):
+    team_module, _ = _patch_team_module(monkeypatch)
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    frame.division_var.set("GCIA DE DIVISION CANALES DE ATENCION")
+    frame.area_var.set("AREA COMERCIAL LIMA 1")
+    frame.servicio_var.set("AREA LIMA 1 - REGION 62")
+    frame.puesto_var.set("EJECUTIVO PYME")
+
+    assert frame._validate_location_field("division") is None
+    assert frame._validate_location_field("area") is None
+    assert frame._validate_location_field("servicio") is None
+    assert frame._validate_location_field("puesto") is None
+
+    frame.servicio_var.set("Servicio inexistente")
+    error = frame._validate_location_field("servicio")
+    assert "no existe" in (error or "")
+
+
+def test_agency_validation_works_without_location_scope(monkeypatch):
+    team_module, _ = _patch_team_module(monkeypatch)
+    frame = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    frame.nombre_agencia_var.set("Agencia Aeropuerto")
+    assert frame._validate_agency_fields("nombre") is None
+
+    frame.codigo_agencia_var.set("194057")
+    name_error = frame._validate_agency_fields("nombre")
+    assert "no coincide" in (name_error or "")
+
+    frame.nombre_agencia_var.set("Agencia Aeropuerto")
+    frame.codigo_agencia_var.set("192007")
+    assert frame._validate_agency_fields("codigo") is None
+
+
 def test_team_frame_shows_and_clears_fallback_warning(monkeypatch):
     team_module, _ = _patch_team_module(monkeypatch)
 
