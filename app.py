@@ -1538,8 +1538,7 @@ class FraudCaseApp:
         canvas, inner = self._find_scrollable_canvas(widget)
         if canvas is None or inner is None:
             return False
-        self._scroll_with_canvas(canvas, inner, widget)
-        return True
+        return self._scroll_with_canvas(canvas, inner, widget)
 
     def _scroll_to_widget(self, widget: tk.Widget) -> bool:
         if widget is None:
@@ -1612,12 +1611,19 @@ class FraudCaseApp:
                 return None
         return offset if current is ancestor else None
 
-    def _scroll_with_canvas(self, canvas: tk.Canvas, inner: ttk.Frame, widget: tk.Widget) -> None:
+    def _scroll_with_canvas(self, canvas: tk.Canvas, inner: ttk.Frame, widget: tk.Widget) -> bool:
         try:
             first, last = canvas.yview()
         except Exception:
             first = 0.0
             last = 1.0
+
+        def _view_tuple(view):
+            try:
+                return tuple(view)
+            except Exception:
+                return ()
+
         self._safe_update_idletasks()
         inner_height = inner.winfo_height()
         view_height = canvas.winfo_height()
@@ -1629,21 +1635,25 @@ class FraudCaseApp:
             or view_height <= 0
             or widget_height <= 0
         ):
-            return
+            return False
         visible_top = first * inner_height
         visible_bottom = last * inner_height
         widget_top = offset
         widget_bottom = offset + widget_height
         if visible_top <= widget_top and widget_bottom <= visible_bottom:
-            return
+            return False
+
         center_target = max(0.0, widget_top + (widget_height / 2) - (view_height / 2))
         max_scroll = max(inner_height - view_height, 1)
         fraction = min(max(center_target / max_scroll, 0.0), 1.0)
+        before_view = _view_tuple(canvas.yview()) or (first, last)
         try:
             canvas.yview_moveto(fraction)
         except Exception:
-            return
+            return False
         self._safe_update_idletasks()
+        after_view = _view_tuple(canvas.yview()) or before_view
+        return after_view != before_view
 
     def _revive_focus_widget(self, widget, origin: str | None = None):
         origin_hint = origin or getattr(widget, "_validation_origin", None) or ""
