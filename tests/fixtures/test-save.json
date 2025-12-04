@@ -1,0 +1,278 @@
+{
+  "dataset": {
+    "caso": {
+      "id_caso": "2024-0001",
+      "tipo_informe": "Gerencia",
+      "categoria1": "Riesgo de Fraude",
+      "categoria2": "Fraude Interno",
+      "modalidad": "Apropiación de fondos",
+      "canal": "Agencias",
+      "proceso": "Venta de crédito comercial",
+      "fecha_de_ocurrencia": "2024-01-05",
+      "fecha_de_descubrimiento": "2024-01-15",
+      "matricula_investigador": "INV001",
+      "investigador": {
+        "matricula": "INV001",
+        "nombre": "María Pérez",
+        "cargo": "Investigador Principal"
+      },
+      "centro_costo": "CC-12345"
+    },
+    "clientes": [
+      {
+        "id_cliente": "12345678",
+        "id_caso": "",
+        "nombres": "Carlos",
+        "apellidos": "Quispe",
+        "tipo_id": "dni",
+        "flag": "Involucrado",
+        "telefonos": "+51999888777",
+        "correos": "carlos@example.com",
+        "direcciones": "Av. Siempre Viva 123",
+        "accionado": "Unidad de Fraude"
+      },
+      {
+        "id_cliente": "20123456789",
+        "id_caso": "",
+        "nombres": "Finanzas",
+        "apellidos": "Industriales SAC",
+        "tipo_id": "ruc",
+        "flag": "Afectado",
+        "telefonos": "+5112345678",
+        "correos": "contacto@finanzas.pe",
+        "direcciones": "Jr. Contabilidad 456",
+        "accionado": "Tribu Canal Impactado"
+      }
+    ],
+    "colaboradores": [
+      {
+        "id_colaborador": "T12345",
+        "id_caso": "",
+        "flag": "Investigado",
+        "nombres": "Ana",
+        "apellidos": "López",
+        "division": "Riesgos",
+        "area": "Operaciones",
+        "servicio": "Prevención",
+        "puesto": "Analista Senior",
+        "fecha_carta_inmediatez": "2024-01-18",
+        "fecha_carta_renuncia": "",
+        "nombre_agencia": "",
+        "codigo_agencia": "",
+        "tipo_falta": "Leve",
+        "tipo_sancion": "Suspensión"
+      },
+      {
+        "id_colaborador": "R67890",
+        "id_caso": "",
+        "flag": "Investigado",
+        "nombres": "Bruno",
+        "apellidos": "Salazar",
+        "division": "DCA",
+        "area": "Area Comercial Norte",
+        "servicio": "Cobranzas",
+        "puesto": "Jefe de equipo",
+        "fecha_carta_inmediatez": "2024-01-10",
+        "fecha_carta_renuncia": "",
+        "nombre_agencia": "Agencia Trujillo Centro",
+        "codigo_agencia": "123456",
+        "tipo_falta": "Grave",
+        "tipo_sancion": "Amonestación"
+      }
+    ],
+    "productos": [
+      {
+        "id_producto": "1234567890123",
+        "id_caso": "",
+        "id_cliente": "12345678",
+        "categoria1": "Riesgo de Fraude",
+        "categoria2": "Fraude Interno",
+        "modalidad": "Apropiación de fondos",
+        "canal": "Agencias",
+        "proceso": "Venta de crédito comercial",
+        "fecha_ocurrencia": "2024-01-05",
+        "fecha_descubrimiento": "2024-01-10",
+        "monto_investigado": "2000.00",
+        "tipo_moneda": "Soles",
+        "monto_perdida_fraude": "0.00",
+        "monto_falla_procesos": "0.00",
+        "monto_contingencia": "2000.00",
+        "monto_recuperado": "0.00",
+        "monto_pago_deuda": "750.00",
+        "tipo_producto": "Crédito personal"
+      },
+      {
+        "id_producto": "9876543210987",
+        "id_caso": "",
+        "id_cliente": "20123456789",
+        "categoria1": "Riesgo de Fraude",
+        "categoria2": "Fraude Externo",
+        "modalidad": "Estafa",
+        "canal": "Homebanking",
+        "proceso": "Afiliación al servicio",
+        "fecha_ocurrencia": "2023-12-15",
+        "fecha_descubrimiento": "2023-12-20",
+        "monto_investigado": "85.00",
+        "tipo_moneda": "Dólares",
+        "monto_perdida_fraude": "50.00",
+        "monto_falla_procesos": "25.00",
+        "monto_contingencia": "0.00",
+        "monto_recuperado": "10.00",
+        "monto_pago_deuda": "20.00",
+        "tipo_producto": "Cuenta de ahorro"
+      },
+      {
+        "id_producto": "4455667788990011",
+        "id_caso": "",
+        "id_cliente": "",
+        "categoria1": "Riesgo de Ciberseguridad",
+        "categoria2": "Perdida de Integridad",
+        "modalidad": "Operaciones no autorizadas",
+        "canal": "Centro de contacto",
+        "proceso": "Bloqueo de cuentas",
+        "fecha_ocurrencia": "2024-02-01",
+        "fecha_descubrimiento": "2024-02-05",
+        "monto_investigado": "500.00",
+        "tipo_moneda": "Soles",
+        "monto_perdida_fraude": "0.00",
+        "monto_falla_procesos": "0.00",
+        "monto_contingencia": "500.00",
+        "monto_recuperado": "0.00",
+        "monto_pago_deuda": "200.00",
+        "tipo_producto": "Crédito flexible"
+      }
+    ],
+    "reclamos": [
+      {
+        "id_reclamo": "C12345678",
+        "id_caso": "",
+        "id_producto": "1234567890123",
+        "nombre_analitica": "Analítica crédito preventivo",
+        "codigo_analitica": "4300000000"
+      },
+      {
+        "id_reclamo": "C87654321",
+        "id_caso": "",
+        "id_producto": "9876543210987",
+        "nombre_analitica": "Analítica de fraude externo",
+        "codigo_analitica": "4500000001"
+      },
+      {
+        "id_reclamo": "C11223344",
+        "id_caso": "",
+        "id_producto": "4455667788990011",
+        "nombre_analitica": "Analítica contingencia crédito",
+        "codigo_analitica": "4600000002"
+      }
+    ],
+    "involucramientos": [
+      {
+        "id_producto": "1234567890123",
+        "id_caso": "",
+        "id_colaborador": "T12345",
+        "monto_asignado": "1200.00"
+      },
+      {
+        "id_producto": "4455667788990011",
+        "id_caso": "",
+        "id_colaborador": "R67890",
+        "monto_asignado": "300.00"
+      }
+    ],
+    "riesgos": [
+      {
+        "id_riesgo": "RSK-000001",
+        "lider": "Líder Control",
+        "descripcion": "Riesgo de repetición de patrones en canales digitales",
+        "criticidad": "Alta",
+        "exposicion_residual": "1500.00",
+        "planes_accion": "Monitoreo semanal; Ajuste de límites"
+      }
+    ],
+    "normas": [
+      {
+        "id_norma": "2024.001.01.01",
+        "descripcion": "Manual de prevención de fraude interno",
+        "fecha_vigencia": "2023-12-01"
+      }
+    ],
+    "analisis": {
+      "antecedentes": {
+        "text": "El caso fue reportado por monitoreo preventivo.",
+        "tags": []
+      },
+      "modus_operandi": {
+        "text": "Se detectaron transferencias no autorizadas mediante ingeniería social.",
+        "tags": []
+      },
+      "hallazgos": {
+        "text": "Los accesos comprometidos se limitaron a un operador.",
+        "tags": []
+      },
+      "descargos": {
+        "text": "El cliente presentó pruebas de suplantación.",
+        "tags": []
+      },
+      "conclusiones": {
+        "text": "Se confirma impacto moderado y se sugiere refuerzo de autenticación.",
+        "tags": []
+      },
+      "recomendaciones": {
+        "text": "Fortalecer MFA; capacitar a fuerza de ventas; revisar accesos de colaboradores.",
+        "tags": []
+      }
+    },
+    "encabezado": {
+      "dirigido_a": "Gerencia de Riesgos",
+      "referencia": "Caso de fraude de referencia",
+      "area_reporte": "Fraude",
+      "fecha_reporte": "2024-02-10",
+      "tipologia_evento": "Fraude interno",
+      "centro_costos": "CC-12345",
+      "procesos_impactados": "Créditos digitales",
+      "numero_reclamos": "3",
+      "analitica_contable": "4300000000"
+    },
+    "operaciones": [
+      {"nombre": "Revisión de logs", "fecha": "2024-02-08", "responsable": "SOC"}
+    ],
+    "anexos": [
+      {"titulo": "Evidencias", "detalle": "Capturas de pantalla y trazas"}
+    ],
+    "firmas": [
+      {"rol": "Responsable", "nombre": "María Pérez", "fecha": "2024-02-12"}
+    ],
+    "recomendaciones_categorias": {
+      "laboral": ["Capacitación acelerada"],
+      "operativo": ["Reforzar controles de onboarding"],
+      "legal": ["Notificar a fiscalía"],
+      "tecnologico": ["Ajustar monitoreo SIEM"]
+    }
+  },
+  "form_state": {
+    "tk_variables": {
+      "id_caso_var": "2024-0001",
+      "tipo_informe_var": "Gerencia",
+      "cat_caso1_var": "Riesgo de Fraude",
+      "cat_caso2_var": "Fraude Interno",
+      "mod_caso_var": "Apropiación de fondos",
+      "canal_caso_var": "Agencias",
+      "proceso_caso_var": "Venta de crédito comercial",
+      "fecha_caso_var": "2024-01-05",
+      "fecha_descubrimiento_caso_var": "2024-01-15",
+      "investigator_id_var": "INV001",
+      "investigator_nombre_var": "María Pérez",
+      "investigator_cargo_var": "Investigador Principal",
+      "centro_costo_caso_var": "CC-12345"
+    },
+    "encabezado_vars": {
+      "dirigido_a": "Gerencia de Riesgos",
+      "referencia": "Caso de fraude de referencia",
+      "area_reporte": "Fraude",
+      "fecha_reporte": "2024-02-10"
+    },
+    "operacion_vars": {},
+    "anexo_vars": {},
+    "firma_vars": {}
+  }
+}
