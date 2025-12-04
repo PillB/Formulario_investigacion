@@ -1871,7 +1871,7 @@ def test_team_frame_inline_agency_validation_clears_when_optional(monkeypatch):
     frame.codigo_agencia_var.set("123456")
     _trigger_focus_out(frame._division_entry)
 
-    assert nombre_validator.last_custom_error is None
+    assert nombre_validator.last_custom_error == "El nombre de agencia no se encuentra en el catálogo CM."
     assert codigo_validator.last_custom_error is None
 
     frame.division_var.set("Banca Empresas")
