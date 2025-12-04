@@ -1440,10 +1440,18 @@ class ToggleWarningBadge:
         _step()
 
     def _restore_text(self) -> None:
-        if getattr(self._text_label, "winfo_manager", lambda: "")() == "":
-            show = getattr(self._text_label, "grid", None) or getattr(self._text_label, "pack", None)
-            if callable(show):
-                show(row=0, column=1, padx=(0, 4), pady=(2, 2), sticky="we")
+        manager = getattr(self._text_label, "winfo_manager", lambda: "")()
+        is_mapped = getattr(self._text_label, "winfo_ismapped", lambda: False)()
+
+        if manager == "pack":
+            show = getattr(self._text_label, "pack", None)
+            kwargs: dict[str, object] = {}
+        else:
+            show = getattr(self._text_label, "grid", None)
+            kwargs = {"row": 0, "column": 1, "padx": (0, 4), "pady": (2, 2), "sticky": "we"}
+
+        if callable(show) and (manager == "" or not is_mapped):
+            show(**kwargs)
 
     def _hide_text(self) -> None:
         manager = getattr(self._text_label, "winfo_manager", lambda: "")()
