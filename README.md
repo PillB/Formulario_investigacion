@@ -18,6 +18,7 @@ Aplicación de escritorio en Python/Tkinter para registrar, validar y exportar e
 
 ## Prerrequisitos
 - Python 3.7 o superior.
+- Dependencia requerida para el selector de fechas: `tkcalendar` (incluida en `requirements.txt`).
 - Dependencia opcional: `python-docx` para generar el informe Word.
 - Archivos CSV de referencia en la raíz del proyecto:
   - `client_details.csv`, `team_details.csv` para autopoblado.

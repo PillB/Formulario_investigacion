@@ -115,6 +115,7 @@ class NormFrame:
             row=1,
             column=3,
         )
+        self.fecha_entry = fecha_entry
         self.tooltip_register(fecha_entry, "Fecha de publicación o vigencia de la norma.")
 
         ttk.Label(self.frame, text="Descripción de la norma:").grid(

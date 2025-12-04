@@ -11,6 +11,16 @@ from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection, register_styles
 
+try:
+    from tkcalendar import DateEntry  # type: ignore
+
+    _CALENDAR_PROBE_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - only exercised when dependency is missing
+    DateEntry = None  # type: ignore[assignment]
+    _CALENDAR_PROBE_ERROR = exc
+
+_CALENDAR_WARNING_EMITTED = False
+
 ALERT_BADGE_ICON = "⚠️"
 SUCCESS_BADGE_ICON = "✅"
 PENDING_BADGE_ICON = "⏳"
@@ -70,9 +80,8 @@ def create_date_entry(
         options["style"] = style
     options.update(kwargs)
 
-    try:
-        from tkcalendar import DateEntry  # type: ignore
-    except Exception:
+    if DateEntry is None:
+        _warn_calendar_fallback("tkcalendar no disponible", _CALENDAR_PROBE_ERROR)
         return _build_plain_entry(parent, textvariable, options)
 
     try:
@@ -82,7 +91,8 @@ def create_date_entry(
             showweeknumbers=False,
             **options,
         )
-    except Exception:
+    except Exception as exc:  # pragma: no cover - fallback only when calendar fails
+        _warn_calendar_fallback("No se pudo inicializar tkcalendar", exc)
         return _build_plain_entry(parent, textvariable, options)
 
     _clear_initial_value(date_entry, textvariable)
@@ -133,6 +143,17 @@ def _normalize_on_focus_out(widget: Any, variable: tk.StringVar) -> None:
         variable.set(raw_value)
 
     widget.bind("<FocusOut>", _store_normalized, add="+")
+
+
+def _warn_calendar_fallback(context: str, exc: Exception | None) -> None:
+    global _CALENDAR_WARNING_EMITTED
+
+    if _CALENDAR_WARNING_EMITTED:
+        return
+
+    _CALENDAR_WARNING_EMITTED = True
+    details = f" ({exc})" if exc else ""
+    sys.stderr.write(f"[date-entry] Recurriendo a entrada simple: {context}{details}\n")
 
 
 class _StubEntry:
@@ -1521,3 +1542,4 @@ class ToggleWarningBadge:
 
     def __getattr__(self, item: str):
         return getattr(self._frame, item)
+
