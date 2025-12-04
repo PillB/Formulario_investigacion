@@ -232,28 +232,62 @@ def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggl
             content.pack(fill="both", expand=True)
 
     except Exception:
+        class _StubClickable:
+            def __init__(self, text: str = ""):
+                self._text = text
+                self._bindings: dict[str, list[Any]] = {}
+                ensure_grid_support(self)
+
+            def pack(self, *_args, **_kwargs):  # noqa: ANN001
+                return None
+
+            def pack_forget(self):  # noqa: ANN001
+                return None
+
+            def configure(self, **kwargs):  # noqa: ANN001
+                if "text" in kwargs:
+                    self._text = kwargs["text"]
+
+            def bind(self, sequence, callback, add=None):  # noqa: ANN001, ARG002
+                self._bindings.setdefault(sequence, []).append(callback)
+                return f"bind_{len(self._bindings[sequence])}"
+
+            def _trigger(self, sequence: str):
+                for callback in self._bindings.get(sequence, []):
+                    try:
+                        callback(None)
+                    except Exception:
+                        continue
+
         class _StubContent:
             def __init__(self):
                 self.children = []
+                ensure_grid_support(self)
 
-            def pack(self, *_args, **_kwargs):
+            def pack(self, *_args, **_kwargs):  # noqa: ANN001
                 return None
 
-            def pack_forget(self):
+            def pack_forget(self):  # noqa: ANN001
                 return None
 
         class _StubCard:
             def __init__(self):
                 self.content = _StubContent()
+                self.header = _StubClickable()
+                self.indicator = _StubClickable("▼" if open else "▸")
+                self.title_label = _StubClickable(title)
                 ensure_grid_support(self)
 
-            def pack(self, *_args, **_kwargs):
+            def pack(self, *_args, **_kwargs):  # noqa: ANN001
                 return None
 
-            def pack_forget(self):
+            def pack_forget(self):  # noqa: ANN001
                 return None
 
         card = _StubCard()
+        header = card.header
+        indicator = card.indicator
+        title_lbl = card.title_label
         content = card.content
 
     card.is_open = bool(open)  # type: ignore[attr-defined]

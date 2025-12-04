@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Callable
-
 import tkinter as tk
 from tkinter import messagebox, ttk
 from tkinter import font as tkfont
@@ -194,7 +192,7 @@ class InvolvementRow:
             self._notify_summary_change()
 
     def remove(self):
-        if messagebox.askyesno("Confirmar", f"¿Desea eliminar esta asignación?"):
+        if messagebox.askyesno("Confirmar", "¿Desea eliminar esta asignación?"):
             self.product_frame.log_change(
                 f"Se eliminó asignación de colaborador en producto {self.product_frame.idx+1}"
             )
@@ -887,8 +885,6 @@ class ProductFrame:
             parent=self.frame, pending_text=ALERT_BADGE_ICON, success_text=SUCCESS_BADGE_ICON
         )
         self._configure_grid_columns()
-        if hasattr(self.owner, "_set_active_product_frame"):
-            self.frame.bind("<FocusIn>", lambda _e: self.owner._set_active_product_frame(self), add="+")
 
         ttk.Label(self.frame, text="ID del producto:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1187,6 +1183,18 @@ class ProductFrame:
             inv_add_btn,
             "Registra un colaborador asociado a este producto. Es obligatorio para validar duplicados.",
         )
+
+        action_row = ttk.Frame(self.frame)
+        ensure_grid_support(action_row)
+        action_row.grid(row=14, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
+        if hasattr(action_row, "columnconfigure"):
+            action_row.columnconfigure(0, weight=1)
+            action_row.columnconfigure(1, weight=0)
+        remove_btn = ttk.Button(
+            action_row, text="Eliminar producto", command=self.remove, style=BUTTON_STYLE
+        )
+        remove_btn.grid(row=0, column=1, sticky="e")
+        self.tooltip_register(remove_btn, "Quita el producto y todas sus capturas del caso.")
 
         self.validators.append(
             FieldValidator(
@@ -1749,8 +1757,6 @@ class ProductFrame:
         self._tree_sort_state[column] = not reverse
 
     def _get_target_product_frame(self):
-        if getattr(self, "owner", None) and getattr(self.owner, "_active_product_frame", None):
-            return self.owner._active_product_frame
         return self
 
     def _on_tree_select(self, _event=None):
