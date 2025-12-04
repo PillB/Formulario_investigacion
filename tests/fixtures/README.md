@@ -7,6 +7,8 @@ El archivo `test-save.json` replica la estructura que devuelve `_serialize_full_
 - Montos no negativos con dos decimales, sumas que cuadran (`investigado = pérdida + falla + contingencia + recuperado`), pago de deuda ≤ investigado y contingencia = investigado en productos de crédito.
 - Combinaciones de productos que cubren cliente+miembro, solo cliente y solo miembro.
 
+Para un autosave listo para usar con valores que respetan catálogos/autocompletar (clientes y colaboradores presentes en los `*_details.csv`), utiliza `autosave-valid.json` en este mismo directorio.
+
 ## Uso rápido
 1. Inicia la aplicación (`python -m main`).
 2. En la pestaña **Acciones**, pulsa **Cargar formulario** y selecciona `tests/fixtures/test-save.json`.
