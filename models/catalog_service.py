@@ -18,7 +18,7 @@ from validators import normalize_team_member_identifier, normalize_without_accen
 
 from .catalogs import (build_detail_catalog_id_index, load_detail_catalogs,
                        normalize_detail_catalog_key)
-from .static_team_catalog import build_team_catalog_rows
+from .static_team_catalog import TEAM_HIERARCHY_CATALOG, build_team_catalog_rows
 
 
 class CatalogService:
@@ -180,7 +180,11 @@ class TeamHierarchyCatalog:
     formularios.
     """
 
-    def __init__(self, rows: Iterable[dict] | None = None):
+    def __init__(
+        self,
+        rows: Iterable[dict] | None = None,
+        hierarchy: dict | None = None,
+    ):
         self._divisions: dict[str, str] = {}
         self._areas: dict[str, dict[str, dict[str, dict[str, str]]]] = {}
         self._area_labels: dict[str, dict[str, str]] = {}
@@ -188,6 +192,7 @@ class TeamHierarchyCatalog:
         self._role_labels: dict[tuple[str, str, str], dict[str, str]] = {}
         self._agencies_by_scope: dict[tuple[str, str], dict[str, dict[str, str]]] = {}
         self._agencies_by_code: dict[tuple[str, str], dict[str, dict[str, str]]] = {}
+        self._hierarchy_dict: dict = hierarchy or TEAM_HIERARCHY_CATALOG
         for row in rows or ():
             self._ingest_row(row)
 
@@ -197,7 +202,129 @@ class TeamHierarchyCatalog:
 
     @property
     def has_data(self) -> bool:
-        return bool(self._divisions)
+        return bool(self._divisions or self._hierarchy_dict)
+
+    @property
+    def hierarchy_dict(self) -> dict:
+        return self._hierarchy_dict
+
+    @staticmethod
+    def _label_for(entry: dict, key: str) -> str:
+        if not isinstance(entry, dict):
+            return str(entry).strip()
+        return (entry.get("nbr") or entry.get("abr") or str(key)).strip()
+
+    def _sorted_option_pairs(self, mapping: dict[str, dict]) -> list[tuple[str, str]]:
+        return sorted(
+            ((key, self._label_for(data or {}, key)) for key, data in (mapping or {}).items()),
+            key=lambda item: item[1].casefold(),
+        )
+
+    def _match_entry(self, mapping: dict[str, dict], value: str) -> tuple[str, dict, str] | tuple[None, None, None]:
+        normalized_value = self._normalize(value)
+        for key, data in (mapping or {}).items():
+            label = self._label_for(data or {}, key)
+            if normalized_value in {self._normalize(key), self._normalize(label)}:
+                return key, data or {}, label
+        return None, None, None
+
+    def list_hierarchy_divisions(self) -> list[tuple[str, str]]:
+        return self._sorted_option_pairs(self._hierarchy_dict)
+
+    def hierarchy_contains_division(self, division: str) -> bool:
+        key, _, _ = self._match_entry(self._hierarchy_dict, division)
+        return bool(key)
+
+    def list_hierarchy_areas(self, division: str) -> list[tuple[str, str]]:
+        div_key, entry, _ = self._match_entry(self._hierarchy_dict, division)
+        if not div_key or entry is None:
+            return []
+        areas = entry.get("areas") or {}
+        services = entry.get("services") or {}
+        if areas:
+            return self._sorted_option_pairs(areas)
+        if services:
+            return self._sorted_option_pairs(services)
+        return []
+
+    def hierarchy_contains_area(self, division: str, area: str) -> bool:
+        div_key, entry, _ = self._match_entry(self._hierarchy_dict, division)
+        if not div_key:
+            return False
+        areas = entry.get("areas") or {}
+        services = entry.get("services") or {}
+        if areas:
+            area_key, _, _ = self._match_entry(areas, area)
+            return bool(area_key)
+        area_key, _, _ = self._match_entry(services, area)
+        return bool(area_key)
+
+    def list_hierarchy_services(self, division: str, area: str) -> list[tuple[str, str]]:
+        div_key, entry, _ = self._match_entry(self._hierarchy_dict, division)
+        if not div_key:
+            return []
+        areas = entry.get("areas") or {}
+        services = entry.get("services") or {}
+        if areas:
+            area_key, area_entry, _ = self._match_entry(areas, area)
+            if not area_key:
+                return []
+            nested_services = area_entry.get("services") or {}
+            if nested_services:
+                return self._sorted_option_pairs(nested_services)
+            if area_entry.get("positions"):
+                return [(area_key, self._label_for(area_entry, area_key))]
+        return self._sorted_option_pairs(services)
+
+    def hierarchy_contains_service(self, division: str, area: str, servicio: str) -> bool:
+        div_key, entry, _ = self._match_entry(self._hierarchy_dict, division)
+        if not div_key:
+            return False
+        areas = entry.get("areas") or {}
+        services = entry.get("services") or {}
+        if areas:
+            area_key, area_entry, _ = self._match_entry(areas, area)
+            if not area_key:
+                return False
+            nested_services = area_entry.get("services") or {}
+            serv_key, _, _ = self._match_entry(nested_services, servicio)
+            if serv_key:
+                return True
+            return bool(area_entry.get("positions") and self._normalize(area) == self._normalize(servicio))
+        serv_key, _, _ = self._match_entry(services, servicio)
+        return bool(serv_key)
+
+    def list_hierarchy_roles(self, division: str, area: str, servicio: str) -> list[tuple[str, str]]:
+        div_key, entry, _ = self._match_entry(self._hierarchy_dict, division)
+        if not div_key:
+            return []
+        areas = entry.get("areas") or {}
+        services = entry.get("services") or {}
+        positions: dict[str, str] = {}
+        if areas:
+            area_key, area_entry, _ = self._match_entry(areas, area)
+            if not area_key:
+                return []
+            nested_services = area_entry.get("services") or {}
+            if nested_services:
+                serv_key, service_entry, _ = self._match_entry(nested_services, servicio)
+                if not serv_key:
+                    return []
+                positions = service_entry.get("positions") or {}
+            else:
+                positions = area_entry.get("positions") or {}
+        else:
+            serv_key, service_entry, _ = self._match_entry(services, servicio or area)
+            if not serv_key:
+                return []
+            nested_services = service_entry.get("services") or {}
+            if nested_services:
+                nested_key, nested_entry, _ = self._match_entry(nested_services, servicio)
+                if nested_key:
+                    positions = nested_entry.get("positions") or {}
+            else:
+                positions = service_entry.get("positions") or {}
+        return self._sorted_option_pairs(positions)
 
     def _remember(self, container: dict[str, str], key: str, label: str) -> str:
         if key not in container and label:
