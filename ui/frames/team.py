@@ -1267,6 +1267,8 @@ class TeamMemberFrame:
             if requires_agency and not agency_name:
                 return "Debe ingresar el nombre de la agencia."
             if self.team_catalog.has_data and agency_name:
+                if requires_agency and not name_lookup:
+                    return "El nombre de agencia no se encuentra en el catálogo CM."
                 if name_lookup and agency_code:
                     expected_code = name_lookup[1]
                     if expected_code and expected_code != agency_code:
