@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from models import TeamHierarchyCatalog
-from models.static_team_catalog import AGENCY_CATALOG
+from models.static_team_catalog import AGENCY_CATALOG, build_team_catalog_rows
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
 from validators import (FieldValidator, log_event, normalize_team_member_identifier,
                         normalize_without_accents, should_autofill_field,
@@ -72,7 +72,7 @@ class TeamMemberFrame:
         self._fallback_message_var = tk.StringVar(value="")
         self.summary_tree = None
         self._summary_tree_sort_state: dict[str, bool] = {}
-        self.team_catalog = team_catalog or TeamHierarchyCatalog()
+        self.team_catalog = team_catalog or TeamHierarchyCatalog(build_team_catalog_rows())
         self._selection_error_cache: set[str] = set()
         self._area_option_map: dict[str, str] = {}
         self._service_option_map: dict[str, str] = {}
@@ -714,13 +714,44 @@ class TeamMemberFrame:
 
     def _build_agency_lookup(self) -> dict[str, tuple[str, str]]:
         lookup: dict[str, tuple[str, str]] = {}
+
+        def _remember(name: str, code: str) -> None:
+            normalized_name = self._normalize_catalog_key(name)
+            normalized_code = (code or "").strip()
+            if normalized_name and normalized_name not in lookup:
+                lookup[normalized_name] = (name, normalized_code)
+            if normalized_code and normalized_code not in lookup:
+                lookup[normalized_code] = (name, normalized_code)
+
         for agency_name, agency_code in (AGENCY_CATALOG or {}).items():
-            normalized_name = self._normalize_catalog_key(agency_name)
-            normalized_code = (agency_code or "").strip()
-            if normalized_name:
-                lookup[normalized_name] = (agency_name, normalized_code)
-            if normalized_code:
-                lookup[normalized_code] = (agency_name, normalized_code)
+            _remember(agency_name, agency_code)
+
+        if self.team_catalog:
+            divisions = set()
+            for _, label in self.team_catalog.list_hierarchy_divisions():
+                if label:
+                    divisions.add(label)
+            for label in self.team_catalog.list_divisions():
+                if label:
+                    divisions.add(label)
+
+            for division in divisions:
+                areas = set()
+                for _, label in self.team_catalog.list_hierarchy_areas(division):
+                    if label:
+                        areas.add(label)
+                for label in self.team_catalog.list_areas(division):
+                    if label:
+                        areas.add(label)
+
+                for area in areas:
+                    for name in self.team_catalog.list_agency_names(division, area):
+                        match = self.team_catalog.match_agency_by_name(division, area, name) or {}
+                        _remember(name, match.get("codigo") or "")
+                    for code in self.team_catalog.list_agency_codes(division, area):
+                        match = self.team_catalog.match_agency_by_code(division, area, code) or {}
+                        _remember(match.get("nombre") or "", match.get("codigo") or code)
+
         return lookup
 
     def _set_combobox_state(self, widget, values, *, enabled: bool = True, allow_free_text: bool = False) -> None:
@@ -1212,7 +1243,8 @@ class TeamMemberFrame:
         self._last_missing_lookup_id = None
 
     def set_team_catalog(self, catalog: TeamHierarchyCatalog | None) -> None:
-        self.team_catalog = catalog or TeamHierarchyCatalog()
+        self.team_catalog = catalog or TeamHierarchyCatalog(build_team_catalog_rows())
+        self._agency_lookup = self._build_agency_lookup()
         self._apply_team_catalog_state(preserve_values=True, silent=True)
 
     def _requires_agency_details(self) -> bool:
@@ -1225,28 +1257,23 @@ class TeamMemberFrame:
 
     def _validate_agency_fields(self, field: str) -> str | None:
         requires_agency = self._requires_agency_details()
-        division = self.division_var.get().strip()
-        area = self.area_var.get().strip()
         agency_name = self.nombre_agencia_var.get().strip()
         agency_code = self.codigo_agencia_var.get().strip()
+        code_lookup = self._agency_lookup.get(agency_code.strip()) if agency_code else None
+        name_lookup = self._agency_lookup.get(self._normalize_catalog_key(agency_name)) if agency_name else None
         if field == "nombre":
             if not requires_agency and not agency_name:
                 return None
             if requires_agency and not agency_name:
                 return "Debe ingresar el nombre de la agencia."
             if self.team_catalog.has_data and agency_name:
-                if not self._has_valid_area():
-                    return None
-                if not division or not area:
-                    return "Selecciona división y área para validar la agencia."
-                match = self.team_catalog.match_agency_by_name(division, area, agency_name)
-                if not match:
-                    return (
-                        f"La agencia '{agency_name}' no está registrada para la división y área seleccionadas."
-                    )
-                expected_code = (match.get("codigo") or "").strip()
-                if expected_code and agency_code and expected_code != agency_code:
-                    return "El código de agencia no coincide con el catálogo CM."
+                if name_lookup and agency_code:
+                    expected_code = name_lookup[1]
+                    if expected_code and expected_code != agency_code:
+                        return "El código de agencia no coincide con el catálogo CM."
+                elif code_lookup and code_lookup[0]:
+                    if self._normalize_catalog_key(code_lookup[0]) != self._normalize_catalog_key(agency_name):
+                        return "El nombre de agencia no coincide con el catálogo CM."
             return None
         if field == "codigo":
             code_error = validate_agency_code(
@@ -1258,18 +1285,14 @@ class TeamMemberFrame:
             if not agency_code:
                 return None
             if self.team_catalog.has_data:
-                if not self._has_valid_area():
-                    return None
-                if not division or not area:
-                    return "Selecciona división y área para validar la agencia."
-                match = self.team_catalog.match_agency_by_code(division, area, agency_code)
-                if not match:
-                    return (
-                        f"El código de agencia '{agency_code}' no está registrado para la división y área seleccionadas."
-                    )
-                expected_name = (match.get("nombre") or "").strip()
-                if expected_name and agency_name and self._normalize_catalog_key(agency_name) != self._normalize_catalog_key(expected_name):
-                    return "El nombre de agencia no coincide con el catálogo CM."
+                if code_lookup and agency_name:
+                    expected_name = code_lookup[0]
+                    if expected_name and self._normalize_catalog_key(agency_name) != self._normalize_catalog_key(expected_name):
+                        return "El nombre de agencia no coincide con el catálogo CM."
+                elif name_lookup:
+                    expected_code = name_lookup[1]
+                    if expected_code and expected_code != agency_code:
+                        return "El código de agencia no coincide con el catálogo CM."
         return None
 
     def _handle_location_change(self) -> None:
@@ -1632,43 +1655,65 @@ class TeamMemberFrame:
     def _validate_location_field(self, level: str) -> str | None:
         if not self.team_catalog.has_data:
             return None
+
+        def _in_hierarchy(pairs: list[tuple[str, str]], value: str) -> bool:
+            normalized = self._normalize_catalog_key(value)
+            for key, label in pairs:
+                if normalized in {self._normalize_catalog_key(key), self._normalize_catalog_key(label)}:
+                    return True
+            return False
+
         division = self.division_var.get().strip()
         area = self.area_var.get().strip()
         servicio = self.servicio_var.get().strip()
         puesto = self.puesto_var.get().strip()
+
         if level == "division":
             if not division:
                 return None
-            if not self.team_catalog.contains_division(division):
-                return f"La división '{division}' no está en el catálogo CM de team_details."
-            return None
+            if self.team_catalog.contains_division(division) or self.team_catalog.hierarchy_contains_division(division):
+                return None
+            return f"La división '{division}' no está en el catálogo CM de team_details."
+
         if level == "area":
             if not area:
                 return None
             if not division:
                 return "Selecciona la división antes de validar el área."
-            if not self.team_catalog.contains_area(division, area):
-                return f"El área '{area}' no pertenece a la división seleccionada en el catálogo CM."
-            return None
+            if self.team_catalog.contains_area(division, area):
+                return None
+            area_pairs = self.team_catalog.list_hierarchy_areas(division)
+            if _in_hierarchy(area_pairs, area):
+                return None
+            return f"El área '{area}' no pertenece a la división seleccionada en el catálogo CM."
+
         if level == "servicio":
             if not servicio:
                 return None
             if not area or not division:
                 return "Completa división y área antes de validar el servicio."
-            if not self.team_catalog.contains_service(division, area, servicio):
-                return (
-                    f"El servicio '{servicio}' no existe para la división y área seleccionadas en el catálogo CM."
-                )
-            return None
+            if self.team_catalog.contains_service(division, area, servicio):
+                return None
+            service_pairs = self.team_catalog.list_hierarchy_services(division, area)
+            if _in_hierarchy(service_pairs, servicio):
+                return None
+            return (
+                f"El servicio '{servicio}' no existe para la división y área seleccionadas en el catálogo CM."
+            )
+
         if level == "puesto":
             if not puesto:
                 return None
             if not servicio or not area or not division:
                 return "Completa división, área y servicio antes de validar el puesto."
-            if not self.team_catalog.contains_role(division, area, servicio, puesto):
-                return (
-                    f"El puesto '{puesto}' no pertenece al servicio seleccionado en el catálogo CM."
-                )
+            if self.team_catalog.contains_role(division, area, servicio, puesto):
+                return None
+            puesto_pairs = self.team_catalog.list_hierarchy_roles(division, area, servicio)
+            if _in_hierarchy(puesto_pairs, puesto):
+                return None
+            return (
+                f"El puesto '{puesto}' no pertenece al servicio seleccionado en el catálogo CM."
+            )
         return None
 
     def _validate_catalog_selection(self, value: str, label: str, catalog) -> str | None:
