@@ -568,6 +568,12 @@ class RiskFrame:
 
     def remove(self):
         if messagebox.askyesno("Confirmar", f"¿Desea eliminar el riesgo {self.idx+1}?"):
+            owner = getattr(self, "owner", None)
+            try:
+                if owner and getattr(owner, "_risk_summary_owner", None) is self:
+                    owner._risk_summary_owner = None
+            except Exception:
+                pass
             self._log_change(f"Se eliminó riesgo {self.idx+1}")
             self.section.destroy()
             self.remove_callback(self)
