@@ -62,6 +62,8 @@ class TeamMemberFrame:
         self._agency_validators: list[FieldValidator] = []
         self._dirty_fields: dict[str, bool] = {}
         self._last_missing_lookup_id = None
+        self._focus_widgets: set[object] = set()
+        self._focus_binding_target = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
@@ -104,6 +106,7 @@ class TeamMemberFrame:
         self._sync_section_title()
         self._register_title_traces()
         self._place_section()
+        self._install_focus_binding()
         if summary_parent is not None and owner is not None and not getattr(owner, "team_summary_tree", None):
             self.summary_tree = self._build_summary(summary_parent)
             owner.team_summary_tree = self.summary_tree
@@ -111,6 +114,7 @@ class TeamMemberFrame:
             owner._team_summary_owner = self
         else:
             self.summary_tree = getattr(owner, "team_summary_tree", None)
+        self._set_as_summary_target()
         self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
@@ -133,8 +137,10 @@ class TeamMemberFrame:
             column=1,
             columnspan=2,
         )
+        self.id_entry = id_entry
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Coloca el código único del colaborador investigado.")
+        self._register_focusable_widgets(id_entry)
 
         ttk.Label(self.frame, text="Nombres:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -151,6 +157,7 @@ class TeamMemberFrame:
         )
         self._bind_dirty_tracking(nombres_entry, "nombres")
         self.tooltip_register(nombres_entry, "Ingresa los nombres del colaborador.")
+        self._register_focusable_widgets(nombres_entry)
 
         ttk.Label(self.frame, text="Apellidos:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -167,6 +174,7 @@ class TeamMemberFrame:
         )
         self._bind_dirty_tracking(apellidos_entry, "apellidos")
         self.tooltip_register(apellidos_entry, "Ingresa los apellidos del colaborador.")
+        self._register_focusable_widgets(apellidos_entry)
 
         ttk.Label(self.frame, text="Flag:").grid(
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -188,6 +196,7 @@ class TeamMemberFrame:
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
+        self._register_focusable_widgets(flag_cb)
 
         self._fallback_label = ToggleWarningBadge(
             self.frame,
@@ -216,6 +225,7 @@ class TeamMemberFrame:
         self.tooltip_register(div_cb, "Ingresa la división o gerencia del colaborador.")
         for sequence in ("<FocusOut>", "<<ComboboxSelected>>", "<KeyRelease>"):
             div_cb.bind(sequence, lambda _e=None: self._on_division_change(), add="+")
+        self._register_focusable_widgets(div_cb)
 
         ttk.Label(self.frame, text="Área:").grid(
             row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -631,7 +641,7 @@ class TeamMemberFrame:
         return create_collapsible_card(
             parent,
             title="",
-            on_toggle=lambda _section=None: self._sync_section_title(),
+            on_toggle=self._handle_toggle,
             log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear sección colapsable para colaborador {self.idx+1}: {exc}",
@@ -690,7 +700,71 @@ class TeamMemberFrame:
     def _on_identity_field_change(self, *_args):
         self._sync_section_title()
 
+    def _handle_toggle(self, _section=None):
+        self._sync_section_title()
+        self._set_as_summary_target()
+
+    def _install_focus_binding(self):
+        container = getattr(self.section, "content", None) or getattr(self, "section", None)
+        if not container:
+            return
+        bind_all = getattr(container, "bind_all", None)
+        if callable(bind_all):
+            try:
+                bind_all("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("all", container)
+                return
+            except Exception:
+                self._focus_binding_target = None
+        binder = getattr(container, "bind", None)
+        if callable(binder):
+            try:
+                binder("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("local", container)
+            except Exception:
+                self._focus_binding_target = None
+
+    def _register_focusable_widgets(self, *widgets):
+        for widget in widgets:
+            if widget is None:
+                continue
+            self._focus_widgets.add(widget)
+            binder = getattr(widget, "bind", None)
+            if callable(binder):
+                try:
+                    binder("<FocusIn>", lambda _e, frame=self: frame._set_as_summary_target(), add="+")
+                except Exception:
+                    continue
+
+    def _widget_belongs_to_team(self, widget) -> bool:
+        if widget is None:
+            return False
+        if widget in self._focus_widgets:
+            return True
+        containers = [
+            getattr(self, "frame", None),
+            getattr(self, "section", None),
+            getattr(getattr(self, "section", None), "content", None),
+        ]
+        return widget in containers
+
+    def _handle_focus_in(self, event):
+        widget = getattr(event, "widget", None)
+        if widget is None or self._widget_belongs_to_team(widget):
+            self._set_as_summary_target()
+
+    def _set_as_summary_target(self):
+        owner = getattr(self, "owner", None)
+        if not owner:
+            return self
+        try:
+            owner._team_summary_owner = self
+        except Exception:
+            pass
+        return self
+
     def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusIn>", lambda _e: self._set_as_summary_target(), add="+")
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<Return>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")

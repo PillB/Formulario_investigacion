@@ -40,6 +40,7 @@ class RiskFrame:
         change_notifier=None,
         default_risk_id: str | None = None,
         header_tree=None,
+        owner=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -55,6 +56,9 @@ class RiskFrame:
         self._last_missing_lookup_id = None
         self.change_notifier = change_notifier
         self.header_tree = None
+        self.owner = owner
+        self._focus_widgets: set[object] = set()
+        self._focus_binding_target = None
 
         self.id_var = tk.StringVar()
         self._auto_id_value = ""
@@ -73,7 +77,7 @@ class RiskFrame:
         self.section = create_collapsible_card(
             parent,
             title="",
-            on_toggle=lambda _section: self._sync_section_title(),
+            on_toggle=self._handle_toggle,
             log_error=lambda exc: log_event(
                 "validacion",
                 f"No se pudo crear acordeón para riesgo {idx+1}: {exc}",
@@ -83,6 +87,7 @@ class RiskFrame:
         )
         self._sync_section_title()
         self._place_section()
+        self._install_focus_binding()
 
         self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
@@ -112,6 +117,7 @@ class RiskFrame:
             row=1,
             column=1,
         )
+        self.id_entry = id_entry
         self.tooltip_register(id_entry, "Usa el formato RSK-000000.")
         self._bind_identifier_triggers(id_entry)
 
@@ -132,6 +138,7 @@ class RiskFrame:
             column=3,
         )
         crit_cb.set('')
+        self.crit_cb = crit_cb
         self.tooltip_register(crit_cb, "Nivel de severidad del riesgo.")
 
         ttk.Label(self.frame, text="Líder:").grid(
@@ -144,6 +151,7 @@ class RiskFrame:
             row=2,
             column=1,
         )
+        self.lider_entry = lider_entry
         self.tooltip_register(lider_entry, "Responsable del seguimiento del riesgo.")
 
         ttk.Label(self.frame, text="Exposición residual (US$):").grid(
@@ -156,6 +164,7 @@ class RiskFrame:
             row=2,
             column=3,
         )
+        self.expos_entry = expos_entry
         self.tooltip_register(expos_entry, "Monto estimado en dólares.")
 
         ttk.Label(self.frame, text="Descripción del riesgo:").grid(
@@ -169,6 +178,7 @@ class RiskFrame:
             column=1,
             columnspan=3,
         )
+        self.desc_entry = desc_entry
         self.tooltip_register(desc_entry, "Describe el riesgo de forma clara.")
 
         ttk.Label(self.frame, text="Planes de acción (IDs separados por ;):").grid(
@@ -182,6 +192,7 @@ class RiskFrame:
             column=1,
             columnspan=3,
         )
+        self.planes_entry = planes_entry
         self.tooltip_register(planes_entry, "Lista de planes registrados en OTRS o Aranda.")
 
         self.validators.append(
@@ -279,6 +290,18 @@ class RiskFrame:
 
         self._register_title_traces()
         self._sync_section_title()
+        self._register_focusable_widgets(
+            id_entry,
+            lider_entry,
+            crit_cb,
+            desc_entry,
+            expos_entry,
+            planes_entry,
+            remove_btn,
+            self.section,
+            self.frame,
+        )
+        self._set_as_summary_target()
 
     def _place_section(self):
         grid_section(
@@ -349,6 +372,9 @@ class RiskFrame:
 
     def attach_header_tree(self, header_tree):
         self.header_tree = header_tree
+        owner = getattr(self, "owner", None)
+        if owner and not getattr(owner, "risk_summary_tree", None):
+            owner.risk_summary_tree = header_tree
         if not self.header_tree:
             return
         tree_sort_state = getattr(self.header_tree, "_tree_sort_state", {})
@@ -412,6 +438,10 @@ class RiskFrame:
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
             self.section.set_title(self._build_section_title())
+
+    def _handle_toggle(self, _section):
+        self._sync_section_title()
+        self._set_as_summary_target()
 
     def get_data(self):
         _, normalized_text = self._normalize_exposure_amount()
@@ -493,6 +523,11 @@ class RiskFrame:
             self.header_tree.item(item, tags=(tag,))
         self._tree_sort_state[column] = not reverse
 
+    def _get_target_risk_frame(self):
+        owner = getattr(self, "owner", None)
+        target = getattr(owner, "_risk_summary_owner", None) if owner else None
+        return target or self
+
     def _on_tree_select(self, _event=None):
         item = self._first_selected_item()
         if not item:
@@ -500,8 +535,9 @@ class RiskFrame:
         values = self.header_tree.item(item, "values")
         if not values:
             return
-        self.id_var.set(values[0])
-        self.on_id_change(preserve_existing=True, silent=True)
+        target = self._get_target_risk_frame()
+        target.id_var.set(values[0])
+        target.on_id_change(preserve_existing=True, silent=True)
 
     def _on_tree_double_click(self, _event=None):
         item = self._first_selected_item()
@@ -510,8 +546,9 @@ class RiskFrame:
         values = self.header_tree.item(item, "values")
         if not values:
             return
-        self.id_var.set(values[0])
-        self.on_id_change(from_focus=True, explicit_lookup=True)
+        target = self._get_target_risk_frame()
+        target.id_var.set(values[0])
+        target.on_id_change(from_focus=True, explicit_lookup=True)
 
     def _first_selected_item(self):
         selection = self.header_tree.selection() if self.header_tree else []
@@ -587,6 +624,7 @@ class RiskFrame:
             self._id_user_modified = True
 
     def _bind_identifier_triggers(self, widget) -> None:
+        widget.bind("<FocusIn>", lambda _e: self._set_as_summary_target(), add="+")
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
         widget.bind("<KeyRelease>", lambda _e: self.on_id_change(), add="+")
         widget.bind(
@@ -625,6 +663,74 @@ class RiskFrame:
             self.section.bind("<FocusIn>", self._activate_header_tree, add="+")
         except Exception:
             pass
+
+    def _install_focus_binding(self):
+        container = getattr(self.section, "content", None) or getattr(self, "section", None)
+        if not container:
+            return
+        bind_all = getattr(container, "bind_all", None)
+        if callable(bind_all):
+            try:
+                bind_all("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("all", container)
+                return
+            except Exception:
+                self._focus_binding_target = None
+        binder = getattr(container, "bind", None)
+        if callable(binder):
+            try:
+                binder("<FocusIn>", self._handle_focus_in, add="+")
+                self._focus_binding_target = ("local", container)
+            except Exception:
+                self._focus_binding_target = None
+
+    def _register_focusable_widgets(self, *widgets):
+        for widget in widgets:
+            if widget is None:
+                continue
+            self._focus_widgets.add(widget)
+            binder = getattr(widget, "bind", None)
+            if callable(binder):
+                try:
+                    binder("<FocusIn>", lambda _e, frame=self: frame._set_as_summary_target(), add="+")
+                except Exception:
+                    continue
+
+    def _widget_belongs_to_risk(self, widget) -> bool:
+        if widget is None:
+            return False
+        if widget in self._focus_widgets:
+            return True
+        containers = [
+            getattr(self, "frame", None),
+            getattr(self, "section", None),
+            getattr(getattr(self, "section", None), "content", None),
+        ]
+        if widget in containers:
+            return True
+        visited: set[object] = set()
+        parent = widget
+        while parent and parent not in visited:
+            visited.add(parent)
+            parent = getattr(parent, "master", None) or getattr(parent, "parent", None)
+            if parent in containers:
+                return True
+        return False
+
+    def _handle_focus_in(self, event):
+        widget = getattr(event, "widget", None)
+        if widget is None or self._widget_belongs_to_risk(widget):
+            self._set_as_summary_target()
+
+    def _set_as_summary_target(self):
+        owner = getattr(self, "owner", None)
+        if not owner:
+            return self
+        try:
+            owner._risk_summary_owner = self
+        except Exception:
+            pass
+        return self
 
     # ------------------------------------------------------------------
     # Refresh management
