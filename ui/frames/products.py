@@ -2615,8 +2615,9 @@ class ProductFrame:
             if client_id not in values:
                 values.append(client_id)
                 self.client_cb['values'] = values
-            self.client_var.set(client_id)
-            self.client_cb.set(client_id)
+            if should_autofill_field(self.client_var.get(), preserve_existing):
+                self.client_var.set(client_id)
+                self.client_cb.set(client_id)
         set_if_present(self.canal_var, 'canal')
         set_if_present(self.proceso_var, 'proceso')
         set_if_present(self.tipo_prod_var, 'tipo_producto')
@@ -2633,14 +2634,14 @@ class ProductFrame:
         cat1 = data.get('categoria1')
         cat2 = data.get('categoria2')
         mod = data.get('modalidad')
-        if cat1 in TAXONOMIA:
+        if cat1 in TAXONOMIA and should_autofill_field(self.cat1_var.get(), preserve_existing):
             self.cat1_var.set(cat1)
             self.on_cat1_change()
-            if cat2 in TAXONOMIA[cat1]:
+            if cat2 in TAXONOMIA[cat1] and should_autofill_field(self.cat2_var.get(), preserve_existing):
                 self.cat2_var.set(cat2)
                 self.cat2_cb.set(cat2)
                 self.on_cat2_change()
-                if mod in TAXONOMIA[cat1][cat2]:
+                if mod in TAXONOMIA[cat1][cat2] and should_autofill_field(self.mod_var.get(), preserve_existing):
                     self.mod_var.set(mod)
                     self.mod_cb.set(mod)
         claims_payload = self.extract_claims_from_payload(data)
