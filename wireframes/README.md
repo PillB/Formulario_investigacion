@@ -10,13 +10,22 @@ Estos artefactos documentan la estructura y los rótulos visibles de la aplicaci
 - `tab04_analisis.mmd`: pestaña "Análisis y narrativas" con textos enriquecidos (Antecedentes, Modus operandi, Hallazgos principales, Descargos del colaborador, Conclusiones, Recomendaciones y mejoras) y las secciones extendidas activables (Encabezado extendido, Recomendaciones categorizadas, Investigador principal, Operaciones, Anexos).
 - `tab05_acciones.mmd`: pestaña "Acciones" con controles de sonido y tema, grupo "Catálogos de detalle" (estado, Cargar catálogos, Iniciar sin catálogos, barra de progreso) y grupo "Importar datos masivos (CSV)" (botones para clientes, colaboradores, productos, normas, riesgos, estado y barra de progreso).
 - `tab06_resumen.mmd`: pestaña "Resumen" con tablas compactas para Clientes, Colaboradores, Asignaciones por colaborador, Productos, Riesgos, Reclamos y Normas.
-- `generate_wireframes.py`: script para producir las imágenes PNG y la compilación `wireframes.pdf` basadas en los archivos `.mmd`.
+- `generate_wireframes.py`: script para producir las imágenes PNG, el PDF `wireframes.pdf`, tablas CSV auxiliares y un registro de ejecución basado en los archivos `.mmd`.
 
 ## Generación de artefactos
-Para cumplir con la restricción de no versionar binarios, las imágenes y el PDF se generan bajo demanda. Requiere `Pillow` (instalar con `pip install pillow`). Ejecute desde este directorio:
+Para cumplir con la restricción de no versionar binarios, las imágenes y el PDF se generan bajo demanda. Requiere `Pillow` (instalar con `pip install pillow`) y la CLI de Mermaid (`npm install -g @mermaid-js/mermaid-cli` para obtener el comando `mmdc` en el `PATH`). Ejecute desde este directorio:
 
 ```bash
 python generate_wireframes.py
 ```
 
-El script renderiza el contenido de cada `.mmd` como texto monoespaciado en PNGs en blanco y negro y luego arma el `wireframes.pdf` respetando el orden real de pestañas configurado en `app.py`.
+El script realiza las siguientes acciones:
+
+1. Renderiza cada archivo `.mmd` usando la CLI de Mermaid con escala aumentada (`-s 2.0`) para obtener PNGs nítidos del diagrama real.
+2. Genera bocetos en blanco y negro (`*_sketch.png`) que simulan la distribución visual básica de cada pestaña según los frames de `ui/` y los constructores en `app.py`.
+3. Construye `wireframes.pdf` respetando el orden real de pestañas configurado en `app.py` (incluye los PNG de Mermaid y los bocetos secuenciales).
+4. Escribe `wireframe_architecture.csv` con el orden de pestañas/archivos procesados.
+5. Genera `wireframes_manifest.csv` con los artefactos construidos y el conteo de líneas de entrada.
+6. Registra los eventos de ejecución en `wireframes_generation.log` para facilitar depuración sin depender de la salida estándar.
+
+Si prefiere evitar dependencias externas en pruebas automatizadas, `generate_assets` acepta un parámetro `renderer` para inyectar una función de renderizado personalizada que reciba `(source_path, png_target)`. El valor por defecto usa `mmdc` y fallará con un mensaje claro si la CLI no está instalada.
