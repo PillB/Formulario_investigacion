@@ -41,9 +41,10 @@ def _wrap_mermaid_lines(lines: Iterable[str]) -> List[str]:
 
 
 def _render_png(text_lines: List[str], target: Path) -> None:
-    font = ImageFont.load_default(size=FONT_SIZE)
+    font = ImageFont.load_default()
     draw_dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    _, line_height = draw_dummy.textsize("Ag", font=font)
+    _, top, _, bottom = draw_dummy.textbbox((0, 0), "Ag", font=font)
+    line_height = bottom - top
 
     height = PADDING * 2 + line_height * len(text_lines)
     image = Image.new("RGB", (OUTPUT_WIDTH, height), color="white")
