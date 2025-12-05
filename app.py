@@ -111,6 +111,7 @@ from ui.frames.utils import (build_grid_container, create_scrollable_container,
                              grid_and_configure, refresh_dynamic_rows,
                              resize_scrollable_to_content)
 from ui.layout import ActionBar
+from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
 from utils.background_worker import run_guarded_task
 from validators import (drain_log_queue, FieldValidator, log_event,
@@ -1449,6 +1450,7 @@ class FraudCaseApp:
         self.notebook = ttk.Notebook(main_container)
         self.notebook.grid(row=0, column=0, sticky="nsew")
         self.notebook.bind("<<NotebookTabChanged>>", self._handle_notebook_tab_change)
+        bind_notebook_refresh_handlers(self.root, self.notebook)
         self._register_navigation_bindings()
 
         self._validation_panel = ValidationPanel(
