@@ -15,7 +15,7 @@ import textwrap
 from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.pagesizes import A3, LETTER, landscape
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
@@ -25,6 +25,7 @@ from reportlab.platypus import (
     Image,
     ListFlowable,
     ListItem,
+    NextPageTemplate,
     PageBreak,
     PageTemplate,
     Paragraph,
@@ -262,19 +263,54 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     render_mermaid(ARCH_MMD, ARCH_PNG)
     render_mermaid(SEQ_MMD, SEQ_PNG)
 
+    page_margins = {
+        "left": 0.7 * inch,
+        "right": 0.7 * inch,
+        "top": 0.8 * inch,
+        "bottom": 0.8 * inch,
+    }
+
     doc = BaseDocTemplate(
         str(output),
         pagesize=LETTER,
-        leftMargin=0.7 * inch,
-        rightMargin=0.7 * inch,
-        topMargin=0.8 * inch,
-        bottomMargin=0.8 * inch,
+        leftMargin=page_margins["left"],
+        rightMargin=page_margins["right"],
+        topMargin=page_margins["top"],
+        bottomMargin=page_margins["bottom"],
         title="Formulario de investigación – Arquitectura",
         author="AI Architecture Assistant",
     )
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
-    template = PageTemplate(id="main", frames=frame, onPage=_page_decor)
-    doc.addPageTemplates([template])
+
+    arch_page_size = landscape(A3)
+    arch_frame = Frame(
+        doc.leftMargin,
+        doc.bottomMargin,
+        arch_page_size[0] - doc.leftMargin - doc.rightMargin,
+        arch_page_size[1] - doc.topMargin - doc.bottomMargin,
+        id="arch_frame",
+    )
+
+    seq_page_size = A3
+    seq_frame = Frame(
+        doc.leftMargin,
+        doc.bottomMargin,
+        seq_page_size[0] - doc.leftMargin - doc.rightMargin,
+        seq_page_size[1] - doc.topMargin - doc.bottomMargin,
+        id="seq_frame",
+    )
+
+    doc.addPageTemplates(
+        [
+            PageTemplate(id="main", frames=frame, onPage=_page_decor, pagesize=LETTER),
+            PageTemplate(
+                id="arch_diagram", frames=arch_frame, onPage=_page_decor, pagesize=arch_page_size
+            ),
+            PageTemplate(
+                id="seq_diagram", frames=seq_frame, onPage=_page_decor, pagesize=seq_page_size
+            ),
+        ]
+    )
     doc.afterFlowable = lambda flowable: _after_flowable(doc, flowable)
 
     today = _dt.date.today().strftime("%Y-%m-%d")
@@ -412,15 +448,17 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     story.append(_technology_table(styles))
 
     # Diagrams
+    story.append(NextPageTemplate("arch_diagram"))
     story.append(PageBreak())
     story.append(_heading("Anexo A — Diagrama de arquitectura (Mermaid)", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(_flowable_image(ARCH_PNG, target_width=6.5 * inch))
+    story.append(_flowable_image(ARCH_PNG, target_width=arch_frame.width))
 
+    story.append(NextPageTemplate("seq_diagram"))
     story.append(PageBreak())
     story.append(_heading("Anexo B — Diagrama de secuencia", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(_flowable_image(SEQ_PNG, target_width=6.5 * inch))
+    story.append(_flowable_image(SEQ_PNG, target_width=seq_frame.width))
 
     doc.build(story)
     return output

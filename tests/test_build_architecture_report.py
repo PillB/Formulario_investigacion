@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 import build_architecture_report as arch_report
 from reportlab.platypus import Spacer
 
@@ -60,3 +62,32 @@ def test_build_report_avoids_duplicate_styles(monkeypatch, tmp_path):
 
     assert generated == output
     assert output.exists()
+
+
+def test_build_report_expands_diagram_pages(monkeypatch, tmp_path):
+    def fake_render(source: Path, target: Path) -> Path:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+        return target
+
+    image_calls: list[tuple[Path, float]] = []
+
+    def fake_flowable(image_path: Path, target_width: float):
+        image_calls.append((image_path, target_width))
+        return Spacer(1, 1)
+
+    monkeypatch.setattr(arch_report, "render_mermaid", fake_render)
+    monkeypatch.setattr(arch_report, "_flowable_image", fake_flowable)
+
+    output = tmp_path / "architecture.pdf"
+    arch_report.build_report(output)
+
+    assert [call[0] for call in image_calls] == [arch_report.ARCH_PNG, arch_report.SEQ_PNG]
+
+    arch_page_size = arch_report.landscape(arch_report.A3)
+    expected_arch_width = arch_page_size[0] - (0.7 * arch_report.inch * 2)
+    seq_page_size = arch_report.A3
+    expected_seq_width = seq_page_size[0] - (0.7 * arch_report.inch * 2)
+
+    assert image_calls[0][1] == pytest.approx(expected_arch_width)
+    assert image_calls[1][1] == pytest.approx(expected_seq_width)
