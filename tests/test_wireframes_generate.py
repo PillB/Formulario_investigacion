@@ -7,7 +7,7 @@ import re
 
 import pytest
 
-from wireframes.generate_wireframes import generate_assets
+from wireframes.generate_wireframes import _mermaid_cli_renderer, generate_assets
 
 
 @pytest.fixture()
@@ -24,6 +24,18 @@ def sample_mermaid_files(tmp_path: Path) -> list[str]:
 
 
 @pytest.fixture()
+def sample_sketch_layouts(sample_mermaid_files: list[str]) -> dict[str, dict[str, list[str]]]:
+    layouts = {}
+    for name in sample_mermaid_files:
+        stem = Path(name).stem
+        layouts[stem] = {
+            "__title__": f"Sketch for {stem}",
+            "Bloques": ["Elemento A", "Elemento B"],
+        }
+    return layouts
+
+
+@pytest.fixture()
 def pillow_renderer():
     def _render(source: Path, target: Path) -> None:
         from PIL import Image, ImageDraw
@@ -37,13 +49,26 @@ def pillow_renderer():
 
 
 def test_generate_assets_creates_png_pdf_and_manifest(
-    tmp_path: Path, sample_mermaid_files: list[str], pillow_renderer
+    tmp_path: Path,
+    sample_mermaid_files: list[str],
+    pillow_renderer,
+    sample_sketch_layouts: dict[str, dict[str, list[str]]],
 ) -> None:
-    generate_assets(base_dir=tmp_path, mmd_files=sample_mermaid_files, renderer=pillow_renderer)
+    generate_assets(
+        base_dir=tmp_path,
+        mmd_files=sample_mermaid_files,
+        renderer=pillow_renderer,
+        sketch_layouts=sample_sketch_layouts,
+    )
 
     for filename in sample_mermaid_files:
         png_path = (tmp_path / filename).with_suffix(".png")
         assert png_path.exists(), f"PNG not created for {filename}"
+
+        sketch_path = (tmp_path / Path(filename).with_suffix(".png").name).with_stem(
+            f"{Path(filename).stem}_sketch"
+        )
+        assert sketch_path.exists(), "Sketch wireframe not created"
 
     pdf_path = tmp_path / "wireframes.pdf"
     assert pdf_path.exists(), "PDF was not created"
@@ -52,20 +77,29 @@ def test_generate_assets_creates_png_pdf_and_manifest(
     assert manifest_path.exists(), "Manifest CSV was not created"
 
     rows = list(csv.DictReader(manifest_path.open(encoding="utf-8")))
-    assert len(rows) == len(sample_mermaid_files) + 1  # includes PDF record
-    assert {row["asset_type"] for row in rows} == {"png", "pdf"}
+    assert len(rows) == (len(sample_mermaid_files) * 2) + 1  # png + sketch per file + pdf
+    assert {row["asset_type"] for row in rows} == {"png", "pdf", "sketch"}
 
 
 def test_generate_assets_logs_and_architecture_table(
-    tmp_path: Path, sample_mermaid_files: list[str], pillow_renderer
+    tmp_path: Path,
+    sample_mermaid_files: list[str],
+    pillow_renderer,
+    sample_sketch_layouts: dict[str, dict[str, list[str]]],
 ) -> None:
-    generate_assets(base_dir=tmp_path, mmd_files=sample_mermaid_files, renderer=pillow_renderer)
+    generate_assets(
+        base_dir=tmp_path,
+        mmd_files=sample_mermaid_files,
+        renderer=pillow_renderer,
+        sketch_layouts=sample_sketch_layouts,
+    )
 
     log_path = tmp_path / "wireframes_generation.log"
     assert log_path.exists(), "Log file not created"
     log_text = log_path.read_text(encoding="utf-8")
     for name in sample_mermaid_files:
         assert name.replace(".mmd", ".png") in log_text
+        assert f"{Path(name).stem}_sketch.png" in log_text
     assert "wireframes.pdf" in log_text
 
     architecture_path = tmp_path / "wireframe_architecture.csv"
@@ -80,3 +114,22 @@ def test_generate_assets_requires_mermaid_cli(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("PATH", "")
     with pytest.raises(RuntimeError, match="Mermaid CLI"):
         generate_assets(base_dir=Path("."), mmd_files=["example.mmd"], renderer=None)
+
+
+def test_mermaid_renderer_uses_scale(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    commands: list[list[str]] = []
+
+    monkeypatch.setattr("wireframes.generate_wireframes.shutil.which", lambda _: "/usr/bin/mmdc")
+
+    def fake_run(cmd, check):
+        commands.append(cmd)
+        class _Result:
+            pass
+
+        return _Result()
+
+    renderer = _mermaid_cli_renderer(scale=3.0, run_process=fake_run)
+    renderer(tmp_path / "example.mmd", tmp_path / "example.png")
+
+    assert commands, "Renderer did not invoke CLI"
+    assert "-s" in commands[0] and "3.0" in commands[0], "CLI did not receive scale flag"

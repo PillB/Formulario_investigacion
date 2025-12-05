@@ -21,10 +21,11 @@ python generate_wireframes.py
 
 El script realiza las siguientes acciones:
 
-1. Renderiza cada archivo `.mmd` usando la CLI de Mermaid para obtener un PNG del diagrama real.
-2. Construye `wireframes.pdf` respetando el orden real de pestañas configurado en `app.py`.
-3. Escribe `wireframe_architecture.csv` con el orden de pestañas/archivos procesados.
-4. Genera `wireframes_manifest.csv` con los artefactos construidos y el conteo de líneas de entrada.
-5. Registra los eventos de ejecución en `wireframes_generation.log` para facilitar depuración sin depender de la salida estándar.
+1. Renderiza cada archivo `.mmd` usando la CLI de Mermaid con escala aumentada (`-s 2.0`) para obtener PNGs nítidos del diagrama real.
+2. Genera bocetos en blanco y negro (`*_sketch.png`) que simulan la distribución visual básica de cada pestaña según los frames de `ui/` y los constructores en `app.py`.
+3. Construye `wireframes.pdf` respetando el orden real de pestañas configurado en `app.py` (incluye los PNG de Mermaid y los bocetos secuenciales).
+4. Escribe `wireframe_architecture.csv` con el orden de pestañas/archivos procesados.
+5. Genera `wireframes_manifest.csv` con los artefactos construidos y el conteo de líneas de entrada.
+6. Registra los eventos de ejecución en `wireframes_generation.log` para facilitar depuración sin depender de la salida estándar.
 
 Si prefiere evitar dependencias externas en pruebas automatizadas, `generate_assets` acepta un parámetro `renderer` para inyectar una función de renderizado personalizada que reciba `(source_path, png_target)`. El valor por defecto usa `mmdc` y fallará con un mensaje claro si la CLI no está instalada.
