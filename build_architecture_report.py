@@ -14,6 +14,9 @@ import sys
 import textwrap
 from pathlib import Path
 
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.util import Cm, Pt
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A3, LETTER, landscape
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleSheet
@@ -37,11 +40,19 @@ from reportlab.platypus.tableofcontents import TableOfContents
 PROJECT_ROOT = Path(__file__).parent
 DOCS_DIR = PROJECT_ROOT / "docs"
 DEFAULT_OUTPUT = PROJECT_ROOT / "Formulario_Investigacion_Architecture_and_Data_Flow.pdf"
+DEFAULT_PPTX = PROJECT_ROOT / "Formulario_Investigacion_Diagramas_editables.pptx"
 ARCH_MMD = DOCS_DIR / "architecture.mmd"
 ARCH_PNG = DOCS_DIR / "architecture.png"
 SEQ_MMD = DOCS_DIR / "sequence_diagram.mmd"
 SEQ_PNG = DOCS_DIR / "sequence.png"
 PUPPETEER_CONFIG = PROJECT_ROOT / "puppeteer-config.json"
+
+PPTX_SLIDE_WIDTH = Cm(42)  # A3 landscape width
+PPTX_SLIDE_HEIGHT = Cm(29.7)  # A3 landscape height
+PPTX_MARGIN = Cm(1.2)
+PPTX_TITLE_HEIGHT = Cm(2.2)
+PPTX_SUBTITLE_HEIGHT = Cm(1.1)
+PPTX_CONTENT_GAP = Cm(0.5)
 
 
 class HeadingParagraph(Paragraph):
@@ -257,6 +268,20 @@ def _flowable_image(image_path: Path, target_width: float) -> Image:
     return Image(str(image_path), width=target_width, height=target_height)
 
 
+def _scale_image_to_box(image_path: Path, max_width: float, max_height: float) -> tuple[float, float]:
+    """Return width/height scaled to fit within a bounding box."""
+
+    reader = ImageReader(str(image_path))
+    original_width, original_height = reader.getSize()
+    if original_width <= 0 or original_height <= 0:
+        raise ValueError("Image dimensions must be positive")
+
+    width_scale = max_width / float(original_width)
+    height_scale = max_height / float(original_height)
+    scale = min(width_scale, height_scale)
+    return original_width * scale, original_height * scale
+
+
 def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     styles = _build_stylesheet()
 
@@ -464,6 +489,77 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     return output
 
 
+def _add_diagram_slide(
+    presentation: Presentation,
+    *,
+    title: str,
+    subtitle: str,
+    image_path: Path,
+) -> None:
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])  # blank
+
+    title_box = slide.shapes.add_textbox(
+        PPTX_MARGIN,
+        PPTX_MARGIN,
+        presentation.slide_width - 2 * PPTX_MARGIN,
+        PPTX_TITLE_HEIGHT,
+    )
+    title_tf = title_box.text_frame
+    title_run = title_tf.paragraphs[0].add_run()
+    title_run.text = title
+    title_run.font.size = Pt(32)
+    title_run.font.bold = True
+
+    subtitle_box = slide.shapes.add_textbox(
+        PPTX_MARGIN,
+        PPTX_MARGIN + PPTX_TITLE_HEIGHT,
+        presentation.slide_width - 2 * PPTX_MARGIN,
+        PPTX_SUBTITLE_HEIGHT,
+    )
+    subtitle_tf = subtitle_box.text_frame
+    subtitle_tf.word_wrap = True
+    subtitle_tf.paragraphs[0].text = subtitle
+    subtitle_tf.paragraphs[0].font.size = Pt(18)
+    subtitle_tf.paragraphs[0].font.color.rgb = RGBColor(64, 64, 64)
+
+    content_top = PPTX_MARGIN + PPTX_TITLE_HEIGHT + PPTX_SUBTITLE_HEIGHT + PPTX_CONTENT_GAP
+    max_width = presentation.slide_width - 2 * PPTX_MARGIN
+    max_height = presentation.slide_height - content_top - PPTX_MARGIN
+
+    scaled_width, scaled_height = _scale_image_to_box(image_path, max_width, max_height)
+    left = PPTX_MARGIN + (max_width - scaled_width) / 2
+    top = content_top + (max_height - scaled_height) / 2
+
+    slide.shapes.add_picture(str(image_path), left, top, width=scaled_width, height=scaled_height)
+
+
+def build_editable_deck(output: Path = DEFAULT_PPTX) -> Path:
+    """Generate a PowerPoint deck with editable architecture/sequence diagrams."""
+
+    render_mermaid(ARCH_MMD, ARCH_PNG)
+    render_mermaid(SEQ_MMD, SEQ_PNG)
+
+    presentation = Presentation()
+    presentation.slide_width = PPTX_SLIDE_WIDTH
+    presentation.slide_height = PPTX_SLIDE_HEIGHT
+
+    _add_diagram_slide(
+        presentation,
+        title="Arquitectura – editable",
+        subtitle="Versión exportada de architecture.mmd (Mermaid). Ajusta tamaño o mueve elementos según necesidad.",
+        image_path=ARCH_PNG,
+    )
+    _add_diagram_slide(
+        presentation,
+        title="Secuencia – editable",
+        subtitle="Derivada de sequence_diagram.mmd (Mermaid). Diseñada para pantallas grandes y revisión conjunta.",
+        image_path=SEQ_PNG,
+    )
+
+    presentation.save(output)
+    return output
+
+
 def parse_args(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Genera el PDF de arquitectura y flujos.")
     parser.add_argument(
@@ -471,6 +567,12 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         type=Path,
         default=DEFAULT_OUTPUT,
         help=f"Ruta del PDF de salida (por defecto {DEFAULT_OUTPUT.name})",
+    )
+    parser.add_argument(
+        "--pptx-output",
+        type=Path,
+        default=None,
+        help="Ruta opcional para generar una presentación editable con los diagramas.",
     )
     return parser.parse_args(args)
 
@@ -485,7 +587,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     else:
         print(f"PDF generado en {output}")
-        return 0
+    pptx_output: Path | None = None
+    if args.pptx_output:
+        try:
+            pptx_output = build_editable_deck(args.pptx_output)
+        except Exception as exc:  # noqa: BLE001
+            sys.stderr.write(f"Error generando la presentación editable: {exc}\n")
+            return 1
+
+    if pptx_output:
+        print(f"Presentación editable generada en {pptx_output}")
+    return 0
 
 
 if __name__ == "__main__":

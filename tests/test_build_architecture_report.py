@@ -1,9 +1,18 @@
 from pathlib import Path
 
+from PIL import Image
+from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+
 import pytest
 
 import build_architecture_report as arch_report
 from reportlab.platypus import Spacer
+
+
+def _make_png(path: Path, size: tuple[int, int]) -> None:
+    image = Image.new("RGB", size, color="white")
+    image.save(path)
 
 
 def test_build_stylesheet_reuses_existing_heading_styles():
@@ -91,3 +100,56 @@ def test_build_report_expands_diagram_pages(monkeypatch, tmp_path):
 
     assert image_calls[0][1] == pytest.approx(expected_arch_width)
     assert image_calls[1][1] == pytest.approx(expected_seq_width)
+
+
+def test_build_editable_deck_scales_each_diagram(monkeypatch, tmp_path):
+    rendered: dict[str, Path] = {}
+
+    def fake_render(source: Path, target: Path) -> Path:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        size = (1600, 800) if "architecture" in target.stem else (800, 1600)
+        _make_png(target, size)
+        rendered[source.name] = target
+        return target
+
+    monkeypatch.setattr(arch_report, "render_mermaid", fake_render)
+
+    output = tmp_path / "diagrams.pptx"
+    deck_path = arch_report.build_editable_deck(output)
+
+    presentation = Presentation(deck_path)
+    assert presentation.slide_width == arch_report.PPTX_SLIDE_WIDTH
+    assert presentation.slide_height == arch_report.PPTX_SLIDE_HEIGHT
+
+    assert len(presentation.slides) == 2
+    arch_picture = [
+        shape
+        for shape in presentation.slides[0].shapes
+        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE
+    ][0]
+    seq_picture = [
+        shape
+        for shape in presentation.slides[1].shapes
+        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE
+    ][0]
+
+    max_width = arch_report.PPTX_SLIDE_WIDTH - 2 * arch_report.PPTX_MARGIN
+    content_top = (
+        arch_report.PPTX_MARGIN
+        + arch_report.PPTX_TITLE_HEIGHT
+        + arch_report.PPTX_SUBTITLE_HEIGHT
+        + arch_report.PPTX_CONTENT_GAP
+    )
+    max_height = arch_report.PPTX_SLIDE_HEIGHT - content_top - arch_report.PPTX_MARGIN
+
+    expected_arch = arch_report._scale_image_to_box(
+        rendered[arch_report.ARCH_MMD.name], max_width, max_height
+    )
+    expected_seq = arch_report._scale_image_to_box(
+        rendered[arch_report.SEQ_MMD.name], max_width, max_height
+    )
+
+    assert arch_picture.width == pytest.approx(expected_arch[0])
+    assert arch_picture.height == pytest.approx(expected_arch[1])
+    assert seq_picture.width == pytest.approx(expected_seq[0])
+    assert seq_picture.height == pytest.approx(expected_seq[1])
