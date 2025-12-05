@@ -16,11 +16,13 @@ from ui.frames.utils import (
     SUCCESS_BADGE_ICON,
     PENDING_BADGE_ICON,
     BadgeManager,
+    SectionToggleMixin,
     ToggleWarningBadge,
     build_grid_container,
     create_collapsible_card,
     create_date_entry,
     ensure_grid_support,
+    generate_section_id,
     grid_section,
     refresh_dynamic_rows,
 )
@@ -791,7 +793,7 @@ AMOUNT_BADGE_KEYS = {
 }
 
 
-class ProductFrame:
+class ProductFrame(SectionToggleMixin):
     """Representa un producto y su interfaz en la sección de productos."""
 
     ENTITY_LABEL = "producto"
@@ -815,6 +817,7 @@ class ProductFrame:
         owner=None,
         summary_parent=None,
     ):
+        SectionToggleMixin.__init__(self)
         self.parent = parent
         self.idx = idx
         self.owner = owner
@@ -855,6 +858,7 @@ class ProductFrame:
         self.duplicate_status_label = None
         self.header_tree = None
         self._focus_binding_target = None
+        self.section_id = generate_section_id("producto")
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -886,6 +890,14 @@ class ProductFrame:
         self.claim_template_btn = None
 
         self.section = self._create_section(parent)
+        self.register_section_toggle(
+            self.section_id,
+            section=self.section,
+            header=getattr(self.section, "header", None),
+            content=getattr(self.section, "content", None),
+            indicator=getattr(self.section, "indicator", None),
+            collapsed=not getattr(self.section, "is_open", True),
+        )
         self._sync_section_title()
         self._place_section()
         self._tree_sort_state: dict[str, bool] = {}

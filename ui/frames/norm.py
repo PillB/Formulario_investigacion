@@ -10,16 +10,18 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_required_text)
 from ui.frames.utils import (
     BadgeManager,
+    SectionToggleMixin,
     create_date_entry,
     create_collapsible_card,
     ensure_grid_support,
+    generate_section_id,
     grid_section,
 )
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 
 
-class NormFrame:
+class NormFrame(SectionToggleMixin):
     """Representa una norma transgredida en la sección de normas."""
 
     HEADER_COLUMNS = (
@@ -39,6 +41,7 @@ class NormFrame:
         header_tree=None,
         owner=None,
     ):
+        SectionToggleMixin.__init__(self)
         self.parent = parent
         self.idx = idx
         self.remove_callback = remove_callback
@@ -53,6 +56,7 @@ class NormFrame:
         self.owner = owner
         self._focus_widgets: set[object] = set()
         self._focus_binding_target = None
+        self.section_id = generate_section_id("norma")
 
         self.id_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
@@ -70,6 +74,14 @@ class NormFrame:
                 self.logs,
             ),
             collapsible_cls=CollapsibleSection,
+        )
+        self.register_section_toggle(
+            self.section_id,
+            section=self.section,
+            header=getattr(self.section, "header", None),
+            content=getattr(self.section, "content", None),
+            indicator=getattr(self.section, "indicator", None),
+            collapsed=not getattr(self.section, "is_open", True),
         )
         self._sync_section_title()
         self._place_section()

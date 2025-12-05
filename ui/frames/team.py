@@ -14,11 +14,13 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         validate_team_member_id)
 from ui.frames.utils import (
     BadgeManager,
+    SectionToggleMixin,
     ToggleWarningBadge,
     build_grid_container,
     create_collapsible_card,
     create_date_entry,
     ensure_grid_support,
+    generate_section_id,
     grid_section,
 )
 from theme_manager import ThemeManager
@@ -26,7 +28,7 @@ from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 
 
-class TeamMemberFrame:
+class TeamMemberFrame(SectionToggleMixin):
     """Representa un colaborador y su interfaz en la sección de colaboradores."""
 
     ENTITY_LABEL = "colaborador"
@@ -50,6 +52,7 @@ class TeamMemberFrame:
         case_date_getter=None,
         team_catalog: TeamHierarchyCatalog | None = None,
     ):
+        SectionToggleMixin.__init__(self)
         self.parent = parent
         self.owner = owner
         self.idx = idx
@@ -80,6 +83,7 @@ class TeamMemberFrame:
         self._service_option_map: dict[str, str] = {}
         self._agency_lookup: dict[str, tuple[str, str]] = self._build_agency_lookup()
         self._agency_sync_in_progress = False
+        self.section_id = generate_section_id("colaborador")
 
         self.id_var = tk.StringVar()
         self.nombres_var = tk.StringVar()
@@ -103,6 +107,14 @@ class TeamMemberFrame:
         self._agencia_codigo_combo = None
 
         self.section = self._create_section(parent)
+        self.register_section_toggle(
+            self.section_id,
+            section=self.section,
+            header=getattr(self.section, "header", None),
+            content=getattr(self.section, "content", None),
+            indicator=getattr(self.section, "indicator", None),
+            collapsed=not getattr(self.section, "is_open", True),
+        )
         self._sync_section_title()
         self._register_title_traces()
         self._place_section()
