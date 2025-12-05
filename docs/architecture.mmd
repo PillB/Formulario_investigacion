@@ -3,8 +3,8 @@ flowchart TB
     subgraph Contexto
         gestion(["Gestión de Investigaciones"])
         analista([Investigador])
-        tkapp[["Aplicación Tkinter\nFormulario_investigacion"]]
-        databricks(["Catálogos empresariales futuro\nDatabricks Parquet/CSV"])
+        tkapp[["Aplicación Python Tkinter GUI<br/>FormularioInvestigacionesFraude"]]
+        databricks(["Catálogos empresariales futuro<br/>Databricks Parquet/CSV"])
         grc(["Registro de riesgos GRC"])
         normdb(["Índice maestro de normas"])
         gestion -- Asigna caso --> analista
@@ -15,29 +15,29 @@ flowchart TB
     end
 
     subgraph Contenedores
-        main[["main.py\nArranque Tk/Ttk"]]
-        appcore[["FraudCaseApp app.py\nControlador"]]
-        ui[["ui/frames/*\nTabs de Caso, Clientes, Equipo, Productos, Riesgos, Normas"]]
-        services[["models/*\nCatálogos y autopoblado"]]
-        validators[["validators.py\nReglas + logs"]]
-        reporting[["report_builder.py\nGeneración JSON/CSV/MD/DOCX"]]
-        files[("Sistema de archivos\nautosave.json, autosaves/<caso>/auto_N.json, exports/")]
-        external[("external drive/\nbackups y logs")]
+        main[["main.py<br/>Arranque Tk/Ttk"]]
+        appcore[["FormularioInvestigacionesFraude app.py<br/>Controlador"]]
+        ui[["ui/frames/*<br/>Pestañas de Caso, Clientes, Team Members, Productos, Riesgos, Normas"]]
+        services[["models/*<br/>Catálogos y autopoblado"]]
+        validators[["validators.py<br/>Reglas + logs"]]
+        reporting[["report_builder.py<br/>Generación JSON/CSV/MD/DOCX"]]
+        files(("Sistema de archivos<br/>autosave.json, autosaves/<caso>/auto_N.json, exports/"))
+        external(("Unidad externa<br/>backups y logs"))
     end
 
     subgraph Componentes_de_App
-        caseTab[[CaseFrame]]
-        clientTab[[ClientFrame]]
-        teamTab[[TeamMemberFrame]]
-        productTab[[ProductFrame]]
-        riskTab[[RiskFrame]]
-        normTab[[NormFrame]]
-        actions[[Tab_Acciones]]
-        summary[[Tab_Resumen]]
-        autosave[[Autosave_Temp]]
-        logging[[logger_logs]]
-        importer[[Importadores_CSV]]
-        autofill[[CatalogService_Autofill]]
+        caseTab[[Pestaña Caso]]
+        clientTab[[Pestaña Clientes]]
+        teamTab[[Pestaña Team Members]]
+        productTab[[Pestaña Productos]]
+        riskTab[[Pestaña Riesgos]]
+        normTab[[Pestaña Normas]]
+        actions[[Tab Acciones]]
+        summary[[Tab Resumen]]
+        autosave[[Auto guardado temporal]]
+        logging[[Bitácora logs.csv]]
+        importer[[Importadores CSV]]
+        autofill[[Servicio de Catálogos<br/>Autopoblado]]
         reporter[[report_builder]]
     end
 
@@ -56,10 +56,24 @@ flowchart TB
     appcore --> normTab
     appcore --> actions
     appcore --> summary
+
+    importer --> caseTab
+    importer --> clientTab
+    importer --> teamTab
+    importer --> productTab
+    importer --> riskTab
+    importer --> normTab
+    importer --> summary
+
+    caseTab --> autofill
     clientTab --> autofill
     teamTab --> autofill
-    productTab --> importer
-    actions --> importer
+    productTab --> autofill
+    riskTab --> autofill
+    normTab --> autofill
+    actions --> autofill
+    summary --> autofill
+
     appcore --> autosave
     appcore --> logging
     appcore --> reporter --> files
