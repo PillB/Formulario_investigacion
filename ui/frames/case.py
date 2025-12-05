@@ -14,7 +14,7 @@ from ui.frames.utils import (
     grid_and_configure,
 )
 from ui.layout import responsive_grid
-from validation_badge import ValidationBadgeGroup
+from validation_badge import badge_registry
 from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
 
@@ -46,7 +46,7 @@ class CaseFrame:
         self._right_column = ttk.Frame(self._paned)
         ensure_grid_support(self._left_column)
         ensure_grid_support(self._right_column)
-        self.badges = ValidationBadgeGroup(parent=self.frame)
+        self.badges = badge_registry
         self._paned.add(self._left_column, weight=1)
         self._paned.add(self._right_column, weight=1)
         owner._case_inputs = {}
@@ -69,7 +69,7 @@ class CaseFrame:
             container.columnconfigure(0, weight=1)
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
-        badge = self.badges.create_and_register(key, container, row=0, column=1)
+        badge = self.badges.claim(key, container, row=0, column=1)
         return container, widget, badge
 
     def _build_header_fields(self, frame, collector):

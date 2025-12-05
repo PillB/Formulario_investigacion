@@ -22,7 +22,7 @@ from ui.frames.utils import (
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
-from validation_badge import ValidationBadge, ValidationBadgeGroup
+from validation_badge import ValidationBadge, badge_registry
 
 
 class TeamMemberFrame:
@@ -113,7 +113,7 @@ class TeamMemberFrame:
         self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
-        self.badges = ValidationBadgeGroup(parent=self.frame)
+        self.badges = badge_registry
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(0, weight=0)
             self.frame.columnconfigure(1, weight=1)
@@ -615,7 +615,7 @@ class TeamMemberFrame:
 
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
-        self.badges.create_and_register(key, container, row=0, column=1)
+        self.badges.claim(key, container, row=0, column=1)
         container.grid(
             row=row,
             column=column,

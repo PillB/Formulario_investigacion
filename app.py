@@ -12253,6 +12253,10 @@ class FraudCaseApp:
             log_event("validacion", warning, self.logs)
             if not getattr(self, '_suppress_messagebox', False):
                 messagebox.showwarning("Informe Word no disponible", warning)
+        export_definitions = self._build_export_definitions(data)
+        architecture_path = self._update_architecture_diagram(export_definitions)
+        if architecture_path:
+            created_files.append(architecture_path)
         if hasattr(self, "root") and self.root:
             ConfettiBurst(
                 self.root,
