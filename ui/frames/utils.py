@@ -63,6 +63,12 @@ class SectionToggleMixin:
             if collapsed is not None
             else not bool(getattr(section, "is_open", True))
         )
+        if section is not None:
+            try:
+                section.identifier = section_id
+                section.section_id = getattr(section, "section_id", section_id)
+            except Exception:
+                pass
         self.section_contents[section_id] = {
             "header": header,
             "content": content,
@@ -110,8 +116,10 @@ class SectionToggleMixin:
             return
 
     def _log_toggle(self, section_id: str, collapsed: bool, event=None) -> None:
-        coords = f"{getattr(event, 'x', 0)},{getattr(event, 'y', 0)}"
-        message = f"{'Colapsó' if collapsed else 'Expandió'} la sección {section_id}"
+        coords = None
+        if event is not None and hasattr(event, "x") and hasattr(event, "y"):
+            coords = (event.x, event.y)
+        message = f"Sección {section_id} {'colapsada' if collapsed else 'expandida'}"
         try:
             log_event(
                 "ui_toggle",
@@ -338,7 +346,15 @@ class _StubEntry:
         return None
 
 
-def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggle=None):
+def _build_collapsible_fallback(
+    parent: Any,
+    *,
+    title: str,
+    open: bool,
+    on_toggle=None,
+    identifier: str | None = None,
+    logs=None,
+):
     """Create a minimal accordion-like container without ``CollapsibleSection``.
 
     The fallback mirrors the public surface used by the frames: ``content``
@@ -442,6 +458,9 @@ def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggl
         title_lbl = card.title_label
         content = card.content
 
+    card.identifier = identifier  # type: ignore[attr-defined]
+    card.section_id = identifier  # type: ignore[attr-defined]
+    card.logs = logs  # type: ignore[attr-defined]
     card.is_open = bool(open)  # type: ignore[attr-defined]
     card._on_toggle = on_toggle  # type: ignore[attr-defined]
 
@@ -464,7 +483,7 @@ def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggl
         card.is_open = True  # type: ignore[attr-defined]
         return widget
 
-    def _toggle(_event=None):  # noqa: ANN001
+    def _toggle(event=None):  # noqa: ANN001
         is_open = getattr(card, "is_open", True)
         if is_open:
             if hasattr(content, "pack_forget"):
@@ -483,6 +502,21 @@ def _build_collapsible_fallback(parent: Any, *, title: str, open: bool, on_toggl
             except Exception:
                 pass
         card.is_open = not is_open  # type: ignore[attr-defined]
+        try:
+            coords = None
+            if event is not None and hasattr(event, "x") and hasattr(event, "y"):
+                coords = (event.x, event.y)
+            message = f"Sección {identifier or 'desconocida'} {'expandida' if card.is_open else 'colapsada'}"
+            log_event(
+                "ui_toggle",
+                message,
+                logs,
+                widget_id=identifier,
+                coords=coords,
+                event_subtipo="click",
+            )
+        except Exception:
+            pass
         callback = getattr(card, "_on_toggle", None)
         if callable(callback):
             try:
@@ -505,6 +539,8 @@ def create_collapsible_card(
     *,
     title: str,
     open: bool = True,
+    identifier: str | None = None,
+    logs=None,
     on_toggle=None,
     log_error=None,
     collapsible_cls=None,
@@ -519,7 +555,14 @@ def create_collapsible_card(
 
     collapsible = collapsible_cls or CollapsibleSection
     try:
-        return collapsible(parent, title=title, open=open, on_toggle=on_toggle)
+        return collapsible(
+            parent,
+            title=title,
+            open=open,
+            identifier=identifier,
+            logs=logs,
+            on_toggle=on_toggle,
+        )
     except Exception as exc:  # pragma: no cover - solo se ejecuta en entornos degradados
         if callable(log_error):
             try:
@@ -527,7 +570,12 @@ def create_collapsible_card(
             except Exception:
                 pass
         return _build_collapsible_fallback(
-            parent, title=title, open=open, on_toggle=on_toggle
+            parent,
+            title=title,
+            open=open,
+            on_toggle=on_toggle,
+            identifier=identifier,
+            logs=logs,
         )
 
 def ensure_grid_support(widget: Any) -> None:

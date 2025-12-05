@@ -85,6 +85,8 @@ class ClientFrame(SectionToggleMixin):
         self.section = create_collapsible_card(
             parent,
             title="",
+            identifier=self.section_id,
+            logs=self.logs,
             on_toggle=self._handle_toggle,
             log_error=lambda exc: log_event(
                 "validacion",
