@@ -9372,6 +9372,44 @@ class FraudCaseApp:
                 identifiers.add(value)
         return identifiers
 
+    def _run_import_batches(self, entries, task_label, process_chunk, finalize, batch_size=20):
+        rows = entries or []
+        total = len(rows)
+        root = getattr(self, "root", None)
+
+        def _update_status(processed):
+            if total and self.import_status_var is not None:
+                try:
+                    self.import_status_var.set(
+                        f"Importando {task_label} ({processed}/{total})..."
+                    )
+                except tk.TclError:
+                    pass
+
+        if root is None or total <= batch_size:
+            if rows:
+                process_chunk(rows)
+            _update_status(total)
+            finalize()
+            return
+
+        def _process_batch(start_index=0):
+            end_index = min(start_index + batch_size, total)
+            chunk = rows[start_index:end_index]
+            if chunk:
+                process_chunk(chunk)
+            _update_status(end_index)
+            if end_index < total:
+                try:
+                    root.after(1, lambda: _process_batch(end_index))
+                except tk.TclError:
+                    _process_batch(end_index)
+            else:
+                finalize()
+
+        _update_status(0)
+        _process_batch(0)
+
     def _apply_client_import_payload(self, entries):
         nuevos = 0
         actualizados = 0
@@ -9380,45 +9418,51 @@ class FraudCaseApp:
         missing_ids = []
         existing_ids = self._collect_existing_ids(self.client_frames)
         seen_ids = set()
-        for entry in entries or []:
-            hydrated = entry.get('row', {})
-            found = entry.get('found', False)
-            id_cliente = (hydrated.get('id_cliente') or '').strip()
-            if not id_cliente:
-                errores += 1
-                continue
-            if id_cliente in seen_ids or id_cliente in existing_ids:
-                duplicados += 1
-                continue
-            seen_ids.add(id_cliente)
-            existing_ids.add(id_cliente)
-            frame = self._obtain_client_slot_for_import()
-            created = True
-            self._populate_client_frame_from_row(frame, hydrated, preserve_existing=True)
-            self._trigger_import_id_refresh(
-                frame,
-                id_cliente,
-                notify_on_missing=True,
-                preserve_existing=False,
+        def process_chunk(chunk):
+            nonlocal nuevos, errores, duplicados
+            for entry in chunk:
+                hydrated = entry.get('row', {})
+                found = entry.get('found', False)
+                id_cliente = (hydrated.get('id_cliente') or '').strip()
+                if not id_cliente:
+                    errores += 1
+                    continue
+                if id_cliente in seen_ids or id_cliente in existing_ids:
+                    duplicados += 1
+                    continue
+                seen_ids.add(id_cliente)
+                existing_ids.add(id_cliente)
+                frame = self._obtain_client_slot_for_import()
+                created = True
+                self._populate_client_frame_from_row(frame, hydrated, preserve_existing=True)
+                self._trigger_import_id_refresh(
+                    frame,
+                    id_cliente,
+                    notify_on_missing=True,
+                    preserve_existing=False,
+                )
+                if created:
+                    nuevos += 1
+                if not found and 'id_cliente' in self.detail_catalogs:
+                    missing_ids.append(id_cliente)
+
+        def finalize():
+            self._notify_dataset_changed(summary_sections="clientes")
+            total = nuevos + actualizados
+            log_event(
+                "navegacion",
+                f"Clientes importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
+                self.logs,
             )
-            if created:
-                nuevos += 1
-            if not found and 'id_cliente' in self.detail_catalogs:
-                missing_ids.append(id_cliente)
-        self._notify_dataset_changed(summary_sections="clientes")
-        total = nuevos + actualizados
-        log_event(
-            "navegacion",
-            f"Clientes importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
-            self.logs,
-        )
-        if total:
-            self.sync_main_form_after_import("clientes")
-            summary = self._format_import_summary("clientes", nuevos, actualizados, duplicados, errores)
-            messagebox.showinfo("Importación completa", summary)
-        else:
-            messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
-        self._report_missing_detail_ids("clientes", missing_ids)
+            if total:
+                self.sync_main_form_after_import("clientes")
+                summary = self._format_import_summary("clientes", nuevos, actualizados, duplicados, errores)
+                messagebox.showinfo("Importación completa", summary)
+            else:
+                messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
+            self._report_missing_detail_ids("clientes", missing_ids)
+
+        self._run_import_batches(entries, "clientes", process_chunk, finalize)
 
     def _apply_team_import_payload(self, entries):
         nuevos = 0
@@ -9428,45 +9472,51 @@ class FraudCaseApp:
         missing_ids = []
         existing_ids = self._collect_existing_ids(self.team_frames)
         seen_ids = set()
-        for entry in entries or []:
-            hydrated = entry.get('row', {})
-            found = entry.get('found', False)
-            collaborator_id = (hydrated.get('id_colaborador') or '').strip()
-            if not collaborator_id:
-                errores += 1
-                continue
-            if collaborator_id in seen_ids or collaborator_id in existing_ids:
-                duplicados += 1
-                continue
-            seen_ids.add(collaborator_id)
-            existing_ids.add(collaborator_id)
-            frame = self._obtain_team_slot_for_import()
-            created = True
-            self._populate_team_frame_from_row(frame, hydrated)
-            self._trigger_import_id_refresh(
-                frame,
-                collaborator_id,
-                notify_on_missing=True,
-                preserve_existing=False,
+        def process_chunk(chunk):
+            nonlocal nuevos, errores, duplicados
+            for entry in chunk:
+                hydrated = entry.get('row', {})
+                found = entry.get('found', False)
+                collaborator_id = (hydrated.get('id_colaborador') or '').strip()
+                if not collaborator_id:
+                    errores += 1
+                    continue
+                if collaborator_id in seen_ids or collaborator_id in existing_ids:
+                    duplicados += 1
+                    continue
+                seen_ids.add(collaborator_id)
+                existing_ids.add(collaborator_id)
+                frame = self._obtain_team_slot_for_import()
+                created = True
+                self._populate_team_frame_from_row(frame, hydrated)
+                self._trigger_import_id_refresh(
+                    frame,
+                    collaborator_id,
+                    notify_on_missing=True,
+                    preserve_existing=False,
+                )
+                if created:
+                    nuevos += 1
+                if not found and 'id_colaborador' in self.detail_catalogs:
+                    missing_ids.append(collaborator_id)
+
+        def finalize():
+            self._notify_dataset_changed(summary_sections="colaboradores")
+            total = nuevos + actualizados
+            log_event(
+                "navegacion",
+                f"Colaboradores importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
+                self.logs,
             )
-            if created:
-                nuevos += 1
-            if not found and 'id_colaborador' in self.detail_catalogs:
-                missing_ids.append(collaborator_id)
-        self._notify_dataset_changed(summary_sections="colaboradores")
-        total = nuevos + actualizados
-        log_event(
-            "navegacion",
-            f"Colaboradores importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
-            self.logs,
-        )
-        if total:
-            self.sync_main_form_after_import("colaboradores")
-            summary = self._format_import_summary("colaboradores", nuevos, actualizados, duplicados, errores)
-            messagebox.showinfo("Importación completa", summary)
-        else:
-            messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
-        self._report_missing_detail_ids("colaboradores", missing_ids)
+            if total:
+                self.sync_main_form_after_import("colaboradores")
+                summary = self._format_import_summary("colaboradores", nuevos, actualizados, duplicados, errores)
+                messagebox.showinfo("Importación completa", summary)
+            else:
+                messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
+            self._report_missing_detail_ids("colaboradores", missing_ids)
+
+        self._run_import_batches(entries, "colaboradores", process_chunk, finalize)
 
     def _apply_product_import_payload(self, entries):
         nuevos = 0
@@ -9476,161 +9526,174 @@ class FraudCaseApp:
         missing_ids = []
         existing_ids = self._collect_existing_ids(self.product_frames)
         seen_ids = set()
-        for entry in entries or []:
-            hydrated = entry.get('row', {})
-            found = entry.get('found', False)
-            product_id = (hydrated.get('id_producto') or '').strip()
-            if not product_id:
-                errores += 1
-                continue
-            if product_id in seen_ids or product_id in existing_ids:
-                duplicados += 1
-                continue
-            seen_ids.add(product_id)
-            existing_ids.add(product_id)
-            frame = self._obtain_product_slot_for_import()
-            created = True
-            client_id = (hydrated.get('id_cliente') or '').strip()
-            if client_id:
-                client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
-                self._ensure_client_exists(client_id, client_details)
-            self._populate_product_frame_from_row(frame, hydrated)
-            self._trigger_import_id_refresh(
-                frame,
-                product_id,
-                notify_on_missing=True,
-                preserve_existing=False,
+        def process_chunk(chunk):
+            nonlocal nuevos, errores, duplicados
+            for entry in chunk:
+                hydrated = entry.get('row', {})
+                found = entry.get('found', False)
+                product_id = (hydrated.get('id_producto') or '').strip()
+                if not product_id:
+                    errores += 1
+                    continue
+                if product_id in seen_ids or product_id in existing_ids:
+                    duplicados += 1
+                    continue
+                seen_ids.add(product_id)
+                existing_ids.add(product_id)
+                frame = self._obtain_product_slot_for_import()
+                created = True
+                client_id = (hydrated.get('id_cliente') or '').strip()
+                if client_id:
+                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                    self._ensure_client_exists(client_id, client_details)
+                self._populate_product_frame_from_row(frame, hydrated)
+                self._trigger_import_id_refresh(
+                    frame,
+                    product_id,
+                    notify_on_missing=True,
+                    preserve_existing=False,
+                )
+                if created:
+                    nuevos += 1
+                if not found and 'id_producto' in self.detail_catalogs:
+                    missing_ids.append(product_id)
+
+        def finalize():
+            self._notify_dataset_changed(summary_sections="productos")
+            total = nuevos + actualizados
+            log_event(
+                "navegacion",
+                f"Productos importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
+                self.logs,
             )
-            if created:
-                nuevos += 1
-            if not found and 'id_producto' in self.detail_catalogs:
-                missing_ids.append(product_id)
-        self._notify_dataset_changed(summary_sections="productos")
-        total = nuevos + actualizados
-        log_event(
-            "navegacion",
-            f"Productos importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
-            self.logs,
-        )
-        if total:
-            self.sync_main_form_after_import("productos")
-            summary = self._format_import_summary("productos", nuevos, actualizados, duplicados, errores)
-            messagebox.showinfo("Importación completa", summary)
-        else:
-            messagebox.showwarning("Sin cambios", "No se detectaron productos nuevos en el archivo.")
-        self._report_missing_detail_ids("productos", missing_ids)
-        self._run_duplicate_check_post_load()
+            if total:
+                self.sync_main_form_after_import("productos")
+                summary = self._format_import_summary("productos", nuevos, actualizados, duplicados, errores)
+                messagebox.showinfo("Importación completa", summary)
+            else:
+                messagebox.showwarning("Sin cambios", "No se detectaron productos nuevos en el archivo.")
+            self._report_missing_detail_ids("productos", missing_ids)
+            self._run_duplicate_check_post_load()
+
+        self._run_import_batches(entries, "productos", process_chunk, finalize)
 
     def _apply_combined_import_payload(self, entries):
         created_records = False
         missing_clients = []
         missing_team = []
         missing_products = []
-        for entry in entries or []:
-            client_row = dict(entry.get('client_row') or {})
-            client_found = entry.get('client_found', False)
-            client_id = (client_row.get('id_cliente') or '').strip()
-            if client_id:
-                if not client_row.get('flag') and client_row.get('flag_cliente'):
-                    client_row['flag'] = client_row.get('flag_cliente')
-                raw_row = entry.get('raw_row', {}) or {}
-                for source_key, target_key in (
-                    ('nombres_cliente', 'nombres'),
-                    ('apellidos_cliente', 'apellidos'),
-                ):
-                    if not client_row.get(target_key) and raw_row.get(source_key):
-                        client_row[target_key] = raw_row[source_key]
-                for key in ('nombres', 'apellidos', 'telefonos', 'correos', 'direcciones', 'accionado', 'tipo_id'):
-                    value = client_row.get(key)
-                    if not value and raw_row.get(key):
-                        client_row[key] = raw_row[key]
-                _client_frame, created_client = self._ensure_client_exists(client_id, client_row)
-                created_records = created_records or created_client
-                if not client_found and 'id_cliente' in self.detail_catalogs:
-                    missing_clients.append(client_id)
-            team_row = dict(entry.get('team_row') or {})
-            team_found = entry.get('team_found', False)
-            collaborator_id = (team_row.get('id_colaborador') or '').strip()
-            if collaborator_id:
-                team_frame, created_team = self._ensure_team_member_exists(collaborator_id, team_row)
-                if created_team:
-                    self._trigger_import_id_refresh(
-                        team_frame,
-                        collaborator_id,
-                        notify_on_missing=False,
-                        preserve_existing=False,
-                    )
-                created_records = created_records or created_team
-                if not team_found and 'id_colaborador' in self.detail_catalogs:
-                    missing_team.append(collaborator_id)
-            product_row = dict(entry.get('product_row') or {})
-            product_found = entry.get('product_found', False)
-            product_id = (product_row.get('id_producto') or '').strip()
-            product_frame = None
-            if product_id:
-                product_frame = self._find_product_frame(product_id)
-                new_product = False
-                preserve_existing_product = bool(product_frame)
-                if not product_frame:
-                    product_frame = self._obtain_product_slot_for_import()
-                    new_product = True
-                client_for_product = (product_row.get('id_cliente') or '').strip()
-                if client_for_product:
-                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
-                    self._ensure_client_exists(client_for_product, client_details)
-                self._populate_product_frame_from_row(
-                    product_frame,
-                    product_row,
-                    preserve_existing=preserve_existing_product,
-                )
-                self._trigger_import_id_refresh(
-                    product_frame,
-                    product_id,
-                    notify_on_missing=False,
-                    preserve_existing=preserve_existing_product,
-                )
-                created_records = created_records or new_product
-                if not product_found and 'id_producto' in self.detail_catalogs:
-                    missing_products.append(product_id)
-            involvement_pairs = entry.get('involvement_pairs') or []
-            if product_frame and involvement_pairs:
-                for collab_id, amount in involvement_pairs:
-                    collab_id = (collab_id or '').strip()
-                    if not collab_id:
-                        continue
-                    collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
-                    _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
+
+        def process_chunk(chunk):
+            nonlocal created_records
+            for entry in chunk:
+                client_row = dict(entry.get('client_row') or {})
+                client_found = entry.get('client_found', False)
+                client_id = (client_row.get('id_cliente') or '').strip()
+                if client_id:
+                    if not client_row.get('flag') and client_row.get('flag_cliente'):
+                        client_row['flag'] = client_row.get('flag_cliente')
+                    raw_row = entry.get('raw_row', {}) or {}
+                    for source_key, target_key in (
+                        ('nombres_cliente', 'nombres'),
+                        ('apellidos_cliente', 'apellidos'),
+                    ):
+                        if not client_row.get(target_key) and raw_row.get(source_key):
+                            client_row[target_key] = raw_row[source_key]
+                    for key in ('nombres', 'apellidos', 'telefonos', 'correos', 'direcciones', 'accionado', 'tipo_id'):
+                        value = client_row.get(key)
+                        if not value and raw_row.get(key):
+                            client_row[key] = raw_row[key]
+                    _client_frame, created_client = self._ensure_client_exists(client_id, client_row)
+                    created_records = created_records or created_client
+                    if not client_found and 'id_cliente' in self.detail_catalogs:
+                        missing_clients.append(client_id)
+                team_row = dict(entry.get('team_row') or {})
+                team_found = entry.get('team_found', False)
+                collaborator_id = (team_row.get('id_colaborador') or '').strip()
+                if collaborator_id:
+                    team_frame, created_team = self._ensure_team_member_exists(collaborator_id, team_row)
+                    if created_team:
+                        self._trigger_import_id_refresh(
+                            team_frame,
+                            collaborator_id,
+                            notify_on_missing=False,
+                            preserve_existing=False,
+                        )
                     created_records = created_records or created_team
-                    if not collab_found and 'id_colaborador' in self.detail_catalogs:
-                        missing_team.append(collab_id)
-                    inv_row = next((inv for inv in product_frame.involvements if inv.team_var.get().strip() == collab_id), None)
-                    if not inv_row:
-                        inv_row = self._obtain_involvement_slot(product_frame)
-                    inv_row.team_var.set(collab_id)
-                    amount_text = (amount or '').strip()
-                    label = (
-                        f"Monto asignado del colaborador {collab_id or 'sin ID'} "
-                        f"en el producto {product_id or 'sin ID'}"
+                    if not team_found and 'id_colaborador' in self.detail_catalogs:
+                        missing_team.append(collaborator_id)
+                product_row = dict(entry.get('product_row') or {})
+                product_found = entry.get('product_found', False)
+                product_id = (product_row.get('id_producto') or '').strip()
+                product_frame = None
+                if product_id:
+                    product_frame = self._find_product_frame(product_id)
+                    new_product = False
+                    preserve_existing_product = bool(product_frame)
+                    if not product_frame:
+                        product_frame = self._obtain_product_slot_for_import()
+                        new_product = True
+                    client_for_product = (product_row.get('id_cliente') or '').strip()
+                    if client_for_product:
+                        client_details, _ = self._hydrate_row_from_details({'id_cliente': client_for_product}, 'id_cliente', CLIENT_ID_ALIASES)
+                        self._ensure_client_exists(client_for_product, client_details)
+                    self._populate_product_frame_from_row(
+                        product_frame,
+                        product_row,
+                        preserve_existing=preserve_existing_product,
                     )
-                    error, _amount, normalized_text = validate_money_bounds(
-                        amount_text,
-                        label,
+                    self._trigger_import_id_refresh(
+                        product_frame,
+                        product_id,
+                        notify_on_missing=False,
+                        preserve_existing=preserve_existing_product,
                     )
-                    if error:
-                        raise ValueError(error)
-                    inv_row.monto_var.set(normalized_text or amount_text)
-                    created_records = True
-        self._notify_dataset_changed()
-        log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
-        if created_records:
-            self.sync_main_form_after_import("datos combinados")
-            messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
-        else:
-            messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
-        self._report_missing_detail_ids("clientes", missing_clients)
-        self._report_missing_detail_ids("colaboradores", missing_team)
-        self._report_missing_detail_ids("productos", missing_products)
-        self._run_duplicate_check_post_load()
+                    created_records = created_records or new_product
+                    if not product_found and 'id_producto' in self.detail_catalogs:
+                        missing_products.append(product_id)
+                involvement_pairs = entry.get('involvement_pairs') or []
+                if product_frame and involvement_pairs:
+                    for collab_id, amount in involvement_pairs:
+                        collab_id = (collab_id or '').strip()
+                        if not collab_id:
+                            continue
+                        collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
+                        _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
+                        created_records = created_records or created_team
+                        if not collab_found and 'id_colaborador' in self.detail_catalogs:
+                            missing_team.append(collab_id)
+                        inv_row = next((inv for inv in product_frame.involvements if inv.team_var.get().strip() == collab_id), None)
+                        if not inv_row:
+                            inv_row = self._obtain_involvement_slot(product_frame)
+                        inv_row.team_var.set(collab_id)
+                        amount_text = (amount or '').strip()
+                        label = (
+                            f"Monto asignado del colaborador {collab_id or 'sin ID'} "
+                            f"en el producto {product_id or 'sin ID'}"
+                        )
+                        error, _amount, normalized_text = validate_money_bounds(
+                            amount_text,
+                            label,
+                        )
+                        if error:
+                            raise ValueError(error)
+                        inv_row.monto_var.set(normalized_text or amount_text)
+                        created_records = True
+
+        def finalize():
+            self._notify_dataset_changed()
+            log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
+            if created_records:
+                self.sync_main_form_after_import("datos combinados")
+                messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
+            else:
+                messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
+            self._report_missing_detail_ids("clientes", missing_clients)
+            self._report_missing_detail_ids("colaboradores", missing_team)
+            self._report_missing_detail_ids("productos", missing_products)
+            self._run_duplicate_check_post_load()
+
+        self._run_import_batches(entries, "datos combinados", process_chunk, finalize)
 
     def _apply_risk_import_payload(self, entries):
         nuevos = 0
@@ -9725,71 +9788,78 @@ class FraudCaseApp:
                 if cid_value:
                     existing_claims.add((pid_value, cid_value))
         seen_claims = set()
-        for entry in entries or []:
-            hydrated = entry.get('row', {})
-            found = entry.get('found', False)
-            product_id = (hydrated.get('id_producto') or '').strip()
-            if not product_id:
-                errores += 1
-                continue
-            product_frame = self._find_product_frame(product_id)
-            new_product = False
-            if not product_frame:
-                product_frame = self._obtain_product_slot_for_import()
-                new_product = True
-            client_id = (hydrated.get('id_cliente') or '').strip()
-            if client_id:
-                client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
-                self._ensure_client_exists(client_id, client_details)
-            if new_product:
-                self._populate_product_frame_from_row(product_frame, hydrated)
-            if product_frame:
-                self._trigger_import_id_refresh(
-                    product_frame,
-                    product_id,
-                    preserve_existing=False,
-                )
-            claim_payload = {
-                'id_reclamo': (hydrated.get('id_reclamo') or '').strip(),
-                'nombre_analitica': (hydrated.get('nombre_analitica') or '').strip(),
-                'codigo_analitica': (hydrated.get('codigo_analitica') or '').strip(),
-            }
-            claim_id = claim_payload['id_reclamo']
-            if not any(claim_payload.values()):
-                continue
-            if not claim_id:
-                errores += 1
-                continue
-            claim_key = (product_id, claim_id)
-            if claim_key in seen_claims or claim_key in existing_claims:
-                duplicados += 1
-                continue
-            seen_claims.add(claim_key)
-            existing_claims.add(claim_key)
-            target = product_frame.find_claim_by_id(claim_id)
-            if not target:
-                target = product_frame.obtain_claim_slot()
-            target.set_data(claim_payload)
-            self._sync_product_lookup_claim_fields(product_frame, product_id)
-            product_frame.persist_lookup_snapshot()
-            nuevos += 1
-            if not found and 'id_producto' in self.detail_catalogs:
-                missing_products.append(product_id)
-        self._notify_dataset_changed(summary_sections="reclamos")
-        total = nuevos
-        log_event(
-            "navegacion",
-            f"Reclamos importados desde CSV: total={total}, nuevos={nuevos}, actualizados=0, duplicados={duplicados}, errores={errores}",
-            self.logs,
-        )
-        if total:
-            self.sync_main_form_after_import("reclamos")
-            summary = self._format_import_summary("reclamos", nuevos, 0, duplicados, errores)
-            messagebox.showinfo("Importación completa", summary)
-        else:
-            messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
-        self._report_missing_detail_ids("productos", missing_products)
-        self._run_duplicate_check_post_load()
+
+        def process_chunk(chunk):
+            nonlocal nuevos, errores, duplicados
+            for entry in chunk:
+                hydrated = entry.get('row', {})
+                found = entry.get('found', False)
+                product_id = (hydrated.get('id_producto') or '').strip()
+                if not product_id:
+                    errores += 1
+                    continue
+                product_frame = self._find_product_frame(product_id)
+                new_product = False
+                if not product_frame:
+                    product_frame = self._obtain_product_slot_for_import()
+                    new_product = True
+                client_id = (hydrated.get('id_cliente') or '').strip()
+                if client_id:
+                    client_details, _ = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                    self._ensure_client_exists(client_id, client_details)
+                if new_product:
+                    self._populate_product_frame_from_row(product_frame, hydrated)
+                if product_frame:
+                    self._trigger_import_id_refresh(
+                        product_frame,
+                        product_id,
+                        preserve_existing=False,
+                    )
+                claim_payload = {
+                    'id_reclamo': (hydrated.get('id_reclamo') or '').strip(),
+                    'nombre_analitica': (hydrated.get('nombre_analitica') or '').strip(),
+                    'codigo_analitica': (hydrated.get('codigo_analitica') or '').strip(),
+                }
+                claim_id = claim_payload['id_reclamo']
+                if not any(claim_payload.values()):
+                    continue
+                if not claim_id:
+                    errores += 1
+                    continue
+                claim_key = (product_id, claim_id)
+                if claim_key in seen_claims or claim_key in existing_claims:
+                    duplicados += 1
+                    continue
+                seen_claims.add(claim_key)
+                existing_claims.add(claim_key)
+                target = product_frame.find_claim_by_id(claim_id)
+                if not target:
+                    target = product_frame.obtain_claim_slot()
+                target.set_data(claim_payload)
+                self._sync_product_lookup_claim_fields(product_frame, product_id)
+                product_frame.persist_lookup_snapshot()
+                nuevos += 1
+                if not found and 'id_producto' in self.detail_catalogs:
+                    missing_products.append(product_id)
+
+        def finalize():
+            self._notify_dataset_changed(summary_sections="reclamos")
+            total = nuevos
+            log_event(
+                "navegacion",
+                f"Reclamos importados desde CSV: total={total}, nuevos={nuevos}, actualizados=0, duplicados={duplicados}, errores={errores}",
+                self.logs,
+            )
+            if total:
+                self.sync_main_form_after_import("reclamos")
+                summary = self._format_import_summary("reclamos", nuevos, 0, duplicados, errores)
+                messagebox.showinfo("Importación completa", summary)
+            else:
+                messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
+            self._report_missing_detail_ids("productos", missing_products)
+            self._run_duplicate_check_post_load()
+
+        self._run_import_batches(entries, "reclamos", process_chunk, finalize)
 
     def import_clients(self, filename=None):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
