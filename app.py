@@ -11915,6 +11915,218 @@ class FraudCaseApp:
             "md", save_md, "Markdown (.md)", source_widget=md_button
         )
 
+    def _build_export_definitions(self, data: CaseData) -> list[dict[str, object]]:
+        """Devuelve los esquemas de exportación basados en el contenido actual."""
+
+        llave_rows, llave_header = build_llave_tecnica_rows(data)
+        analisis_data = data.get("analisis") if isinstance(data, Mapping) else {}
+        analysis_texts = self._normalize_analysis_texts(analisis_data or {})
+        caso = data.get("caso") if isinstance(data, Mapping) else {}
+        analysis_row = {
+            "id_caso": (caso or {}).get("id_caso", ""),
+            **{
+                key: (value.get("text") if isinstance(value, Mapping) else "")
+                for key, value in analysis_texts.items()
+            },
+        }
+
+        return [
+            {
+                "name": "casos",
+                "rows": [data["caso"]],
+                "header": [
+                    "id_caso",
+                    "tipo_informe",
+                    "categoria1",
+                    "categoria2",
+                    "modalidad",
+                    "canal",
+                    "proceso",
+                    "fecha_de_ocurrencia",
+                    "fecha_de_descubrimiento",
+                    "centro_costos",
+                    "matricula_investigador",
+                    "investigador_nombre",
+                    "investigador_cargo",
+                ],
+            },
+            {
+                "name": "llave_tecnica",
+                "rows": llave_rows,
+                "header": llave_header,
+            },
+            {
+                "name": "clientes",
+                "rows": data.get("clientes") if isinstance(data, Mapping) else [],
+                "header": [
+                    "id_cliente",
+                    "id_caso",
+                    "nombres",
+                    "apellidos",
+                    "tipo_id",
+                    "flag",
+                    "telefonos",
+                    "correos",
+                    "direcciones",
+                    "accionado",
+                ],
+            },
+            {
+                "name": "colaboradores",
+                "rows": data.get("colaboradores") if isinstance(data, Mapping) else [],
+                "header": [
+                    "id_colaborador",
+                    "id_caso",
+                    "flag",
+                    "nombres",
+                    "apellidos",
+                    "division",
+                    "area",
+                    "servicio",
+                    "puesto",
+                    "fecha_carta_inmediatez",
+                    "fecha_carta_renuncia",
+                    "nombre_agencia",
+                    "codigo_agencia",
+                    "tipo_falta",
+                    "tipo_sancion",
+                ],
+            },
+            {
+                "name": "productos",
+                "rows": data.get("productos") if isinstance(data, Mapping) else [],
+                "header": [
+                    "id_producto",
+                    "id_caso",
+                    "id_cliente",
+                    "categoria1",
+                    "categoria2",
+                    "modalidad",
+                    "canal",
+                    "proceso",
+                    "fecha_ocurrencia",
+                    "fecha_descubrimiento",
+                    "monto_investigado",
+                    "tipo_moneda",
+                    "monto_perdida_fraude",
+                    "monto_falla_procesos",
+                    "monto_contingencia",
+                    "monto_recuperado",
+                    "monto_pago_deuda",
+                    "tipo_producto",
+                ],
+            },
+            {
+                "name": "producto_reclamo",
+                "rows": data.get("reclamos") if isinstance(data, Mapping) else [],
+                "header": [
+                    "id_reclamo",
+                    "id_caso",
+                    "id_producto",
+                    "nombre_analitica",
+                    "codigo_analitica",
+                ],
+            },
+            {
+                "name": "involucramiento",
+                "rows": data.get("involucramientos") if isinstance(data, Mapping) else [],
+                "header": ["id_producto", "id_caso", "id_colaborador", "monto_asignado"],
+            },
+            {
+                "name": "detalles_riesgo",
+                "rows": data.get("riesgos") if isinstance(data, Mapping) else [],
+                "header": [
+                    "id_riesgo",
+                    "id_caso",
+                    "lider",
+                    "descripcion",
+                    "criticidad",
+                    "exposicion_residual",
+                    "planes_accion",
+                ],
+            },
+            {
+                "name": "detalles_norma",
+                "rows": data.get("normas") if isinstance(data, Mapping) else [],
+                "header": ["id_norma", "id_caso", "descripcion", "fecha_vigencia"],
+            },
+            {
+                "name": "analisis",
+                "rows": [analysis_row],
+                "header": [
+                    "id_caso",
+                    "antecedentes",
+                    "modus_operandi",
+                    "hallazgos",
+                    "descargos",
+                    "conclusiones",
+                    "recomendaciones",
+                ],
+            },
+            {
+                "name": "logs",
+                "rows": [normalize_log_row(row) for row in self.logs],
+                "header": LOG_FIELDNAMES,
+                "skip_if_empty": True,
+            },
+        ]
+
+    def _update_architecture_diagram(self, export_definitions: list[dict[str, object]]) -> Optional[Path]:
+        """Regenera ``architecture.mmd`` a partir de los esquemas exportados."""
+
+        target = getattr(self, "_architecture_diagram_path", None) or Path(__file__).resolve().parent.joinpath(
+            "architecture.mmd"
+        )
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        font_family = "Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif"
+        lines = [
+            "%% Diagramas de arquitectura y flujos de artefactos",
+            f"%% Actualizado automáticamente el {timestamp}",
+            f"%%{{init: {{ 'fontFamily': '{font_family}', 'themeVariables': {{ 'fontFamily': '{font_family}' }} }} }}%%",
+            "",
+            "erDiagram",
+        ]
+
+        table_names = {str(defn.get("name", "")).upper().replace(".CSV", "") for defn in export_definitions}
+
+        for definition in export_definitions:
+            table_name = str(definition.get("name", "")).upper().replace(".CSV", "")
+            if not table_name:
+                continue
+            headers = definition.get("header") or []
+            lines.append(f"  {table_name} {{")
+            for field in headers:
+                field_name = str(field)
+                lines.append(f"    string {field_name}")
+            lines.append("  }")
+
+        relations: set[str] = set()
+        for definition in export_definitions:
+            headers = set(str(field) for field in definition.get("header") or [])
+            table_name = str(definition.get("name", "")).upper().replace(".CSV", "")
+            if not table_name:
+                continue
+            if "id_caso" in headers and table_name != "CASOS":
+                relations.add(f"  CASOS ||--o{{ {table_name} : contiene")
+            fk_targets = {
+                "CLIENTES": "id_cliente",
+                "COLABORADORES": "id_colaborador",
+                "PRODUCTOS": "id_producto",
+                "RIESGOS": "id_riesgo",
+                "DETALLES_NORMA": "id_norma",
+            }
+            for target_table, fk_field in fk_targets.items():
+                if target_table in table_names and fk_field in headers and target_table != table_name:
+                    relations.add(f"  {target_table} ||--o{{ {table_name} : {fk_field}")
+
+        if relations:
+            lines.append("")
+            lines.extend(sorted(relations))
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return target
+
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
         log_event("navegacion", "Usuario pulsó guardar y enviar", self.logs)

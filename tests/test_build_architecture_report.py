@@ -197,6 +197,42 @@ def test_build_editable_deck_uses_native_shapes(tmp_path):
             assert not (overlap_x and overlap_y), "Diagram boxes must not overlap"
 
 
+def test_architecture_layout_avoids_overlap_and_uses_black_font(tmp_path):
+    deck_path = arch_report.build_editable_deck(tmp_path / "grid.pptx")
+    presentation = Presentation(deck_path)
+    arch_slide = presentation.slides[0]
+
+    diagram_shapes = [
+        shape
+        for shape in arch_slide.shapes
+        if shape.shape_type in {MSO_SHAPE_TYPE.AUTO_SHAPE, MSO_SHAPE_TYPE.TEXT_BOX}
+    ]
+
+    def overlaps(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> bool:
+        return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
+
+    rectangles: list[tuple[int, int, int, int]] = []
+    for shape in diagram_shapes:
+        rect = (shape.left, shape.top, shape.left + shape.width, shape.top + shape.height)
+        for other in rectangles:
+            assert not overlaps(rect, other), f"{shape.name} overlaps another shape"
+        rectangles.append(rect)
+
+    appcore = next(shape for shape in diagram_shapes if shape.name == "container_appcore")
+    assert appcore.text_frame.paragraphs[0].font.color.rgb == arch_report.PPTX_FONT_COLOR
+
+    importer_link = next(
+        shape
+        for shape in arch_slide.shapes
+        if getattr(shape, "name", "") == "importer_to_caseTab"
+    )
+    connector_format = getattr(importer_link, "connector_format", None)
+    if connector_format:
+        assert connector_format.type == arch_report.MSO_CONNECTOR.ELBOW
+    else:
+        assert importer_link.shape_type == MSO_SHAPE_TYPE.LINE
+
+
 def test_main_generates_pptx_by_default(monkeypatch, tmp_path):
     pdf_out = tmp_path / "out.pdf"
     pptx_out = tmp_path / "out.pptx"

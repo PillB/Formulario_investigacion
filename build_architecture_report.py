@@ -51,6 +51,7 @@ DB_ARCH_PNG = DOCS_DIR / "db_architecture.png"
 SEQ_MMD = DOCS_DIR / "sequence_diagram.mmd"
 SEQ_PNG = DOCS_DIR / "sequence.png"
 PUPPETEER_CONFIG = PROJECT_ROOT / "puppeteer-config.json"
+MERMAID_CONFIG = PROJECT_ROOT / "mermaid-config.json"
 MERMAID_EXPORT_SCALE = 2.8  # higher pixel density to keep diagram text crisp
 MERMAID_EXPORT_WIDTH_PX = 4800  # approximate A3 width at ~290 DPI
 
@@ -118,6 +119,8 @@ def render_mermaid(source: Path, target: Path) -> Path:
     cmd.extend(["-s", str(MERMAID_EXPORT_SCALE), "-w", str(MERMAID_EXPORT_WIDTH_PX)])
     if PUPPETEER_CONFIG.exists():
         cmd.extend(["-p", str(PUPPETEER_CONFIG)])
+    if MERMAID_CONFIG.exists():
+        cmd.extend(["-c", str(MERMAID_CONFIG)])
 
     subprocess.run(cmd, check=True)
     return target
@@ -394,14 +397,33 @@ def _add_box(
     return shape
 
 
-def _connect(shapes, start_shape, end_shape, *, name: str):
-    start_x = start_shape.left + start_shape.width / 2
-    start_y = start_shape.top + start_shape.height / 2
-    end_x = end_shape.left + end_shape.width / 2
-    end_y = end_shape.top + end_shape.height / 2
-    connector = shapes.add_connector(
-        MSO_CONNECTOR.STRAIGHT, start_x, start_y, end_x, end_y
-    )
+def _anchor_point(shape, anchor: str) -> tuple[float, float]:
+    match anchor:
+        case "top":
+            return shape.left + shape.width / 2, shape.top
+        case "bottom":
+            return shape.left + shape.width / 2, shape.top + shape.height
+        case "left":
+            return shape.left, shape.top + shape.height / 2
+        case "right":
+            return shape.left + shape.width, shape.top + shape.height / 2
+        case _:
+            return shape.left + shape.width / 2, shape.top + shape.height / 2
+
+
+def _connect(
+    shapes,
+    start_shape,
+    end_shape,
+    *,
+    name: str,
+    start_anchor: str = "center",
+    end_anchor: str = "center",
+    connector_type: MSO_CONNECTOR = MSO_CONNECTOR.ELBOW,
+):
+    start_x, start_y = _anchor_point(start_shape, start_anchor)
+    end_x, end_y = _anchor_point(end_shape, end_anchor)
+    connector = shapes.add_connector(connector_type, start_x, start_y, end_x, end_y)
     connector.name = name
     connector.line.width = Pt(2)
     return connector
@@ -442,7 +464,7 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
 
     nodes: dict[str, object] = {}
 
-    # Contexto
+    # Contexto en cuadrícula 100x100
     nodes["gestion"] = _add_box(
         slide,
         name="context_gestion",
@@ -725,20 +747,111 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
     )
 
     # Relacionar
-    _connect(slide.shapes, nodes["gestion"], nodes["analista"], name="gestion_to_analista")
-    _connect(slide.shapes, nodes["analista"], nodes["tkapp"], name="analista_to_tkapp")
-    _connect(slide.shapes, nodes["databricks"], nodes["tkapp"], name="databricks_to_tkapp")
-    _connect(slide.shapes, nodes["grc"], nodes["tkapp"], name="grc_to_tkapp")
-    _connect(slide.shapes, nodes["normdb"], nodes["tkapp"], name="normdb_to_tkapp")
+    _connect(
+        slide.shapes,
+        nodes["gestion"],
+        nodes["analista"],
+        name="gestion_to_analista",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["analista"],
+        nodes["tkapp"],
+        name="analista_to_tkapp",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["databricks"],
+        nodes["tkapp"],
+        name="databricks_to_tkapp",
+        start_anchor="bottom",
+        end_anchor="right",
+    )
+    _connect(
+        slide.shapes,
+        nodes["grc"],
+        nodes["tkapp"],
+        name="grc_to_tkapp",
+        start_anchor="bottom",
+        end_anchor="right",
+    )
+    _connect(
+        slide.shapes,
+        nodes["normdb"],
+        nodes["tkapp"],
+        name="normdb_to_tkapp",
+        start_anchor="top",
+        end_anchor="right",
+    )
 
-    _connect(slide.shapes, nodes["tkapp"], nodes["main"], name="tkapp_to_main")
-    _connect(slide.shapes, nodes["main"], nodes["appcore"], name="main_to_appcore")
-    _connect(slide.shapes, nodes["appcore"], nodes["ui"], name="appcore_to_ui")
-    _connect(slide.shapes, nodes["appcore"], nodes["services"], name="appcore_to_services")
-    _connect(slide.shapes, nodes["appcore"], nodes["validators"], name="appcore_to_validators")
-    _connect(slide.shapes, nodes["appcore"], nodes["reporting"], name="appcore_to_reporting")
-    _connect(slide.shapes, nodes["reporting"], nodes["files"], name="reporting_to_files")
-    _connect(slide.shapes, nodes["files"], nodes["external"], name="files_to_external")
+    _connect(
+        slide.shapes,
+        nodes["tkapp"],
+        nodes["main"],
+        name="tkapp_to_main",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["main"],
+        nodes["appcore"],
+        name="main_to_appcore",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["ui"],
+        name="appcore_to_ui",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["services"],
+        name="appcore_to_services",
+        start_anchor="left",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["validators"],
+        name="appcore_to_validators",
+        start_anchor="left",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["reporting"],
+        name="appcore_to_reporting",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["reporting"],
+        nodes["files"],
+        name="reporting_to_files",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["files"],
+        nodes["external"],
+        name="files_to_external",
+        start_anchor="right",
+        end_anchor="left",
+    )
 
     # Pestañas
     for tab in [
@@ -751,14 +864,63 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         "actions",
         "summary",
     ]:
-        _connect(slide.shapes, nodes["appcore"], nodes[tab], name=f"appcore_to_{tab}")
-        _connect(slide.shapes, nodes["importer"], nodes[tab], name=f"importer_to_{tab}")
-        _connect(slide.shapes, nodes[tab], nodes["autofill"], name=f"{tab}_to_autofill")
+        _connect(
+            slide.shapes,
+            nodes["appcore"],
+            nodes[tab],
+            name=f"appcore_to_{tab}",
+            start_anchor="bottom",
+            end_anchor="top",
+        )
+        _connect(
+            slide.shapes,
+            nodes["importer"],
+            nodes[tab],
+            name=f"importer_to_{tab}",
+            start_anchor="top",
+            end_anchor="bottom",
+        )
+        _connect(
+            slide.shapes,
+            nodes[tab],
+            nodes["autofill"],
+            name=f"{tab}_to_autofill",
+            start_anchor="right",
+            end_anchor="left",
+        )
 
-    _connect(slide.shapes, nodes["appcore"], nodes["autosave"], name="appcore_to_autosave")
-    _connect(slide.shapes, nodes["appcore"], nodes["logging"], name="appcore_to_logging")
-    _connect(slide.shapes, nodes["appcore"], nodes["reporter"], name="appcore_to_reporter")
-    _connect(slide.shapes, nodes["reporter"], nodes["files"], name="reporter_to_files")
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["autosave"],
+        name="appcore_to_autosave",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["logging"],
+        name="appcore_to_logging",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["reporter"],
+        name="appcore_to_reporter",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["reporter"],
+        nodes["files"],
+        name="reporter_to_files",
+        start_anchor="right",
+        end_anchor="left",
+    )
 
     return nodes
 
