@@ -1,6 +1,5 @@
 %% Diagramas de arquitectura y flujos de artefactos
 
-%% Diagrama ER de la arquitectura de datos normalizada para el sistema de casos de fraude
 erDiagram
   CASOS {
     string case_id PK "Identificador único del caso"
@@ -145,18 +144,15 @@ erDiagram
 %% Diagrama de flujo del manejo de artefactos entre la app y los destinos locales/externos
 flowchart LR
   subgraph UI[App Tkinter]
-    U1[Notebook
-    (Caso/Clientes/Colaboradores/Productos)]
+    U1[Notebook<br/>(Caso/Clientes/Colaboradores/Productos)]
     U2[Riesgos y Normas]
     U3[Análisis]
     U4[Acciones & Resumen]
   end
 
   subgraph Validaciones
-    V1[Validación por campo
-    (fechas, montos, IDs, condicionales)]
-    V2[Revisión de duplicados
-    case+producto+cliente+team+fecha+reclamo]
+    V1[Validación por campo<br/>(fechas, montos, IDs, condicionales)]
+    V2[Revisión de duplicados<br/>case+producto+cliente+team+fecha+reclamo]
   end
 
   subgraph Persistencia
