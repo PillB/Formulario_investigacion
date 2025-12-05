@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import ttk
-from typing import Callable
+from typing import Callable, Iterable
 
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
@@ -23,6 +23,66 @@ NEUTRAL_ICON = "⏳"
 class _Palette:
     foreground: str
     background: str
+
+
+class _FallbackVar:
+    def __init__(self, value: str = "") -> None:
+        self._value = value
+
+    def get(self) -> str:
+        return self._value
+
+    def set(self, value: str) -> None:
+        self._value = value
+
+    def trace_add(self, *_args):  # noqa: ANN001
+        return None
+
+
+class _FallbackLabel:
+    def __init__(self, *_args, textvariable=None, **kwargs):  # noqa: ANN001
+        self._config = {"textvariable": textvariable, **kwargs}
+        self._bindings: list = []
+        self._mapped = False
+
+    def grid(self, *args, **kwargs):  # noqa: ANN001
+        self._mapped = True
+        self._config.update(kwargs)
+
+    def pack(self, *args, **kwargs):  # noqa: ANN001
+        self._mapped = True
+        self._config.update(kwargs)
+
+    def place(self, *args, **kwargs):  # noqa: ANN001
+        self._mapped = True
+        self._config.update(kwargs)
+
+    def grid_remove(self, *args, **kwargs):  # noqa: ANN001
+        self._mapped = False
+
+    def pack_forget(self, *args, **kwargs):  # noqa: ANN001
+        self._mapped = False
+
+    def place_forget(self, *args, **kwargs):  # noqa: ANN001
+        self._mapped = False
+
+    def winfo_ismapped(self):  # noqa: ANN001
+        return self._mapped
+
+    def winfo_manager(self):  # noqa: ANN001
+        return "grid" if self._mapped else ""
+
+    def bind(self, *args, **kwargs):  # noqa: ANN001
+        self._bindings.append((args, kwargs))
+
+    def configure(self, **kwargs):  # noqa: ANN001
+        self._config.update(kwargs)
+
+    def winfo_exists(self):
+        return True
+
+    def winfo_children(self):
+        return []
 
 
 def _coalesce_color(style: ttk.Style | None, style_name: str, option: str, fallback: str) -> str:
@@ -126,13 +186,25 @@ class ValidationBadge:
         self._display_mode = initial_display if initial_display in {"short", "full", "emoji"} else "short"
         self._message_full = ""
         self._message_short = ""
-        self._text_var = self._tk.StringVar()
+        try:
+            self._text_var = self._tk.StringVar()
+        except Exception:
+            self._text_var = _FallbackVar()
         self._textvariable = textvariable
 
         ensure_grid_support(parent)
-        self._label = self._ttk.Label(parent, textvariable=self._text_var, anchor="w", wraplength=wraplength)
+        try:
+            self._label = self._ttk.Label(parent, textvariable=self._text_var, anchor="w", wraplength=wraplength)
+        except Exception:
+            self._label = _FallbackLabel(textvariable=self._text_var, anchor="w", wraplength=wraplength)
         ensure_grid_support(self._label)
         self._label.bind("<Button-1>", self._cycle_display, add="+")
+
+        _register_badge(self)
+        try:
+            self._label.bind("<Destroy>", lambda _evt, badge=self: _unregister_badge(badge), add="+")
+        except Exception:
+            pass
 
         initial_message = textvariable.get() if textvariable is not None else ""
         if textvariable is not None:
@@ -281,6 +353,12 @@ class ValidationBadge:
     def __getattr__(self, item: str):
         return getattr(self._label, item)
 
+    def reapply_style(self) -> None:
+        """Recompute the badge style so it reflects the active theme palette."""
+
+        self._configured_styles.clear()
+        self._apply_render()
+
 
 class ValidationBadgeGroup:
     """Registers and updates multiple validation badges."""
@@ -386,3 +464,30 @@ class ValidationBadgeGroup:
     def refresh(self) -> None:
         for updater in self._updaters.values():
             updater()
+
+
+_ACTIVE_BADGES: set[ValidationBadge] = set()
+
+
+def _register_badge(badge: ValidationBadge) -> None:
+    _ACTIVE_BADGES.add(badge)
+
+
+def _unregister_badge(badge: ValidationBadge) -> None:
+    _ACTIVE_BADGES.discard(badge)
+
+
+def iter_active_badges() -> Iterable[ValidationBadge]:
+    """Yield ValidationBadge instances that are still alive."""
+
+    stale: set[ValidationBadge] = set()
+    for badge in _ACTIVE_BADGES:
+        try:
+            exists = bool(badge.widget.winfo_exists())
+        except Exception:
+            exists = False
+        if exists:
+            yield badge
+        else:
+            stale.add(badge)
+    _ACTIVE_BADGES.difference_update(stale)

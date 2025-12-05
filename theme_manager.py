@@ -121,6 +121,7 @@ class ThemeManager:
         cls._refresh_content_widgets()
         cls._persist_theme(theme["name"])
         cls.refresh_all_widgets()
+        reapply_all_badges()
         active_root = root or cls._root or getattr(ttk_style, "master", None)
         if active_root is not None:
             try:
@@ -169,6 +170,7 @@ class ThemeManager:
             else:
                 stale_menus.add(menu)
         cls._tracked_menus.difference_update(stale_menus)
+        reapply_all_badges()
 
     @classmethod
     def register_toplevel(cls, window: Optional[tk.Toplevel]) -> None:
@@ -499,6 +501,10 @@ class ThemeManager:
                 widget.configure(style=cls.FRAME_STYLE)
             elif isinstance(widget, ttk.Notebook):
                 widget.configure(style="TNotebook")
+                try:
+                    widget.bind("<<NotebookTabChanged>>", lambda _evt: reapply_all_badges(), add="+")
+                except tk.TclError:
+                    pass
             elif isinstance(widget, ttk.Panedwindow):
                 widget.configure(style="TPanedwindow")
             elif isinstance(widget, ttk.Separator):
@@ -1642,4 +1648,18 @@ class ThemeManager:
                 cls._apply_widget_tree(window, cls._current)
 
 
-__all__ = ["ThemeManager", "LIGHT_THEME", "DARK_THEME"]
+def reapply_all_badges() -> None:
+    """Re-render every live ``ValidationBadge`` using the active palette."""
+
+    try:
+        from validation_badge import iter_active_badges
+    except Exception:
+        return
+    for badge in iter_active_badges():
+        try:
+            badge.reapply_style()
+        except Exception:
+            continue
+
+
+__all__ = ["ThemeManager", "LIGHT_THEME", "DARK_THEME", "reapply_all_badges"]
