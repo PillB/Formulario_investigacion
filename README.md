@@ -32,6 +32,11 @@ Aplicación de escritorio en Python/Tkinter para registrar, validar y exportar e
    ```bash
    pip install python-docx
    ```
+3. (Opcional) para regenerar el informe de arquitectura en PDF instala Mermaid CLI y ReportLab:
+   ```bash
+   npm install -g @mermaid-js/mermaid-cli
+   pip install -r requirements.txt
+   ```
 
 ## Ejecución rápida
 Desde la raíz del proyecto:
@@ -69,6 +74,16 @@ graph TD
     D --> I
     E -->|Errores| B
 ```
+
+### Generar el PDF de arquitectura
+El PDF `Formulario_Investigacion_Architecture_and_Data_Flow.pdf` no se versiona. Para crearlo de forma local:
+
+```bash
+python build_architecture_report.py --output Formulario_Investigacion_Architecture_and_Data_Flow.pdf
+```
+
+El script recompila los diagramas Mermaid (`docs/architecture.mmd`, `docs/sequence_diagram.mmd`) usando `mermaid-cli` y ensambla
+el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con las imágenes generadas.
 
 ## Flujos principales
 ### Crear un nuevo expediente

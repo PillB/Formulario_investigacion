@@ -1,0 +1,65 @@
+%%{init: {'theme': 'default'}}%%
+flowchart TB
+    subgraph Contexto
+        gestion(["Gestión de Investigaciones"])
+        analista([Investigador])
+        tkapp[["Aplicación Tkinter\nFormulario_investigacion"]]
+        databricks(["Catálogos empresariales futuro\nDatabricks Parquet/CSV"])
+        grc(["Registro de riesgos GRC"])
+        normdb(["Índice maestro de normas"])
+        gestion -- Asigna caso --> analista
+        analista -- Llena formulario --> tkapp
+        databricks -- Catálogos clientes/colaboradores --> tkapp
+        grc -- Exportes de riesgos --> tkapp
+        normdb -- Exportes de normas --> tkapp
+    end
+
+    subgraph Contenedores
+        main[["main.py\nArranque Tk/Ttk"]]
+        appcore[["FraudCaseApp app.py\nControlador"]]
+        ui[["ui/frames/*\nTabs de Caso, Clientes, Equipo, Productos, Riesgos, Normas"]]
+        services[["models/*\nCatálogos y autopoblado"]]
+        validators[["validators.py\nReglas + logs"]]
+        reporting[["report_builder.py\nGeneración JSON/CSV/MD/DOCX"]]
+        files[("Sistema de archivos\nautosave.json, autosaves/<caso>/auto_N.json, exports/")]
+        external[("external drive/\nbackups y logs")]
+    end
+
+    subgraph Componentes_de_App
+        caseTab[[CaseFrame]]
+        clientTab[[ClientFrame]]
+        teamTab[[TeamMemberFrame]]
+        productTab[[ProductFrame]]
+        riskTab[[RiskFrame]]
+        normTab[[NormFrame]]
+        actions[[Tab_Acciones]]
+        summary[[Tab_Resumen]]
+        autosave[[Autosave_Temp]]
+        logging[[logger_logs]]
+        importer[[Importadores_CSV]]
+        autofill[[CatalogService_Autofill]]
+        reporter[[report_builder]]
+    end
+
+    analista --> main --> appcore
+    appcore --> ui
+    ui --> validators
+    appcore --> services
+    appcore --> reporting
+    appcore --> files --> external
+
+    appcore --> caseTab
+    appcore --> clientTab
+    appcore --> teamTab
+    appcore --> productTab
+    appcore --> riskTab
+    appcore --> normTab
+    appcore --> actions
+    appcore --> summary
+    clientTab --> autofill
+    teamTab --> autofill
+    productTab --> importer
+    actions --> importer
+    appcore --> autosave
+    appcore --> logging
+    appcore --> reporter --> files
