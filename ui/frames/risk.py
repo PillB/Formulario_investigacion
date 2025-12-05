@@ -14,6 +14,7 @@ from ui.frames.utils import (
     SectionToggleMixin,
     create_collapsible_card,
     ensure_grid_support,
+    compose_section_title,
     generate_section_id,
     grid_section,
 )
@@ -99,6 +100,7 @@ class RiskFrame(SectionToggleMixin):
             indicator=getattr(self.section, "indicator", None),
             collapsed=not getattr(self.section, "is_open", True),
         )
+        self.section_title_var = getattr(self.section, "title_var", tk.StringVar())
         self._sync_section_title()
         self._place_section()
         self._install_focus_binding()
@@ -431,27 +433,30 @@ class RiskFrame(SectionToggleMixin):
         return widget
 
     def _register_title_traces(self):
-        for var in (self.id_var, self.descripcion_var):
+        for var in (self.id_var, self.criticidad_var, self.descripcion_var):
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
 
     def _build_section_title(self) -> str:
-        base_title = f"Riesgo {self.idx+1}"
-        if getattr(self, "section", None) and not self.section.is_open:
-            rid = self.id_var.get().strip()
-            desc = self.descripcion_var.get().strip()
-            details = [value for value in (rid, desc) if value]
-            if details:
-                base_title = f"{base_title} – {' | '.join(details)}"
-        return base_title
+        details = (
+            self.id_var.get().strip(),
+            self.criticidad_var.get().strip(),
+            self.descripcion_var.get().strip(),
+        )
+        return compose_section_title(self.section, f"Riesgo {self.idx+1}", details, max_details=2)
 
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
             return
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
-            self.section.set_title(self._build_section_title())
+            title = self._build_section_title()
+            try:
+                self.section_title_var.set(title)
+            except Exception:
+                pass
+            self.section.set_title(title)
 
     def _handle_toggle(self, _section):
         self._sync_section_title()
