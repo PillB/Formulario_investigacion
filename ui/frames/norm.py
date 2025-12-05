@@ -27,6 +27,8 @@ from validation_badge import badge_registry
 class NormFrame:
     """Representa una norma transgredida en la sección de normas."""
 
+    _instance_counter = 0
+
     HEADER_COLUMNS = (
         ("id_norma", "ID"),
         ("fecha_vigencia", "Fecha"),
@@ -60,6 +62,8 @@ class NormFrame:
         self.fecha_var = tk.StringVar()
         self.norm_lookup = {}
         self._last_missing_lookup_id = None
+        self.badge_namespace = f"norm-{NormFrame._instance_counter}"
+        NormFrame._instance_counter += 1
 
         self.section = create_collapsible_card(
             parent,
@@ -98,7 +102,7 @@ class NormFrame:
         )
         id_entry = self._make_badged_field(
             self.frame,
-            "norm_id",
+            self._badge_key("norm_id"),
             lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=20),
             row=1,
             column=1,
@@ -115,7 +119,7 @@ class NormFrame:
         )
         fecha_entry = self._make_badged_field(
             self.frame,
-            "norm_fecha",
+            self._badge_key("norm_fecha"),
             lambda parent: create_date_entry(parent, textvariable=self.fecha_var, width=15),
             row=1,
             column=3,
@@ -128,7 +132,7 @@ class NormFrame:
         )
         desc_entry = self._make_badged_field(
             self.frame,
-            "norm_desc",
+            self._badge_key("norm_desc"),
             lambda parent: ttk.Entry(parent, textvariable=self.descripcion_var, width=70),
             row=2,
             column=1,
@@ -140,7 +144,7 @@ class NormFrame:
             FieldValidator(
                 id_entry,
                 self.badges.wrap_validation(
-                    "norm_id", lambda: validate_norm_id(self.id_var.get())
+                    self._badge_key("norm_id"), lambda: validate_norm_id(self.id_var.get())
                 ),
                 self.logs,
                 f"Norma {self.idx+1} - ID",
@@ -151,7 +155,7 @@ class NormFrame:
             FieldValidator(
                 fecha_entry,
                 self.badges.wrap_validation(
-                    "norm_fecha",
+                    self._badge_key("norm_fecha"),
                     lambda: validate_date_text(
                         self.fecha_var.get(),
                         "la fecha de vigencia",
@@ -168,7 +172,7 @@ class NormFrame:
             FieldValidator(
                 desc_entry,
                 self.badges.wrap_validation(
-                    "norm_desc",
+                    self._badge_key("norm_desc"),
                     lambda: validate_required_text(
                         self.descripcion_var.get(), "la descripción de la norma"
                     ),
@@ -184,6 +188,9 @@ class NormFrame:
         self.attach_header_tree(header_tree)
         self._register_header_tree_focus(id_entry, fecha_entry, desc_entry)
         self._register_refresh_traces()
+
+    def _badge_key(self, key: str) -> str:
+        return f"{self.badge_namespace}:{key}"
 
     def _place_section(self):
         grid_section(

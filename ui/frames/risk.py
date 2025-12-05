@@ -27,6 +27,8 @@ from validation_badge import badge_registry
 class RiskFrame:
     """Representa un riesgo identificado en la sección de riesgos."""
 
+    _instance_counter = 0
+
     HEADER_COLUMNS = (
         ("id_riesgo", "ID"),
         ("criticidad", "Criticidad"),
@@ -60,6 +62,8 @@ class RiskFrame:
         self._last_missing_lookup_id = None
         self.change_notifier = change_notifier
         self.header_tree = None
+        self.badge_namespace = f"risk-{RiskFrame._instance_counter}"
+        RiskFrame._instance_counter += 1
 
         self.id_var = tk.StringVar()
         self._auto_id_value = ""
@@ -112,7 +116,7 @@ class RiskFrame:
         )
         id_entry = self._make_badged_field(
             self.frame,
-            "riesgo_id",
+            self._badge_key("riesgo_id"),
             lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=15),
             row=1,
             column=1,
@@ -125,7 +129,7 @@ class RiskFrame:
         )
         crit_cb = self._make_badged_field(
             self.frame,
-            "riesgo_criticidad",
+            self._badge_key("riesgo_criticidad"),
             lambda parent: ttk.Combobox(
                 parent,
                 textvariable=self.criticidad_var,
@@ -144,7 +148,7 @@ class RiskFrame:
         )
         lider_entry = self._make_badged_field(
             self.frame,
-            "riesgo_lider",
+            self._badge_key("riesgo_lider"),
             lambda parent: ttk.Entry(parent, textvariable=self.lider_var, width=20),
             row=2,
             column=1,
@@ -156,7 +160,7 @@ class RiskFrame:
         )
         expos_entry = self._make_badged_field(
             self.frame,
-            "riesgo_exposicion",
+            self._badge_key("riesgo_exposicion"),
             lambda parent: ttk.Entry(parent, textvariable=self.exposicion_var, width=15),
             row=2,
             column=3,
@@ -168,7 +172,7 @@ class RiskFrame:
         )
         desc_entry = self._make_badged_field(
             self.frame,
-            "riesgo_desc",
+            self._badge_key("riesgo_desc"),
             lambda parent: ttk.Entry(parent, textvariable=self.descripcion_var, width=60),
             row=3,
             column=1,
@@ -181,7 +185,7 @@ class RiskFrame:
         )
         planes_entry = self._make_badged_field(
             self.frame,
-            "riesgo_planes",
+            self._badge_key("riesgo_planes"),
             lambda parent: ttk.Entry(parent, textvariable=self.planes_var, width=40),
             row=4,
             column=1,
@@ -192,7 +196,9 @@ class RiskFrame:
         self.validators.append(
             FieldValidator(
                 id_entry,
-                self.badges.wrap_validation("riesgo_id", self._validate_risk_id),
+                self.badges.wrap_validation(
+                    self._badge_key("riesgo_id"), self._validate_risk_id
+                ),
                 self.logs,
                 f"Riesgo {self.idx+1} - ID",
                 variables=[self.id_var],
@@ -203,7 +209,7 @@ class RiskFrame:
             FieldValidator(
                 lider_entry,
                 self.badges.wrap_validation(
-                    "riesgo_lider",
+                    self._badge_key("riesgo_lider"),
                     lambda: validate_required_text(
                         self.lider_var.get(), "el líder del riesgo"
                     ),
@@ -222,7 +228,7 @@ class RiskFrame:
             FieldValidator(
                 expos_entry,
                 self.badges.wrap_validation(
-                    "riesgo_exposicion", _validate_exposure_amount
+                    self._badge_key("riesgo_exposicion"), _validate_exposure_amount
                 ),
                 self.logs,
                 f"Riesgo {self.idx+1} - Exposición",
@@ -234,7 +240,7 @@ class RiskFrame:
             FieldValidator(
                 crit_cb,
                 self.badges.wrap_validation(
-                    "riesgo_criticidad", self._validate_criticidad
+                    self._badge_key("riesgo_criticidad"), self._validate_criticidad
                 ),
                 self.logs,
                 f"Riesgo {self.idx+1} - Criticidad",
@@ -246,7 +252,7 @@ class RiskFrame:
             FieldValidator(
                 desc_entry,
                 self.badges.wrap_validation(
-                    "riesgo_desc",
+                    self._badge_key("riesgo_desc"),
                     lambda: validate_required_text(
                         self.descripcion_var.get(), "la descripción del riesgo"
                     ),
@@ -261,7 +267,7 @@ class RiskFrame:
             FieldValidator(
                 planes_entry,
                 self.badges.wrap_validation(
-                    "riesgo_planes",
+                    self._badge_key("riesgo_planes"),
                     lambda: validate_required_text(
                         self.planes_var.get(), "los planes de acción"
                     ),
@@ -366,6 +372,9 @@ class RiskFrame:
         self.header_tree.bind("<<TreeviewSelect>>", self._on_tree_select, add=False)
         self.header_tree.bind("<Double-1>", self._on_tree_double_click, add=False)
 
+    def _badge_key(self, key: str) -> str:
+        return f"{self.badge_namespace}:{key}"
+
     def _make_badged_field(
         self,
         parent,
@@ -376,7 +385,7 @@ class RiskFrame:
         column: int,
         columnspan: int = 1,
         sticky: str = "we",
-    ):
+        ):
         container = ttk.Frame(parent)
         ensure_grid_support(container)
         if hasattr(container, "columnconfigure"):
