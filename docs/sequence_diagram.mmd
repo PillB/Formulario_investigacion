@@ -3,17 +3,17 @@ sequenceDiagram
     autonumber
     participant Gestion as Gestión
     participant Investigador as Investigador
-    participant UI as UI Tkinter (FraudCaseApp)
+    participant UI as UI Python Tkinter GUI (FormularioInvestigacionesFraude)
     participant Valid as Validaciones (validators.py)
-    participant Catalog as CatalogService/Autofill
+    participant Catalogos as Servicio de Catálogos/Autopoblado
     participant Import as Importador CSV (iter_massive_csv_rows)
-    participant Autosave as Autosave
+    participant Autosave as Autoguardado
     participant Logs as logger/logs.csv
-    participant Report as Reporte (report_builder)
+    participant Reporte as Reportes (report_builder)
 
     Gestion->>Investigador: Asigna caso y solicita informe
     Investigador->>UI: Abre aplicación y selecciona pestañas
-    Note over UI: Manual data entry
+    Note over UI: Entrada manual de datos
     Investigador->>UI: Escribe campos (Entry/Combobox/Text)
     UI->>Valid: FieldValidator valida formato/montos/fechas
     Valid-->>UI: Errores inline o messagebox
@@ -21,24 +21,25 @@ sequenceDiagram
     UI->>Autosave: request_autosave() (debounce 4s)
     Autosave-->>UI: save_auto() + temp_version
 
-    Note over Import: Carga masiva
+    Note over UI,Import: Carga masiva
     Investigador->>UI: Acciones > Importar CSV
     UI->>Import: _start_background_import(worker)
     Import-->>UI: payload de filas normalizadas
-    UI->>UI: _apply_*_import_payload pobla pestañas
-    UI->>Valid: Validación por fila y duplicados
+    UI->>UI: _apply_*_import_payload pobla pestañas (Caso/Cliente/Equipo/Producto/Riesgo/Norma/Resumen)
+    UI->>Valid: Validación por fila y duplicados (cliente/colaborador/riesgo/producto/norma)
     UI->>Logs: log_event(subtipo="import")
     UI->>Autosave: _notify_dataset_changed()
 
-    Note over Catalog: Autocomplete/Autopoblado
-    Investigador->>UI: Ingresa ID cliente/colaborador
-    UI->>Catalog: lookup en detail_catalogs / snapshots
-    Catalog-->>UI: Datos encontrados + meta
+    Note over UI,Catalogos: Autocompletado/Autopoblado
+    Investigador->>UI: Ingresa IDs (cliente/colaborador/producto/caso)
+    UI->>Catalogos: lookup en catálogos locales y snapshots
+    Catalogos-->>UI: Datos encontrados + metadatos
     UI->>Valid: should_autofill_field respeta campos editados
-    UI->>UI: Actualiza combobox/entries
+    UI->>UI: Actualiza combobox/entries/tablas
+    Valid->>Catalogos: Validación de integridad referencial (IDs existen en catálogos/snapshots)
     UI->>Logs: log_event(subtipo="autofill")
 
-    Note over Autosave: Autosave & logging continuos
+    Note over Autosave: Autosave y logging continuos
     loop Cada 5 min
         UI->>Autosave: autosave_cycle() -> autosaves/<caso>/auto_N.json
     end
@@ -47,10 +48,10 @@ sequenceDiagram
         Logs-->>Logs: flush a logs.csv y external drive
     end
 
-    Note over Report: Guardado final
+    Note over Reporte: Guardado final
     Investigador->>UI: Acciones > Guardar y enviar
     UI->>Valid: Validación global de todas las pestañas
-    UI->>Report: build_report + build_docx
-    Report-->>Investigador: Exporta JSON/CSV/Markdown/DOCX
+    UI->>Reporte: build_report + build_docx + build_editable_deck
+    Reporte-->>Investigador: Exporta JSON/CSV/Markdown/DOCX/PDF/PPTX
     UI->>Autosave: save_temp_version() + backup en external drive
     UI->>Logs: log_event("export")
