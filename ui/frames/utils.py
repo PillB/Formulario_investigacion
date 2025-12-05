@@ -6,6 +6,9 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Iterable, Tuple
+import uuid
+
+from validators import log_event
 
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
@@ -26,6 +29,155 @@ SUCCESS_BADGE_ICON = "✅"
 PENDING_BADGE_ICON = "⏳"
 WARNING_BADGE_STYLE = "WarningBadge.TLabel"
 WARNING_CONTAINER_STYLE = "WarningBadge.TFrame"
+
+
+def generate_section_id(prefix: str) -> str:
+    """Return a stable identifier for collapsible sections."""
+
+    return f"{prefix}-{uuid.uuid4().hex}"
+
+
+class SectionToggleMixin:
+    """Gestiona el colapso y expansión de secciones dinámicas."""
+
+    def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+        self.collapsed_states: dict[str, bool] = {}
+        self.section_contents: dict[str, dict[str, Any]] = {}
+        self._toggle_in_progress: set[str] = set()
+        super_init = getattr(super(), "__init__", None)
+        if callable(super_init):
+            super_init(*args, **kwargs)
+
+    def register_section_toggle(
+        self,
+        section_id: str,
+        *,
+        section=None,
+        header=None,
+        content=None,
+        indicator=None,
+        collapsed: bool | None = None,
+    ) -> None:
+        collapsed_state = (
+            bool(collapsed)
+            if collapsed is not None
+            else not bool(getattr(section, "is_open", True))
+        )
+        self.section_contents[section_id] = {
+            "header": header,
+            "content": content,
+            "indicator": indicator,
+            "section": section,
+        }
+        self.collapsed_states.setdefault(section_id, collapsed_state)
+        if collapsed_state and hasattr(content, "pack_forget"):
+            try:
+                content.pack_forget()
+            except Exception:
+                pass
+        self._refresh_indicator(section_id)
+        self._wire_section_toggle(section_id, header, section)
+
+    def _wire_section_toggle(self, section_id: str, header, section) -> None:
+        binder = getattr(header, "bind", None)
+        if callable(binder):
+            try:
+                binder(
+                    "<Button-1>",
+                    lambda event=None, sid=section_id: self.toggle_section(sid, event),
+                    add="+",
+                )
+            except Exception:
+                pass
+        if section is not None:
+            try:
+                section.toggle = lambda event=None, sid=section_id: self.toggle_section(  # type: ignore[assignment]
+                    sid, event
+                )
+            except Exception:
+                pass
+
+    def _refresh_indicator(self, section_id: str) -> None:
+        info = self.section_contents.get(section_id)
+        if not info:
+            return
+        indicator = info.get("indicator")
+        if indicator is None:
+            return
+        try:
+            indicator.configure(text="▸" if self.collapsed_states.get(section_id) else "▼")
+        except Exception:
+            return
+
+    def _log_toggle(self, section_id: str, collapsed: bool, event=None) -> None:
+        coords = f"{getattr(event, 'x', 0)},{getattr(event, 'y', 0)}"
+        message = f"{'Colapsó' if collapsed else 'Expandió'} la sección {section_id}"
+        try:
+            log_event(
+                "ui_toggle",
+                message,
+                getattr(self, "logs", None),
+                widget_id=section_id,
+                coords=coords,
+                subtipo="click",
+            )
+        except Exception:
+            return
+
+    def toggle_section(self, section_id: str, event=None):  # noqa: ANN001
+        if section_id in self._toggle_in_progress:
+            return "break"
+        info = self.section_contents.get(section_id)
+        if not info:
+            return None
+        self._toggle_in_progress.add(section_id)
+        try:
+            content = info.get("content")
+            indicator = info.get("indicator")
+            header = info.get("header")
+            section = info.get("section")
+            currently_collapsed = bool(self.collapsed_states.get(section_id, False))
+            new_collapsed = not currently_collapsed
+            try:
+                if currently_collapsed:
+                    if hasattr(content, "pack"):
+                        content.pack(fill="both", expand=True)
+                else:
+                    if hasattr(content, "pack_forget"):
+                        content.pack_forget()
+            except Exception:
+                pass
+            self.collapsed_states[section_id] = new_collapsed
+            if indicator is not None:
+                try:
+                    indicator.configure(text="▸" if new_collapsed else "▼")
+                except Exception:
+                    pass
+            if section is not None:
+                try:
+                    section._is_open = not new_collapsed  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            callback = getattr(section, "_on_toggle", None)
+            if callable(callback):
+                try:
+                    callback(section)
+                except Exception:
+                    pass
+            self._log_toggle(section_id, new_collapsed, event)
+            target = header or content or self
+            after_fn = getattr(target, "after", None)
+            updater = getattr(self, "update_idletasks", None)
+            if not callable(updater):
+                updater = getattr(target, "update_idletasks", None)
+            if callable(after_fn) and callable(updater):
+                try:
+                    after_fn(50, updater)
+                except Exception:
+                    pass
+        finally:
+            self._toggle_in_progress.discard(section_id)
+        return "break"
 
 
 def format_warning_preview(message: str, *, max_chars_per_line: int = 15, max_lines: int = 2) -> str:

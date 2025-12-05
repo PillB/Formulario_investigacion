@@ -12,6 +12,8 @@ from validators import (FieldValidator, log_event, should_autofill_field,
                         validate_required_text)
 from ui.frames.utils import (
     BadgeManager,
+    SectionToggleMixin,
+    generate_section_id,
     build_required_label,
     build_grid_container,
     create_collapsible_card,
@@ -27,7 +29,7 @@ ENTRY_STYLE = ThemeManager.ENTRY_STYLE
 COMBOBOX_STYLE = ThemeManager.COMBOBOX_STYLE
 
 
-class ClientFrame:
+class ClientFrame(SectionToggleMixin):
     """Representa un cliente y su interfaz dentro de la sección de clientes."""
 
     ENTITY_LABEL = "cliente"
@@ -47,6 +49,7 @@ class ClientFrame:
         change_notifier=None,
         id_change_callback=None,
     ):
+        SectionToggleMixin.__init__(self)
         self.parent = parent
         self.owner = owner
         self.idx = idx
@@ -77,6 +80,7 @@ class ClientFrame:
         self.direcciones_var = tk.StringVar()
         self.accionado_var = tk.StringVar()
         self.accionado_options_var = tk.StringVar(value=ACCIONADO_OPTIONS)
+        self.section_id = generate_section_id("cliente")
 
         self.section = create_collapsible_card(
             parent,
@@ -88,6 +92,14 @@ class ClientFrame:
                 self.logs,
             ),
             collapsible_cls=CollapsibleSection,
+        )
+        self.register_section_toggle(
+            self.section_id,
+            section=self.section,
+            header=getattr(self.section, "header", None),
+            content=getattr(self.section, "content", None),
+            indicator=getattr(self.section, "indicator", None),
+            collapsed=not getattr(self.section, "is_open", True),
         )
         self._sync_section_title()
         self._place_section()
