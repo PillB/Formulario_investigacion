@@ -23,8 +23,23 @@ def sample_mermaid_files(tmp_path: Path) -> list[str]:
     return files
 
 
-def test_generate_assets_creates_png_pdf_and_manifest(tmp_path: Path, sample_mermaid_files: list[str]) -> None:
-    generate_assets(base_dir=tmp_path, mmd_files=sample_mermaid_files)
+@pytest.fixture()
+def pillow_renderer():
+    def _render(source: Path, target: Path) -> None:
+        from PIL import Image, ImageDraw
+
+        image = Image.new("RGB", (400, 120), color="white")
+        draw = ImageDraw.Draw(image)
+        draw.text((10, 10), source.read_text(encoding="utf-8"), fill="black")
+        image.save(target, format="PNG")
+
+    return _render
+
+
+def test_generate_assets_creates_png_pdf_and_manifest(
+    tmp_path: Path, sample_mermaid_files: list[str], pillow_renderer
+) -> None:
+    generate_assets(base_dir=tmp_path, mmd_files=sample_mermaid_files, renderer=pillow_renderer)
 
     for filename in sample_mermaid_files:
         png_path = (tmp_path / filename).with_suffix(".png")
@@ -41,8 +56,10 @@ def test_generate_assets_creates_png_pdf_and_manifest(tmp_path: Path, sample_mer
     assert {row["asset_type"] for row in rows} == {"png", "pdf"}
 
 
-def test_generate_assets_logs_and_architecture_table(tmp_path: Path, sample_mermaid_files: list[str]) -> None:
-    generate_assets(base_dir=tmp_path, mmd_files=sample_mermaid_files)
+def test_generate_assets_logs_and_architecture_table(
+    tmp_path: Path, sample_mermaid_files: list[str], pillow_renderer
+) -> None:
+    generate_assets(base_dir=tmp_path, mmd_files=sample_mermaid_files, renderer=pillow_renderer)
 
     log_path = tmp_path / "wireframes_generation.log"
     assert log_path.exists(), "Log file not created"
@@ -57,3 +74,9 @@ def test_generate_assets_logs_and_architecture_table(tmp_path: Path, sample_merm
     assert [row["mermaid_file"] for row in table_rows] == sample_mermaid_files
     iso8601_log_line = re.compile(r"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
     assert iso8601_log_line.search(log_text)
+
+
+def test_generate_assets_requires_mermaid_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", "")
+    with pytest.raises(RuntimeError, match="Mermaid CLI"):
+        generate_assets(base_dir=Path("."), mmd_files=["example.mmd"], renderer=None)

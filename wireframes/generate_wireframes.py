@@ -1,24 +1,22 @@
 """Generate wireframe PNGs and a combined PDF from Mermaid source files.
 
-This script stays offline-friendly by rendering the Mermaid source as
-monospaced text on a white canvas. The intent is to mirror the structure
-and labels defined in the `.mmd` files without requiring external CLI
-tools. Generated assets are placed alongside the sources.
+This script renders Mermaid diagrams to PNG via the Mermaid CLI (``mmdc``)
+so the resulting images reflect the actual diagrams rather than raw
+markdown. Generated assets are placed alongside the sources together with
+CSV manifests and logs.
 """
 from __future__ import annotations
 
 from pathlib import Path
 import csv
 import datetime as dt
-import textwrap
-from typing import Iterable, List, Sequence
+import shutil
+import subprocess
+from typing import Callable, List, Sequence
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
-OUTPUT_WIDTH = 1400
-PADDING = 24
-FONT_SIZE = 14
-WRAP_COLUMNS = 140
+DEFAULT_MERMAID_CLI = "mmdc"
 
 # Tab order must match the ttk.Notebook ordering in app.py
 MMD_FILES = [
@@ -32,44 +30,28 @@ MMD_FILES = [
 ]
 
 
-def _wrap_mermaid_lines(lines: Iterable[str]) -> List[str]:
-    wrapped: List[str] = []
-    for line in lines:
-        if line.strip() == "":
-            wrapped.append("")
-            continue
-        wrapped.extend(textwrap.wrap(line.rstrip("\n"), width=WRAP_COLUMNS, replace_whitespace=False))
-    return wrapped
+def _resolve_mermaid_cli(executable: str | None = None) -> str:
+    """Return an absolute path to the Mermaid CLI executable or raise an error."""
+
+    candidate = executable or DEFAULT_MERMAID_CLI
+    resolved = shutil.which(candidate)
+    if resolved is None:
+        raise RuntimeError(
+            "Mermaid CLI (mmdc) not found. Install '@mermaid-js/mermaid-cli' and ensure 'mmdc' is on your PATH."
+        )
+    return resolved
 
 
-def _load_font() -> ImageFont.ImageFont:
-    """Load a monospaced font compatible with current Pillow versions."""
+def _mermaid_cli_renderer(executable: str | None = None) -> Callable[[Path, Path], None]:
+    """Return a callable that renders Mermaid files to PNG via the Mermaid CLI."""
 
-    # Pillow removed the ``textsize`` helper; ``textbbox`` remains available and
-    # works with the built-in bitmap font. ``load_default`` keeps the script
-    # dependency-free across environments.
-    return ImageFont.load_default()
+    cli = _resolve_mermaid_cli(executable)
 
+    def render(source: Path, target: Path) -> None:
+        command = [cli, "-i", str(source), "-o", str(target), "-b", "transparent"]
+        subprocess.run(command, check=True)
 
-def _measure_line_height(font: ImageFont.ImageFont) -> int:
-    """Return the pixel height of a representative text sample."""
-
-    # ``textbbox`` is stable across Pillow releases and avoids the deprecated
-    # ``textsize`` API that is no longer exposed in newer versions.
-    draw_dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    _, y0, _, y1 = draw_dummy.textbbox((0, 0), "Ag", font=font)
-    return y1 - y0
-
-
-def _render_png(text_lines: List[str], target: Path) -> None:
-    font = _load_font()
-    line_height = _measure_line_height(font)
-
-    height = PADDING * 2 + line_height * len(text_lines)
-    image = Image.new("RGB", (OUTPUT_WIDTH, height), color="white")
-    draw = ImageDraw.Draw(image)
-    draw.multiline_text((PADDING, PADDING), "\n".join(text_lines), fill="black", font=font, spacing=0)
-    image.save(target, format="PNG")
+    return render
 
 
 def _build_pdf(image_paths: List[Path], target: Path) -> None:
@@ -104,7 +86,11 @@ def _write_log(log_path: Path, lines: List[str]) -> None:
         log_file.write("\n".join(lines))
 
 
-def generate_assets(base_dir: Path | None = None, mmd_files: Sequence[str] | None = None) -> None:
+def generate_assets(
+    base_dir: Path | None = None,
+    mmd_files: Sequence[str] | None = None,
+    renderer: Callable[[Path, Path], None] | None = None,
+) -> None:
     """Render PNGs, manifest CSVs, logs, and a combined PDF for Mermaid sources."""
 
     base = base_dir or Path(__file__).resolve().parent
@@ -112,6 +98,8 @@ def generate_assets(base_dir: Path | None = None, mmd_files: Sequence[str] | Non
     image_paths: List[Path] = []
     manifest_rows: List[dict] = []
     log_lines: List[str] = []
+
+    render_png = renderer or _mermaid_cli_renderer()
 
     architecture_table = _write_architecture_table(base, mmd_sequence)
     log_lines.append(f"[{dt.datetime.utcnow().isoformat()}Z] INFO: Created {architecture_table.name}")
@@ -121,16 +109,15 @@ def generate_assets(base_dir: Path | None = None, mmd_files: Sequence[str] | Non
         if not source.exists():
             raise FileNotFoundError(f"Mermaid source not found: {source}")
 
-        wrapped_lines = _wrap_mermaid_lines(source.read_text(encoding="utf-8").splitlines())
         png_path = source.with_suffix(".png")
-        _render_png(wrapped_lines, png_path)
+        render_png(source, png_path)
         image_paths.append(png_path)
         manifest_rows.append(
             {
                 "source": filename,
                 "asset_type": "png",
                 "output_path": png_path.name,
-                "line_count": len(wrapped_lines),
+                "line_count": len(source.read_text(encoding="utf-8").splitlines()),
             }
         )
         log_lines.append(f"[{dt.datetime.utcnow().isoformat()}Z] INFO: Created {png_path.name}")
