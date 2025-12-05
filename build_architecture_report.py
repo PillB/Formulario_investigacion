@@ -14,16 +14,21 @@ import sys
 import textwrap
 from pathlib import Path
 
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.util import Cm, Pt
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.pagesizes import A3, LETTER, landscape
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
     Image,
     ListFlowable,
     ListItem,
+    NextPageTemplate,
     PageBreak,
     PageTemplate,
     Paragraph,
@@ -35,11 +40,19 @@ from reportlab.platypus.tableofcontents import TableOfContents
 PROJECT_ROOT = Path(__file__).parent
 DOCS_DIR = PROJECT_ROOT / "docs"
 DEFAULT_OUTPUT = PROJECT_ROOT / "Formulario_Investigacion_Architecture_and_Data_Flow.pdf"
+DEFAULT_PPTX = PROJECT_ROOT / "Formulario_Investigacion_Diagramas_editables.pptx"
 ARCH_MMD = DOCS_DIR / "architecture.mmd"
 ARCH_PNG = DOCS_DIR / "architecture.png"
 SEQ_MMD = DOCS_DIR / "sequence_diagram.mmd"
 SEQ_PNG = DOCS_DIR / "sequence.png"
 PUPPETEER_CONFIG = PROJECT_ROOT / "puppeteer-config.json"
+
+PPTX_SLIDE_WIDTH = Cm(42)  # A3 landscape width
+PPTX_SLIDE_HEIGHT = Cm(29.7)  # A3 landscape height
+PPTX_MARGIN = Cm(1.2)
+PPTX_TITLE_HEIGHT = Cm(2.2)
+PPTX_SUBTITLE_HEIGHT = Cm(1.1)
+PPTX_CONTENT_GAP = Cm(0.5)
 
 
 class HeadingParagraph(Paragraph):
@@ -100,89 +113,68 @@ def render_mermaid(source: Path, target: Path) -> Path:
 def _build_stylesheet() -> StyleSheet1:
     styles = getSampleStyleSheet()
 
-    styles.add(
-        ParagraphStyle(
-            name="CoverTitle",
-            fontSize=24,
-            leading=28,
-            spaceAfter=18,
-            alignment=1,
-        )
+    def _ensure_style(name: str, **attributes: object) -> ParagraphStyle:
+        style = styles[name] if name in styles.byName else ParagraphStyle(name=name)
+        for attr, value in attributes.items():
+            setattr(style, attr, value)
+        if name not in styles.byName:
+            styles.add(style)
+        return style
+
+    _ensure_style(
+        name="CoverTitle",
+        fontSize=24,
+        leading=28,
+        spaceAfter=18,
+        alignment=1,
     )
-    styles.add(
-        ParagraphStyle(
-            name="CoverSubtitle",
-            fontSize=12,
-            leading=14,
-            textColor=colors.grey,
-            alignment=1,
-            spaceAfter=6,
-        )
+    _ensure_style(
+        name="CoverSubtitle",
+        fontSize=12,
+        leading=14,
+        textColor=colors.grey,
+        alignment=1,
+        spaceAfter=6,
     )
-    styles.add(
-        ParagraphStyle(
-            name="Meta",
-            fontSize=10,
-            leading=12,
-            textColor=colors.HexColor("#555555"),
-            alignment=1,
-            spaceAfter=14,
-        )
+    _ensure_style(
+        name="Meta",
+        fontSize=10,
+        leading=12,
+        textColor=colors.HexColor("#555555"),
+        alignment=1,
+        spaceAfter=14,
     )
 
-    styles.add(
-        ParagraphStyle(
-            name="Heading1",
-            parent=styles["Heading1"],
-            fontSize=18,
-            leading=22,
-            spaceAfter=12,
-        )
+    _ensure_style(name="Heading1", fontSize=18, leading=22, spaceAfter=12)
+    _ensure_style(name="Heading2", fontSize=14, leading=18, spaceAfter=8)
+
+    _ensure_style(
+        name="Body",
+        parent=styles["BodyText"],
+        fontSize=10.5,
+        leading=14,
+        spaceAfter=8,
     )
-    styles.add(
-        ParagraphStyle(
-            name="Heading2",
-            parent=styles["Heading2"],
-            fontSize=14,
-            leading=18,
-            spaceAfter=8,
-        )
+    _ensure_style(
+        name="Bullet",
+        parent=styles["Body"],
+        leftIndent=12,
+        bulletIndent=0,
+        spaceAfter=4,
     )
-    styles.add(
-        ParagraphStyle(
-            name="Body",
-            parent=styles["BodyText"],
-            fontSize=10.5,
-            leading=14,
-            spaceAfter=8,
-        )
+    _ensure_style(
+        name="TableHeader",
+        parent=styles["Body"],
+        fontSize=10,
+        textColor=colors.white,
+        backColor=colors.HexColor("#1f3a93"),
+        spaceAfter=4,
     )
-    styles.add(
-        ParagraphStyle(
-            name="Bullet",
-            parent=styles["Body"],
-            leftIndent=12,
-            bulletIndent=0,
-            spaceAfter=4,
-        )
-    )
-    styles.add(
-        ParagraphStyle(
-            name="TableHeader",
-            parent=styles["Body"],
-            fontSize=10,
-            textColor=colors.white,
-            backColor=colors.HexColor("#1f3a93"),
-            spaceAfter=4,
-        )
-    )
-    styles.add(
-        ParagraphStyle(
-            name="TableCell",
-            parent=styles["Body"],
-            fontSize=9,
-            leading=12,
-        )
+    _ensure_style(
+        name="TableCell",
+        parent=styles["Body"],
+        fontSize=9,
+        leading=12,
     )
     return styles
 
@@ -263,25 +255,87 @@ def _technology_table(styles: StyleSheet1) -> Table:
     return table
 
 
+def _flowable_image(image_path: Path, target_width: float) -> Image:
+    """Scale an image to the requested width while keeping the aspect ratio."""
+
+    reader = ImageReader(str(image_path))
+    original_width, original_height = reader.getSize()
+    if original_width <= 0 or original_height <= 0:
+        raise ValueError("Image dimensions must be positive")
+
+    scale = target_width / float(original_width)
+    target_height = original_height * scale
+    return Image(str(image_path), width=target_width, height=target_height)
+
+
+def _scale_image_to_box(image_path: Path, max_width: float, max_height: float) -> tuple[float, float]:
+    """Return width/height scaled to fit within a bounding box."""
+
+    reader = ImageReader(str(image_path))
+    original_width, original_height = reader.getSize()
+    if original_width <= 0 or original_height <= 0:
+        raise ValueError("Image dimensions must be positive")
+
+    width_scale = max_width / float(original_width)
+    height_scale = max_height / float(original_height)
+    scale = min(width_scale, height_scale)
+    return original_width * scale, original_height * scale
+
+
 def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     styles = _build_stylesheet()
 
     render_mermaid(ARCH_MMD, ARCH_PNG)
     render_mermaid(SEQ_MMD, SEQ_PNG)
 
+    page_margins = {
+        "left": 0.7 * inch,
+        "right": 0.7 * inch,
+        "top": 0.8 * inch,
+        "bottom": 0.8 * inch,
+    }
+
     doc = BaseDocTemplate(
         str(output),
         pagesize=LETTER,
-        leftMargin=0.7 * inch,
-        rightMargin=0.7 * inch,
-        topMargin=0.8 * inch,
-        bottomMargin=0.8 * inch,
+        leftMargin=page_margins["left"],
+        rightMargin=page_margins["right"],
+        topMargin=page_margins["top"],
+        bottomMargin=page_margins["bottom"],
         title="Formulario de investigación – Arquitectura",
         author="AI Architecture Assistant",
     )
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
-    template = PageTemplate(id="main", frames=frame, onPage=_page_decor)
-    doc.addPageTemplates([template])
+
+    arch_page_size = landscape(A3)
+    arch_frame = Frame(
+        doc.leftMargin,
+        doc.bottomMargin,
+        arch_page_size[0] - doc.leftMargin - doc.rightMargin,
+        arch_page_size[1] - doc.topMargin - doc.bottomMargin,
+        id="arch_frame",
+    )
+
+    seq_page_size = A3
+    seq_frame = Frame(
+        doc.leftMargin,
+        doc.bottomMargin,
+        seq_page_size[0] - doc.leftMargin - doc.rightMargin,
+        seq_page_size[1] - doc.topMargin - doc.bottomMargin,
+        id="seq_frame",
+    )
+
+    doc.addPageTemplates(
+        [
+            PageTemplate(id="main", frames=frame, onPage=_page_decor, pagesize=LETTER),
+            PageTemplate(
+                id="arch_diagram", frames=arch_frame, onPage=_page_decor, pagesize=arch_page_size
+            ),
+            PageTemplate(
+                id="seq_diagram", frames=seq_frame, onPage=_page_decor, pagesize=seq_page_size
+            ),
+        ]
+    )
     doc.afterFlowable = lambda flowable: _after_flowable(doc, flowable)
 
     today = _dt.date.today().strftime("%Y-%m-%d")
@@ -419,17 +473,90 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     story.append(_technology_table(styles))
 
     # Diagrams
+    story.append(NextPageTemplate("arch_diagram"))
     story.append(PageBreak())
     story.append(_heading("Anexo A — Diagrama de arquitectura (Mermaid)", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(Image(str(ARCH_PNG), width=6.5 * inch, preserveAspectRatio=True))
+    story.append(_flowable_image(ARCH_PNG, target_width=arch_frame.width))
 
+    story.append(NextPageTemplate("seq_diagram"))
     story.append(PageBreak())
     story.append(_heading("Anexo B — Diagrama de secuencia", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(Image(str(SEQ_PNG), width=6.5 * inch, preserveAspectRatio=True))
+    story.append(_flowable_image(SEQ_PNG, target_width=seq_frame.width))
 
     doc.build(story)
+    return output
+
+
+def _add_diagram_slide(
+    presentation: Presentation,
+    *,
+    title: str,
+    subtitle: str,
+    image_path: Path,
+) -> None:
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])  # blank
+
+    title_box = slide.shapes.add_textbox(
+        PPTX_MARGIN,
+        PPTX_MARGIN,
+        presentation.slide_width - 2 * PPTX_MARGIN,
+        PPTX_TITLE_HEIGHT,
+    )
+    title_tf = title_box.text_frame
+    title_run = title_tf.paragraphs[0].add_run()
+    title_run.text = title
+    title_run.font.size = Pt(32)
+    title_run.font.bold = True
+
+    subtitle_box = slide.shapes.add_textbox(
+        PPTX_MARGIN,
+        PPTX_MARGIN + PPTX_TITLE_HEIGHT,
+        presentation.slide_width - 2 * PPTX_MARGIN,
+        PPTX_SUBTITLE_HEIGHT,
+    )
+    subtitle_tf = subtitle_box.text_frame
+    subtitle_tf.word_wrap = True
+    subtitle_tf.paragraphs[0].text = subtitle
+    subtitle_tf.paragraphs[0].font.size = Pt(18)
+    subtitle_tf.paragraphs[0].font.color.rgb = RGBColor(64, 64, 64)
+
+    content_top = PPTX_MARGIN + PPTX_TITLE_HEIGHT + PPTX_SUBTITLE_HEIGHT + PPTX_CONTENT_GAP
+    max_width = presentation.slide_width - 2 * PPTX_MARGIN
+    max_height = presentation.slide_height - content_top - PPTX_MARGIN
+
+    scaled_width, scaled_height = _scale_image_to_box(image_path, max_width, max_height)
+    left = PPTX_MARGIN + (max_width - scaled_width) / 2
+    top = content_top + (max_height - scaled_height) / 2
+
+    slide.shapes.add_picture(str(image_path), left, top, width=scaled_width, height=scaled_height)
+
+
+def build_editable_deck(output: Path = DEFAULT_PPTX) -> Path:
+    """Generate a PowerPoint deck with editable architecture/sequence diagrams."""
+
+    render_mermaid(ARCH_MMD, ARCH_PNG)
+    render_mermaid(SEQ_MMD, SEQ_PNG)
+
+    presentation = Presentation()
+    presentation.slide_width = PPTX_SLIDE_WIDTH
+    presentation.slide_height = PPTX_SLIDE_HEIGHT
+
+    _add_diagram_slide(
+        presentation,
+        title="Arquitectura – editable",
+        subtitle="Versión exportada de architecture.mmd (Mermaid). Ajusta tamaño o mueve elementos según necesidad.",
+        image_path=ARCH_PNG,
+    )
+    _add_diagram_slide(
+        presentation,
+        title="Secuencia – editable",
+        subtitle="Derivada de sequence_diagram.mmd (Mermaid). Diseñada para pantallas grandes y revisión conjunta.",
+        image_path=SEQ_PNG,
+    )
+
+    presentation.save(output)
     return output
 
 
@@ -440,6 +567,12 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         type=Path,
         default=DEFAULT_OUTPUT,
         help=f"Ruta del PDF de salida (por defecto {DEFAULT_OUTPUT.name})",
+    )
+    parser.add_argument(
+        "--pptx-output",
+        type=Path,
+        default=None,
+        help="Ruta opcional para generar una presentación editable con los diagramas.",
     )
     return parser.parse_args(args)
 
@@ -454,7 +587,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     else:
         print(f"PDF generado en {output}")
-        return 0
+    pptx_output: Path | None = None
+    if args.pptx_output:
+        try:
+            pptx_output = build_editable_deck(args.pptx_output)
+        except Exception as exc:  # noqa: BLE001
+            sys.stderr.write(f"Error generando la presentación editable: {exc}\n")
+            return 1
+
+    if pptx_output:
+        print(f"Presentación editable generada en {pptx_output}")
+    return 0
 
 
 if __name__ == "__main__":
