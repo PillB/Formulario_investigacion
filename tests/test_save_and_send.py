@@ -158,6 +158,27 @@ def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy)
     assert 'primer caso' not in log_contents
 
 
+def test_save_and_send_updates_architecture_diagram(tmp_path, messagebox_spy):
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+    architecture_path = tmp_path / 'architecture.mmd'
+    architecture_path.write_text('legacy', encoding='utf-8')
+
+    app = _make_minimal_app()
+    app._export_base_path = export_dir
+    app._architecture_diagram_path = architecture_path
+    app._current_case_data = _build_case_data('2024-1111')
+
+    app.save_and_send()
+
+    content = architecture_path.read_text(encoding='utf-8')
+    assert 'legacy' not in content
+    assert 'erDiagram' in content
+    for table in ['CASOS', 'CLIENTES', 'PRODUCTOS', 'ANALISIS']:
+        assert table in content
+    assert 'CASOS ||--o{ PRODUCTOS' in content
+
+
 def test_save_and_send_reports_catalog_errors_once(messagebox_spy):
     app = build_headless_app("Crédito personal")
     app._suppress_messagebox = False
