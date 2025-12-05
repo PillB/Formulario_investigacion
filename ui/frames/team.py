@@ -16,6 +16,8 @@ from ui.frames.utils import (
     BadgeManager,
     SectionToggleMixin,
     ToggleWarningBadge,
+    build_summary_tree,
+    compose_section_title,
     build_grid_container,
     create_collapsible_card,
     create_date_entry,
@@ -115,6 +117,7 @@ class TeamMemberFrame(SectionToggleMixin):
             indicator=getattr(self.section, "indicator", None),
             collapsed=not getattr(self.section, "is_open", True),
         )
+        self.section_title_var = getattr(self.section, "title_var", tk.StringVar())
         self._sync_section_title()
         self._register_title_traces()
         self._place_section()
@@ -689,27 +692,31 @@ class TeamMemberFrame(SectionToggleMixin):
                 pass
 
     def _register_title_traces(self):
-        for var in (self.id_var, self.nombres_var, self.apellidos_var):
+        for var in (self.id_var, self.puesto_var, self.area_var):
             var.trace_add("write", self._on_identity_field_change)
 
     def _build_section_title(self) -> str:
-        base_title = f"Colaborador {self.idx+1}"
-        if getattr(self, "section", None) and not getattr(self.section, "is_open", True):
-            id_value = self.id_var.get().strip()
-            name_value = " ".join(
-                part.strip()
-                for part in (self.nombres_var.get(), self.apellidos_var.get())
-                if part.strip()
-            )
-            details = [value for value in (id_value, name_value) if value]
-            if details:
-                base_title = f"{base_title} – {' | '.join(details)}"
-        return base_title
+        details = (
+            self.id_var.get().strip(),
+            self.puesto_var.get().strip(),
+            self.area_var.get().strip(),
+        )
+        return compose_section_title(
+            self.section,
+            f"Colaborador {self.idx+1}",
+            details,
+            max_details=2,
+        )
 
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
             return
-        self.section.set_title(self._build_section_title())
+        title = self._build_section_title()
+        try:
+            self.section_title_var.set(title)
+        except Exception:
+            pass
+        self.section.set_title(title)
 
     def _on_identity_field_change(self, *_args):
         self._sync_section_title()
@@ -1554,44 +1561,25 @@ class TeamMemberFrame(SectionToggleMixin):
     # Resumen de colaboradores
     # ------------------------------------------------------------------
     def _build_summary(self, container):
-        summary_frame = build_grid_container(
-            container,
-            row_weight=1,
-            column_weight=1,
-        )
-
         columns = (
-            ("id", "ID"),
-            ("nombres", "Nombres"),
-            ("apellidos", "Apellidos"),
-            ("division", "División"),
-            ("area", "Área"),
-            ("servicio", "Servicio"),
-            ("puesto", "Puesto"),
-            ("tipo_sancion", "Tipo sanción"),
-            ("fecha_carta_inmediatez", "Carta inmediatez"),
-            ("fecha_carta_renuncia", "Carta renuncia"),
+            ("id", "ID", 150),
+            ("nombres", "Nombres", 150),
+            ("apellidos", "Apellidos", 150),
+            ("division", "División", 140),
+            ("area", "Área", 140),
+            ("servicio", "Servicio", 140),
+            ("puesto", "Puesto", 140),
+            ("tipo_sancion", "Tipo sanción", 140),
+            ("fecha_carta_inmediatez", "Carta inmediatez", 150),
+            ("fecha_carta_renuncia", "Carta renuncia", 150),
         )
-        tree = ttk.Treeview(summary_frame, columns=[col for col, _ in columns], show="headings", height=5)
-        vscroll = ttk.Scrollbar(summary_frame, orient="vertical", command=tree.yview)
-        hscroll = ttk.Scrollbar(summary_frame, orient="horizontal", command=tree.xview)
-        tree.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
-        tree.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
-        vscroll.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
-        hscroll.grid(row=1, column=0, sticky="ew")
-
-        for col_id, heading in columns:
-            tree.heading(col_id, text=heading, command=lambda c=col_id: self._sort_summary(c))
-            tree.column(col_id, width=150, anchor="w")
-
-        palette = ThemeManager.current()
-        if hasattr(tree, "tag_configure"):
-            tree.tag_configure("even", background=palette.get("heading_background", palette.get("background")), foreground=palette.get("foreground"))
-            tree.tag_configure("odd", background=palette.get("background"), foreground=palette.get("foreground"))
-
-        tree.bind("<<TreeviewSelect>>", self._on_summary_select)
-        tree.bind("<Double-1>", self._on_summary_double_click)
-        return tree
+        return build_summary_tree(
+            container,
+            columns,
+            sort_callback=self._sort_summary,
+            select_callback=self._on_summary_select,
+            double_click_callback=self._on_summary_double_click,
+        )
 
     def refresh_summary(self):
         tree = self.summary_tree or getattr(self.owner, "team_summary_tree", None)

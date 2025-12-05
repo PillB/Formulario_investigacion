@@ -18,6 +18,7 @@ from ui.frames.utils import (
     BadgeManager,
     SectionToggleMixin,
     ToggleWarningBadge,
+    compose_section_title,
     build_grid_container,
     create_collapsible_card,
     create_date_entry,
@@ -63,6 +64,7 @@ class InvolvementRow:
         self.section_id = generate_section_id("involucramiento")
 
         self.section = self._create_section(parent)
+        self.section_title_var = getattr(self.section, "title_var", tk.StringVar())
         self._sync_section_title()
         self.section.grid(
             row=idx + 1, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we"
@@ -232,21 +234,23 @@ class InvolvementRow:
                 trace_add("write", self._sync_section_title)
 
     def _build_section_title(self) -> str:
-        base_title = f"Asignación {self.idx+1}"
-        if getattr(self, "section", None) and not self.section.is_open:
-            team_value = self.team_var.get().strip()
-            monto_value = self.monto_var.get().strip()
-            details = [value for value in (team_value, monto_value) if value]
-            if details:
-                base_title = f"{base_title} – {' | '.join(details)}"
-        return base_title
+        details = (
+            self.team_var.get().strip(),
+            self.monto_var.get().strip(),
+        )
+        return compose_section_title(self.section, f"Asignación {self.idx+1}", details, max_details=2)
 
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
             return
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
-            self.section.set_title(self._build_section_title())
+            title = self._build_section_title()
+            try:
+                self.section_title_var.set(title)
+            except Exception:
+                pass
+            self.section.set_title(title)
 
     def refresh_indexed_state(self):
         prefix = f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1}"
@@ -396,6 +400,7 @@ class ClaimRow:
         self.section_id = generate_section_id("reclamo")
 
         self.section = self._create_section(parent)
+        self.section_title_var = getattr(self.section, "title_var", tk.StringVar())
         self._sync_section_title()
         self.section.grid(
             row=idx + 1, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we"
@@ -636,21 +641,23 @@ class ClaimRow:
                 trace_add("write", self._sync_section_title)
 
     def _build_section_title(self) -> str:
-        base_title = f"Reclamo {self.idx+1}"
-        if getattr(self, "section", None) and not self.section.is_open:
-            rid = self.id_var.get().strip()
-            name = self.name_var.get().strip()
-            details = [value for value in (rid, name) if value]
-            if details:
-                base_title = f"{base_title} – {' | '.join(details)}"
-        return base_title
+        details = (
+            self.id_var.get().strip(),
+            self.name_var.get().strip(),
+        )
+        return compose_section_title(self.section, f"Reclamo {self.idx+1}", details, max_details=2)
 
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
             return
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
-            self.section.set_title(self._build_section_title())
+            title = self._build_section_title()
+            try:
+                self.section_title_var.set(title)
+            except Exception:
+                pass
+            self.section.set_title(title)
 
     def refresh_indexed_state(self):
         prefix = f"Producto {self.product_frame.idx+1} - Reclamo {self.idx+1}"
@@ -908,6 +915,7 @@ class ProductFrame(SectionToggleMixin):
             indicator=getattr(self.section, "indicator", None),
             collapsed=not getattr(self.section, "is_open", True),
         )
+        self.section_title_var = getattr(self.section, "title_var", tk.StringVar())
         self._sync_section_title()
         self._place_section()
         self._tree_sort_state: dict[str, bool] = {}
@@ -1564,7 +1572,7 @@ class ProductFrame(SectionToggleMixin):
             self._place_section()
 
     def _register_title_traces(self):
-        for var in (self.id_var, self.tipo_prod_var):
+        for var in (self.id_var, self.tipo_prod_var, self.monto_inv_var):
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
@@ -1614,14 +1622,12 @@ class ProductFrame(SectionToggleMixin):
             return 40
 
     def _build_section_title(self) -> str:
-        base_title = f"Producto {self.idx+1}"
-        if getattr(self, "section", None) and not self.section.is_open:
-            id_value = self.id_var.get().strip()
-            tipo_value = self.tipo_prod_var.get().strip()
-            details = [value for value in (id_value, tipo_value) if value]
-            if details:
-                base_title = f"{base_title} – {' | '.join(details)}"
-        return base_title
+        details = (
+            self.id_var.get().strip(),
+            self.tipo_prod_var.get().strip(),
+            self.monto_inv_var.get().strip(),
+        )
+        return compose_section_title(self.section, f"Producto {self.idx+1}", details, max_details=2)
 
     def _initialize_header_table(self, summary_parent):
         owner_tree = getattr(self.owner, "product_summary_tree", None) if self.owner else None
@@ -1648,7 +1654,12 @@ class ProductFrame(SectionToggleMixin):
             return
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
-            self.section.set_title(self._build_section_title())
+            title = self._build_section_title()
+            try:
+                self.section_title_var.set(title)
+            except Exception:
+                pass
+            self.section.set_title(title)
 
     def _build_header_table(self, parent=None):
         host = parent or getattr(self.section, "content", None) or self.section

@@ -37,6 +37,8 @@ class CollapsibleSection(ttk.Frame):
         self.identifier = identifier
         self.logs = logs
 
+        self.title_var = tk.StringVar(value=title)
+
         self.header = ttk.Frame(self, style="AccordionHeader.TFrame")
         self.header.pack(fill="x")
 
@@ -46,7 +48,10 @@ class CollapsibleSection(ttk.Frame):
         self.indicator.pack(side="left", padx=(6, 4))
 
         self.title_label = ttk.Label(
-            self.header, text=title, style="AccordionTitle.TLabel", anchor="w"
+            self.header,
+            textvariable=self.title_var,
+            style="AccordionTitle.TLabel",
+            anchor="w",
         )
         self.title_label.pack(side="left", fill="x", expand=True, padx=(0, 6))
 
@@ -74,7 +79,10 @@ class CollapsibleSection(ttk.Frame):
     def set_title(self, title: str) -> None:
         """Update the header title label text."""
 
-        self.title_label.configure(text=title)
+        try:
+            self.title_var.set(title)
+        except Exception:
+            self.title_label.configure(text=title)
 
     def toggle(self, event: tk.Event | None = None) -> None:
         """Toggle the visibility of the content frame."""

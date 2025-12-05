@@ -14,6 +14,7 @@ from ui.frames.utils import (
     create_date_entry,
     create_collapsible_card,
     ensure_grid_support,
+    compose_section_title,
     generate_section_id,
     grid_section,
 )
@@ -85,6 +86,7 @@ class NormFrame(SectionToggleMixin):
             indicator=getattr(self.section, "indicator", None),
             collapsed=not getattr(self.section, "is_open", True),
         )
+        self.section_title_var = getattr(self.section, "title_var", tk.StringVar())
         self._sync_section_title()
         self._place_section()
         self._install_focus_binding()
@@ -340,21 +342,23 @@ class NormFrame(SectionToggleMixin):
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def _build_section_title(self) -> str:
-        base_title = f"Norma {self.idx+1}"
-        if getattr(self, "section", None) and not self.section.is_open:
-            norm_id = self.id_var.get().strip()
-            descripcion = self.descripcion_var.get().strip()
-            details = [value for value in (norm_id, descripcion) if value]
-            if details:
-                base_title = f"{base_title} – {' | '.join(details)}"
-        return base_title
+        details = (
+            self.id_var.get().strip(),
+            self.descripcion_var.get().strip(),
+        )
+        return compose_section_title(self.section, f"Norma {self.idx+1}", details, max_details=2)
 
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
             return
         set_title = getattr(self.section, "set_title", None)
         if callable(set_title):
-            self.section.set_title(self._build_section_title())
+            title = self._build_section_title()
+            try:
+                self.section_title_var.set(title)
+            except Exception:
+                pass
+            self.section.set_title(title)
 
     def _handle_toggle(self, _section):
         self._sync_section_title()

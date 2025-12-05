@@ -29,6 +29,8 @@ SUCCESS_BADGE_ICON = "✅"
 PENDING_BADGE_ICON = "⏳"
 WARNING_BADGE_STYLE = "WarningBadge.TLabel"
 WARNING_CONTAINER_STYLE = "WarningBadge.TFrame"
+HEADER_INDICATOR_OPEN = "▼"
+HEADER_INDICATOR_CLOSED = "▸"
 
 
 def generate_section_id(prefix: str) -> str:
@@ -186,6 +188,30 @@ class SectionToggleMixin:
         finally:
             self._toggle_in_progress.discard(section_id)
         return "break"
+
+
+def compose_section_title(
+    section: Any,
+    base_title: str,
+    details: Iterable[str],
+    *,
+    max_details: int = 2,
+    indicator_open: str = HEADER_INDICATOR_OPEN,
+    indicator_closed: str = HEADER_INDICATOR_CLOSED,
+) -> str:
+    """Build a compact header title including the indicator glyph and details."""
+
+    is_open = True
+    if section is not None:
+        is_open = bool(getattr(section, "is_open", not getattr(section, "collapsed", False)))
+    indicator = indicator_open if is_open else indicator_closed
+    clean_details = [value.strip() for value in details if value and str(value).strip()]
+    if max_details:
+        clean_details = clean_details[:max(1, max_details)]
+    detail_text = " | ".join(clean_details)
+    if detail_text:
+        return f"{indicator} {base_title} – {detail_text}"
+    return f"{indicator} {base_title}"
 
 
 def format_warning_preview(message: str, *, max_chars_per_line: int = 15, max_lines: int = 2) -> str:
@@ -853,6 +879,125 @@ def build_grid_container(
         except Exception:
             pass
     return container
+
+
+def build_summary_tree(
+    container: Any,
+    columns: Iterable[tuple[str, str] | tuple[str, str, int]],
+    *,
+    height: int = 5,
+    sort_callback=None,
+    select_callback=None,
+    double_click_callback=None,
+):
+    """Create a Treeview with scrollbars for inline summaries across sections."""
+
+    summary_frame = build_grid_container(
+        container,
+        row_weight=1,
+        column_weight=1,
+    )
+
+    normalized_columns: list[tuple[str, str, int]] = []
+    for column in columns:
+        if len(column) == 2:
+            col_id, heading = column
+            width = 140
+        else:
+            col_id, heading, width = column  # type: ignore[misc]
+        normalized_columns.append((col_id, heading, width))
+
+    def _build_treeview_fallback():
+        class _StubTree:
+            def __init__(self):
+                self._children: list[str] = []
+
+            def heading(self, *_args, **_kwargs):
+                return None
+
+            def column(self, *_args, **_kwargs):
+                return None
+
+            def bind(self, *_args, **_kwargs):
+                return None
+
+            def get_children(self):  # noqa: D401
+                """Return inserted children identifiers."""
+
+                return tuple(self._children)
+
+            def delete(self, *items):  # noqa: ANN002
+                if not items:
+                    self._children.clear()
+                    return None
+                for item in items:
+                    try:
+                        self._children.remove(item)
+                    except ValueError:
+                        continue
+                return None
+
+            def insert(self, _parent, _index, iid=None, values=None, tags=None):  # noqa: ANN001, D401
+                """Register a new child and return its identifier."""
+
+                new_iid = iid or f"item-{len(self._children)+1}"
+                self._children.append(new_iid)
+                return new_iid
+
+            def yview(self, *_args, **_kwargs):
+                return None
+
+            def xview(self, *_args, **_kwargs):
+                return None
+
+            def configure(self, *_args, **_kwargs):
+                return None
+
+            def tag_configure(self, *_args, **_kwargs):
+                return None
+
+        return _StubTree()
+
+    try:
+        tree = ttk.Treeview(
+            summary_frame,
+            columns=[col_id for col_id, _, _ in normalized_columns],
+            show="headings",
+            height=height,
+        )
+    except Exception:
+        return _build_treeview_fallback()
+    try:
+        vscroll = ttk.Scrollbar(summary_frame, orient="vertical", command=tree.yview)
+        hscroll = ttk.Scrollbar(summary_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vscroll.set, xscrollcommand=hscroll.set)
+        tree.grid(row=0, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
+        vscroll.grid(row=0, column=1, sticky="ns", pady=(ROW_PADY, ROW_PADY // 2))
+        hscroll.grid(row=1, column=0, sticky="ew")
+    except Exception:
+        pass
+
+    for col_id, heading, width in normalized_columns:
+        if callable(sort_callback):
+            tree.heading(col_id, text=heading, command=lambda c=col_id: sort_callback(c))
+        else:
+            tree.heading(col_id, text=heading)
+        tree.column(col_id, width=width, anchor="w")
+
+    palette = ThemeManager.current()
+    if hasattr(tree, "tag_configure"):
+        tree.tag_configure(
+            "even",
+            background=palette.get("heading_background", palette.get("background")),
+            foreground=palette.get("foreground"),
+        )
+        tree.tag_configure("odd", background=palette.get("background"), foreground=palette.get("foreground"))
+
+    if callable(select_callback):
+        tree.bind("<<TreeviewSelect>>", select_callback)
+    if callable(double_click_callback):
+        tree.bind("<Double-1>", double_click_callback)
+    return tree
 
 
 def grid_section(
