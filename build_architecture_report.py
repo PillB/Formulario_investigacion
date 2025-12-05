@@ -46,6 +46,8 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "Formulario_Investigacion_Architecture_and_Data_
 DEFAULT_PPTX = PROJECT_ROOT / "Formulario_Investigacion_Diagramas_editables.pptx"
 ARCH_MMD = DOCS_DIR / "architecture.mmd"
 ARCH_PNG = DOCS_DIR / "architecture.png"
+DB_ARCH_MMD = DOCS_DIR / "db_architecture.mmd"
+DB_ARCH_PNG = DOCS_DIR / "db_architecture.png"
 SEQ_MMD = DOCS_DIR / "sequence_diagram.mmd"
 SEQ_PNG = DOCS_DIR / "sequence.png"
 PUPPETEER_CONFIG = PROJECT_ROOT / "puppeteer-config.json"
@@ -67,6 +69,7 @@ PPTX_APP_FILL = RGBColor(236, 249, 235)
 PPTX_COMPONENT_FILL = RGBColor(252, 243, 229)
 PPTX_SERVICE_FILL = RGBColor(231, 231, 255)
 PPTX_BORDER_COLOR = RGBColor(64, 64, 64)
+PPTX_TEXT_COLOR = RGBColor(0, 0, 0)
 
 
 class HeadingParagraph(Paragraph):
@@ -118,6 +121,33 @@ def render_mermaid(source: Path, target: Path) -> Path:
 
     subprocess.run(cmd, check=True)
     return target
+
+
+def _ensure_db_diagram_png() -> Path:
+    """Render the DB Mermaid diagram or create a placeholder if CLI is missing."""
+
+    try:
+        return render_mermaid(DB_ARCH_MMD, DB_ARCH_PNG)
+    except RuntimeError:
+        try:
+            from PIL import Image, ImageDraw, ImageFont  # type: ignore
+
+            DB_ARCH_PNG.parent.mkdir(parents=True, exist_ok=True)
+            img = Image.new("RGB", (1200, 800), color="white")
+            draw = ImageDraw.Draw(img)
+            draw.rectangle((20, 20, 1180, 780), outline="black", width=4)
+            draw.text(
+                (60, 60),
+                "DB diagram placeholder\nInstala mermaid-cli para render completo",
+                fill="black",
+                font=ImageFont.load_default(),
+            )
+            img.save(DB_ARCH_PNG)
+            return DB_ARCH_PNG
+        except Exception as exc:  # pragma: no cover - fallback only
+            raise RuntimeError(
+                "Se requiere mermaid-cli. Instala 'npm install -g @mermaid-js/mermaid-cli'"
+            ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +344,7 @@ def _add_header(slide, *, title: str, subtitle: str, slide_width: float) -> floa
     title_tf.paragraphs[0].text = title
     title_tf.paragraphs[0].font.size = PPTX_TITLE_TEXT_SIZE
     title_tf.paragraphs[0].font.bold = True
+    title_tf.paragraphs[0].font.color.rgb = PPTX_TEXT_COLOR
     title_tf.paragraphs[0].alignment = PP_ALIGN.CENTER
 
     subtitle_box = slide.shapes.add_textbox(
@@ -327,7 +358,7 @@ def _add_header(slide, *, title: str, subtitle: str, slide_width: float) -> floa
     subtitle_tf.word_wrap = True
     subtitle_tf.paragraphs[0].text = subtitle
     subtitle_tf.paragraphs[0].font.size = PPTX_SUBTITLE_TEXT_SIZE
-    subtitle_tf.paragraphs[0].font.color.rgb = PPTX_BORDER_COLOR
+    subtitle_tf.paragraphs[0].font.color.rgb = PPTX_TEXT_COLOR
     subtitle_tf.paragraphs[0].alignment = PP_ALIGN.CENTER
 
     return PPTX_MARGIN + PPTX_TITLE_HEIGHT + PPTX_SUBTITLE_HEIGHT + PPTX_CONTENT_GAP
@@ -358,6 +389,7 @@ def _add_box(
     para.text = text
     para.font.size = font_size
     para.font.bold = bold
+    para.font.color.rgb = PPTX_TEXT_COLOR
     para.alignment = align
     return shape
 
@@ -395,16 +427,18 @@ def _add_note(slide, *, text: str, left: float, top: float, width: float, height
 
 
 def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dict[str, object]:
-    """Create the architecture diagram with native shapes."""
+    """Create the architecture diagram with native shapes on a 100x100 grid."""
 
-    col_width = (slide_width - 2 * PPTX_MARGIN) / 6
-    row1 = content_top
-    row2 = content_top + Cm(5.5)
-    row3 = content_top + Cm(12)
-    row4 = content_top + Cm(18)
+    unit_x = (slide_width - 2 * PPTX_MARGIN) / 100
+    unit_y = (PPTX_SLIDE_HEIGHT - content_top - PPTX_MARGIN) / 100
 
-    def col_left(idx: int) -> float:
-        return PPTX_MARGIN + idx * col_width + Cm(0.4)
+    def g(x_units: float, y_units: float, w_units: float, h_units: float) -> tuple[float, float, float, float]:
+        return (
+            PPTX_MARGIN + x_units * unit_x,
+            content_top + y_units * unit_y,
+            w_units * unit_x,
+            h_units * unit_y,
+        )
 
     nodes: dict[str, object] = {}
 
@@ -413,10 +447,10 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="context_gestion",
         text="Gestión de Investigaciones",
-        left=col_left(0),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        left=g(0, 0, 14, 8)[0],
+        top=g(0, 0, 14, 8)[1],
+        width=g(0, 0, 14, 8)[2],
+        height=g(0, 0, 14, 8)[3],
         fill=PPTX_CONTEXT_FILL,
         bold=True,
     )
@@ -424,51 +458,51 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="context_analista",
         text="Investigador",
-        left=col_left(1),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        left=g(16, 0, 14, 8)[0],
+        top=g(16, 0, 14, 8)[1],
+        width=g(16, 0, 14, 8)[2],
+        height=g(16, 0, 14, 8)[3],
         fill=PPTX_CONTEXT_FILL,
     )
     nodes["tkapp"] = _add_box(
         slide,
         name="context_tkapp",
-        text="Aplicación Python Tkinter GUI\nFormularioInvestigacionesFraude",
-        left=col_left(2),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3.5),
+        text="Aplicación Python Tkinter GUI\\nFormularioInvestigacionesFraude",
+        left=g(34, 0, 20, 10)[0],
+        top=g(34, 0, 20, 10)[1],
+        width=g(34, 0, 20, 10)[2],
+        height=g(34, 0, 20, 10)[3],
         fill=PPTX_CONTEXT_FILL,
         bold=True,
     )
     nodes["databricks"] = _add_box(
         slide,
         name="context_databricks",
-        text="Catálogos empresariales futuro\nDatabricks Parquet/CSV",
-        left=col_left(3),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3.5),
+        text="Catálogos empresariales futuro\\nDatabricks Parquet/CSV",
+        left=g(58, 0, 16, 9)[0],
+        top=g(58, 0, 16, 9)[1],
+        width=g(58, 0, 16, 9)[2],
+        height=g(58, 0, 16, 9)[3],
         fill=PPTX_CONTEXT_FILL,
     )
     nodes["grc"] = _add_box(
         slide,
         name="context_grc",
         text="Registro de riesgos GRC",
-        left=col_left(4),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        left=g(78, 0, 10, 8)[0],
+        top=g(78, 0, 10, 8)[1],
+        width=g(78, 0, 10, 8)[2],
+        height=g(78, 0, 10, 8)[3],
         fill=PPTX_CONTEXT_FILL,
     )
     nodes["normdb"] = _add_box(
         slide,
         name="context_normdb",
         text="Índice maestro de normas",
-        left=col_left(5),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        left=g(90, 0, 10, 8)[0],
+        top=g(90, 0, 10, 8)[1],
+        width=g(90, 0, 10, 8)[2],
+        height=g(90, 0, 10, 8)[3],
         fill=PPTX_CONTEXT_FILL,
     )
 
@@ -476,136 +510,135 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
     nodes["main"] = _add_box(
         slide,
         name="container_main",
-        text="main.py\nArranque Tk/Ttk",
-        left=col_left(1),
-        top=row2,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        text="main.py\\nArranque Tk/Ttk",
+        left=g(10, 16, 16, 9)[0],
+        top=g(10, 16, 16, 9)[1],
+        width=g(10, 16, 16, 9)[2],
+        height=g(10, 16, 16, 9)[3],
         fill=PPTX_APP_FILL,
     )
     nodes["appcore"] = _add_box(
         slide,
         name="container_appcore",
-        text="FormularioInvestigacionesFraude app.py\nControlador",
-        left=col_left(2),
-        top=row2,
-        width=col_width - Cm(0.8),
-        height=Cm(3.4),
+        text="FormularioInvestigacionesFraude app.py\\nControlador",
+        left=g(30, 16, 18, 11)[0],
+        top=g(30, 16, 18, 11)[1],
+        width=g(30, 16, 18, 11)[2],
+        height=g(30, 16, 18, 11)[3],
         fill=PPTX_APP_FILL,
         bold=True,
     )
     nodes["ui"] = _add_box(
         slide,
         name="container_ui",
-        text="ui/frames/*\nPestañas de Caso, Clientes, Team Members, Productos, Riesgos, Normas",
-        left=col_left(3),
-        top=row2,
-        width=col_width - Cm(0.8),
-        height=Cm(4.2),
+        text="ui/frames/*\\nPestañas de Caso, Clientes, Team Members, Productos, Riesgos, Normas",
+        left=g(52, 16, 20, 13)[0],
+        top=g(52, 16, 20, 13)[1],
+        width=g(52, 16, 20, 13)[2],
+        height=g(52, 16, 20, 13)[3],
         fill=PPTX_APP_FILL,
     )
 
     nodes["services"] = _add_box(
         slide,
         name="container_services",
-        text="models/*\nCatálogos y autopoblado",
-        left=col_left(0),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.6),
+        text="models/*\\nCatálogos y autopoblado",
+        left=g(0, 32, 18, 10)[0],
+        top=g(0, 32, 18, 10)[1],
+        width=g(0, 32, 18, 10)[2],
+        height=g(0, 32, 18, 10)[3],
         fill=PPTX_SERVICE_FILL,
     )
     nodes["validators"] = _add_box(
         slide,
         name="container_validators",
-        text="validators.py\nReglas + logs",
-        left=col_left(1),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.6),
+        text="validators.py\\nReglas + logs",
+        left=g(20, 32, 16, 10)[0],
+        top=g(20, 32, 16, 10)[1],
+        width=g(20, 32, 16, 10)[2],
+        height=g(20, 32, 16, 10)[3],
         fill=PPTX_SERVICE_FILL,
     )
     nodes["reporting"] = _add_box(
         slide,
         name="container_reporting",
-        text="report_builder.py\nGeneración JSON/CSV/MD/DOCX",
-        left=col_left(2),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.8),
+        text="report_builder.py\\nGeneración JSON/CSV/MD/DOCX",
+        left=g(38, 32, 18, 10)[0],
+        top=g(38, 32, 18, 10)[1],
+        width=g(38, 32, 18, 10)[2],
+        height=g(38, 32, 18, 10)[3],
         fill=PPTX_SERVICE_FILL,
     )
     nodes["files"] = _add_box(
         slide,
         name="container_files",
-        text="Sistema de archivos\nautosave.json, autosaves/<caso>/auto_N.json, exports/",
-        left=col_left(3),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.8),
+        text="Sistema de archivos\\nautosave.json, autosaves/<caso>/auto_N.json, exports/",
+        left=g(58, 32, 22, 11)[0],
+        top=g(58, 32, 22, 11)[1],
+        width=g(58, 32, 22, 11)[2],
+        height=g(58, 32, 22, 11)[3],
         fill=PPTX_SERVICE_FILL,
     )
     nodes["external"] = _add_box(
         slide,
         name="container_external",
-        text="Unidad externa\nbackups y logs",
-        left=col_left(4),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.6),
+        text="Unidad externa\\nbackups y logs",
+        left=g(82, 32, 14, 9)[0],
+        top=g(82, 32, 14, 9)[1],
+        width=g(82, 32, 14, 9)[2],
+        height=g(82, 32, 14, 9)[3],
         fill=PPTX_SERVICE_FILL,
     )
 
     # Componentes de aplicación
-    tab_width = col_width - Cm(1.2)
     nodes["caseTab"] = _add_box(
         slide,
         name="component_case",
         text="Pestaña Caso",
-        left=col_left(0),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(2, 48, 14, 8)[0],
+        top=g(2, 48, 14, 8)[1],
+        width=g(2, 48, 14, 8)[2],
+        height=g(2, 48, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["clientTab"] = _add_box(
         slide,
         name="component_client",
         text="Pestaña Clientes",
-        left=col_left(1),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(18, 48, 14, 8)[0],
+        top=g(18, 48, 14, 8)[1],
+        width=g(18, 48, 14, 8)[2],
+        height=g(18, 48, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["teamTab"] = _add_box(
         slide,
         name="component_team",
         text="Pestaña Team Members",
-        left=col_left(2),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(34, 48, 14, 8)[0],
+        top=g(34, 48, 14, 8)[1],
+        width=g(34, 48, 14, 8)[2],
+        height=g(34, 48, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["productTab"] = _add_box(
         slide,
         name="component_product",
         text="Pestaña Productos",
-        left=col_left(3),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(50, 48, 14, 8)[0],
+        top=g(50, 48, 14, 8)[1],
+        width=g(50, 48, 14, 8)[2],
+        height=g(50, 48, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["riskTab"] = _add_box(
         slide,
         name="component_risk",
         text="Pestaña Riesgos",
-        left=col_left(4),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(66, 48, 14, 8)[0],
+        top=g(66, 48, 14, 8)[1],
+        width=g(66, 48, 14, 8)[2],
+        height=g(66, 48, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
 
@@ -613,80 +646,81 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="component_norm",
         text="Pestaña Normas",
-        left=col_left(0),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(82, 48, 14, 8)[0],
+        top=g(82, 48, 14, 8)[1],
+        width=g(82, 48, 14, 8)[2],
+        height=g(82, 48, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["actions"] = _add_box(
         slide,
         name="component_actions",
         text="Tab Acciones",
-        left=col_left(1),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(22, 60, 14, 8)[0],
+        top=g(22, 60, 14, 8)[1],
+        width=g(22, 60, 14, 8)[2],
+        height=g(22, 60, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["summary"] = _add_box(
         slide,
         name="component_summary",
         text="Tab Resumen",
-        left=col_left(2),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(42, 60, 14, 8)[0],
+        top=g(42, 60, 14, 8)[1],
+        width=g(42, 60, 14, 8)[2],
+        height=g(42, 60, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
-    nodes["importer"] = _add_box(
-        slide,
-        name="component_importer",
-        text="Importadores CSV",
-        left=col_left(3),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
-        fill=PPTX_COMPONENT_FILL,
-    )
-    nodes["autofill"] = _add_box(
-        slide,
-        name="component_autofill",
-        text="Servicio de Catálogos\nAutopoblado",
-        left=col_left(4),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
-        fill=PPTX_COMPONENT_FILL,
-    )
+
     nodes["autosave"] = _add_box(
         slide,
         name="component_autosave",
         text="Auto guardado temporal",
-        left=col_left(1),
-        top=row4,
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(62, 60, 14, 8)[0],
+        top=g(62, 60, 14, 8)[1],
+        width=g(62, 60, 14, 8)[2],
+        height=g(62, 60, 14, 8)[3],
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["logging"] = _add_box(
         slide,
         name="component_logging",
         text="Bitácora logs.csv",
-        left=col_left(2),
-        top=row4,
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(78, 60, 14, 8)[0],
+        top=g(78, 60, 14, 8)[1],
+        width=g(78, 60, 14, 8)[2],
+        height=g(78, 60, 14, 8)[3],
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["importer"] = _add_box(
+        slide,
+        name="component_importer",
+        text="Importadores CSV",
+        left=g(6, 72, 16, 9)[0],
+        top=g(6, 72, 16, 9)[1],
+        width=g(6, 72, 16, 9)[2],
+        height=g(6, 72, 16, 9)[3],
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["autofill"] = _add_box(
+        slide,
+        name="component_autofill",
+        text="Servicio de Catálogos\\nAutopoblado",
+        left=g(26, 72, 18, 9)[0],
+        top=g(26, 72, 18, 9)[1],
+        width=g(26, 72, 18, 9)[2],
+        height=g(26, 72, 18, 9)[3],
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["reporter"] = _add_box(
         slide,
         name="component_reporter",
         text="report_builder",
-        left=col_left(3),
-        top=row4,
-        width=tab_width,
-        height=Cm(2.8),
+        left=g(48, 72, 16, 9)[0],
+        top=g(48, 72, 16, 9)[1],
+        width=g(48, 72, 16, 9)[2],
+        height=g(48, 72, 16, 9)[3],
         fill=PPTX_COMPONENT_FILL,
     )
 
@@ -727,6 +761,7 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
     _connect(slide.shapes, nodes["reporter"], nodes["files"], name="reporter_to_files")
 
     return nodes
+
 
 
 def _sequence_diagram(slide, *, content_top: float, slide_width: float) -> None:
@@ -906,6 +941,7 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     styles = _build_stylesheet()
 
     render_mermaid(ARCH_MMD, ARCH_PNG)
+    _ensure_db_diagram_png()
     render_mermaid(SEQ_MMD, SEQ_PNG)
 
     page_margins = {
@@ -936,6 +972,15 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
         id="arch_frame",
     )
 
+    db_page_size = landscape(A3)
+    db_frame = Frame(
+        doc.leftMargin,
+        doc.bottomMargin,
+        db_page_size[0] - doc.leftMargin - doc.rightMargin,
+        db_page_size[1] - doc.topMargin - doc.bottomMargin,
+        id="db_frame",
+    )
+
     seq_page_size = A3
     seq_frame = Frame(
         doc.leftMargin,
@@ -950,6 +995,9 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
             PageTemplate(id="main", frames=frame, onPage=_page_decor, pagesize=LETTER),
             PageTemplate(
                 id="arch_diagram", frames=arch_frame, onPage=_page_decor, pagesize=arch_page_size
+            ),
+            PageTemplate(
+                id="db_diagram", frames=db_frame, onPage=_page_decor, pagesize=db_page_size
             ),
             PageTemplate(
                 id="seq_diagram", frames=seq_frame, onPage=_page_decor, pagesize=seq_page_size
@@ -1099,9 +1147,15 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     story.append(Spacer(1, 0.1 * inch))
     story.append(_flowable_image(ARCH_PNG, target_width=arch_frame.width))
 
+    story.append(NextPageTemplate("db_diagram"))
+    story.append(PageBreak())
+    story.append(_heading("Anexo B — Modelo de datos para CSV", styles, 1))
+    story.append(Spacer(1, 0.1 * inch))
+    story.append(_flowable_image(DB_ARCH_PNG, target_width=db_frame.width))
+
     story.append(NextPageTemplate("seq_diagram"))
     story.append(PageBreak())
-    story.append(_heading("Anexo B — Diagrama de secuencia", styles, 1))
+    story.append(_heading("Anexo C — Diagrama de secuencia", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
     story.append(_flowable_image(SEQ_PNG, target_width=seq_frame.width))
 
@@ -1141,6 +1195,24 @@ def build_editable_deck(output: Path = DEFAULT_PPTX) -> Path:
     _sequence_diagram(
         seq_slide, content_top=seq_content_top, slide_width=presentation.slide_width
     )
+
+    db_png = _ensure_db_diagram_png()
+    db_slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    db_content_top = _add_header(
+        db_slide,
+        title="Modelo de datos CSV",
+        subtitle=(
+            "Diagrama entidad-relación alineado a los CSV exportados (caso, clientes, "
+            "colaboradores, productos, reclamos, riesgos, normas y llave técnica)."
+        ),
+        slide_width=presentation.slide_width,
+    )
+    max_width = presentation.slide_width - 2 * PPTX_MARGIN
+    max_height = presentation.slide_height - db_content_top - PPTX_MARGIN
+    img_width, img_height = _scale_image_to_box(db_png, max_width, max_height)
+    db_left = PPTX_MARGIN + (max_width - img_width) / 2
+    db_top = db_content_top + (max_height - img_height) / 2
+    db_slide.shapes.add_picture(str(db_png), db_left, db_top, width=img_width, height=img_height)
 
     presentation.save(output)
     return output

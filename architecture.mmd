@@ -121,6 +121,15 @@ erDiagram
     string recomendaciones
   }
 
+  LLAVE_TECNICA {
+    string case_id FK
+    string id_producto FK
+    string id_cliente FK
+    string id_colaborador FK
+    string id_reclamo FK
+    date fecha_ocurrencia
+  }
+
   CASOS ||--o{ CLIENTES : contiene
   CASOS ||--o{ TEAM_MEMBERS : tiene
   CASOS ||--o{ PRODUCTS : incluye
@@ -135,6 +144,10 @@ erDiagram
   TEAM_MEMBERS ||--o{ INVOLVEMENT : participa
   PRODUCTS ||--o{ INVOLVEMENT : "asigna colaboradores"
   PRODUCTS ||--o{ PRODUCT_CLAIMS : "origina reclamos"
+  LLAVE_TECNICA ||--|| PRODUCTS : "usa"
+  LLAVE_TECNICA ||--|| CLIENTES : "usa"
+  LLAVE_TECNICA ||--|| TEAM_MEMBERS : "usa"
+  LLAVE_TECNICA ||--|| PRODUCT_CLAIMS : "usa"
   PRODUCTS ||--o{ ACCIONADO : "accionado por"
 
 %% Notas de almacenamiento de logs:

@@ -1,6 +1,9 @@
 from pathlib import Path
 
 from PIL import Image
+from pathlib import Path
+
+from PIL import Image
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
@@ -114,15 +117,22 @@ def test_build_report_expands_diagram_pages(monkeypatch, tmp_path):
     output = tmp_path / "architecture.pdf"
     arch_report.build_report(output)
 
-    assert [call[0] for call in image_calls] == [arch_report.ARCH_PNG, arch_report.SEQ_PNG]
+    assert [call[0] for call in image_calls] == [
+        arch_report.ARCH_PNG,
+        arch_report.DB_ARCH_PNG,
+        arch_report.SEQ_PNG,
+    ]
 
     arch_page_size = arch_report.landscape(arch_report.A3)
     expected_arch_width = arch_page_size[0] - (0.7 * arch_report.inch * 2)
+    db_page_size = arch_report.landscape(arch_report.A3)
+    expected_db_width = db_page_size[0] - (0.7 * arch_report.inch * 2)
     seq_page_size = arch_report.A3
     expected_seq_width = seq_page_size[0] - (0.7 * arch_report.inch * 2)
 
     assert image_calls[0][1] == pytest.approx(expected_arch_width)
-    assert image_calls[1][1] == pytest.approx(expected_seq_width)
+    assert image_calls[1][1] == pytest.approx(expected_db_width)
+    assert image_calls[2][1] == pytest.approx(expected_seq_width)
 
 
 def test_build_editable_deck_uses_native_shapes(tmp_path):
@@ -133,9 +143,10 @@ def test_build_editable_deck_uses_native_shapes(tmp_path):
     assert presentation.slide_width == arch_report.PPTX_SLIDE_WIDTH
     assert presentation.slide_height == arch_report.PPTX_SLIDE_HEIGHT
 
-    assert len(presentation.slides) == 2
+    assert len(presentation.slides) == 3
     arch_slide = presentation.slides[0]
     seq_slide = presentation.slides[1]
+    db_slide = presentation.slides[2]
 
     assert all(
         shape.shape_type != MSO_SHAPE_TYPE.PICTURE for shape in arch_slide.shapes
@@ -161,11 +172,29 @@ def test_build_editable_deck_uses_native_shapes(tmp_path):
     assert "Servicio de Catálogos" in text_content
     assert "Pestaña Team Members" in text_content
 
-    seq_text = " ".join(
-        shape.text for shape in seq_slide.shapes if hasattr(shape, "text")
-    )
+    seq_text = " ".join(shape.text for shape in seq_slide.shapes if hasattr(shape, "text"))
     assert "Validación de integridad referencial" in seq_text
     assert "Autocompletado/Autopoblado" in seq_text
+
+    assert any(
+        shape.shape_type == MSO_SHAPE_TYPE.PICTURE for shape in db_slide.shapes
+    ), "DB slide must render the mermaid PNG"
+
+    # Las cajas en la diapositiva de arquitectura no deben solaparse
+    boxes = [
+        shape
+        for shape in arch_slide.shapes
+        if shape.shape_type not in {MSO_SHAPE_TYPE.LINE, MSO_SHAPE_TYPE.PICTURE}
+    ]
+    for idx, shape in enumerate(boxes):
+        for other in boxes[idx + 1 :]:
+            overlap_x = not (
+                shape.left + shape.width <= other.left or other.left + other.width <= shape.left
+            )
+            overlap_y = not (
+                shape.top + shape.height <= other.top or other.top + other.height <= shape.top
+            )
+            assert not (overlap_x and overlap_y), "Diagram boxes must not overlap"
 
 
 def test_main_generates_pptx_by_default(monkeypatch, tmp_path):
@@ -217,6 +246,17 @@ def test_main_can_skip_pptx(monkeypatch, tmp_path):
     assert exit_code == 0
     assert calls["pdf"] == pdf_out
     assert "pptx" not in calls
+
+
+def test_db_architecture_diagram_includes_llave_tecnica():
+    content = Path(__file__).resolve().parent.parent.joinpath("docs", "db_architecture.mmd").read_text(
+        encoding="utf-8"
+    )
+
+    assert "LLAVE_TECNICA" in content
+    assert "id_reclamo" in content
+    assert "PLANES_RIESGO" in content
+    assert "CLIENT_PHONES" in content
 
 
 def test_architecture_diagram_links_imports_and_autofill():
