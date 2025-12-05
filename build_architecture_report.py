@@ -29,8 +29,8 @@ from reportlab.platypus import (
     Paragraph,
     Spacer,
     Table,
-    TableOfContents,
 )
+from reportlab.platypus.tableofcontents import TableOfContents
 
 PROJECT_ROOT = Path(__file__).parent
 DOCS_DIR = PROJECT_ROOT / "docs"
@@ -97,8 +97,35 @@ def render_mermaid(source: Path, target: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def _clone_sample_stylesheet() -> StyleSheet1:
+    """Return an isolated copy of ReportLab's sample stylesheet.
+
+    ``getSampleStyleSheet`` returns a singleton, so adding custom styles would raise
+    ``KeyError`` on repeated calls. We clone every entry into a fresh ``StyleSheet1``
+    to guarantee callers always receive a clean, mutable instance.
+    """
+
+    base = getSampleStyleSheet()
+    styles = StyleSheet1()
+    for name, style in base.byName.items():
+        styles.add(style.clone(name))
+    return styles
+
+
 def _build_stylesheet() -> StyleSheet1:
-    styles = getSampleStyleSheet()
+    styles = _clone_sample_stylesheet()
+
+    # Customize existing heading styles instead of re-adding them (StyleSheet1 forbids
+    # duplicate names).
+    heading1 = styles["Heading1"]
+    heading1.fontSize = 18
+    heading1.leading = 22
+    heading1.spaceAfter = 12
+
+    heading2 = styles["Heading2"]
+    heading2.fontSize = 14
+    heading2.leading = 18
+    heading2.spaceAfter = 8
 
     # Customize existing heading styles instead of re-adding them (StyleSheet1 forbids
     # duplicate names).
