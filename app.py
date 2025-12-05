@@ -85,15 +85,9 @@ from inheritance_service import InheritanceService
 from models import (AutofillService, build_detail_catalog_id_index,
                     CatalogService, iter_massive_csv_rows,
                     normalize_detail_catalog_key, parse_involvement_entries)
-from report_builder import (
-    CaseData,
-    DOCX_AVAILABLE,
-    DOCX_MISSING_MESSAGE,
-    build_docx,
-    build_llave_tecnica_rows,
-    build_report_filename,
-    save_md,
-)
+from report_builder import (build_docx, build_llave_tecnica_rows,
+                            build_report_filename, CaseData, DOCX_AVAILABLE,
+                            DOCX_MISSING_MESSAGE, save_md)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       ENABLE_EXTENDED_ANALYSIS_SECTIONS,
@@ -109,20 +103,16 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY
-from ui.effects.confetti import ConfettiBurst
+from ui.effects.confetti import start_confetti_burst
 from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
-from ui.frames.utils import (
-    GlobalScrollBinding,
-    build_grid_container,
-    create_scrollable_container,
-    ensure_grid_support,
-    grid_and_configure,
-    refresh_dynamic_rows,
-    resize_scrollable_to_content,
-)
+from ui.frames.utils import (build_grid_container, create_scrollable_container,
+                             ensure_grid_support, GlobalScrollBinding,
+                             grid_and_configure, refresh_dynamic_rows,
+                             resize_scrollable_to_content)
 from ui.layout import ActionBar
 from ui.tooltips import HoverTooltip
+from utils.background_worker import run_guarded_task
 from validators import (drain_log_queue, FieldValidator, log_event,
                         LOG_FIELDNAMES, normalize_log_row,
                         normalize_without_accents, parse_decimal_amount,
@@ -137,7 +127,6 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_product_id, validate_reclamo_id,
                         validate_required_text, validate_risk_id,
                         validate_team_member_id)
-from utils.background_worker import run_guarded_task
 
 PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
 if PIL_AVAILABLE:
@@ -12373,7 +12362,7 @@ class FraudCaseApp:
         save_button = self.actions_action_bar.buttons.get("save_send") if hasattr(self, "actions_action_bar") else None
         self._show_success_toast(save_button)
         if hasattr(self, "root") and self.root:
-            ConfettiBurst(
+            start_confetti_burst(
                 self.root,
                 self.root.winfo_pointerx(),
                 self.root.winfo_pointery(),
