@@ -12078,9 +12078,11 @@ class FraudCaseApp:
             "architecture.mmd"
         )
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        font_family = "Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif"
         lines = [
             "%% Diagramas de arquitectura y flujos de artefactos",
             f"%% Actualizado automáticamente el {timestamp}",
+            f"%%{{init: {{ 'fontFamily': '{font_family}', 'themeVariables': {{ 'fontFamily': '{font_family}' }} }} }}%%",
             "",
             "erDiagram",
         ]

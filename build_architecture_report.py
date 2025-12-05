@@ -49,6 +49,7 @@ ARCH_PNG = DOCS_DIR / "architecture.png"
 SEQ_MMD = DOCS_DIR / "sequence_diagram.mmd"
 SEQ_PNG = DOCS_DIR / "sequence.png"
 PUPPETEER_CONFIG = PROJECT_ROOT / "puppeteer-config.json"
+MERMAID_CONFIG = PROJECT_ROOT / "mermaid-config.json"
 MERMAID_EXPORT_SCALE = 2.8  # higher pixel density to keep diagram text crisp
 MERMAID_EXPORT_WIDTH_PX = 4800  # approximate A3 width at ~290 DPI
 
@@ -115,6 +116,8 @@ def render_mermaid(source: Path, target: Path) -> Path:
     cmd.extend(["-s", str(MERMAID_EXPORT_SCALE), "-w", str(MERMAID_EXPORT_WIDTH_PX)])
     if PUPPETEER_CONFIG.exists():
         cmd.extend(["-p", str(PUPPETEER_CONFIG)])
+    if MERMAID_CONFIG.exists():
+        cmd.extend(["-c", str(MERMAID_CONFIG)])
 
     subprocess.run(cmd, check=True)
     return target
