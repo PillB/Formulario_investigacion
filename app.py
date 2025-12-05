@@ -137,6 +137,7 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_product_id, validate_reclamo_id,
                         validate_required_text, validate_risk_id,
                         validate_team_member_id)
+from utils.background_worker import run_guarded_task
 
 PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
 if PIL_AVAILABLE:
@@ -2561,6 +2562,25 @@ class FraudCaseApp:
             return bar.buttons.get("save_send")
         except Exception:
             return None
+
+    def _set_save_send_in_progress(self, in_progress: bool) -> None:
+        button = self._get_save_anchor_widget()
+        spinner = getattr(self, "save_send_spinner", None)
+        if button:
+            try:
+                button.state(["disabled"] if in_progress else ["!disabled"])
+            except tk.TclError:
+                pass
+        if spinner:
+            try:
+                if in_progress:
+                    spinner.pack(side="right", padx=(4, 0), pady=6)
+                    spinner.start(10)
+                else:
+                    spinner.stop()
+                    spinner.pack_forget()
+            except tk.TclError:
+                pass
 
     def _play_save_particles(self, target_widget: Optional[tk.Widget] = None) -> None:
         """Muestra una animación ligera de partículas junto al botón de guardado."""
@@ -6258,6 +6278,9 @@ class FraudCaseApp:
             action_bar_parent,
             commands=action_commands,
             buttons=action_buttons,
+        )
+        self.save_send_spinner = ttk.Progressbar(
+            self.actions_action_bar, mode="indeterminate", length=140
         )
         self._actions_bar_anchor = (
             self.actions_action_bar.buttons.get("save_send")
@@ -11873,6 +11896,136 @@ class FraudCaseApp:
             build_report_filename(case.get("tipo_informe"), case.get("id_caso"), "csv")
         ).stem
 
+    def _perform_save_exports(self, data: CaseData, folder: Path, case_id: str):
+        folder = Path(folder)
+        report_prefix = self._build_report_prefix(data)
+        created_files = []
+        llave_rows, llave_header = build_llave_tecnica_rows(data)
+        warnings: list[str] = []
+
+        def write_csv(file_name, rows, header):
+            path = folder / f"{report_prefix}_{file_name}"
+            with path.open('w', newline='', encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=header)
+                writer.writeheader()
+                for row in rows:
+                    sanitized_row = {
+                        field: _sanitize_csv_value(row.get(field, "")) for field in header
+                    }
+                    writer.writerow(sanitized_row)
+            created_files.append(path)
+
+        write_csv(
+            'casos.csv',
+            [data['caso']],
+            [
+                'id_caso',
+                'tipo_informe',
+                'categoria1',
+                'categoria2',
+                'modalidad',
+                'canal',
+                'proceso',
+                'fecha_de_ocurrencia',
+                'fecha_de_descubrimiento',
+                'centro_costos',
+                'matricula_investigador',
+                'investigador_nombre',
+                'investigador_cargo',
+            ],
+        )
+        write_csv('llave_tecnica.csv', llave_rows, llave_header)
+        write_csv(
+            'clientes.csv',
+            data['clientes'],
+            [
+                'id_cliente',
+                'id_caso',
+                'nombres',
+                'apellidos',
+                'tipo_id',
+                'flag',
+                'telefonos',
+                'correos',
+                'direcciones',
+                'accionado',
+            ],
+        )
+        write_csv(
+            'colaboradores.csv',
+            data['colaboradores'],
+            [
+                'id_colaborador',
+                'id_caso',
+                'flag',
+                'nombres',
+                'apellidos',
+                'division',
+                'area',
+                'servicio',
+                'puesto',
+                'fecha_carta_inmediatez',
+                'fecha_carta_renuncia',
+                'nombre_agencia',
+                'codigo_agencia',
+                'tipo_falta',
+                'tipo_sancion',
+            ],
+        )
+        write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'])
+        write_csv('producto_reclamo.csv', data['reclamos'], ['id_reclamo', 'id_caso', 'id_producto', 'nombre_analitica', 'codigo_analitica'])
+        write_csv('involucramiento.csv', data['involucramientos'], ['id_producto', 'id_caso', 'id_colaborador', 'monto_asignado'])
+        write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'])
+        write_csv('detalles_norma.csv', data['normas'], ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia'])
+        analysis_texts = self._normalize_analysis_texts(data['analisis'])
+        analysis_row = {
+            "id_caso": data['caso']['id_caso'],
+            **{
+                key: (value.get("text") if isinstance(value, Mapping) else "")
+                for key, value in analysis_texts.items()
+            },
+        }
+        write_csv('analisis.csv', [analysis_row], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
+        if self.logs:
+            write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES)
+        json_path = folder / f"{report_prefix}_version.json"
+        with json_path.open('w', encoding="utf-8") as f:
+            json.dump(data.as_dict(), f, ensure_ascii=False, indent=2)
+        created_files.append(json_path)
+        md_path = self._build_report_path(data, folder, "md")
+        created_files.append(save_md(data, md_path))
+        docx_path: Optional[Path] = None
+        if not self._docx_available:
+            warnings.append(DOCX_MISSING_MESSAGE)
+        else:
+            try:
+                docx_path = build_docx(data, self._build_report_path(data, folder, "docx"))
+            except Exception as exc:  # pragma: no cover - protección frente a fallos externos
+                warning = f"Error al generar DOCX: {exc}"
+                log_event("validacion", warning, self.logs)
+                warnings.append(warning)
+                docx_path = None
+            else:
+                if docx_path:
+                    created_files.append(docx_path)
+        export_definitions = self._build_export_definitions(data)
+        architecture_path = self._update_architecture_diagram(export_definitions)
+        if architecture_path:
+            created_files.append(architecture_path)
+        warnings.extend(
+            self._mirror_exports_to_external_drive(
+                created_files, case_id, notify_user=False
+            )
+        )
+        return {
+            "data": data,
+            "report_prefix": report_prefix,
+            "created_files": created_files,
+            "md_path": md_path,
+            "docx_path": docx_path,
+            "warnings": warnings,
+        }
+
     def _generate_report_file(
         self, extension: str, builder, description: str, *, source_widget: Optional[tk.Widget] = None
     ) -> None:
@@ -12127,167 +12280,91 @@ class FraudCaseApp:
         target.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return target
 
+
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
         log_event("navegacion", "Usuario pulsó guardar y enviar", self.logs)
+        self._set_save_send_in_progress(True)
         data, folder, case_id = self._prepare_case_data_for_export()
         if not data or not folder or not case_id:
+            self._set_save_send_in_progress(False)
             return
-        folder = Path(folder)
-        report_prefix = self._build_report_prefix(data)
-        # Guardar CSVs
-        created_files = []
-        llave_rows, llave_header = build_llave_tecnica_rows(data)
 
-        def write_csv(file_name, rows, header):
-            path = folder / f"{report_prefix}_{file_name}"
-            with path.open('w', newline='', encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=header)
-                writer.writeheader()
-                for row in rows:
-                    sanitized_row = {
-                        field: _sanitize_csv_value(row.get(field, "")) for field in header
-                    }
-                    writer.writerow(sanitized_row)
-            created_files.append(path)
-        # CASOS
-        write_csv(
-            'casos.csv',
-            [data['caso']],
-            [
-                'id_caso',
-                'tipo_informe',
-                'categoria1',
-                'categoria2',
-                'modalidad',
-                'canal',
-                'proceso',
-                'fecha_de_ocurrencia',
-                'fecha_de_descubrimiento',
-                'centro_costos',
-                'matricula_investigador',
-                'investigador_nombre',
-                'investigador_cargo',
-            ],
-        )
-        # LLAVE TÉCNICA
-        write_csv('llave_tecnica.csv', llave_rows, llave_header)
-        # CLIENTES
-        write_csv(
-            'clientes.csv',
-            data['clientes'],
-            [
-                'id_cliente',
-                'id_caso',
-                'nombres',
-                'apellidos',
-                'tipo_id',
-                'flag',
-                'telefonos',
-                'correos',
-                'direcciones',
-                'accionado',
-            ],
-        )
-        # COLABORADORES
-        write_csv(
-            'colaboradores.csv',
-            data['colaboradores'],
-            [
-                'id_colaborador',
-                'id_caso',
-                'flag',
-                'nombres',
-                'apellidos',
-                'division',
-                'area',
-                'servicio',
-                'puesto',
-                'fecha_carta_inmediatez',
-                'fecha_carta_renuncia',
-                'nombre_agencia',
-                'codigo_agencia',
-                'tipo_falta',
-                'tipo_sancion',
-            ],
-        )
-        # PRODUCTOS
-        write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'])
-        # PRODUCTO_RECLAMO
-        write_csv('producto_reclamo.csv', data['reclamos'], ['id_reclamo', 'id_caso', 'id_producto', 'nombre_analitica', 'codigo_analitica'])
-        # INVOLUCRAMIENTO
-        write_csv('involucramiento.csv', data['involucramientos'], ['id_producto', 'id_caso', 'id_colaborador', 'monto_asignado'])
-        # DETALLES_RIESGO
-        write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'])
-        # DETALLES_NORMA
-        write_csv('detalles_norma.csv', data['normas'], ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia'])
-        # ANALISIS
-        analysis_texts = self._normalize_analysis_texts(data['analisis'])
-        analysis_row = {
-            "id_caso": data['caso']['id_caso'],
-            **{
-                key: (value.get("text") if isinstance(value, Mapping) else "")
-                for key, value in analysis_texts.items()
-            },
-        }
-        write_csv('analisis.csv', [analysis_row], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
-        # LOGS
-        if self.logs:
-            write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES)
-        # Guardar JSON
-        json_path = folder / f"{report_prefix}_version.json"
-        with json_path.open('w', encoding="utf-8") as f:
-            json.dump(data.as_dict(), f, ensure_ascii=False, indent=2)
-        created_files.append(json_path)
-        # Guardar informe Markdown
-        md_path = self._build_report_path(data, folder, "md")
-        created_files.append(save_md(data, md_path))
-        docx_path: Optional[Path] = None
-        if self._docx_available:
-            docx_path = self._build_report_path(data, folder, "docx")
-            created_files.append(build_docx(data, docx_path))
-        else:
-            warning = (
-                f"El informe Word no se generó para el caso {case_id}: {DOCX_MISSING_MESSAGE}"
-            )
-            log_event("validacion", warning, self.logs)
+        def task():
+            return self._perform_save_exports(data, folder, case_id)
+
+        def on_success(result):
+            self._set_save_send_in_progress(False)
+            self._handle_save_success(result)
+
+        def on_error(exc: BaseException):
+            self._set_save_send_in_progress(False)
+            message = f"No se pudieron guardar y enviar los datos: {exc}"
+            log_event("validacion", message, self.logs)
             if not getattr(self, '_suppress_messagebox', False):
-                messagebox.showwarning("Informe Word no disponible", warning)
-        export_definitions = self._build_export_definitions(data)
-        architecture_path = self._update_architecture_diagram(export_definitions)
-        if architecture_path:
-            created_files.append(architecture_path)
-        if hasattr(self, "root") and self.root:
-            ConfettiBurst(
-                self.root,
-                self.root.winfo_pointerx(),
-                self.root.winfo_pointery(),
-            )
-        self._mirror_exports_to_external_drive(created_files, case_id)
-        reports = [md_path.name]
+                messagebox.showerror("Error al guardar", message)
+
+        root = getattr(self, "root", None)
+        if root is None:
+            try:
+                result = task()
+            except BaseException as exc:  # pragma: no cover - compatibilidad en pruebas
+                on_error(exc)
+            else:
+                on_success(result)
+            return
+
+        run_guarded_task(task, on_success, on_error, root)
+
+    def _handle_save_success(self, result) -> None:
+        if not result:
+            return
+        report_prefix = result.get("report_prefix") or ""
+        data = result.get("data")
+        md_path = result.get("md_path")
+        docx_path = result.get("docx_path")
+        warnings = result.get("warnings") or []
+
+        if warnings and not getattr(self, '_suppress_messagebox', False):
+            messagebox.showwarning("Copia incompleta", "\n\n".join(warnings))
+
+        reports = []
+        if md_path:
+            reports.append(Path(md_path).name)
         if docx_path:
-            reports.append(docx_path.name)
-        messagebox.showinfo(
-            "Datos guardados",
-            (
-                f"Los archivos se han guardado como {report_prefix}_*.csv, {report_prefix}_version.json "
-                "y {informes}."
-            ).format(informes=" y ".join(reports)),
-        )
+            reports.append(Path(docx_path).name)
+        informes = " y ".join(reports) if reports else "el informe Markdown"
+        if not getattr(self, '_suppress_messagebox', False):
+            messagebox.showinfo(
+                "Datos guardados",
+                (
+                    f"Los archivos se han guardado como {report_prefix}_*.csv, {report_prefix}_version.json "
+                    "y {informes}."
+                ).format(informes=informes),
+            )
         log_event("navegacion", "Datos guardados y enviados", self.logs)
         self.flush_logs_now()
         self._play_feedback_sound()
         self._handle_session_saved(data)
         save_button = self.actions_action_bar.buttons.get("save_send") if hasattr(self, "actions_action_bar") else None
         self._show_success_toast(save_button)
+        if hasattr(self, "root") and self.root:
+            ConfettiBurst(
+                self.root,
+                self.root.winfo_pointerx(),
+                self.root.winfo_pointery(),
+            )
 
-    def _mirror_exports_to_external_drive(self, file_paths, case_id: str) -> None:
+    def _mirror_exports_to_external_drive(
+        self, file_paths, case_id: str, *, notify_user: bool = True
+    ) -> list[str]:
         normalized_sources = [Path(path) for path in file_paths or [] if path]
+        messages: list[str] = []
         if not normalized_sources:
-            return
+            return messages
         external_base = self._get_external_drive_path()
         if not external_base:
-            return
+            return messages
         case_label = case_id or 'caso'
         case_folder = external_base / case_label
         try:
@@ -12295,9 +12372,11 @@ class FraudCaseApp:
         except OSError as exc:
             message = f"No se pudo crear la carpeta de respaldo {case_folder}: {exc}"
             log_event("validacion", message, self.logs)
-            if not getattr(self, '_suppress_messagebox', False):
+            if notify_user and not getattr(self, '_suppress_messagebox', False):
                 messagebox.showwarning("Copia pendiente", message)
-            return
+            else:
+                messages.append(message)
+            return messages
         autosave_abs = Path(AUTOSAVE_FILE).resolve()
         failures = []
         for source in normalized_sources:
@@ -12315,13 +12394,18 @@ class FraudCaseApp:
                     f"No se pudo copiar {source} a {destination}: {exc}",
                     self.logs,
                 )
-        if failures and not getattr(self, '_suppress_messagebox', False):
+        if failures:
             lines = [
                 "Se exportaron los archivos, pero algunos no se copiaron al respaldo externo:",
             ]
             for source, exc in failures:
                 lines.append(f"- {source.name}: {exc}")
-            messagebox.showwarning("Copia incompleta", "\n".join(lines))
+            warning_message = "\n".join(lines)
+            if notify_user and not getattr(self, '_suppress_messagebox', False):
+                messagebox.showwarning("Copia incompleta", warning_message)
+            else:
+                messages.append(warning_message)
+        return messages
 
     def save_temp_version(self, data=None):
         """Guarda una versión temporal del estado actual del formulario.
