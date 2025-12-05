@@ -1,0 +1,56 @@
+%%{init: {'theme': 'default'}}%%
+sequenceDiagram
+    autonumber
+    participant Gestion as Gestión
+    participant Investigador as Investigador
+    participant UI as UI Tkinter (FraudCaseApp)
+    participant Valid as Validaciones (validators.py)
+    participant Catalog as CatalogService/Autofill
+    participant Import as Importador CSV (iter_massive_csv_rows)
+    participant Autosave as Autosave
+    participant Logs as logger/logs.csv
+    participant Report as Reporte (report_builder)
+
+    Gestion->>Investigador: Asigna caso y solicita informe
+    Investigador->>UI: Abre aplicación y selecciona pestañas
+    Note over UI: Manual data entry
+    Investigador->>UI: Escribe campos (Entry/Combobox/Text)
+    UI->>Valid: FieldValidator valida formato/montos/fechas
+    Valid-->>UI: Errores inline o messagebox
+    UI->>Logs: log_event(tipo="validacion/navegacion")
+    UI->>Autosave: request_autosave() (debounce 4s)
+    Autosave-->>UI: save_auto() + temp_version
+
+    Note over Import: Carga masiva
+    Investigador->>UI: Acciones > Importar CSV
+    UI->>Import: _start_background_import(worker)
+    Import-->>UI: payload de filas normalizadas
+    UI->>UI: _apply_*_import_payload pobla pestañas
+    UI->>Valid: Validación por fila y duplicados
+    UI->>Logs: log_event(subtipo="import")
+    UI->>Autosave: _notify_dataset_changed()
+
+    Note over Catalog: Autocomplete/Autopoblado
+    Investigador->>UI: Ingresa ID cliente/colaborador
+    UI->>Catalog: lookup en detail_catalogs / snapshots
+    Catalog-->>UI: Datos encontrados + meta
+    UI->>Valid: should_autofill_field respeta campos editados
+    UI->>UI: Actualiza combobox/entries
+    UI->>Logs: log_event(subtipo="autofill")
+
+    Note over Autosave: Autosave & logging continuos
+    loop Cada 5 min
+        UI->>Autosave: autosave_cycle() -> autosaves/<caso>/auto_N.json
+    end
+    loop Cada interacción
+        UI->>Logs: Encola evento
+        Logs-->>Logs: flush a logs.csv y external drive
+    end
+
+    Note over Report: Guardado final
+    Investigador->>UI: Acciones > Guardar y enviar
+    UI->>Valid: Validación global de todas las pestañas
+    UI->>Report: build_report + build_docx
+    Report-->>Investigador: Exporta JSON/CSV/Markdown/DOCX
+    UI->>Autosave: save_temp_version() + backup en external drive
+    UI->>Logs: log_event("export")

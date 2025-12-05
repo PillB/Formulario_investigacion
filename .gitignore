@@ -1,0 +1,8 @@
+Formulario_Investigacion_Architecture_and_Data_Flow.pdf
+external drive/
+exports/
+autosave.json
+autosaves/
+__pycache__/
+*.pyc
+docs/*.png
