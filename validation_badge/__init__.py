@@ -5,12 +5,14 @@ from validation_badge.validation_badge import (
     ValidationBadge,
     ValidationBadgeGroup,
     build_message_preview,
+    iter_active_badges,
 )
 
 __all__ = [
     "ValidationBadge",
     "ValidationBadgeGroup",
     "build_message_preview",
+    "iter_active_badges",
     "WARNING_ICON",
     "SUCCESS_ICON",
     "NEUTRAL_ICON",

@@ -68,6 +68,9 @@ class StubWidget:
     def winfo_reqwidth(self):
         return 160
 
+    def winfo_exists(self):
+        return True
+
 
 class DummyStyle:
     def __init__(self, *args, **kwargs):
