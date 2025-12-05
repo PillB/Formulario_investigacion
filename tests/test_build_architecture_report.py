@@ -271,8 +271,12 @@ def test_sequence_diagram_is_spanish_and_covers_data_sources():
 
     assert "Servicio de Catálogos/Autopoblado" in content
     assert "Importador CSV" in content
+    assert "Note over UI,Import: Carga masiva" in content
     assert "UI->>UI: _apply_*_import_payload" in content
+    assert "Validación por fila y duplicados (cliente/colaborador/riesgo/producto/norma)" in content
     assert "Reporte: build_report + build_docx + build_editable_deck" in content
+    assert "Note over UI,Catalogos: Autocompletado/Autopoblado" in content
+    assert "Validación de integridad referencial (IDs existen en catálogos/snapshots)" in content
     assert "Autofill" not in content
     assert "CatalogService" not in content
     assert "\\n" not in content

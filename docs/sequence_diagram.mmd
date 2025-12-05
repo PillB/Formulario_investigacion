@@ -21,21 +21,22 @@ sequenceDiagram
     UI->>Autosave: request_autosave() (debounce 4s)
     Autosave-->>UI: save_auto() + temp_version
 
-    Note over Import: Carga masiva
+    Note over UI,Import: Carga masiva
     Investigador->>UI: Acciones > Importar CSV
     UI->>Import: _start_background_import(worker)
     Import-->>UI: payload de filas normalizadas
     UI->>UI: _apply_*_import_payload pobla pestañas (Caso/Cliente/Equipo/Producto/Riesgo/Norma/Resumen)
-    UI->>Valid: Validación por fila y duplicados
+    UI->>Valid: Validación por fila y duplicados (cliente/colaborador/riesgo/producto/norma)
     UI->>Logs: log_event(subtipo="import")
     UI->>Autosave: _notify_dataset_changed()
 
-    Note over Catalogos: Autocompletado/Autopoblado
+    Note over UI,Catalogos: Autocompletado/Autopoblado
     Investigador->>UI: Ingresa IDs (cliente/colaborador/producto/caso)
     UI->>Catalogos: lookup en catálogos locales y snapshots
     Catalogos-->>UI: Datos encontrados + metadatos
     UI->>Valid: should_autofill_field respeta campos editados
     UI->>UI: Actualiza combobox/entries/tablas
+    Valid->>Catalogos: Validación de integridad referencial (IDs existen en catálogos/snapshots)
     UI->>Logs: log_event(subtipo="autofill")
 
     Note over Autosave: Autosave y logging continuos
