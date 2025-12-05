@@ -29,8 +29,8 @@ from reportlab.platypus import (
     Paragraph,
     Spacer,
     Table,
-    TableOfContents,
 )
+from reportlab.platypus.tableofcontents import TableOfContents
 
 PROJECT_ROOT = Path(__file__).parent
 DOCS_DIR = PROJECT_ROOT / "docs"
