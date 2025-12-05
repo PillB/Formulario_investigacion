@@ -18,6 +18,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
@@ -242,6 +243,19 @@ def _technology_table(styles: StyleSheet1) -> Table:
     return table
 
 
+def _flowable_image(image_path: Path, target_width: float) -> Image:
+    """Scale an image to the requested width while keeping the aspect ratio."""
+
+    reader = ImageReader(str(image_path))
+    original_width, original_height = reader.getSize()
+    if original_width <= 0 or original_height <= 0:
+        raise ValueError("Image dimensions must be positive")
+
+    scale = target_width / float(original_width)
+    target_height = original_height * scale
+    return Image(str(image_path), width=target_width, height=target_height)
+
+
 def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     styles = _build_stylesheet()
 
@@ -401,12 +415,12 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     story.append(PageBreak())
     story.append(_heading("Anexo A — Diagrama de arquitectura (Mermaid)", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(Image(str(ARCH_PNG), width=6.5 * inch, preserveAspectRatio=True))
+    story.append(_flowable_image(ARCH_PNG, target_width=6.5 * inch))
 
     story.append(PageBreak())
     story.append(_heading("Anexo B — Diagrama de secuencia", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(Image(str(SEQ_PNG), width=6.5 * inch, preserveAspectRatio=True))
+    story.append(_flowable_image(SEQ_PNG, target_width=6.5 * inch))
 
     doc.build(story)
     return output
