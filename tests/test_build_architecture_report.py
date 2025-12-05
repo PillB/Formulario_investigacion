@@ -176,3 +176,54 @@ def test_build_editable_deck_scales_each_diagram(monkeypatch, tmp_path):
     assert arch_picture.height == pytest.approx(expected_arch[1])
     assert seq_picture.width == pytest.approx(expected_seq[0])
     assert seq_picture.height == pytest.approx(expected_seq[1])
+
+
+def test_main_generates_pptx_by_default(monkeypatch, tmp_path):
+    pdf_out = tmp_path / "out.pdf"
+    pptx_out = tmp_path / "out.pptx"
+
+    calls: dict[str, Path] = {}
+
+    def fake_build_report(path: Path):
+        path.touch()
+        calls["pdf"] = path
+        return path
+
+    def fake_build_pptx(path: Path):
+        path.touch()
+        calls["pptx"] = path
+        return path
+
+    monkeypatch.setattr(arch_report, "DEFAULT_OUTPUT", pdf_out)
+    monkeypatch.setattr(arch_report, "DEFAULT_PPTX", pptx_out)
+    monkeypatch.setattr(arch_report, "build_report", fake_build_report)
+    monkeypatch.setattr(arch_report, "build_editable_deck", fake_build_pptx)
+
+    exit_code = arch_report.main([])
+
+    assert exit_code == 0
+    assert calls["pdf"] == pdf_out
+    assert calls["pptx"] == pptx_out
+
+
+def test_main_can_skip_pptx(monkeypatch, tmp_path):
+    pdf_out = tmp_path / "only.pdf"
+
+    calls: dict[str, Path] = {}
+
+    def fake_build_report(path: Path):
+        path.touch()
+        calls["pdf"] = path
+        return path
+
+    def fake_build_pptx(path: Path):  # pragma: no cover - should not be hit
+        raise AssertionError("pptx should be skipped")
+
+    monkeypatch.setattr(arch_report, "build_report", fake_build_report)
+    monkeypatch.setattr(arch_report, "build_editable_deck", fake_build_pptx)
+
+    exit_code = arch_report.main(["--output", str(pdf_out), "--no-pptx"])
+
+    assert exit_code == 0
+    assert calls["pdf"] == pdf_out
+    assert "pptx" not in calls

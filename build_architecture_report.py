@@ -56,13 +56,6 @@ PPTX_TITLE_HEIGHT = Cm(2.2)
 PPTX_SUBTITLE_HEIGHT = Cm(1.1)
 PPTX_CONTENT_GAP = Cm(0.5)
 
-PPTX_SLIDE_WIDTH = Cm(42)  # A3 landscape width
-PPTX_SLIDE_HEIGHT = Cm(29.7)  # A3 landscape height
-PPTX_MARGIN = Cm(1.2)
-PPTX_TITLE_HEIGHT = Cm(2.2)
-PPTX_SUBTITLE_HEIGHT = Cm(1.1)
-PPTX_CONTENT_GAP = Cm(0.5)
-
 
 class HeadingParagraph(Paragraph):
     """Paragraph that stores the heading level to feed the TOC."""
@@ -581,8 +574,16 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--pptx-output",
         type=Path,
-        default=None,
-        help="Ruta opcional para generar una presentación editable con los diagramas.",
+        default=DEFAULT_PPTX,
+        help=(
+            "Ruta para generar la presentación editable con los diagramas. "
+            "Se habilita por defecto; usa --no-pptx para omitirla"
+        ),
+    )
+    parser.add_argument(
+        "--no-pptx",
+        action="store_true",
+        help="No exportar la presentación editable.",
     )
     return parser.parse_args(args)
 
@@ -598,7 +599,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(f"PDF generado en {output}")
     pptx_output: Path | None = None
-    if args.pptx_output:
+    if not args.no_pptx and args.pptx_output:
         try:
             pptx_output = build_editable_deck(args.pptx_output)
         except Exception as exc:  # noqa: BLE001
