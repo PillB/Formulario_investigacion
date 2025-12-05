@@ -15,6 +15,29 @@ def _make_png(path: Path, size: tuple[int, int]) -> None:
     image.save(path)
 
 
+def test_render_mermaid_uses_high_resolution(monkeypatch, tmp_path):
+    source = tmp_path / "diagram.mmd"
+    target = tmp_path / "diagram.png"
+    source.write_text("graph TD; A-->B;")
+
+    monkeypatch.setattr(arch_report.shutil, "which", lambda name: "/usr/bin/mmdc" if name == "mmdc" else None)
+    commands: list[list[str]] = []
+
+    def fake_run(cmd: list[str], check: bool):  # noqa: D401
+        commands.append(cmd)
+
+    monkeypatch.setattr(arch_report.subprocess, "run", fake_run)
+
+    arch_report.render_mermaid(source, target)
+
+    assert commands, "render_mermaid should invoke mmdc"
+    cmd = commands[0]
+    assert "-s" in cmd
+    assert str(arch_report.MERMAID_EXPORT_SCALE) in cmd
+    assert "-w" in cmd
+    assert str(arch_report.MERMAID_EXPORT_WIDTH_PX) in cmd
+
+
 def test_build_stylesheet_reuses_existing_heading_styles():
     first = arch_report._build_stylesheet()
     assert first["Heading1"].fontSize == 18

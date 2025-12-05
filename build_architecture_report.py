@@ -46,6 +46,15 @@ ARCH_PNG = DOCS_DIR / "architecture.png"
 SEQ_MMD = DOCS_DIR / "sequence_diagram.mmd"
 SEQ_PNG = DOCS_DIR / "sequence.png"
 PUPPETEER_CONFIG = PROJECT_ROOT / "puppeteer-config.json"
+MERMAID_EXPORT_SCALE = 2.8  # higher pixel density to keep diagram text crisp
+MERMAID_EXPORT_WIDTH_PX = 4800  # approximate A3 width at ~290 DPI
+
+PPTX_SLIDE_WIDTH = Cm(42)  # A3 landscape width
+PPTX_SLIDE_HEIGHT = Cm(29.7)  # A3 landscape height
+PPTX_MARGIN = Cm(1.2)
+PPTX_TITLE_HEIGHT = Cm(2.2)
+PPTX_SUBTITLE_HEIGHT = Cm(1.1)
+PPTX_CONTENT_GAP = Cm(0.5)
 
 PPTX_SLIDE_WIDTH = Cm(42)  # A3 landscape width
 PPTX_SLIDE_HEIGHT = Cm(29.7)  # A3 landscape height
@@ -98,6 +107,7 @@ def render_mermaid(source: Path, target: Path) -> Path:
             "Se requiere mermaid-cli. Instala 'npm install -g @mermaid-js/mermaid-cli'"
         )
 
+    cmd.extend(["-s", str(MERMAID_EXPORT_SCALE), "-w", str(MERMAID_EXPORT_WIDTH_PX)])
     if PUPPETEER_CONFIG.exists():
         cmd.extend(["-p", str(PUPPETEER_CONFIG)])
 
