@@ -1,0 +1,173 @@
+%%{init: {'theme': 'default'}}%%
+erDiagram
+  CASOS {
+    string id_caso PK "Identificador único del caso"
+    string tipo_informe "Tipo de informe (Gerencia/Interno/Credicorp)"
+    string categoria1 "Categoría de fraude – Nivel 1"
+    string categoria2 "Categoría de fraude – Nivel 2"
+    string modalidad "Modalidad de fraude"
+    string canal "Canal de ocurrencia"
+    string proceso "Proceso impactado"
+    date fecha_de_ocurrencia "Fecha de ocurrencia declarada en el caso"
+    date fecha_de_descubrimiento "Fecha de descubrimiento declarada en el caso"
+    string centro_costos "Centro de costos"
+    string matricula_investigador "ID de investigador"
+    string investigador_nombre "Nombre del investigador"
+    string investigador_cargo "Cargo del investigador"
+  }
+
+  CLIENTES {
+    string id_cliente PK "Identificador del cliente"
+    string id_caso FK
+    string tipo_id "Tipo de documento"
+    string flag "Rol (Involucrado/Afectado/No aplica)"
+  }
+
+  CLIENT_PHONES {
+    string id_cliente FK
+    string telefono "Número de teléfono"
+  }
+
+  CLIENT_EMAILS {
+    string id_cliente FK
+    string correo "Correo electrónico"
+  }
+
+  CLIENT_ADDRESSES {
+    string id_cliente FK
+    string direccion "Dirección física"
+  }
+
+  COLABORADORES {
+    string id_colaborador PK "ID de Team Member"
+    string id_caso FK
+    string flag "Rol (Involucrado/Relacionado/No aplica)"
+    string division "División"
+    string area "Área"
+    string servicio "Servicio"
+    string puesto "Puesto"
+    string nombre_agencia "Nombre de agencia"
+    string codigo_agencia "Código de agencia"
+    string tipo_falta "Tipo de falta"
+    string tipo_sancion "Tipo de sanción"
+  }
+
+  PRODUCTOS {
+    string id_producto PK
+    string id_caso FK
+    string id_cliente FK
+    string categoria1 "Categoría Nivel 1 (override)"
+    string categoria2 "Categoría Nivel 2 (override)"
+    string modalidad "Modalidad (override)"
+    string canal "Canal (override)"
+    string proceso "Proceso impactado (override)"
+    date fecha_ocurrencia
+    date fecha_descubrimiento
+    decimal monto_investigado
+    string tipo_moneda
+    decimal monto_perdida_fraude
+    decimal monto_falla_procesos
+    decimal monto_contingencia
+    decimal monto_recuperado
+    decimal monto_pago_deuda
+    string tipo_producto
+  }
+
+  RECLAMOS {
+    string id_reclamo PK
+    string id_caso FK
+    string id_producto FK
+    string nombre_analitica
+    string codigo_analitica
+  }
+
+  INVOLUCRAMIENTOS {
+    string id_caso FK
+    string id_producto FK
+    string id_colaborador FK
+    decimal monto_asignado
+  }
+
+  RIESGOS {
+    string risk_id PK
+    string id_caso FK
+    string lider
+    string descripcion
+    string criticidad
+    decimal exposicion_residual
+  }
+
+  PLANES_RIESGO {
+    string risk_id FK
+    string id_caso FK
+    string plan_id
+  }
+
+  NORMAS {
+    string norm_id PK
+    string id_caso FK
+    string descripcion
+    date fecha_vigencia
+  }
+
+  ANALISIS {
+    string id_caso FK
+    string antecedentes
+    string modus_operandi
+    string hallazgos
+    string descargos
+    string conclusiones
+    string recomendaciones
+  }
+
+  OPERACIONES {
+    string id_caso FK
+    string tipo
+    string descripcion
+    decimal monto
+  }
+
+  ANEXOS {
+    string id_caso FK
+    string tipo
+    string descripcion
+    string ruta
+  }
+
+  FIRMAS {
+    string id_caso FK
+    string firmante
+    string rol
+    date fecha
+  }
+
+  LLAVE_TECNICA {
+    string id_caso FK
+    string id_producto FK
+    string id_cliente FK
+    string id_colaborador FK
+    string id_reclamo FK
+    date fecha_ocurrencia
+  }
+
+  CASOS ||--o{ CLIENTES : contiene
+  CASOS ||--o{ COLABORADORES : relaciona
+  CASOS ||--o{ PRODUCTOS : incluye
+  CASOS ||--o{ RIESGOS : identifica
+  CASOS ||--o{ NORMAS : transgrede
+  CASOS ||--o{ ANALISIS : documenta
+  CASOS ||--o{ OPERACIONES : "movimientos vinculados"
+  CASOS ||--o{ ANEXOS : "evidencias"
+  CASOS ||--o{ FIRMAS : "autorizaciones"
+  CLIENTES ||--o{ CLIENT_PHONES : "tiene teléfonos"
+  CLIENTES ||--o{ CLIENT_EMAILS : "tiene correos"
+  CLIENTES ||--o{ CLIENT_ADDRESSES : "tiene direcciones"
+  CLIENTES ||--o{ PRODUCTOS : posee
+  PRODUCTOS ||--o{ RECLAMOS : "origina reclamos"
+  PRODUCTOS ||--o{ INVOLUCRAMIENTOS : "asigna colaboradores"
+  COLABORADORES ||--o{ INVOLUCRAMIENTOS : participa
+  RIESGOS ||--o{ PLANES_RIESGO : "tiene planes"
+  LLAVE_TECNICA ||--|| PRODUCTOS : "usa"
+  LLAVE_TECNICA ||--|| CLIENTES : "usa"
+  LLAVE_TECNICA ||--|| COLABORADORES : "usa"
+  LLAVE_TECNICA ||--|| RECLAMOS : "usa"

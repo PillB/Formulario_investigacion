@@ -12137,15 +12137,10 @@ class FraudCaseApp:
         report_prefix = self._build_report_prefix(data)
         # Guardar CSVs
         created_files = []
-        export_definitions = self._build_export_definitions(data)
+        llave_rows, llave_header = build_llave_tecnica_rows(data)
 
-        def write_csv(definition: dict[str, object]) -> None:
-            file_name = f"{report_prefix}_{definition['name']}.csv"
-            rows = definition.get("rows") or []
-            header = definition.get("header") or []
-            if not rows and definition.get("skip_if_empty"):
-                return
-            path = folder / file_name
+        def write_csv(file_name, rows, header):
+            path = folder / f"{report_prefix}_{file_name}"
             with path.open('w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=header)
                 writer.writeheader()
@@ -12155,11 +12150,90 @@ class FraudCaseApp:
                     }
                     writer.writerow(sanitized_row)
             created_files.append(path)
-
-        for definition in export_definitions:
-            write_csv(definition)
-
-        self._update_architecture_diagram(export_definitions)
+        # CASOS
+        write_csv(
+            'casos.csv',
+            [data['caso']],
+            [
+                'id_caso',
+                'tipo_informe',
+                'categoria1',
+                'categoria2',
+                'modalidad',
+                'canal',
+                'proceso',
+                'fecha_de_ocurrencia',
+                'fecha_de_descubrimiento',
+                'centro_costos',
+                'matricula_investigador',
+                'investigador_nombre',
+                'investigador_cargo',
+            ],
+        )
+        # LLAVE TÉCNICA
+        write_csv('llave_tecnica.csv', llave_rows, llave_header)
+        # CLIENTES
+        write_csv(
+            'clientes.csv',
+            data['clientes'],
+            [
+                'id_cliente',
+                'id_caso',
+                'nombres',
+                'apellidos',
+                'tipo_id',
+                'flag',
+                'telefonos',
+                'correos',
+                'direcciones',
+                'accionado',
+            ],
+        )
+        # COLABORADORES
+        write_csv(
+            'colaboradores.csv',
+            data['colaboradores'],
+            [
+                'id_colaborador',
+                'id_caso',
+                'flag',
+                'nombres',
+                'apellidos',
+                'division',
+                'area',
+                'servicio',
+                'puesto',
+                'fecha_carta_inmediatez',
+                'fecha_carta_renuncia',
+                'nombre_agencia',
+                'codigo_agencia',
+                'tipo_falta',
+                'tipo_sancion',
+            ],
+        )
+        # PRODUCTOS
+        write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'])
+        # PRODUCTO_RECLAMO
+        write_csv('producto_reclamo.csv', data['reclamos'], ['id_reclamo', 'id_caso', 'id_producto', 'nombre_analitica', 'codigo_analitica'])
+        # INVOLUCRAMIENTO
+        write_csv('involucramiento.csv', data['involucramientos'], ['id_producto', 'id_caso', 'id_colaborador', 'monto_asignado'])
+        # DETALLES_RIESGO
+        write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'])
+        # DETALLES_NORMA
+        write_csv('detalles_norma.csv', data['normas'], ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia'])
+        # ANALISIS
+        analysis_texts = self._normalize_analysis_texts(data['analisis'])
+        analysis_row = {
+            "id_caso": data['caso']['id_caso'],
+            **{
+                key: (value.get("text") if isinstance(value, Mapping) else "")
+                for key, value in analysis_texts.items()
+            },
+        }
+        write_csv('analisis.csv', [analysis_row], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
+        # LOGS
+        if self.logs:
+            write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES)
         # Guardar JSON
         json_path = folder / f"{report_prefix}_version.json"
         with json_path.open('w', encoding="utf-8") as f:
