@@ -15,15 +15,17 @@ import textwrap
 from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.pagesizes import A3, LETTER, landscape
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
     Image,
     ListFlowable,
     ListItem,
+    NextPageTemplate,
     PageBreak,
     PageTemplate,
     Paragraph,
@@ -100,89 +102,68 @@ def render_mermaid(source: Path, target: Path) -> Path:
 def _build_stylesheet() -> StyleSheet1:
     styles = getSampleStyleSheet()
 
-    styles.add(
-        ParagraphStyle(
-            name="CoverTitle",
-            fontSize=24,
-            leading=28,
-            spaceAfter=18,
-            alignment=1,
-        )
+    def _ensure_style(name: str, **attributes: object) -> ParagraphStyle:
+        style = styles[name] if name in styles.byName else ParagraphStyle(name=name)
+        for attr, value in attributes.items():
+            setattr(style, attr, value)
+        if name not in styles.byName:
+            styles.add(style)
+        return style
+
+    _ensure_style(
+        name="CoverTitle",
+        fontSize=24,
+        leading=28,
+        spaceAfter=18,
+        alignment=1,
     )
-    styles.add(
-        ParagraphStyle(
-            name="CoverSubtitle",
-            fontSize=12,
-            leading=14,
-            textColor=colors.grey,
-            alignment=1,
-            spaceAfter=6,
-        )
+    _ensure_style(
+        name="CoverSubtitle",
+        fontSize=12,
+        leading=14,
+        textColor=colors.grey,
+        alignment=1,
+        spaceAfter=6,
     )
-    styles.add(
-        ParagraphStyle(
-            name="Meta",
-            fontSize=10,
-            leading=12,
-            textColor=colors.HexColor("#555555"),
-            alignment=1,
-            spaceAfter=14,
-        )
+    _ensure_style(
+        name="Meta",
+        fontSize=10,
+        leading=12,
+        textColor=colors.HexColor("#555555"),
+        alignment=1,
+        spaceAfter=14,
     )
 
-    styles.add(
-        ParagraphStyle(
-            name="Heading1",
-            parent=styles["Heading1"],
-            fontSize=18,
-            leading=22,
-            spaceAfter=12,
-        )
+    _ensure_style(name="Heading1", fontSize=18, leading=22, spaceAfter=12)
+    _ensure_style(name="Heading2", fontSize=14, leading=18, spaceAfter=8)
+
+    _ensure_style(
+        name="Body",
+        parent=styles["BodyText"],
+        fontSize=10.5,
+        leading=14,
+        spaceAfter=8,
     )
-    styles.add(
-        ParagraphStyle(
-            name="Heading2",
-            parent=styles["Heading2"],
-            fontSize=14,
-            leading=18,
-            spaceAfter=8,
-        )
+    _ensure_style(
+        name="Bullet",
+        parent=styles["Body"],
+        leftIndent=12,
+        bulletIndent=0,
+        spaceAfter=4,
     )
-    styles.add(
-        ParagraphStyle(
-            name="Body",
-            parent=styles["BodyText"],
-            fontSize=10.5,
-            leading=14,
-            spaceAfter=8,
-        )
+    _ensure_style(
+        name="TableHeader",
+        parent=styles["Body"],
+        fontSize=10,
+        textColor=colors.white,
+        backColor=colors.HexColor("#1f3a93"),
+        spaceAfter=4,
     )
-    styles.add(
-        ParagraphStyle(
-            name="Bullet",
-            parent=styles["Body"],
-            leftIndent=12,
-            bulletIndent=0,
-            spaceAfter=4,
-        )
-    )
-    styles.add(
-        ParagraphStyle(
-            name="TableHeader",
-            parent=styles["Body"],
-            fontSize=10,
-            textColor=colors.white,
-            backColor=colors.HexColor("#1f3a93"),
-            spaceAfter=4,
-        )
-    )
-    styles.add(
-        ParagraphStyle(
-            name="TableCell",
-            parent=styles["Body"],
-            fontSize=9,
-            leading=12,
-        )
+    _ensure_style(
+        name="TableCell",
+        parent=styles["Body"],
+        fontSize=9,
+        leading=12,
     )
     return styles
 
@@ -263,25 +244,73 @@ def _technology_table(styles: StyleSheet1) -> Table:
     return table
 
 
+def _flowable_image(image_path: Path, target_width: float) -> Image:
+    """Scale an image to the requested width while keeping the aspect ratio."""
+
+    reader = ImageReader(str(image_path))
+    original_width, original_height = reader.getSize()
+    if original_width <= 0 or original_height <= 0:
+        raise ValueError("Image dimensions must be positive")
+
+    scale = target_width / float(original_width)
+    target_height = original_height * scale
+    return Image(str(image_path), width=target_width, height=target_height)
+
+
 def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     styles = _build_stylesheet()
 
     render_mermaid(ARCH_MMD, ARCH_PNG)
     render_mermaid(SEQ_MMD, SEQ_PNG)
 
+    page_margins = {
+        "left": 0.7 * inch,
+        "right": 0.7 * inch,
+        "top": 0.8 * inch,
+        "bottom": 0.8 * inch,
+    }
+
     doc = BaseDocTemplate(
         str(output),
         pagesize=LETTER,
-        leftMargin=0.7 * inch,
-        rightMargin=0.7 * inch,
-        topMargin=0.8 * inch,
-        bottomMargin=0.8 * inch,
+        leftMargin=page_margins["left"],
+        rightMargin=page_margins["right"],
+        topMargin=page_margins["top"],
+        bottomMargin=page_margins["bottom"],
         title="Formulario de investigación – Arquitectura",
         author="AI Architecture Assistant",
     )
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
-    template = PageTemplate(id="main", frames=frame, onPage=_page_decor)
-    doc.addPageTemplates([template])
+
+    arch_page_size = landscape(A3)
+    arch_frame = Frame(
+        doc.leftMargin,
+        doc.bottomMargin,
+        arch_page_size[0] - doc.leftMargin - doc.rightMargin,
+        arch_page_size[1] - doc.topMargin - doc.bottomMargin,
+        id="arch_frame",
+    )
+
+    seq_page_size = A3
+    seq_frame = Frame(
+        doc.leftMargin,
+        doc.bottomMargin,
+        seq_page_size[0] - doc.leftMargin - doc.rightMargin,
+        seq_page_size[1] - doc.topMargin - doc.bottomMargin,
+        id="seq_frame",
+    )
+
+    doc.addPageTemplates(
+        [
+            PageTemplate(id="main", frames=frame, onPage=_page_decor, pagesize=LETTER),
+            PageTemplate(
+                id="arch_diagram", frames=arch_frame, onPage=_page_decor, pagesize=arch_page_size
+            ),
+            PageTemplate(
+                id="seq_diagram", frames=seq_frame, onPage=_page_decor, pagesize=seq_page_size
+            ),
+        ]
+    )
     doc.afterFlowable = lambda flowable: _after_flowable(doc, flowable)
 
     today = _dt.date.today().strftime("%Y-%m-%d")
@@ -419,15 +448,17 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     story.append(_technology_table(styles))
 
     # Diagrams
+    story.append(NextPageTemplate("arch_diagram"))
     story.append(PageBreak())
     story.append(_heading("Anexo A — Diagrama de arquitectura (Mermaid)", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(Image(str(ARCH_PNG), width=6.5 * inch, preserveAspectRatio=True))
+    story.append(_flowable_image(ARCH_PNG, target_width=arch_frame.width))
 
+    story.append(NextPageTemplate("seq_diagram"))
     story.append(PageBreak())
     story.append(_heading("Anexo B — Diagrama de secuencia", styles, 1))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(Image(str(SEQ_PNG), width=6.5 * inch, preserveAspectRatio=True))
+    story.append(_flowable_image(SEQ_PNG, target_width=seq_frame.width))
 
     doc.build(story)
     return output
