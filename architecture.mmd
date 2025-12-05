@@ -1,118 +1,121 @@
 %% Diagramas de arquitectura y flujos de artefactos
+%% Actualizado automáticamente el 2025-12-05 05:17:37
 
 erDiagram
   CASOS {
-    string case_id PK "Identificador único del caso"
-    string tipo_informe "Tipo de informe (Gerencia, Interno, Credicorp)"
-    string categoria1 "Categoría de fraude – Nivel 1"
-    string categoria2 "Categoría de fraude – Nivel 2"
-    string modalidad "Modalidad de fraude"
-    string canal "Canal de ocurrencia"
-    string proceso "Proceso impactado"
+    string id_caso
+    string tipo_informe
+    string categoria1
+    string categoria2
+    string modalidad
+    string canal
+    string proceso
+    string fecha_de_ocurrencia
+    string fecha_de_descubrimiento
+    string centro_costos
+    string matricula_investigador
+    string investigador_nombre
+    string investigador_cargo
   }
-
+  LLAVE_TECNICA {
+    string id_caso
+    string tipo_informe
+    string categoria1
+    string categoria2
+    string modalidad
+    string canal
+    string proceso
+    string fecha_de_ocurrencia
+    string fecha_de_descubrimiento
+    string centro_costos
+    string matricula_investigador
+    string investigador_nombre
+    string investigador_cargo
+    string id_producto
+    string id_cliente
+    string id_colaborador
+    string id_reclamo
+    string fecha_ocurrencia
+  }
   CLIENTES {
-    string id_cliente PK "Identificador del cliente"
-    string case_id FK "Caso asociado"
-    string tipo_id "Tipo de documento (DNI, RUC, Pasaporte, etc.)"
-    string flag "Rol del cliente (Involucrado/Afectado/No aplica)"
+    string id_cliente
+    string id_caso
+    string nombres
+    string apellidos
+    string tipo_id
+    string flag
+    string telefonos
+    string correos
+    string direcciones
+    string accionado
   }
-
-  CLIENT_PHONES {
-    string id_cliente FK "Identificador del cliente"
-    string telefono "Número de teléfono"
+  COLABORADORES {
+    string id_colaborador
+    string id_caso
+    string flag
+    string nombres
+    string apellidos
+    string division
+    string area
+    string servicio
+    string puesto
+    string fecha_carta_inmediatez
+    string fecha_carta_renuncia
+    string nombre_agencia
+    string codigo_agencia
+    string tipo_falta
+    string tipo_sancion
   }
-
-  CLIENT_EMAILS {
-    string id_cliente FK
-    string correo "Dirección de correo electrónico"
+  PRODUCTOS {
+    string id_producto
+    string id_caso
+    string id_cliente
+    string categoria1
+    string categoria2
+    string modalidad
+    string canal
+    string proceso
+    string fecha_ocurrencia
+    string fecha_descubrimiento
+    string monto_investigado
+    string tipo_moneda
+    string monto_perdida_fraude
+    string monto_falla_procesos
+    string monto_contingencia
+    string monto_recuperado
+    string monto_pago_deuda
+    string tipo_producto
   }
-
-  CLIENT_ADDRESSES {
-    string id_cliente FK
-    string direccion "Dirección física"
+  PRODUCTO_RECLAMO {
+    string id_reclamo
+    string id_caso
+    string id_producto
+    string nombre_analitica
+    string codigo_analitica
   }
-
-  TEAM_MEMBERS {
-    string id_colaborador PK "ID del colaborador"
-    string case_id FK "Caso asociado"
-    string flag "Rol (Involucrado/Relacionado/No aplica)"
-    string division "División"
-    string area "Área"
-    string servicio "Servicio"
-    string puesto "Puesto"
-    string nombre_agencia "Nombre de agencia (si aplica)"
-    string codigo_agencia "Código de agencia (si aplica)"
-    string tipo_falta "Tipo de falta"
-    string tipo_sancion "Tipo de sanción"
+  INVOLUCRAMIENTO {
+    string id_producto
+    string id_caso
+    string id_colaborador
+    string monto_asignado
   }
-
-  PRODUCTS {
-    string id_producto PK "Identificador del producto"
-    string case_id FK "Caso asociado"
-    string id_cliente FK "Cliente propietario"
-    string categoria1 "Categoría Nivel 1 (override)"
-    string categoria2 "Categoría Nivel 2 (override)"
-    string modalidad "Modalidad (override)"
-    string canal "Canal (override)"
-    string proceso "Proceso impactado (override)"
-    date fecha_ocurrencia "Fecha de ocurrencia"
-    date fecha_descubrimiento "Fecha de descubrimiento"
-    float monto_investigado "Monto investigado"
-    string tipo_moneda "Tipo de moneda"
-    float monto_perdida_fraude "Monto de pérdida de fraude"
-    float monto_falla_procesos "Monto de falla en procesos"
-    float monto_contingencia "Monto de contingencia"
-    float monto_recuperado "Monto recuperado"
-    float monto_pago_deuda "Monto de pago de deuda"
-    string tipo_producto "Tipo de producto"
+  DETALLES_RIESGO {
+    string id_riesgo
+    string id_caso
+    string lider
+    string descripcion
+    string criticidad
+    string exposicion_residual
+    string planes_accion
   }
-
-  PRODUCT_CLAIMS {
-    string id_reclamo PK "Identificador del reclamo"
-    string case_id FK "Caso asociado"
-    string id_producto FK "Producto asociado"
-    string nombre_analitica "Nombre de analítica contable"
-    string codigo_analitica "Código de analítica contable"
+  DETALLES_NORMA {
+    string id_norma
+    string id_caso
+    string descripcion
+    string fecha_vigencia
   }
-
-  ACCIONADO {
-    string id_producto FK
-    string case_id FK
-    string accionado "Tribu o entidad accionada"
-  }
-
-  INVOLVEMENT {
-    string id_producto FK
-    string case_id FK
-    string id_colaborador FK
-    float monto_asignado "Monto asignado al colaborador"
-  }
-
-  RISK_DETAILS {
-    string risk_id PK "ID del riesgo (RSK-xxxxxx)"
-    string case_id FK "Caso asociado"
-    string lider "Líder del riesgo"
-    string descripcion "Descripción del riesgo"
-    string criticidad "Nivel de criticidad"
-    float exposicion_residual "Exposición residual (US$)"
-  }
-
-  RISK_PLANS {
-    string risk_id FK
-    string case_id FK
-    string plan_id "ID del plan de acción"
-  }
-
-  NORM_DETAILS {
-    string norm_id PK "Número de norma (XXXX.XXX.XX.XX o generado)"
-    string case_id FK
-    string descripcion "Descripción de la norma"
-    date fecha_vigencia "Fecha de vigencia"
-  }
-
-  ANALYSIS {
-    string case_id FK
+  ANALISIS {
+    string id_caso
     string antecedentes
     string modus_operandi
     string hallazgos
@@ -120,59 +123,28 @@ erDiagram
     string conclusiones
     string recomendaciones
   }
+  LOGS {
+    string timestamp
+    string tipo
+    string subtipo
+    string widget_id
+    string coords
+    string mensaje
+  }
 
+  CASOS ||--o{ ANALISIS : contiene
   CASOS ||--o{ CLIENTES : contiene
-  CASOS ||--o{ TEAM_MEMBERS : tiene
-  CASOS ||--o{ PRODUCTS : incluye
-  CASOS ||--o{ RISK_DETAILS : identifica
-  CASOS ||--o{ NORM_DETAILS : transgrede
-  RISK_DETAILS ||--o{ RISK_PLANS : "tiene planes"
-  CASOS ||--o{ ANALYSIS : documenta
-  CLIENTES ||--o{ CLIENT_PHONES : "tiene teléfonos"
-  CLIENTES ||--o{ CLIENT_EMAILS : "tiene correos"
-  CLIENTES ||--o{ CLIENT_ADDRESSES : "tiene direcciones"
-  CLIENTES ||--o{ PRODUCTS : posee
-  TEAM_MEMBERS ||--o{ INVOLVEMENT : participa
-  PRODUCTS ||--o{ INVOLVEMENT : "asigna colaboradores"
-  PRODUCTS ||--o{ PRODUCT_CLAIMS : "origina reclamos"
-  PRODUCTS ||--o{ ACCIONADO : "accionado por"
-
-%% Notas de almacenamiento de logs:
-%% - Los eventos del formulario se escriben en `logs.csv` (carpeta local) y se espejan a `external drive/logs.csv`.
-%% - Si `STORE_LOGS_LOCALLY` es `False`, la bitácora sólo se persistirá en la unidad externa y se reportarán advertencias si alguno de los destinos falla.
-
-%% Diagrama de flujo del manejo de artefactos entre la app y los destinos locales/externos
-flowchart LR
-  subgraph UI[App Python Tkinter GUI]
-    U1[Notebook<br/>(Caso/Clientes/Colaboradores/Productos)]
-    U2[Riesgos y Normas]
-    U3[Análisis]
-    U4[Acciones & Resumen]
-  end
-
-  subgraph Validaciones
-    V1[Validación por campo<br/>(fechas, montos, IDs, condicionales)]
-    V2[Revisión de duplicados<br/>case+producto+cliente+team+fecha+reclamo]
-  end
-
-  subgraph Persistencia
-    P1[autosave.json]
-    P2[temp versions]
-    P3[exports/ (CSV, JSON, MD, DOCX)]
-    P4[external drive/<case>/]
-    P5[logs.csv]
-  end
-
-  UI -->|Edición dispara| V1
-  UI -->|Guardar y enviar| V2
-  V1 -->|Errores a usuario| UI
-  V2 -->|Bloquea duplicados| UI
-
-  UI -->|Autosave| P1
-  UI -->|Autosave incremental| P2
-  UI -->|Exportadores| P3
-  UI -->|Espejo| P4
-  UI -->|Bitácora| P5
-
-  P3 -->|Replica| P4
-  P5 -->|Replica| P4
+  CASOS ||--o{ COLABORADORES : contiene
+  CASOS ||--o{ DETALLES_NORMA : contiene
+  CASOS ||--o{ DETALLES_RIESGO : contiene
+  CASOS ||--o{ INVOLUCRAMIENTO : contiene
+  CASOS ||--o{ LLAVE_TECNICA : contiene
+  CASOS ||--o{ PRODUCTOS : contiene
+  CASOS ||--o{ PRODUCTO_RECLAMO : contiene
+  CLIENTES ||--o{ LLAVE_TECNICA : id_cliente
+  CLIENTES ||--o{ PRODUCTOS : id_cliente
+  COLABORADORES ||--o{ INVOLUCRAMIENTO : id_colaborador
+  COLABORADORES ||--o{ LLAVE_TECNICA : id_colaborador
+  PRODUCTOS ||--o{ INVOLUCRAMIENTO : id_producto
+  PRODUCTOS ||--o{ LLAVE_TECNICA : id_producto
+  PRODUCTOS ||--o{ PRODUCTO_RECLAMO : id_producto
