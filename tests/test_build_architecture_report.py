@@ -234,6 +234,12 @@ def test_architecture_diagram_links_imports_and_autofill():
         encoding="utf-8"
     )
 
+    assert "Aplicación Python Tkinter GUI" in content
+    assert "FormularioInvestigacionesFraude" in content
+    assert "Pestañas de Caso, Clientes, Team Members, Productos, Riesgos, Normas" in content
+    assert "Tabs de Caso" not in content
+    assert "FraudCaseApp" not in content
+
     importer_targets = [
         "caseTab",
         "clientTab",
@@ -269,6 +275,7 @@ def test_sequence_diagram_is_spanish_and_covers_data_sources():
         encoding="utf-8"
     )
 
+    assert "UI Python Tkinter GUI (FormularioInvestigacionesFraude)" in content
     assert "Servicio de Catálogos/Autopoblado" in content
     assert "Importador CSV" in content
     assert "Note over UI,Import: Carga masiva" in content
