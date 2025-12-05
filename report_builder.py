@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -22,6 +23,80 @@ from validators import parse_decimal_amount, sanitize_rich_text
 
 
 PLACEHOLDER = "No aplica / Sin información registrada."
+
+
+def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict[str, str]], list[str]]:
+    """Construye las combinaciones de llave técnica a partir de los datos capturados.
+
+    Cada fila incluye los campos del tab "caso" combinados con los
+    identificadores que conforman la llave técnica: producto, cliente,
+    colaborador (Team Member) y reclamo, además de la fecha de
+    ocurrencia asociada al producto.
+    """
+
+    caso = case_data.get("caso", {}) if isinstance(case_data, Mapping) else {}
+    investigator = caso.get("investigador") if isinstance(caso, Mapping) else {}
+    investigator = investigator if isinstance(investigator, Mapping) else {}
+    base_row = {
+        "id_caso": caso.get("id_caso", ""),
+        "tipo_informe": caso.get("tipo_informe", ""),
+        "categoria1": caso.get("categoria1", ""),
+        "categoria2": caso.get("categoria2", ""),
+        "modalidad": caso.get("modalidad", ""),
+        "canal": caso.get("canal", ""),
+        "proceso": caso.get("proceso", ""),
+        "fecha_de_ocurrencia": caso.get("fecha_de_ocurrencia", ""),
+        "fecha_de_descubrimiento": caso.get("fecha_de_descubrimiento", ""),
+        "centro_costos": caso.get("centro_costos", "") or caso.get("centro_costo", ""),
+        "matricula_investigador": caso.get("matricula_investigador", ""),
+        "investigador_nombre": caso.get("investigador_nombre", "")
+        or investigator.get("nombre", ""),
+        "investigador_cargo": caso.get("investigador_cargo", "")
+        or investigator.get("cargo", ""),
+    }
+
+    header = list(base_row.keys()) + [
+        "id_producto",
+        "id_cliente",
+        "id_colaborador",
+        "id_reclamo",
+        "fecha_ocurrencia",
+    ]
+
+    productos = case_data.get("productos") if isinstance(case_data, Mapping) else []
+    reclamos = case_data.get("reclamos") if isinstance(case_data, Mapping) else []
+    involucramientos = case_data.get("involucramientos") if isinstance(case_data, Mapping) else []
+
+    reclamos_por_producto: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for reclamo in reclamos or []:
+        producto_id = reclamo.get("id_producto", "") if isinstance(reclamo, Mapping) else ""
+        reclamos_por_producto[producto_id].append(reclamo if isinstance(reclamo, Mapping) else {})
+
+    involucramientos_por_producto: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for inv in involucramientos or []:
+        producto_id = inv.get("id_producto", "") if isinstance(inv, Mapping) else ""
+        involucramientos_por_producto[producto_id].append(inv if isinstance(inv, Mapping) else {})
+
+    rows: list[dict[str, str]] = []
+    for product in productos or []:
+        if not isinstance(product, Mapping):
+            continue
+        producto_id = product.get("id_producto", "")
+        invs = involucramientos_por_producto.get(producto_id) or [None]
+        claims = reclamos_por_producto.get(producto_id) or [None]
+        for inv in invs:
+            for claim in claims:
+                rows.append(
+                    {
+                        **base_row,
+                        "id_producto": producto_id,
+                        "id_cliente": product.get("id_cliente", ""),
+                        "id_colaborador": (inv or {}).get("id_colaborador", ""),
+                        "id_reclamo": (claim or {}).get("id_reclamo", ""),
+                        "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
+                    }
+                )
+    return rows, header
 
 
 @dataclass
