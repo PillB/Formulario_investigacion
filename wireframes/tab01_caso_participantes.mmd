@@ -1,0 +1,78 @@
+flowchart TB
+    tab["Pestaña: Caso y participantes"]
+
+    subgraph case_frame["1. Datos generales del caso (LabelFrame)"]
+        case_id["Número de caso (AAAA-XXXX) [Entry]"]
+        tipo_inf["Tipo de informe [Combobox]"]
+        subgraph taxonomia["Taxonomía del caso"]
+            cat1["Categoría nivel 1 [Combobox]"]
+            cat2["Categoría nivel 2 [Combobox]"]
+            modalidad["Modalidad [Combobox]"]
+            canal["Canal [Combobox]"]
+            proceso["Proceso impactado [Combobox]"]
+        end
+        subgraph investigador["Investigador principal"]
+            matricula["Matrícula [Entry]"]
+            nombre["Nombre y apellidos [Entry readonly]"]
+            cargo["Cargo [Entry readonly]"]
+        end
+        subgraph fechas["Fechas del caso"]
+            ocurrencia["Ocurrencia (YYYY-MM-DD) [DateEntry]"]
+            descubrimiento["Descubrimiento (YYYY-MM-DD) [DateEntry]"]
+        end
+        centro_costo["Centro de costos del caso (; separados) [Entry]"]
+    end
+
+    subgraph clientes_frame["2. Clientes implicados"]
+        resumen_clientes["(Opcional) tabla resumen en la sección"]
+        boton_add_cliente["Botón 'Añadir cliente'"]
+        subgraph cliente_card["Acordeón Cliente N"]
+            tipo_id["Tipo de ID [Combobox]"]
+            id_cliente["ID del cliente [Entry]"]
+            nombres["Nombres [Entry]"]
+            apellidos["Apellidos [Entry]"]
+            flag["Flag [Combobox]"]
+            accionado["Accionado (lista múltiple) [Listbox + scrollbar]"]
+            telefonos["Teléfonos (separados por ;) [Entry]"]
+            correos["Correos (separados por ;) [Entry]"]
+            direcciones["Direcciones (separados por ;) [Entry]"]
+            remove_cliente["Botón 'Eliminar cliente'"]
+        end
+    end
+
+    subgraph productos_frame["3. Productos investigados"]
+        header_productos["Tabla resumen compartida de productos"]
+        boton_add_producto["Botón 'Agregar producto'"]
+        subgraph producto_card["Acordeón Producto N"]
+            basics["Datos básicos: ID del producto, Cliente, Categoría 1/2, Modalidad, Canal, Proceso, Tipo de producto"]
+            fechas_prod["Fechas: Ocurrencia (YYYY-MM-DD), Descubrimiento (YYYY-MM-DD)"]
+            montos["Montos: Investigado, Moneda, Pérdida fraude, Falla procesos, Contingencia, Recuperado, Pago deuda"]
+            reclamos["Reclamos asociados: ID reclamo, Código, Analítica nombre; tabla dentro de 'Reclamos asociados'"]
+            invol["Involucramiento de colaboradores: tabla con Colaborador y Monto asignado; botón 'Añadir involucrado'"]
+            acciones_prod["Botones: Eliminar producto, Autocompletar analítica, Ir al primer faltante"]
+        end
+    end
+
+    subgraph colaboradores_frame["4. Colaboradores involucrados"]
+        resumen_team["(Opcional) tabla resumen en la sección"]
+        boton_add_team["Botón 'Añadir colaborador'"]
+        subgraph team_card["Acordeón Colaborador N"]
+            id_colab["ID del colaborador [Entry]"]
+            nombres_colab["Nombres [Entry]"]
+            apellidos_colab["Apellidos [Entry]"]
+            flag_colab["Flag [Combobox]"]
+            division["División [Combobox]"]
+            area["Área [Combobox]"]
+            servicio["Servicio [Combobox]"]
+            puesto["Puesto [Combobox]"]
+            fecha_inmediatez["Fecha carta inmediatez (YYYY-MM-DD) [DateEntry]"]
+            fecha_renuncia["Fecha carta renuncia (YYYY-MM-DD) [DateEntry]"]
+            nombre_agencia["Nombre agencia [Entry]"]
+            codigo_agencia["Código agencia [Entry]"]
+            tipo_falta["Tipo de falta [Combobox]"]
+            tipo_sancion["Tipo de sanción [Combobox]"]
+            remove_team["Botón 'Eliminar colaborador'"]
+        end
+    end
+
+    tab --> case_frame --> clientes_frame --> productos_frame --> colaboradores_frame

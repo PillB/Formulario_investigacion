@@ -1,0 +1,27 @@
+flowchart TB
+    tab["Pestaña: Análisis y narrativas"]
+    toggle_ext["Check: Mostrar secciones extendidas del informe"]
+    tab --> toggle_ext
+
+    subgraph analisis_group["Análisis narrativo"]
+        antecedentes["Antecedentes [ScrolledText]"]
+        modus["Modus operandi [ScrolledText]"]
+        hallazgos["Hallazgos principales [ScrolledText]"]
+        descargos["Descargos del colaborador [ScrolledText]"]
+        conclusiones["Conclusiones [ScrolledText]"]
+        recomendaciones["Recomendaciones y mejoras [ScrolledText]"]
+    end
+    tab --> analisis_group
+
+    subgraph secciones_ext["Secciones extendidas (Notebook interno)"]
+        subgraph encabezado_tab["Tab: Encabezado y firmas"]
+            encabezado_ext["Encabezado extendido: Dirigido a, Referencia, Área de reporte, Fecha de reporte (YYYY-MM-DD), Tipología de evento, Centro de costos (;), Procesos impactados, N° de reclamos, Analítica contable, Producto (texto opcional)"]
+            recomendaciones_cat["Recomendaciones categorizadas: Laboral / Operativo / Legal [textos cortos]"]
+            firmas["Investigador principal: Matrícula/ID (solo lectura), Nombre y apellidos, Cargo"]
+        end
+        subgraph tablas_tab["Tab: Operaciones y anexos"]
+            operaciones["Tabla 'Operaciones' (campos solicitados en app)"]
+            anexos["Tabla 'Anexos' (archivos y descripciones)"]
+        end
+    end
+    tab --> secciones_ext

@@ -1,0 +1,15 @@
+flowchart TB
+    tab["Pestaña: Resumen"]
+    intro["Label introductorio"]
+    tab --> intro
+
+    subgraph tablas["Tablas compactas"]
+        clientes["Clientes registrados\nColumnas: ID, Nombres, Apellidos, Tipo ID, Flag, Teléfonos, Correos, Direcciones, Accionado"]
+        colaboradores["Colaboradores involucrados\nColumnas: ID, Nombres, Apellidos, División, Área, Servicio, Puesto, Tipo sanción, Carta inmediatez, Carta renuncia"]
+        involucramientos["Asignaciones por colaborador\nColumnas: Producto, Colaborador, Monto asignado"]
+        productos["Productos investigados\nColumnas: ID Producto, Cliente, Tipo, Categoría 1/2, Modalidad, Canal, Proceso, Fechas, Moneda, Montos (investigado/pérdida/falla/contingencia/recuperado/pago)"]
+        riesgos["Riesgos registrados\nColumnas: ID Riesgo, Líder, Descripción, Criticidad, Exposición, Planes de acción"]
+        reclamos["Reclamos asociados\nColumnas: ID Reclamo, Producto, Analítica, Código analítica"]
+        normas["Normas transgredidas\nColumnas: ID Norma, Descripción, Vigencia"]
+    end
+    tab --> tablas
