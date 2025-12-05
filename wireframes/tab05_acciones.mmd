@@ -1,0 +1,27 @@
+flowchart TB
+    tab["Pestaña: Acciones"]
+
+    subgraph header["Encabezado"]
+        sonido["Check: Sonido de confirmación"]
+        tema["Botón conmutar tema (texto variable)"]
+    end
+    tab --> header
+
+    subgraph catalogos["Catálogos de detalle"]
+        estado_catalogos["Etiqueta de estado/ayuda"]
+        cargar["Botón 'Cargar catálogos'"]
+        iniciar_sin["Botón 'Iniciar sin catálogos'"]
+        barra_catalogos["Barra de progreso indeterminada"]
+    end
+    tab --> catalogos
+
+    subgraph importacion["Importar datos masivos (CSV)"]
+        btn_clientes["Botón 'Cargar clientes'"]
+        btn_colabs["Botón 'Cargar colaboradores'"]
+        btn_productos["Botón 'Cargar productos'"]
+        btn_normas["Botón 'Cargar normas'"]
+        btn_riesgos["Botón 'Cargar riesgos'"]
+        estado_import["Etiqueta de estado de importación"]
+        barra_import["Barra de progreso indeterminada"]
+    end
+    tab --> importacion

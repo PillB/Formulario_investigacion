@@ -1,0 +1,55 @@
+flowchart TB
+    root["Ventana principal de Formulario de investigación"]
+    header["Barra superior: progreso, racha, validaciones"]
+    nb["Notebook con pestañas"]
+    root --> header
+    root --> nb
+
+    subgraph tabs["Orden de pestañas"]
+        main_tab["1. Caso y participantes"]
+        risk_tab["2. Riesgos"]
+        norm_tab["3. Normas"]
+        analysis_tab["4. Análisis y narrativas"]
+        actions_tab["5. Acciones"]
+        summary_tab["6. Resumen"]
+    end
+    nb --> tabs
+
+    subgraph main_tab_sections["Caso y participantes"]
+        case_section["1. Datos generales del caso:\n- Número de caso (AAAA-XXXX)\n- Tipo de informe\n- Taxonomía: Categoría 1, Categoría 2, Modalidad\n- Canal, Proceso impactado\n- Investigador principal: Matrícula, Nombre y apellidos, Cargo\n- Fechas: Ocurrencia, Descubrimiento\n- Centro de costos del caso"]
+        clients_section["2. Clientes implicados (acordeones múltiples)\nCampos: Tipo de ID, ID del cliente, Nombres, Apellidos, Flag, Accionado (lista múltiple),\nTeléfonos, Correos, Direcciones"]
+        products_section["3. Productos investigados (acordeones)\nDatos básicos: ID producto, Cliente, Categoría 1/2, Modalidad, Canal, Proceso, Tipo de producto,\nFechas de ocurrencia/descubrimiento, Moneda\nMontos: Investigado, Pérdida fraude, Falla procesos, Contingencia, Recuperado, Pago deuda\nReclamos asociados y analítica\nInvolucramiento de colaboradores por monto"]
+        team_section["4. Colaboradores involucrados (acordeones)\nCampos: ID colaborador, Nombres, Apellidos, Flag, División, Área, Servicio, Puesto,\nFechas carta inmediatez/renuncia, Nombre/Código agencia, Tipo de falta, Tipo de sanción"]
+    end
+    main_tab --> main_tab_sections
+
+    subgraph risk_tab_sections["Riesgos"]
+        risk_header["Tabla resumen: ID, Criticidad, Exposición, Líder, Descripción"]
+        risk_forms["Acordeones de riesgo con campos ID riesgo, Criticidad, Líder, Exposición residual (US$),\nDescripción, Planes de acción; botón Eliminar riesgo"]
+    end
+    risk_tab --> risk_tab_sections
+
+    subgraph norm_tab_sections["Normas"]
+        norm_header["Tabla resumen: ID, Fecha, Descripción"]
+        norm_forms["Acordeones de normas con ID de norma, Fecha de vigencia (YYYY-MM-DD), Descripción; botón Eliminar norma"]
+    end
+    norm_tab --> norm_tab_sections
+
+    subgraph analysis_tab_sections["Análisis y narrativas"]
+        analysis_main["Grupo 'Análisis narrativo' con campos de texto desplazables:\nAntecedentes, Modus operandi, Hallazgos principales, Descargos del colaborador, Conclusiones, Recomendaciones y mejoras\nToggle: Mostrar secciones extendidas del informe"]
+        analysis_extended["Secciones extendidas (Notebook interno):\n- Encabezado y firmas: Encabezado extendido, Recomendaciones categorizadas (Laboral/Operativo/Legal), Investigador principal\n- Operaciones y anexos: tablas para Operaciones y Anexos"]
+    end
+    analysis_tab --> analysis_tab_sections
+
+    subgraph actions_tab_sections["Acciones"]
+        actions_header["Configuración: Sonido de confirmación (check), Botón alternar tema"]
+        catalogs["Catálogos de detalle: estado, botones Cargar catálogos / Iniciar sin catálogos, barra de progreso"]
+        imports["Importar datos masivos (CSV): botones Cargar clientes, Cargar colaboradores, Cargar productos,\nCargar normas, Cargar riesgos; estado y barra de progreso"]
+    end
+    actions_tab --> actions_tab_sections
+
+    subgraph summary_tab_sections["Resumen"]
+        summary_intro["Mensaje introductorio"]
+        summary_tables["Tablas compactas: Clientes, Colaboradores, Asignaciones por colaborador, Productos, Riesgos, Reclamos, Normas"]
+    end
+    summary_tab --> summary_tab_sections

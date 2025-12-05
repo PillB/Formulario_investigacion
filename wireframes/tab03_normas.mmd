@@ -1,0 +1,14 @@
+flowchart TB
+    tab["Pestaña: Normas"]
+    header["Tabla encabezado: columnas ID, Fecha, Descripción"]
+    add_btn["Botón 'Agregar norma'"]
+    tab --> header
+    tab --> add_btn
+
+    subgraph norm_card["Acordeón Norma N"]
+        id_norma["ID de norma [Entry]"]
+        fecha["Fecha de vigencia (YYYY-MM-DD) [DateEntry]"]
+        descripcion["Descripción de la norma [Entry]"]
+        remove_btn["Botón 'Eliminar norma'"]
+    end
+    tab --> norm_card
