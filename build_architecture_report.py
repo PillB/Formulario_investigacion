@@ -68,6 +68,7 @@ PPTX_APP_FILL = RGBColor(236, 249, 235)
 PPTX_COMPONENT_FILL = RGBColor(252, 243, 229)
 PPTX_SERVICE_FILL = RGBColor(231, 231, 255)
 PPTX_BORDER_COLOR = RGBColor(64, 64, 64)
+PPTX_FONT_COLOR = RGBColor(0, 0, 0)
 
 
 class HeadingParagraph(Paragraph):
@@ -317,6 +318,7 @@ def _add_header(slide, *, title: str, subtitle: str, slide_width: float) -> floa
     title_tf.paragraphs[0].text = title
     title_tf.paragraphs[0].font.size = PPTX_TITLE_TEXT_SIZE
     title_tf.paragraphs[0].font.bold = True
+    title_tf.paragraphs[0].font.color.rgb = PPTX_FONT_COLOR
     title_tf.paragraphs[0].alignment = PP_ALIGN.CENTER
 
     subtitle_box = slide.shapes.add_textbox(
@@ -330,7 +332,7 @@ def _add_header(slide, *, title: str, subtitle: str, slide_width: float) -> floa
     subtitle_tf.word_wrap = True
     subtitle_tf.paragraphs[0].text = subtitle
     subtitle_tf.paragraphs[0].font.size = PPTX_SUBTITLE_TEXT_SIZE
-    subtitle_tf.paragraphs[0].font.color.rgb = PPTX_BORDER_COLOR
+    subtitle_tf.paragraphs[0].font.color.rgb = PPTX_FONT_COLOR
     subtitle_tf.paragraphs[0].alignment = PP_ALIGN.CENTER
 
     return PPTX_MARGIN + PPTX_TITLE_HEIGHT + PPTX_SUBTITLE_HEIGHT + PPTX_CONTENT_GAP
@@ -361,18 +363,38 @@ def _add_box(
     para.text = text
     para.font.size = font_size
     para.font.bold = bold
+    para.font.color.rgb = PPTX_FONT_COLOR
     para.alignment = align
     return shape
 
 
-def _connect(shapes, start_shape, end_shape, *, name: str):
-    start_x = start_shape.left + start_shape.width / 2
-    start_y = start_shape.top + start_shape.height / 2
-    end_x = end_shape.left + end_shape.width / 2
-    end_y = end_shape.top + end_shape.height / 2
-    connector = shapes.add_connector(
-        MSO_CONNECTOR.STRAIGHT, start_x, start_y, end_x, end_y
-    )
+def _anchor_point(shape, anchor: str) -> tuple[float, float]:
+    match anchor:
+        case "top":
+            return shape.left + shape.width / 2, shape.top
+        case "bottom":
+            return shape.left + shape.width / 2, shape.top + shape.height
+        case "left":
+            return shape.left, shape.top + shape.height / 2
+        case "right":
+            return shape.left + shape.width, shape.top + shape.height / 2
+        case _:
+            return shape.left + shape.width / 2, shape.top + shape.height / 2
+
+
+def _connect(
+    shapes,
+    start_shape,
+    end_shape,
+    *,
+    name: str,
+    start_anchor: str = "center",
+    end_anchor: str = "center",
+    connector_type: MSO_CONNECTOR = MSO_CONNECTOR.ELBOW,
+):
+    start_x, start_y = _anchor_point(start_shape, start_anchor)
+    end_x, end_y = _anchor_point(end_shape, end_anchor)
+    connector = shapes.add_connector(connector_type, start_x, start_y, end_x, end_y)
     connector.name = name
     connector.line.width = Pt(2)
     return connector
@@ -400,26 +422,26 @@ def _add_note(slide, *, text: str, left: float, top: float, width: float, height
 def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dict[str, object]:
     """Create the architecture diagram with native shapes."""
 
-    col_width = (slide_width - 2 * PPTX_MARGIN) / 6
-    row1 = content_top
-    row2 = content_top + Cm(5.5)
-    row3 = content_top + Cm(12)
-    row4 = content_top + Cm(18)
-
-    def col_left(idx: int) -> float:
-        return PPTX_MARGIN + idx * col_width + Cm(0.4)
+    def map_to_grid(x_units: float, y_units: float, w_units: float, h_units: float):
+        usable_width = slide_width - 2 * PPTX_MARGIN
+        usable_height = PPTX_SLIDE_HEIGHT - content_top - PPTX_MARGIN
+        unit_x = usable_width / 100
+        unit_y = usable_height / 100
+        return {
+            "left": PPTX_MARGIN + unit_x * x_units,
+            "top": content_top + unit_y * y_units,
+            "width": unit_x * w_units,
+            "height": unit_y * h_units,
+        }
 
     nodes: dict[str, object] = {}
 
-    # Contexto
+    # Contexto en cuadrícula 100x100
     nodes["gestion"] = _add_box(
         slide,
         name="context_gestion",
         text="Gestión de Investigaciones",
-        left=col_left(0),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        **map_to_grid(3, 4, 16, 10),
         fill=PPTX_CONTEXT_FILL,
         bold=True,
     )
@@ -427,20 +449,14 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="context_analista",
         text="Investigador",
-        left=col_left(1),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        **map_to_grid(22, 4, 16, 10),
         fill=PPTX_CONTEXT_FILL,
     )
     nodes["tkapp"] = _add_box(
         slide,
         name="context_tkapp",
         text="Aplicación Python Tkinter GUI\nFormularioInvestigacionesFraude",
-        left=col_left(2),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3.5),
+        **map_to_grid(42, 8, 20, 12),
         fill=PPTX_CONTEXT_FILL,
         bold=True,
     )
@@ -448,30 +464,21 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="context_databricks",
         text="Catálogos empresariales futuro\nDatabricks Parquet/CSV",
-        left=col_left(3),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3.5),
+        **map_to_grid(68, 4, 14, 10),
         fill=PPTX_CONTEXT_FILL,
     )
     nodes["grc"] = _add_box(
         slide,
         name="context_grc",
         text="Registro de riesgos GRC",
-        left=col_left(4),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        **map_to_grid(84, 4, 12, 10),
         fill=PPTX_CONTEXT_FILL,
     )
     nodes["normdb"] = _add_box(
         slide,
         name="context_normdb",
         text="Índice maestro de normas",
-        left=col_left(5),
-        top=row1,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        **map_to_grid(68, 18, 14, 10),
         fill=PPTX_CONTEXT_FILL,
     )
 
@@ -480,20 +487,14 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="container_main",
         text="main.py\nArranque Tk/Ttk",
-        left=col_left(1),
-        top=row2,
-        width=col_width - Cm(0.8),
-        height=Cm(3),
+        **map_to_grid(26, 30, 14, 9),
         fill=PPTX_APP_FILL,
     )
     nodes["appcore"] = _add_box(
         slide,
         name="container_appcore",
         text="FormularioInvestigacionesFraude app.py\nControlador",
-        left=col_left(2),
-        top=row2,
-        width=col_width - Cm(0.8),
-        height=Cm(3.4),
+        **map_to_grid(44, 30, 18, 12),
         fill=PPTX_APP_FILL,
         bold=True,
     )
@@ -501,10 +502,7 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="container_ui",
         text="ui/frames/*\nPestañas de Caso, Clientes, Team Members, Productos, Riesgos, Normas",
-        left=col_left(3),
-        top=row2,
-        width=col_width - Cm(0.8),
-        height=Cm(4.2),
+        **map_to_grid(66, 30, 24, 12),
         fill=PPTX_APP_FILL,
     )
 
@@ -512,103 +510,72 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="container_services",
         text="models/*\nCatálogos y autopoblado",
-        left=col_left(0),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.6),
+        **map_to_grid(6, 48, 18, 11),
         fill=PPTX_SERVICE_FILL,
     )
     nodes["validators"] = _add_box(
         slide,
         name="container_validators",
         text="validators.py\nReglas + logs",
-        left=col_left(1),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.6),
+        **map_to_grid(28, 48, 18, 11),
         fill=PPTX_SERVICE_FILL,
     )
     nodes["reporting"] = _add_box(
         slide,
         name="container_reporting",
         text="report_builder.py\nGeneración JSON/CSV/MD/DOCX",
-        left=col_left(2),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.8),
+        **map_to_grid(50, 48, 18, 11),
         fill=PPTX_SERVICE_FILL,
     )
     nodes["files"] = _add_box(
         slide,
         name="container_files",
         text="Sistema de archivos\nautosave.json, autosaves/<caso>/auto_N.json, exports/",
-        left=col_left(3),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.8),
+        **map_to_grid(72, 48, 18, 11),
         fill=PPTX_SERVICE_FILL,
     )
     nodes["external"] = _add_box(
         slide,
         name="container_external",
         text="Unidad externa\nbackups y logs",
-        left=col_left(4),
-        top=row2 + Cm(3.8),
-        width=col_width - Cm(0.8),
-        height=Cm(3.6),
+        **map_to_grid(90, 48, 10, 11),
         fill=PPTX_SERVICE_FILL,
     )
 
-    # Componentes de aplicación
-    tab_width = col_width - Cm(1.2)
+    # Componentes de aplicación en cuadrícula
     nodes["caseTab"] = _add_box(
         slide,
         name="component_case",
         text="Pestaña Caso",
-        left=col_left(0),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(6, 62, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["clientTab"] = _add_box(
         slide,
         name="component_client",
         text="Pestaña Clientes",
-        left=col_left(1),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(24, 62, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["teamTab"] = _add_box(
         slide,
         name="component_team",
         text="Pestaña Team Members",
-        left=col_left(2),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(42, 62, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["productTab"] = _add_box(
         slide,
         name="component_product",
         text="Pestaña Productos",
-        left=col_left(3),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(60, 62, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["riskTab"] = _add_box(
         slide,
         name="component_risk",
         text="Pestaña Riesgos",
-        left=col_left(4),
-        top=row3,
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(78, 62, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
 
@@ -616,98 +583,165 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         slide,
         name="component_norm",
         text="Pestaña Normas",
-        left=col_left(0),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(6, 74, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["actions"] = _add_box(
         slide,
         name="component_actions",
         text="Tab Acciones",
-        left=col_left(1),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(24, 74, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["summary"] = _add_box(
         slide,
         name="component_summary",
         text="Tab Resumen",
-        left=col_left(2),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(42, 74, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["importer"] = _add_box(
         slide,
         name="component_importer",
         text="Importadores CSV",
-        left=col_left(3),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(60, 74, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["autofill"] = _add_box(
         slide,
         name="component_autofill",
         text="Servicio de Catálogos\nAutopoblado",
-        left=col_left(4),
-        top=row3 + Cm(3.2),
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(78, 74, 16, 9),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["autosave"] = _add_box(
         slide,
         name="component_autosave",
         text="Auto guardado temporal",
-        left=col_left(1),
-        top=row4,
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(24, 88, 16, 8),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["logging"] = _add_box(
         slide,
         name="component_logging",
         text="Bitácora logs.csv",
-        left=col_left(2),
-        top=row4,
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(42, 88, 16, 8),
         fill=PPTX_COMPONENT_FILL,
     )
     nodes["reporter"] = _add_box(
         slide,
         name="component_reporter",
         text="report_builder",
-        left=col_left(3),
-        top=row4,
-        width=tab_width,
-        height=Cm(2.8),
+        **map_to_grid(60, 88, 16, 8),
         fill=PPTX_COMPONENT_FILL,
     )
 
     # Relacionar
-    _connect(slide.shapes, nodes["gestion"], nodes["analista"], name="gestion_to_analista")
-    _connect(slide.shapes, nodes["analista"], nodes["tkapp"], name="analista_to_tkapp")
-    _connect(slide.shapes, nodes["databricks"], nodes["tkapp"], name="databricks_to_tkapp")
-    _connect(slide.shapes, nodes["grc"], nodes["tkapp"], name="grc_to_tkapp")
-    _connect(slide.shapes, nodes["normdb"], nodes["tkapp"], name="normdb_to_tkapp")
+    _connect(
+        slide.shapes,
+        nodes["gestion"],
+        nodes["analista"],
+        name="gestion_to_analista",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["analista"],
+        nodes["tkapp"],
+        name="analista_to_tkapp",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["databricks"],
+        nodes["tkapp"],
+        name="databricks_to_tkapp",
+        start_anchor="bottom",
+        end_anchor="right",
+    )
+    _connect(
+        slide.shapes,
+        nodes["grc"],
+        nodes["tkapp"],
+        name="grc_to_tkapp",
+        start_anchor="bottom",
+        end_anchor="right",
+    )
+    _connect(
+        slide.shapes,
+        nodes["normdb"],
+        nodes["tkapp"],
+        name="normdb_to_tkapp",
+        start_anchor="top",
+        end_anchor="right",
+    )
 
-    _connect(slide.shapes, nodes["tkapp"], nodes["main"], name="tkapp_to_main")
-    _connect(slide.shapes, nodes["main"], nodes["appcore"], name="main_to_appcore")
-    _connect(slide.shapes, nodes["appcore"], nodes["ui"], name="appcore_to_ui")
-    _connect(slide.shapes, nodes["appcore"], nodes["services"], name="appcore_to_services")
-    _connect(slide.shapes, nodes["appcore"], nodes["validators"], name="appcore_to_validators")
-    _connect(slide.shapes, nodes["appcore"], nodes["reporting"], name="appcore_to_reporting")
-    _connect(slide.shapes, nodes["reporting"], nodes["files"], name="reporting_to_files")
-    _connect(slide.shapes, nodes["files"], nodes["external"], name="files_to_external")
+    _connect(
+        slide.shapes,
+        nodes["tkapp"],
+        nodes["main"],
+        name="tkapp_to_main",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["main"],
+        nodes["appcore"],
+        name="main_to_appcore",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["ui"],
+        name="appcore_to_ui",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["services"],
+        name="appcore_to_services",
+        start_anchor="left",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["validators"],
+        name="appcore_to_validators",
+        start_anchor="left",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["reporting"],
+        name="appcore_to_reporting",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["reporting"],
+        nodes["files"],
+        name="reporting_to_files",
+        start_anchor="right",
+        end_anchor="left",
+    )
+    _connect(
+        slide.shapes,
+        nodes["files"],
+        nodes["external"],
+        name="files_to_external",
+        start_anchor="right",
+        end_anchor="left",
+    )
 
     # Pestañas
     for tab in [
@@ -720,14 +754,63 @@ def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dic
         "actions",
         "summary",
     ]:
-        _connect(slide.shapes, nodes["appcore"], nodes[tab], name=f"appcore_to_{tab}")
-        _connect(slide.shapes, nodes["importer"], nodes[tab], name=f"importer_to_{tab}")
-        _connect(slide.shapes, nodes[tab], nodes["autofill"], name=f"{tab}_to_autofill")
+        _connect(
+            slide.shapes,
+            nodes["appcore"],
+            nodes[tab],
+            name=f"appcore_to_{tab}",
+            start_anchor="bottom",
+            end_anchor="top",
+        )
+        _connect(
+            slide.shapes,
+            nodes["importer"],
+            nodes[tab],
+            name=f"importer_to_{tab}",
+            start_anchor="top",
+            end_anchor="bottom",
+        )
+        _connect(
+            slide.shapes,
+            nodes[tab],
+            nodes["autofill"],
+            name=f"{tab}_to_autofill",
+            start_anchor="right",
+            end_anchor="left",
+        )
 
-    _connect(slide.shapes, nodes["appcore"], nodes["autosave"], name="appcore_to_autosave")
-    _connect(slide.shapes, nodes["appcore"], nodes["logging"], name="appcore_to_logging")
-    _connect(slide.shapes, nodes["appcore"], nodes["reporter"], name="appcore_to_reporter")
-    _connect(slide.shapes, nodes["reporter"], nodes["files"], name="reporter_to_files")
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["autosave"],
+        name="appcore_to_autosave",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["logging"],
+        name="appcore_to_logging",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["appcore"],
+        nodes["reporter"],
+        name="appcore_to_reporter",
+        start_anchor="bottom",
+        end_anchor="top",
+    )
+    _connect(
+        slide.shapes,
+        nodes["reporter"],
+        nodes["files"],
+        name="reporter_to_files",
+        start_anchor="right",
+        end_anchor="left",
+    )
 
     return nodes
 
