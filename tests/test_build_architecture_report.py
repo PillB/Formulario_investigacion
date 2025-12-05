@@ -227,3 +227,52 @@ def test_main_can_skip_pptx(monkeypatch, tmp_path):
     assert exit_code == 0
     assert calls["pdf"] == pdf_out
     assert "pptx" not in calls
+
+
+def test_architecture_diagram_links_imports_and_autofill():
+    content = Path(__file__).resolve().parent.parent.joinpath("docs", "architecture.mmd").read_text(
+        encoding="utf-8"
+    )
+
+    importer_targets = [
+        "caseTab",
+        "clientTab",
+        "teamTab",
+        "productTab",
+        "riskTab",
+        "normTab",
+        "summary",
+    ]
+    for target in importer_targets:
+        assert f"importer --> {target}" in content
+
+    autofill_targets = [
+        "caseTab",
+        "clientTab",
+        "teamTab",
+        "productTab",
+        "riskTab",
+        "normTab",
+        "actions",
+        "summary",
+    ]
+    for target in autofill_targets:
+        assert f"{target} --> autofill" in content
+
+    assert "\\n" not in content
+    assert "Autofill" not in content
+    assert "CatalogService" not in content
+
+
+def test_sequence_diagram_is_spanish_and_covers_data_sources():
+    content = Path(__file__).resolve().parent.parent.joinpath("docs", "sequence_diagram.mmd").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Servicio de Catálogos/Autopoblado" in content
+    assert "Importador CSV" in content
+    assert "UI->>UI: _apply_*_import_payload" in content
+    assert "Reporte: build_report + build_docx + build_editable_deck" in content
+    assert "Autofill" not in content
+    assert "CatalogService" not in content
+    assert "\\n" not in content
