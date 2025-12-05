@@ -16,6 +16,9 @@ from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.dml import MSO_LINE_DASH_STYLE
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+from pptx.enum.text import PP_ALIGN
 from pptx.util import Cm, Pt
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A3, LETTER, landscape
@@ -55,6 +58,15 @@ PPTX_MARGIN = Cm(1.2)
 PPTX_TITLE_HEIGHT = Cm(2.2)
 PPTX_SUBTITLE_HEIGHT = Cm(1.1)
 PPTX_CONTENT_GAP = Cm(0.5)
+PPTX_BODY_TEXT_SIZE = Pt(18)
+PPTX_TITLE_TEXT_SIZE = Pt(32)
+PPTX_SUBTITLE_TEXT_SIZE = Pt(18)
+PPTX_HEADER_FILL = RGBColor(237, 242, 247)
+PPTX_CONTEXT_FILL = RGBColor(225, 242, 255)
+PPTX_APP_FILL = RGBColor(236, 249, 235)
+PPTX_COMPONENT_FILL = RGBColor(252, 243, 229)
+PPTX_SERVICE_FILL = RGBColor(231, 231, 255)
+PPTX_BORDER_COLOR = RGBColor(64, 64, 64)
 
 
 class HeadingParagraph(Paragraph):
@@ -285,6 +297,611 @@ def _scale_image_to_box(image_path: Path, max_width: float, max_height: float) -
     return original_width * scale, original_height * scale
 
 
+# ---------------------------------------------------------------------------
+# PowerPoint helpers (native shapes)
+# ---------------------------------------------------------------------------
+
+
+def _add_header(slide, *, title: str, subtitle: str, slide_width: float) -> float:
+    title_box = slide.shapes.add_textbox(
+        PPTX_MARGIN,
+        PPTX_MARGIN,
+        slide_width - 2 * PPTX_MARGIN,
+        PPTX_TITLE_HEIGHT,
+    )
+    title_box.name = "header_title"
+    title_tf = title_box.text_frame
+    title_tf.paragraphs[0].text = title
+    title_tf.paragraphs[0].font.size = PPTX_TITLE_TEXT_SIZE
+    title_tf.paragraphs[0].font.bold = True
+    title_tf.paragraphs[0].alignment = PP_ALIGN.CENTER
+
+    subtitle_box = slide.shapes.add_textbox(
+        PPTX_MARGIN,
+        PPTX_MARGIN + PPTX_TITLE_HEIGHT,
+        slide_width - 2 * PPTX_MARGIN,
+        PPTX_SUBTITLE_HEIGHT,
+    )
+    subtitle_box.name = "header_subtitle"
+    subtitle_tf = subtitle_box.text_frame
+    subtitle_tf.word_wrap = True
+    subtitle_tf.paragraphs[0].text = subtitle
+    subtitle_tf.paragraphs[0].font.size = PPTX_SUBTITLE_TEXT_SIZE
+    subtitle_tf.paragraphs[0].font.color.rgb = PPTX_BORDER_COLOR
+    subtitle_tf.paragraphs[0].alignment = PP_ALIGN.CENTER
+
+    return PPTX_MARGIN + PPTX_TITLE_HEIGHT + PPTX_SUBTITLE_HEIGHT + PPTX_CONTENT_GAP
+
+
+def _add_box(
+    slide,
+    *,
+    name: str,
+    text: str,
+    left: float,
+    top: float,
+    width: float,
+    height: float,
+    fill: RGBColor,
+    font_size: Pt = PPTX_BODY_TEXT_SIZE,
+    bold: bool = False,
+    shape_type=MSO_SHAPE.ROUNDED_RECTANGLE,
+    align: PP_ALIGN = PP_ALIGN.CENTER,
+):
+    shape = slide.shapes.add_shape(shape_type, left, top, width, height)
+    shape.name = name
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = fill
+    shape.line.color.rgb = PPTX_BORDER_COLOR
+    shape.text_frame.word_wrap = True
+    para = shape.text_frame.paragraphs[0]
+    para.text = text
+    para.font.size = font_size
+    para.font.bold = bold
+    para.alignment = align
+    return shape
+
+
+def _connect(shapes, start_shape, end_shape, *, name: str):
+    start_x = start_shape.left + start_shape.width / 2
+    start_y = start_shape.top + start_shape.height / 2
+    end_x = end_shape.left + end_shape.width / 2
+    end_y = end_shape.top + end_shape.height / 2
+    connector = shapes.add_connector(
+        MSO_CONNECTOR.STRAIGHT, start_x, start_y, end_x, end_y
+    )
+    connector.name = name
+    connector.line.width = Pt(2)
+    return connector
+
+
+def _add_note(slide, *, text: str, left: float, top: float, width: float, height: float):
+    note = _add_box(
+        slide,
+        name=f"note_{text[:10]}",
+        text=text,
+        left=left,
+        top=top,
+        width=width,
+        height=height,
+        fill=PPTX_HEADER_FILL,
+        font_size=Pt(16),
+        shape_type=MSO_SHAPE.RECTANGLE,
+        align=PP_ALIGN.LEFT,
+    )
+    note.line.color.rgb = PPTX_BORDER_COLOR
+    note.line.dash_style = MSO_LINE_DASH_STYLE.DASH_DOT
+    return note
+
+
+def _architecture_nodes(slide, *, content_top: float, slide_width: float) -> dict[str, object]:
+    """Create the architecture diagram with native shapes."""
+
+    col_width = (slide_width - 2 * PPTX_MARGIN) / 6
+    row1 = content_top
+    row2 = content_top + Cm(5.5)
+    row3 = content_top + Cm(12)
+    row4 = content_top + Cm(18)
+
+    def col_left(idx: int) -> float:
+        return PPTX_MARGIN + idx * col_width + Cm(0.4)
+
+    nodes: dict[str, object] = {}
+
+    # Contexto
+    nodes["gestion"] = _add_box(
+        slide,
+        name="context_gestion",
+        text="Gestión de Investigaciones",
+        left=col_left(0),
+        top=row1,
+        width=col_width - Cm(0.8),
+        height=Cm(3),
+        fill=PPTX_CONTEXT_FILL,
+        bold=True,
+    )
+    nodes["analista"] = _add_box(
+        slide,
+        name="context_analista",
+        text="Investigador",
+        left=col_left(1),
+        top=row1,
+        width=col_width - Cm(0.8),
+        height=Cm(3),
+        fill=PPTX_CONTEXT_FILL,
+    )
+    nodes["tkapp"] = _add_box(
+        slide,
+        name="context_tkapp",
+        text="Aplicación Python Tkinter GUI\nFormularioInvestigacionesFraude",
+        left=col_left(2),
+        top=row1,
+        width=col_width - Cm(0.8),
+        height=Cm(3.5),
+        fill=PPTX_CONTEXT_FILL,
+        bold=True,
+    )
+    nodes["databricks"] = _add_box(
+        slide,
+        name="context_databricks",
+        text="Catálogos empresariales futuro\nDatabricks Parquet/CSV",
+        left=col_left(3),
+        top=row1,
+        width=col_width - Cm(0.8),
+        height=Cm(3.5),
+        fill=PPTX_CONTEXT_FILL,
+    )
+    nodes["grc"] = _add_box(
+        slide,
+        name="context_grc",
+        text="Registro de riesgos GRC",
+        left=col_left(4),
+        top=row1,
+        width=col_width - Cm(0.8),
+        height=Cm(3),
+        fill=PPTX_CONTEXT_FILL,
+    )
+    nodes["normdb"] = _add_box(
+        slide,
+        name="context_normdb",
+        text="Índice maestro de normas",
+        left=col_left(5),
+        top=row1,
+        width=col_width - Cm(0.8),
+        height=Cm(3),
+        fill=PPTX_CONTEXT_FILL,
+    )
+
+    # Contenedores principales
+    nodes["main"] = _add_box(
+        slide,
+        name="container_main",
+        text="main.py\nArranque Tk/Ttk",
+        left=col_left(1),
+        top=row2,
+        width=col_width - Cm(0.8),
+        height=Cm(3),
+        fill=PPTX_APP_FILL,
+    )
+    nodes["appcore"] = _add_box(
+        slide,
+        name="container_appcore",
+        text="FormularioInvestigacionesFraude app.py\nControlador",
+        left=col_left(2),
+        top=row2,
+        width=col_width - Cm(0.8),
+        height=Cm(3.4),
+        fill=PPTX_APP_FILL,
+        bold=True,
+    )
+    nodes["ui"] = _add_box(
+        slide,
+        name="container_ui",
+        text="ui/frames/*\nPestañas de Caso, Clientes, Team Members, Productos, Riesgos, Normas",
+        left=col_left(3),
+        top=row2,
+        width=col_width - Cm(0.8),
+        height=Cm(4.2),
+        fill=PPTX_APP_FILL,
+    )
+
+    nodes["services"] = _add_box(
+        slide,
+        name="container_services",
+        text="models/*\nCatálogos y autopoblado",
+        left=col_left(0),
+        top=row2 + Cm(3.8),
+        width=col_width - Cm(0.8),
+        height=Cm(3.6),
+        fill=PPTX_SERVICE_FILL,
+    )
+    nodes["validators"] = _add_box(
+        slide,
+        name="container_validators",
+        text="validators.py\nReglas + logs",
+        left=col_left(1),
+        top=row2 + Cm(3.8),
+        width=col_width - Cm(0.8),
+        height=Cm(3.6),
+        fill=PPTX_SERVICE_FILL,
+    )
+    nodes["reporting"] = _add_box(
+        slide,
+        name="container_reporting",
+        text="report_builder.py\nGeneración JSON/CSV/MD/DOCX",
+        left=col_left(2),
+        top=row2 + Cm(3.8),
+        width=col_width - Cm(0.8),
+        height=Cm(3.8),
+        fill=PPTX_SERVICE_FILL,
+    )
+    nodes["files"] = _add_box(
+        slide,
+        name="container_files",
+        text="Sistema de archivos\nautosave.json, autosaves/<caso>/auto_N.json, exports/",
+        left=col_left(3),
+        top=row2 + Cm(3.8),
+        width=col_width - Cm(0.8),
+        height=Cm(3.8),
+        fill=PPTX_SERVICE_FILL,
+    )
+    nodes["external"] = _add_box(
+        slide,
+        name="container_external",
+        text="Unidad externa\nbackups y logs",
+        left=col_left(4),
+        top=row2 + Cm(3.8),
+        width=col_width - Cm(0.8),
+        height=Cm(3.6),
+        fill=PPTX_SERVICE_FILL,
+    )
+
+    # Componentes de aplicación
+    tab_width = col_width - Cm(1.2)
+    nodes["caseTab"] = _add_box(
+        slide,
+        name="component_case",
+        text="Pestaña Caso",
+        left=col_left(0),
+        top=row3,
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["clientTab"] = _add_box(
+        slide,
+        name="component_client",
+        text="Pestaña Clientes",
+        left=col_left(1),
+        top=row3,
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["teamTab"] = _add_box(
+        slide,
+        name="component_team",
+        text="Pestaña Team Members",
+        left=col_left(2),
+        top=row3,
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["productTab"] = _add_box(
+        slide,
+        name="component_product",
+        text="Pestaña Productos",
+        left=col_left(3),
+        top=row3,
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["riskTab"] = _add_box(
+        slide,
+        name="component_risk",
+        text="Pestaña Riesgos",
+        left=col_left(4),
+        top=row3,
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+
+    nodes["normTab"] = _add_box(
+        slide,
+        name="component_norm",
+        text="Pestaña Normas",
+        left=col_left(0),
+        top=row3 + Cm(3.2),
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["actions"] = _add_box(
+        slide,
+        name="component_actions",
+        text="Tab Acciones",
+        left=col_left(1),
+        top=row3 + Cm(3.2),
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["summary"] = _add_box(
+        slide,
+        name="component_summary",
+        text="Tab Resumen",
+        left=col_left(2),
+        top=row3 + Cm(3.2),
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["importer"] = _add_box(
+        slide,
+        name="component_importer",
+        text="Importadores CSV",
+        left=col_left(3),
+        top=row3 + Cm(3.2),
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["autofill"] = _add_box(
+        slide,
+        name="component_autofill",
+        text="Servicio de Catálogos\nAutopoblado",
+        left=col_left(4),
+        top=row3 + Cm(3.2),
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["autosave"] = _add_box(
+        slide,
+        name="component_autosave",
+        text="Auto guardado temporal",
+        left=col_left(1),
+        top=row4,
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["logging"] = _add_box(
+        slide,
+        name="component_logging",
+        text="Bitácora logs.csv",
+        left=col_left(2),
+        top=row4,
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+    nodes["reporter"] = _add_box(
+        slide,
+        name="component_reporter",
+        text="report_builder",
+        left=col_left(3),
+        top=row4,
+        width=tab_width,
+        height=Cm(2.8),
+        fill=PPTX_COMPONENT_FILL,
+    )
+
+    # Relacionar
+    _connect(slide.shapes, nodes["gestion"], nodes["analista"], name="gestion_to_analista")
+    _connect(slide.shapes, nodes["analista"], nodes["tkapp"], name="analista_to_tkapp")
+    _connect(slide.shapes, nodes["databricks"], nodes["tkapp"], name="databricks_to_tkapp")
+    _connect(slide.shapes, nodes["grc"], nodes["tkapp"], name="grc_to_tkapp")
+    _connect(slide.shapes, nodes["normdb"], nodes["tkapp"], name="normdb_to_tkapp")
+
+    _connect(slide.shapes, nodes["tkapp"], nodes["main"], name="tkapp_to_main")
+    _connect(slide.shapes, nodes["main"], nodes["appcore"], name="main_to_appcore")
+    _connect(slide.shapes, nodes["appcore"], nodes["ui"], name="appcore_to_ui")
+    _connect(slide.shapes, nodes["appcore"], nodes["services"], name="appcore_to_services")
+    _connect(slide.shapes, nodes["appcore"], nodes["validators"], name="appcore_to_validators")
+    _connect(slide.shapes, nodes["appcore"], nodes["reporting"], name="appcore_to_reporting")
+    _connect(slide.shapes, nodes["reporting"], nodes["files"], name="reporting_to_files")
+    _connect(slide.shapes, nodes["files"], nodes["external"], name="files_to_external")
+
+    # Pestañas
+    for tab in [
+        "caseTab",
+        "clientTab",
+        "teamTab",
+        "productTab",
+        "riskTab",
+        "normTab",
+        "actions",
+        "summary",
+    ]:
+        _connect(slide.shapes, nodes["appcore"], nodes[tab], name=f"appcore_to_{tab}")
+        _connect(slide.shapes, nodes["importer"], nodes[tab], name=f"importer_to_{tab}")
+        _connect(slide.shapes, nodes[tab], nodes["autofill"], name=f"{tab}_to_autofill")
+
+    _connect(slide.shapes, nodes["appcore"], nodes["autosave"], name="appcore_to_autosave")
+    _connect(slide.shapes, nodes["appcore"], nodes["logging"], name="appcore_to_logging")
+    _connect(slide.shapes, nodes["appcore"], nodes["reporter"], name="appcore_to_reporter")
+    _connect(slide.shapes, nodes["reporter"], nodes["files"], name="reporter_to_files")
+
+    return nodes
+
+
+def _sequence_diagram(slide, *, content_top: float, slide_width: float) -> None:
+    lifeline_height = PPTX_SLIDE_HEIGHT - content_top - PPTX_MARGIN - Cm(1)
+    lifelines: dict[str, object] = {}
+
+    participants = [
+        ("gestion", "Gestión"),
+        ("investigador", "Investigador"),
+        ("ui", "UI Python Tkinter GUI\n(FormularioInvestigacionesFraude)"),
+        ("valid", "Validaciones (validators.py)"),
+        ("catalogos", "Servicio de Catálogos/Autopoblado"),
+        ("importador", "Importador CSV"),
+        ("autosave", "Autoguardado"),
+        ("logs", "logger/logs.csv"),
+        ("reporte", "Reportes (report_builder)"),
+    ]
+
+    interior_width = slide_width - 2 * PPTX_MARGIN
+    spacing = interior_width / (len(participants) - 1)
+    head_width = Cm(5)
+
+    def lane_center(idx: float) -> float:
+        return PPTX_MARGIN + spacing * idx
+
+    for idx, (name, label) in enumerate(participants):
+        left = PPTX_MARGIN + spacing * idx - head_width / 2
+        head = _add_box(
+            slide,
+            name=f"lifeline_{name}",
+            text=label,
+            left=left,
+            top=content_top,
+            width=head_width,
+            height=Cm(2.6),
+            fill=PPTX_CONTEXT_FILL,
+            bold=True,
+            shape_type=MSO_SHAPE.RECTANGLE,
+        )
+        center_x = head.left + head.width / 2
+        line = slide.shapes.add_connector(
+            MSO_CONNECTOR.STRAIGHT,
+            center_x,
+            head.top + head.height,
+            center_x,
+            content_top + lifeline_height,
+        )
+        line.name = f"lifeline_line_{name}"
+        line.line.dash_style = MSO_LINE_DASH_STYLE.DASH
+        line.line.width = Pt(1.5)
+        lifelines[name] = head
+
+    base_y = Cm(1)
+    step_height = Cm(0.7)
+
+    def message(step: int, source: str, target: str, text: str) -> None:
+        start = lifelines[source]
+        end = lifelines[target]
+        start_x = start.left + start.width / 2
+        end_x = end.left + end.width / 2
+        y = content_top + base_y + step_height * (step - 1)
+        connector = slide.shapes.add_connector(
+            MSO_CONNECTOR.STRAIGHT, start_x, y, end_x, y
+        )
+        connector.name = f"msg_{step}_{source}_to_{target}"
+        connector.line.width = Pt(2)
+        text_box = slide.shapes.add_textbox(
+            min(start_x, end_x),
+            y - Cm(0.7),
+            abs(end_x - start_x) + Cm(1.2),
+            Cm(1.5),
+        )
+        text_box.name = f"label_{step}"
+        para = text_box.text_frame.paragraphs[0]
+        para.text = f"{step}. {text}"
+        para.font.size = Pt(16)
+        para.alignment = PP_ALIGN.LEFT
+
+    # Mensajes
+    message(1, "gestion", "investigador", "Asigna caso y solicita informe")
+    message(2, "investigador", "ui", "Abre aplicación y selecciona pestañas")
+    _add_note(
+        slide,
+        text="Entrada manual de datos",
+        left=lane_center(2) - spacing * 1.5,
+        top=content_top + base_y + step_height * 4,
+        width=spacing * 3,
+        height=Cm(1.4),
+    )
+    message(3, "investigador", "ui", "Escribe campos (Entry/Combobox/Text)")
+    message(4, "ui", "valid", "FieldValidator valida formato/montos/fechas")
+    message(5, "valid", "ui", "Errores inline o messagebox")
+    message(6, "ui", "logs", "log_event(tipo=\"validacion/navegacion\")")
+    message(7, "ui", "autosave", "request_autosave() (debounce 4s)")
+    message(8, "autosave", "ui", "save_auto() + temp_version")
+
+    _add_note(
+        slide,
+        text="Carga masiva",
+        left=lane_center(2.5) - spacing * 1.1,
+        top=content_top + base_y + step_height * 12,
+        width=spacing * 2.2,
+        height=Cm(1.4),
+    )
+    message(9, "investigador", "ui", "Acciones > Importar CSV")
+    message(10, "ui", "importador", "_start_background_import(worker)")
+    message(11, "importador", "ui", "payload de filas normalizadas")
+    message(
+        12,
+        "ui",
+        "ui",
+        "_apply_*_import_payload pobla pestañas (Caso/Cliente/Equipo/Producto/Riesgo/Norma/Resumen)",
+    )
+    message(
+        13,
+        "ui",
+        "valid",
+        "Validación por fila y duplicados (cliente/colaborador/riesgo/producto/norma)",
+    )
+    message(14, "ui", "logs", "log_event(subtipo=\"import\")")
+    message(15, "ui", "autosave", "_notify_dataset_changed()")
+
+    _add_note(
+        slide,
+        text="Autocompletado/Autopoblado",
+        left=lane_center(3.5) - spacing * 1.15,
+        top=content_top + base_y + step_height * 20,
+        width=spacing * 2.3,
+        height=Cm(1.4),
+    )
+    message(
+        16,
+        "investigador",
+        "ui",
+        "Ingresa IDs (cliente/colaborador/producto/caso/riesgo/norma)",
+    )
+    message(17, "ui", "catalogos", "lookup en catálogos locales y snapshots")
+    message(18, "catalogos", "ui", "Datos encontrados + metadatos")
+    message(19, "ui", "valid", "should_autofill_field respeta campos editados")
+    message(20, "ui", "ui", "Actualiza combobox/entries/tablas")
+    message(
+        21,
+        "valid",
+        "catalogos",
+        "Validación de integridad referencial (IDs existen en catálogos/snapshots)",
+    )
+    message(22, "ui", "logs", "log_event(subtipo=\"autofill\")")
+
+    _add_note(
+        slide,
+        text="Autosave y logging continuos",
+        left=lane_center(1.5) - spacing * 1.5,
+        top=content_top + base_y + step_height * 24,
+        width=spacing * 3,
+        height=Cm(1.4),
+    )
+    message(23, "ui", "autosave", "autosave_cycle() -> autosaves/<caso>/auto_N.json")
+    message(24, "ui", "logs", "Encola evento y flush a logs.csv + external drive")
+
+    _add_note(
+        slide,
+        text="Guardado final",
+        left=lane_center(2.7) - spacing * 1.25,
+        top=content_top + base_y + step_height * 27,
+        width=spacing * 2.5,
+        height=Cm(1.4),
+    )
+    message(25, "investigador", "ui", "Acciones > Guardar y enviar")
+    message(26, "ui", "valid", "Validación global de todas las pestañas")
+    message(27, "ui", "reporte", "build_report + build_docx + build_editable_deck")
+    message(28, "reporte", "investigador", "Exporta JSON/CSV/Markdown/DOCX/PDF/PPTX")
+    message(29, "ui", "autosave", "save_temp_version() + backup en external drive")
+    message(30, "ui", "logs", "log_event(\"export\")")
+
+
 def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     styles = _build_stylesheet()
 
@@ -492,71 +1109,37 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
     return output
 
 
-def _add_diagram_slide(
-    presentation: Presentation,
-    *,
-    title: str,
-    subtitle: str,
-    image_path: Path,
-) -> None:
-    slide = presentation.slides.add_slide(presentation.slide_layouts[6])  # blank
-
-    title_box = slide.shapes.add_textbox(
-        PPTX_MARGIN,
-        PPTX_MARGIN,
-        presentation.slide_width - 2 * PPTX_MARGIN,
-        PPTX_TITLE_HEIGHT,
-    )
-    title_tf = title_box.text_frame
-    title_run = title_tf.paragraphs[0].add_run()
-    title_run.text = title
-    title_run.font.size = Pt(32)
-    title_run.font.bold = True
-
-    subtitle_box = slide.shapes.add_textbox(
-        PPTX_MARGIN,
-        PPTX_MARGIN + PPTX_TITLE_HEIGHT,
-        presentation.slide_width - 2 * PPTX_MARGIN,
-        PPTX_SUBTITLE_HEIGHT,
-    )
-    subtitle_tf = subtitle_box.text_frame
-    subtitle_tf.word_wrap = True
-    subtitle_tf.paragraphs[0].text = subtitle
-    subtitle_tf.paragraphs[0].font.size = Pt(18)
-    subtitle_tf.paragraphs[0].font.color.rgb = RGBColor(64, 64, 64)
-
-    content_top = PPTX_MARGIN + PPTX_TITLE_HEIGHT + PPTX_SUBTITLE_HEIGHT + PPTX_CONTENT_GAP
-    max_width = presentation.slide_width - 2 * PPTX_MARGIN
-    max_height = presentation.slide_height - content_top - PPTX_MARGIN
-
-    scaled_width, scaled_height = _scale_image_to_box(image_path, max_width, max_height)
-    left = PPTX_MARGIN + (max_width - scaled_width) / 2
-    top = content_top + (max_height - scaled_height) / 2
-
-    slide.shapes.add_picture(str(image_path), left, top, width=scaled_width, height=scaled_height)
-
-
 def build_editable_deck(output: Path = DEFAULT_PPTX) -> Path:
     """Generate a PowerPoint deck with editable architecture/sequence diagrams."""
-
-    render_mermaid(ARCH_MMD, ARCH_PNG)
-    render_mermaid(SEQ_MMD, SEQ_PNG)
-
     presentation = Presentation()
     presentation.slide_width = PPTX_SLIDE_WIDTH
     presentation.slide_height = PPTX_SLIDE_HEIGHT
 
-    _add_diagram_slide(
-        presentation,
+    arch_slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    arch_content_top = _add_header(
+        arch_slide,
         title="Arquitectura – editable",
-        subtitle="Versión exportada de architecture.mmd (Mermaid). Ajusta tamaño o mueve elementos según necesidad.",
-        image_path=ARCH_PNG,
+        subtitle=(
+            "Diagrama construido con formas nativas para mover cajas, alinear conectores "
+            "y ajustar estilo durante la revisión."
+        ),
+        slide_width=presentation.slide_width,
     )
-    _add_diagram_slide(
-        presentation,
+    _architecture_nodes(
+        arch_slide, content_top=arch_content_top, slide_width=presentation.slide_width
+    )
+
+    seq_slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    seq_content_top = _add_header(
+        seq_slide,
         title="Secuencia – editable",
-        subtitle="Derivada de sequence_diagram.mmd (Mermaid). Diseñada para pantallas grandes y revisión conjunta.",
-        image_path=SEQ_PNG,
+        subtitle=(
+            "Flujo de investigación, importación y exporte generado con conectores nativos para edición inmediata."
+        ),
+        slide_width=presentation.slide_width,
+    )
+    _sequence_diagram(
+        seq_slide, content_top=seq_content_top, slide_width=presentation.slide_width
     )
 
     presentation.save(output)

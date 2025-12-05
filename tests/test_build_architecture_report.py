@@ -125,18 +125,7 @@ def test_build_report_expands_diagram_pages(monkeypatch, tmp_path):
     assert image_calls[1][1] == pytest.approx(expected_seq_width)
 
 
-def test_build_editable_deck_scales_each_diagram(monkeypatch, tmp_path):
-    rendered: dict[str, Path] = {}
-
-    def fake_render(source: Path, target: Path) -> Path:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        size = (1600, 800) if "architecture" in target.stem else (800, 1600)
-        _make_png(target, size)
-        rendered[source.name] = target
-        return target
-
-    monkeypatch.setattr(arch_report, "render_mermaid", fake_render)
-
+def test_build_editable_deck_uses_native_shapes(tmp_path):
     output = tmp_path / "diagrams.pptx"
     deck_path = arch_report.build_editable_deck(output)
 
@@ -145,37 +134,38 @@ def test_build_editable_deck_scales_each_diagram(monkeypatch, tmp_path):
     assert presentation.slide_height == arch_report.PPTX_SLIDE_HEIGHT
 
     assert len(presentation.slides) == 2
-    arch_picture = [
-        shape
-        for shape in presentation.slides[0].shapes
-        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE
-    ][0]
-    seq_picture = [
-        shape
-        for shape in presentation.slides[1].shapes
-        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE
-    ][0]
+    arch_slide = presentation.slides[0]
+    seq_slide = presentation.slides[1]
 
-    max_width = arch_report.PPTX_SLIDE_WIDTH - 2 * arch_report.PPTX_MARGIN
-    content_top = (
-        arch_report.PPTX_MARGIN
-        + arch_report.PPTX_TITLE_HEIGHT
-        + arch_report.PPTX_SUBTITLE_HEIGHT
-        + arch_report.PPTX_CONTENT_GAP
-    )
-    max_height = arch_report.PPTX_SLIDE_HEIGHT - content_top - arch_report.PPTX_MARGIN
+    assert all(
+        shape.shape_type != MSO_SHAPE_TYPE.PICTURE for shape in arch_slide.shapes
+    ), "Architecture slide must use native shapes"
 
-    expected_arch = arch_report._scale_image_to_box(
-        rendered[arch_report.ARCH_MMD.name], max_width, max_height
-    )
-    expected_seq = arch_report._scale_image_to_box(
-        rendered[arch_report.SEQ_MMD.name], max_width, max_height
-    )
+    connector_names = {
+        shape.name for shape in arch_slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.LINE
+    }
+    expected_import_links = {
+        "importer_to_caseTab",
+        "importer_to_clientTab",
+        "importer_to_teamTab",
+        "importer_to_productTab",
+        "importer_to_riskTab",
+        "importer_to_normTab",
+        "importer_to_summary",
+    }
+    assert expected_import_links.issubset(connector_names)
 
-    assert arch_picture.width == pytest.approx(expected_arch[0])
-    assert arch_picture.height == pytest.approx(expected_arch[1])
-    assert seq_picture.width == pytest.approx(expected_seq[0])
-    assert seq_picture.height == pytest.approx(expected_seq[1])
+    text_content = " ".join(
+        shape.text for shape in arch_slide.shapes if hasattr(shape, "text")
+    )
+    assert "Servicio de Catálogos" in text_content
+    assert "Pestaña Team Members" in text_content
+
+    seq_text = " ".join(
+        shape.text for shape in seq_slide.shapes if hasattr(shape, "text")
+    )
+    assert "Validación de integridad referencial" in seq_text
+    assert "Autocompletado/Autopoblado" in seq_text
 
 
 def test_main_generates_pptx_by_default(monkeypatch, tmp_path):
@@ -285,5 +275,6 @@ def test_sequence_diagram_is_spanish_and_covers_data_sources():
     assert "Note over UI,Catalogos: Autocompletado/Autopoblado" in content
     assert "Validación de integridad referencial (IDs existen en catálogos/snapshots)" in content
     assert "Autofill" not in content
+    assert "FraudCaseApp" not in content
     assert "CatalogService" not in content
     assert "\\n" not in content
