@@ -306,7 +306,7 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
         topMargin=page_margins["top"],
         bottomMargin=page_margins["bottom"],
         title="Formulario de investigación – Arquitectura",
-        author="AI Architecture Assistant",
+        author="Documento de referencia de prototipo",
     )
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
 
@@ -348,7 +348,7 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
         Paragraph("Formulario de Investigación", styles["CoverTitle"]),
         Paragraph("Arquitectura y flujos de datos", styles["CoverSubtitle"]),
         Paragraph(f"Versión 1.0 — {today}", styles["Meta"]),
-        Paragraph("Autor: AI Architecture Assistant", styles["Meta"]),
+        Paragraph("Autor: Documentación referencia de prototipo", styles["Meta"]),
         Spacer(1, 1.2 * inch),
         Paragraph(
             "Documento generado automáticamente. Ejecuta build_architecture_report.py para actualizarlo.",
