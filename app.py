@@ -85,8 +85,15 @@ from inheritance_service import InheritanceService
 from models import (AutofillService, build_detail_catalog_id_index,
                     CatalogService, iter_massive_csv_rows,
                     normalize_detail_catalog_key, parse_involvement_entries)
-from report_builder import (build_docx, build_report_filename, CaseData,
-                            DOCX_AVAILABLE, DOCX_MISSING_MESSAGE, save_md)
+from report_builder import (
+    CaseData,
+    DOCX_AVAILABLE,
+    DOCX_MISSING_MESSAGE,
+    build_docx,
+    build_llave_tecnica_rows,
+    build_report_filename,
+    save_md,
+)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       ENABLE_EXTENDED_ANALYSIS_SECTIONS,
@@ -199,6 +206,13 @@ def _derive_validation_payload(field_name: str, message: Optional[str], widget):
             message = f"Debe seleccionar {field_name}."
             severity = "error"
     return message, severity, target_widget
+
+
+def _sanitize_csv_value(value):
+    sanitized = sanitize_rich_text("" if value is None else value, max_chars=None)
+    if sanitized.startswith(("=", "+", "-", "@")):
+        return f"'{sanitized}"
+    return sanitized
 
 
 class ValidationPanel(ttk.Frame):
@@ -11911,12 +11925,7 @@ class FraudCaseApp:
         report_prefix = self._build_report_prefix(data)
         # Guardar CSVs
         created_files = []
-
-        def _sanitize_csv_value(value):
-            sanitized = sanitize_rich_text("" if value is None else value, max_chars=None)
-            if sanitized.startswith(("=", "+", "-", "@")):
-                return f"'{sanitized}"
-            return sanitized
+        llave_rows, llave_header = build_llave_tecnica_rows(data)
 
         def write_csv(file_name, rows, header):
             path = folder / f"{report_prefix}_{file_name}"
@@ -11949,6 +11958,8 @@ class FraudCaseApp:
                 'investigador_cargo',
             ],
         )
+        # LLAVE TÉCNICA
+        write_csv('llave_tecnica.csv', llave_rows, llave_header)
         # CLIENTES
         write_csv(
             'clientes.csv',
