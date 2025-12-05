@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from theme_manager import ThemeManager
 
@@ -24,6 +24,8 @@ class CollapsibleSection(ttk.Frame):
         title: str,
         *,
         open: bool = True,
+        identifier: str | None = None,
+        logs: list[dict[str, Any]] | None = None,
         on_toggle: Optional[Callable[["CollapsibleSection"], None]] = None,
         **kwargs,
     ) -> None:
@@ -32,6 +34,8 @@ class CollapsibleSection(ttk.Frame):
         self._is_open = open
         self._hovering = False
         self._on_toggle = on_toggle
+        self.identifier = identifier
+        self.logs = logs
 
         self.header = ttk.Frame(self, style="AccordionHeader.TFrame")
         self.header.pack(fill="x")
@@ -72,7 +76,7 @@ class CollapsibleSection(ttk.Frame):
 
         self.title_label.configure(text=title)
 
-    def toggle(self, _event: tk.Event | None = None) -> None:
+    def toggle(self, event: tk.Event | None = None) -> None:
         """Toggle the visibility of the content frame."""
 
         if self._is_open:
@@ -82,6 +86,7 @@ class CollapsibleSection(ttk.Frame):
         self.indicator.configure(text=self._indicator_symbol)
         if callable(self._on_toggle):
             self._on_toggle(self)
+        self._log_toggle(event)
 
     def pack_content(self, widget: tk.Widget, **pack_kwargs) -> tk.Widget:
         """Pack ``widget`` into the content frame with sensible defaults.
@@ -136,6 +141,32 @@ class CollapsibleSection(ttk.Frame):
 
     def _on_release(self, _event: tk.Event | None = None) -> None:
         self._set_header_style("hover" if self._hovering else "normal")
+
+    def _log_toggle(self, event: tk.Event | None = None) -> None:
+        try:
+            from validators import log_event
+        except Exception:
+            return
+
+        logs = getattr(self, "logs", None)
+        if logs is None:
+            return
+        widget_id = getattr(self, "identifier", None) or getattr(self, "section_id", None)
+        coords = None
+        if event is not None and hasattr(event, "x") and hasattr(event, "y"):
+            coords = (event.x, event.y)
+        message = f"Sección {widget_id or 'desconocida'} {'expandida' if self._is_open else 'colapsada'}"
+        try:
+            log_event(
+                "ui_toggle",
+                message,
+                logs,
+                widget_id=widget_id,
+                coords=coords,
+                event_subtipo="click",
+            )
+        except Exception:
+            return
 
 
 def register_styles() -> None:

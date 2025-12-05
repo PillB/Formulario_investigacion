@@ -60,6 +60,8 @@ class InvolvementRow:
         self.team_var = tk.StringVar()
         self.monto_var = tk.StringVar()
 
+        self.section_id = generate_section_id("involucramiento")
+
         self.section = self._create_section(parent)
         self._sync_section_title()
         self.section.grid(
@@ -149,6 +151,8 @@ class InvolvementRow:
         return create_collapsible_card(
             parent,
             title="",
+            identifier=self.section_id,
+            logs=self.logs,
             on_toggle=lambda _section: self._sync_section_title(),
             log_error=lambda exc: log_event(
                 "validacion",
@@ -276,6 +280,8 @@ class InvolvementRow:
         return create_collapsible_card(
             parent,
             title="",
+            identifier=self.section_id,
+            logs=self.logs,
             on_toggle=lambda _section: self._sync_section_title(),
             log_error=lambda exc: log_event(
                 "validacion",
@@ -386,6 +392,8 @@ class ClaimRow:
         self.name_var = tk.StringVar()
         self.code_var = tk.StringVar()
         self.badge_manager = None
+
+        self.section_id = generate_section_id("reclamo")
 
         self.section = self._create_section(parent)
         self._sync_section_title()
@@ -662,6 +670,8 @@ class ClaimRow:
         return create_collapsible_card(
             parent,
             title="",
+            identifier=self.section_id,
+            logs=self.logs,
             on_toggle=lambda _section: self._sync_section_title(),
             log_error=lambda exc: log_event(
                 "validacion",
@@ -1526,6 +1536,8 @@ class ProductFrame(SectionToggleMixin):
         return create_collapsible_card(
             parent,
             title="",
+            identifier=self.section_id,
+            logs=self.logs,
             on_toggle=self._handle_section_toggle,
             log_error=lambda exc: log_event(
                 "validacion",
