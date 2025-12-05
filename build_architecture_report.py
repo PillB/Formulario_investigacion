@@ -56,6 +56,13 @@ PPTX_TITLE_HEIGHT = Cm(2.2)
 PPTX_SUBTITLE_HEIGHT = Cm(1.1)
 PPTX_CONTENT_GAP = Cm(0.5)
 
+PPTX_SLIDE_WIDTH = Cm(42)  # A3 landscape width
+PPTX_SLIDE_HEIGHT = Cm(29.7)  # A3 landscape height
+PPTX_MARGIN = Cm(1.2)
+PPTX_TITLE_HEIGHT = Cm(2.2)
+PPTX_SUBTITLE_HEIGHT = Cm(1.1)
+PPTX_CONTENT_GAP = Cm(0.5)
+
 
 class HeadingParagraph(Paragraph):
     """Paragraph that stores the heading level to feed the TOC."""
@@ -306,7 +313,7 @@ def build_report(output: Path = DEFAULT_OUTPUT) -> Path:
         topMargin=page_margins["top"],
         bottomMargin=page_margins["bottom"],
         title="Formulario de investigación – Arquitectura",
-        author="AI Architecture Assistant",
+        author="Documento de referencia de prototipo",
     )
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
 
