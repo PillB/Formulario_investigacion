@@ -1,0 +1,17 @@
+flowchart TB
+    tab["Pestaña: Riesgos"]
+    header["Tabla encabezado: columnas ID, Criticidad, Exposición, Líder, Descripción"]
+    add_btn["Botón 'Agregar riesgo'"]
+    tab --> header
+    tab --> add_btn
+
+    subgraph risk_card["Acordeón Riesgo N"]
+        id_riesgo["ID riesgo [Entry]"]
+        criticidad["Criticidad [Combobox]"]
+        lider["Líder [Entry]"]
+        exposicion["Exposición residual (US$) [Entry]"]
+        descripcion["Descripción del riesgo [Entry]"]
+        planes["Planes de acción (IDs separados por ;) [Entry]"]
+        remove_btn["Botón 'Eliminar riesgo'"]
+    end
+    tab --> risk_card
