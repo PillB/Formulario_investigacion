@@ -5,11 +5,15 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from validators import (FieldValidator, log_event, should_autofill_field,
-                        validate_date_text, validate_norm_id,
-                        validate_required_text)
+from validators import (
+    FieldValidator,
+    log_event,
+    should_autofill_field,
+    validate_date_text,
+    validate_norm_id,
+    validate_required_text,
+)
 from ui.frames.utils import (
-    BadgeManager,
     create_date_entry,
     create_collapsible_card,
     ensure_grid_support,
@@ -17,6 +21,7 @@ from ui.frames.utils import (
 )
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
+from validation_badge import ValidationBadgeGroup
 
 
 class NormFrame:
@@ -73,7 +78,7 @@ class NormFrame:
         self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
-        self.badges = BadgeManager(parent=self.frame)
+        self.badges = ValidationBadgeGroup(parent=self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(1, weight=1)
             self.frame.columnconfigure(3, weight=1)

@@ -8,13 +8,13 @@ from tkinter import ttk
 from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
 from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import (
-    BadgeManager,
     build_required_label,
     create_date_entry,
     ensure_grid_support,
     grid_and_configure,
 )
 from ui.layout import responsive_grid
+from validation_badge import ValidationBadgeGroup
 from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
 
@@ -46,7 +46,7 @@ class CaseFrame:
         self._right_column = ttk.Frame(self._paned)
         ensure_grid_support(self._left_column)
         ensure_grid_support(self._right_column)
-        self.badges = BadgeManager(parent=self.frame)
+        self.badges = ValidationBadgeGroup(parent=self.frame)
         self._paned.add(self._left_column, weight=1)
         self._paned.add(self._right_column, weight=1)
         owner._case_inputs = {}

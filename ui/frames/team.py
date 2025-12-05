@@ -13,8 +13,6 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         validate_agency_code, validate_date_text, validate_required_text,
                         validate_team_member_id)
 from ui.frames.utils import (
-    BadgeManager,
-    ToggleWarningBadge,
     build_grid_container,
     create_collapsible_card,
     create_date_entry,
@@ -24,6 +22,7 @@ from ui.frames.utils import (
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
+from validation_badge import ValidationBadge, ValidationBadgeGroup
 
 
 class TeamMemberFrame:
@@ -114,7 +113,7 @@ class TeamMemberFrame:
         self.frame = ttk.LabelFrame(self.section.content, text="")
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
-        self.badges = BadgeManager(parent=self.frame)
+        self.badges = ValidationBadgeGroup(parent=self.frame)
         if hasattr(self.frame, "columnconfigure"):
             self.frame.columnconfigure(0, weight=0)
             self.frame.columnconfigure(1, weight=1)
@@ -189,11 +188,11 @@ class TeamMemberFrame:
         self.tooltip_register(flag_cb, "Define el rol del colaborador en el caso.")
         flag_cb.bind("<FocusOut>", lambda e: self._log_change(f"Colaborador {self.idx+1}: modificó flag"))
 
-        self._fallback_label = ToggleWarningBadge(
+        self._fallback_label = ValidationBadge(
             self.frame,
             textvariable=self._fallback_message_var,
-            tk_module=tk,
-            ttk_module=ttk,
+            default_state="warning",
+            wraplength=520,
         )
 
         ttk.Label(self.frame, text="División:").grid(

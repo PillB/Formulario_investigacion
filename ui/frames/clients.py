@@ -6,12 +6,17 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from settings import ACCIONADO_OPTIONS, FLAG_CLIENTE_LIST, TIPO_ID_LIST
-from validators import (FieldValidator, log_event, should_autofill_field,
-                        validate_client_id, validate_email_list,
-                        validate_multi_selection, validate_phone_list,
-                        validate_required_text)
+from validators import (
+    FieldValidator,
+    log_event,
+    should_autofill_field,
+    validate_client_id,
+    validate_email_list,
+    validate_multi_selection,
+    validate_phone_list,
+    validate_required_text,
+)
 from ui.frames.utils import (
-    BadgeManager,
     build_required_label,
     build_grid_container,
     create_collapsible_card,
@@ -21,6 +26,7 @@ from ui.frames.utils import (
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 from theme_manager import ThemeManager
+from validation_badge import ValidationBadgeGroup
 
 
 ENTRY_STYLE = ThemeManager.ENTRY_STYLE
@@ -63,7 +69,7 @@ class ClientFrame:
         self._last_tracked_id = ''
         self._tree_sort_state: dict[str, bool] = {}
         self.summary_tree = None
-        self.badges = BadgeManager(parent=parent)
+        self.badges = ValidationBadgeGroup(parent=parent)
 
         self.tipo_id_var = tk.StringVar()
         self.id_var = tk.StringVar()

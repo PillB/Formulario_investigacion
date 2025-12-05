@@ -12,11 +12,6 @@ from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import (
-    ALERT_BADGE_ICON,
-    SUCCESS_BADGE_ICON,
-    PENDING_BADGE_ICON,
-    BadgeManager,
-    ToggleWarningBadge,
     build_grid_container,
     create_collapsible_card,
     create_date_entry,
@@ -25,6 +20,13 @@ from ui.frames.utils import (
     refresh_dynamic_rows,
 )
 from ui.layout import CollapsibleSection
+from validation_badge import (
+    NEUTRAL_ICON,
+    SUCCESS_ICON,
+    WARNING_ICON,
+    ValidationBadge,
+    ValidationBadgeGroup,
+)
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
                         validate_codigo_analitica, validate_date_text,
@@ -150,13 +152,13 @@ class InvolvementRow:
             collapsible_cls=CollapsibleSection,
         )
 
-    def _get_badge_manager(self, parent=None) -> BadgeManager:
+    def _get_badge_manager(self, parent=None) -> ValidationBadgeGroup:
         manager = getattr(self.product_frame, "badges", None)
         if manager is None:
-            manager = BadgeManager(
+            manager = ValidationBadgeGroup(
                 parent=parent or getattr(self.product_frame, "frame", None) or self.parent,
-                pending_text=PENDING_BADGE_ICON,
-                success_text=SUCCESS_BADGE_ICON,
+                pending_text=NEUTRAL_ICON,
+                success_text=SUCCESS_ICON,
             )
             self.product_frame.badges = manager
         return manager
@@ -289,8 +291,8 @@ class InvolvementRow:
             container,
             row=0,
             column=1,
-            pending_text=ALERT_BADGE_ICON,
-            success_text=SUCCESS_BADGE_ICON,
+            pending_text=WARNING_ICON,
+            success_text=SUCCESS_ICON,
         )
         return container, widget
 
@@ -656,13 +658,13 @@ class ClaimRow:
             collapsible_cls=CollapsibleSection,
         )
 
-    def _get_badge_manager(self, parent=None) -> BadgeManager:
+    def _get_badge_manager(self, parent=None) -> ValidationBadgeGroup:
         manager = getattr(self.product_frame, "badges", None)
         if manager is None:
-            manager = BadgeManager(
+            manager = ValidationBadgeGroup(
                 parent=parent or getattr(self.product_frame, "frame", None) or self.parent,
-                pending_text=ALERT_BADGE_ICON,
-                success_text=SUCCESS_BADGE_ICON,
+                pending_text=WARNING_ICON,
+                success_text=SUCCESS_ICON,
             )
             self.product_frame.badges = manager
         return manager
@@ -679,8 +681,8 @@ class ClaimRow:
             container,
             row=0,
             column=1,
-            pending_text=ALERT_BADGE_ICON,
-            success_text=SUCCESS_BADGE_ICON,
+            pending_text=WARNING_ICON,
+            success_text=SUCCESS_ICON,
         )
         return container, widget
 
@@ -820,7 +822,7 @@ class ProductFrame:
         self._last_missing_lookup_id = None
         self._claim_requirement_active = False
         self._claim_nudge_shown = False
-        self.badges: BadgeManager | None = None
+        self.badges: ValidationBadgeGroup | None = None
         self._field_errors: dict[str, str | None] = {}
         self._last_date_errors: dict[str, str | None] = {"fecha_oc": None, "fecha_desc": None}
         self._last_pair_error: str | None = None
@@ -881,8 +883,8 @@ class ProductFrame:
         self.frame = ttk.Frame(self.section.content)
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
-        self.badges = BadgeManager(
-            parent=self.frame, pending_text=ALERT_BADGE_ICON, success_text=SUCCESS_BADGE_ICON
+        self.badges = ValidationBadgeGroup(
+            parent=self.frame, pending_text=NEUTRAL_ICON, success_text=SUCCESS_ICON
         )
         self._configure_grid_columns()
 
@@ -1430,13 +1432,8 @@ class ProductFrame:
             self._field_errors = {}
         for badge_key in AMOUNT_BADGE_KEYS.values():
             self._field_errors[badge_key] = None
-            config = badge_manager._registry.get(badge_key, {})
-            badge_manager.set_badge_state(
-                config.get("badge"),
-                False,
-                None,
-                pending_text=config.get("pending", badge_manager.pending_text),
-            )
+            if badge_key in getattr(badge_manager, "_registry", {}):
+                badge_manager.update_badge(badge_key, False, None)
 
     def _sync_amount_validation_state(self, *_args) -> bool:
         if getattr(self, "_amount_validation_ready", False):
@@ -1544,7 +1541,7 @@ class ProductFrame:
     def _compute_badge_minsize(self) -> int:
         try:
             base_font = tkfont.nametofont("TkDefaultFont")
-            return base_font.measure(f"{ALERT_BADGE_ICON}{ALERT_BADGE_ICON}") + COL_PADX
+            return base_font.measure(f"{WARNING_ICON}{WARNING_ICON}") + COL_PADX
         except Exception:
             return 40
 
@@ -2078,12 +2075,12 @@ class ProductFrame:
         hide_fn = getattr(frame, "grid_remove", None) or getattr(frame, "grid_forget", None)
         if callable(hide_fn):
             hide_fn()
-        badge = ToggleWarningBadge(
+        badge = ValidationBadge(
             frame,
             textvariable=self.claim_hint_var,
-            initially_collapsed=False,
-            tk_module=tk,
-            ttk_module=ttk,
+            default_state="warning",
+            wraplength=520,
+            initial_display="full",
         )
         badge.grid(row=0, column=0, padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY // 4), sticky="w")
         actions = ttk.Frame(frame)
