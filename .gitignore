@@ -6,3 +6,5 @@ autosaves/
 __pycache__/
 *.pyc
 docs/*.png
+wireframes/*.png
+wireframes/*.pdf
