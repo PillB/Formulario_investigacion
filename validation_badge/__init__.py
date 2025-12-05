@@ -4,6 +4,8 @@ from validation_badge.validation_badge import (
     WARNING_ICON,
     ValidationBadge,
     ValidationBadgeGroup,
+    ValidationBadgeRegistry,
+    badge_registry,
     build_message_preview,
     iter_active_badges,
 )
@@ -11,6 +13,8 @@ from validation_badge.validation_badge import (
 __all__ = [
     "ValidationBadge",
     "ValidationBadgeGroup",
+    "ValidationBadgeRegistry",
+    "badge_registry",
     "build_message_preview",
     "iter_active_badges",
     "WARNING_ICON",

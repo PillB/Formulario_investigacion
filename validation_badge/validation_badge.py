@@ -144,6 +144,8 @@ def build_message_preview(message: str, *, max_chars_per_line: int = 18, max_lin
 class ValidationBadge:
     """Displays validation feedback with cycling view modes."""
 
+    instances: set["ValidationBadge"] = set()
+
     STYLE_MAP = {
         "warning": WARNING_STYLE,
         "success": SUCCESS_STYLE,
@@ -201,6 +203,7 @@ class ValidationBadge:
         self._label.bind("<Button-1>", self._cycle_display, add="+")
 
         _register_badge(self)
+        self.instances.add(self)
         try:
             self._label.bind("<Destroy>", lambda _evt, badge=self: _unregister_badge(badge), add="+")
         except Exception:
@@ -275,6 +278,9 @@ class ValidationBadge:
     def set_warning(self, message: str | None) -> None:
         self.update_state("warning", message)
 
+    def set_error(self, message: str | None) -> None:
+        self.set_warning(message)
+
     def set_success(self, message: str | None = None) -> None:
         self.update_state("success", message, success_text=message)
 
@@ -283,6 +289,10 @@ class ValidationBadge:
 
     def set_message(self, message: str | None, *, expand: bool | None = None) -> None:
         self.set_warning(message or "")
+        if self._textvariable is not None:
+            setter = getattr(self._textvariable, "set", None)
+            if callable(setter):
+                setter(message or "")
         if expand:
             self._display_mode = "full"
         elif expand is False:
@@ -360,8 +370,8 @@ class ValidationBadge:
         self._apply_render()
 
 
-class ValidationBadgeGroup:
-    """Registers and updates multiple validation badges."""
+class ValidationBadgeRegistry:
+    """Central registry that creates and updates validation badges."""
 
     def __init__(
         self,
@@ -378,9 +388,10 @@ class ValidationBadgeGroup:
         self._tk = tk_module
         self._ttk = ttk_module
         self._registry: dict[str, ValidationBadge] = {}
+        self._labels: dict[str, tuple[str, str]] = {}
         self._updaters: dict[str, Callable[[], str | None]] = {}
 
-    def create_and_register(
+    def claim(
         self,
         key: str,
         parent,
@@ -403,7 +414,6 @@ class ValidationBadgeGroup:
             pending_text=pending_text or self.pending_text,
             success_text=success_text or self.success_text,
         )
-        badge.set_neutral(pending_text or self.pending_text)
         return badge
 
     def register_badge(
@@ -414,9 +424,11 @@ class ValidationBadgeGroup:
         pending_text: str | None = None,
         success_text: str | None = None,
     ) -> None:
+        pending_label = pending_text or self.pending_text
+        success_label = success_text or self.success_text
         self._registry[key] = badge
-        badge.set_neutral(pending_text or self.pending_text)
-        badge._success_text = success_text or self.success_text  # type: ignore[attr-defined]
+        self._labels[key] = (pending_label, success_label)
+        badge.set_neutral(pending_label)
 
     def update_badge(
         self,
@@ -430,12 +442,13 @@ class ValidationBadgeGroup:
         badge = self._registry.get(key)
         if badge is None:
             return
-        success_label = success_text or getattr(badge, "_success_text", self.success_text)
-        pending_label = pending_text or self.pending_text
+        pending_label, success_label = self._labels.get(key, (self.pending_text, self.success_text))
+        success_label = success_text or success_label
+        pending_label = pending_text or pending_label
         if is_ok:
             badge.set_success(success_label)
         elif message:
-            badge.set_warning(message)
+            badge.set_error(message)
         else:
             badge.set_neutral(pending_label)
 
@@ -466,6 +479,12 @@ class ValidationBadgeGroup:
             updater()
 
 
+class ValidationBadgeGroup(ValidationBadgeRegistry):
+    """Backward compatible alias for the badge registry."""
+
+    create_and_register = ValidationBadgeRegistry.claim
+
+
 _ACTIVE_BADGES: set[ValidationBadge] = set()
 
 
@@ -475,6 +494,10 @@ def _register_badge(badge: ValidationBadge) -> None:
 
 def _unregister_badge(badge: ValidationBadge) -> None:
     _ACTIVE_BADGES.discard(badge)
+    try:
+        ValidationBadge.instances.discard(badge)
+    except Exception:
+        pass
 
 
 def iter_active_badges() -> Iterable[ValidationBadge]:
@@ -491,3 +514,6 @@ def iter_active_badges() -> Iterable[ValidationBadge]:
         else:
             stale.add(badge)
     _ACTIVE_BADGES.difference_update(stale)
+
+
+badge_registry = ValidationBadgeRegistry()

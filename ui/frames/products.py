@@ -25,7 +25,8 @@ from validation_badge import (
     SUCCESS_ICON,
     WARNING_ICON,
     ValidationBadge,
-    ValidationBadgeGroup,
+    ValidationBadgeRegistry,
+    badge_registry,
 )
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
@@ -152,16 +153,10 @@ class InvolvementRow:
             collapsible_cls=CollapsibleSection,
         )
 
-    def _get_badge_manager(self, parent=None) -> ValidationBadgeGroup:
-        manager = getattr(self.product_frame, "badges", None)
-        if manager is None:
-            manager = ValidationBadgeGroup(
-                parent=parent or getattr(self.product_frame, "frame", None) or self.parent,
-                pending_text=NEUTRAL_ICON,
-                success_text=SUCCESS_ICON,
-            )
-            self.product_frame.badges = manager
-        return manager
+    def _get_badge_manager(self, _parent=None) -> ValidationBadgeRegistry:
+        self.badge_manager = badge_registry
+        self.product_frame.badges = badge_registry
+        return badge_registry
 
     def _badge_key(self, name: str) -> str:
         return f"product{self.product_frame.idx}_inv{self.idx}_{name}"
@@ -286,7 +281,7 @@ class InvolvementRow:
             container.columnconfigure(0, weight=1)
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
-        self.badge_manager.create_and_register(
+        self.badge_manager.claim(
             badge_key,
             container,
             row=0,
@@ -658,16 +653,10 @@ class ClaimRow:
             collapsible_cls=CollapsibleSection,
         )
 
-    def _get_badge_manager(self, parent=None) -> ValidationBadgeGroup:
-        manager = getattr(self.product_frame, "badges", None)
-        if manager is None:
-            manager = ValidationBadgeGroup(
-                parent=parent or getattr(self.product_frame, "frame", None) or self.parent,
-                pending_text=WARNING_ICON,
-                success_text=SUCCESS_ICON,
-            )
-            self.product_frame.badges = manager
-        return manager
+    def _get_badge_manager(self, _parent=None) -> ValidationBadgeRegistry:
+        self.badge_manager = badge_registry
+        self.product_frame.badges = badge_registry
+        return badge_registry
 
     def _create_badged_container(self, parent, badge_key: str, widget_factory):
         container = ttk.Frame(parent)
@@ -676,7 +665,7 @@ class ClaimRow:
             container.columnconfigure(0, weight=1)
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
-        self.badge_manager.create_and_register(
+        self.badge_manager.claim(
             badge_key,
             container,
             row=0,
@@ -822,7 +811,7 @@ class ProductFrame:
         self._last_missing_lookup_id = None
         self._claim_requirement_active = False
         self._claim_nudge_shown = False
-        self.badges: ValidationBadgeGroup | None = None
+        self.badges: ValidationBadgeRegistry | None = badge_registry
         self._field_errors: dict[str, str | None] = {}
         self._last_date_errors: dict[str, str | None] = {"fecha_oc": None, "fecha_desc": None}
         self._last_pair_error: str | None = None
@@ -883,9 +872,7 @@ class ProductFrame:
         self.frame = ttk.Frame(self.section.content)
         self.section.pack_content(self.frame, fill="x", expand=True)
         ensure_grid_support(self.frame)
-        self.badges = ValidationBadgeGroup(
-            parent=self.frame, pending_text=NEUTRAL_ICON, success_text=SUCCESS_ICON
-        )
+        self.badges = badge_registry
         self._configure_grid_columns()
 
         ttk.Label(self.frame, text="ID del producto:").grid(
@@ -897,7 +884,7 @@ class ProductFrame:
         self._bind_identifier_triggers(id_entry)
         self._register_duplicate_triggers(id_entry)
         self.tooltip_register(id_entry, "Código único del producto investigado.")
-        self.badges.create_and_register("producto_id", self.frame, row=1, column=4)
+        self.badges.claim("producto_id", self.frame, row=1, column=4)
 
         ttk.Label(self.frame, text="Cliente:").grid(
             row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -917,7 +904,7 @@ class ProductFrame:
         )
         self.client_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_client_focus_out(), add="+")
         self.tooltip_register(self.client_cb, "Selecciona al cliente dueño del producto.")
-        self.badges.create_and_register("producto_cliente", self.frame, row=1, column=5)
+        self.badges.claim("producto_cliente", self.frame, row=1, column=5)
 
         ttk.Label(self.frame, text="Categoría 1:").grid(
             row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -935,7 +922,7 @@ class ProductFrame:
         cat1_cb.bind("<FocusOut>", lambda e: self.on_cat1_change())
         cat1_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat1_change())
         self.tooltip_register(cat1_cb, "Define la categoría principal del riesgo de producto.")
-        self.badges.create_and_register("producto_categoria1", self.frame, row=2, column=4)
+        self.badges.claim("producto_categoria1", self.frame, row=2, column=4)
 
         ttk.Label(self.frame, text="Categoría 2:").grid(
             row=2, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -952,7 +939,7 @@ class ProductFrame:
         self.cat2_cb.bind("<FocusOut>", lambda e: self.on_cat2_change())
         self.cat2_cb.bind("<<ComboboxSelected>>", lambda e: self.on_cat2_change())
         self.tooltip_register(self.cat2_cb, "Selecciona la subcategoría específica.")
-        self.badges.create_and_register("producto_categoria2", self.frame, row=2, column=5)
+        self.badges.claim("producto_categoria2", self.frame, row=2, column=5)
 
         ttk.Label(self.frame, text="Modalidad:").grid(
             row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -967,7 +954,7 @@ class ProductFrame:
         self.mod_cb.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.mod_cb.set('')
         self.tooltip_register(self.mod_cb, "Indica la modalidad concreta del fraude.")
-        self.badges.create_and_register("producto_modalidad", self.frame, row=3, column=4)
+        self.badges.claim("producto_modalidad", self.frame, row=3, column=4)
 
         ttk.Label(self.frame, text="Canal:").grid(
             row=3, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -982,7 +969,7 @@ class ProductFrame:
         canal_cb.grid(row=3, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         canal_cb.set('')
         self.tooltip_register(canal_cb, "Canal por donde ocurrió el evento.")
-        self.badges.create_and_register("producto_canal", self.frame, row=3, column=5)
+        self.badges.claim("producto_canal", self.frame, row=3, column=5)
 
         ttk.Label(self.frame, text="Proceso:").grid(
             row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -997,7 +984,7 @@ class ProductFrame:
         proc_cb.grid(row=4, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         proc_cb.set('')
         self.tooltip_register(proc_cb, "Proceso impactado por el incidente.")
-        self.badges.create_and_register("producto_proceso", self.frame, row=4, column=4)
+        self.badges.claim("producto_proceso", self.frame, row=4, column=4)
 
         ttk.Label(self.frame, text="Tipo de producto:").grid(
             row=4, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1013,7 +1000,7 @@ class ProductFrame:
         self.tipo_prod_cb = tipo_prod_cb
         tipo_prod_cb.set('')
         self.tooltip_register(tipo_prod_cb, "Clasificación comercial del producto.")
-        self.badges.create_and_register("producto_tipo", self.frame, row=4, column=5)
+        self.badges.claim("producto_tipo", self.frame, row=4, column=5)
 
         ttk.Label(self.frame, text="Fecha de ocurrencia:\n(YYYY-MM-DD)").grid(
             row=5,
@@ -1035,7 +1022,7 @@ class ProductFrame:
         self.focc_entry = focc_entry
         self.tooltip_register(focc_entry, "Fecha exacta del evento.")
         self._register_duplicate_triggers(focc_entry)
-        self.badges.create_and_register("fecha_oc", self.frame, row=5, column=4)
+        self.badges.claim("fecha_oc", self.frame, row=5, column=4)
 
         ttk.Label(self.frame, text="Fecha de descubrimiento:\n(YYYY-MM-DD)").grid(
             row=5,
@@ -1056,7 +1043,7 @@ class ProductFrame:
         )
         self.fdesc_entry = fdesc_entry
         self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")
-        self.date_badge = self.badges.create_and_register("fecha_desc", self.frame, row=5, column=5)
+        self.date_badge = self.badges.claim("fecha_desc", self.frame, row=5, column=5)
 
         ttk.Label(self.frame, text="Monto investigado:").grid(
             row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1065,7 +1052,7 @@ class ProductFrame:
         inv_entry.grid(row=6, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.inv_entry = inv_entry
         self.tooltip_register(inv_entry, "Monto total bajo investigación.")
-        self.amount_badge = self.badges.create_and_register("monto_inv", self.frame, row=6, column=4)
+        self.amount_badge = self.badges.claim("monto_inv", self.frame, row=6, column=4)
 
         ttk.Label(self.frame, text="Moneda:").grid(
             row=6, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1080,7 +1067,7 @@ class ProductFrame:
         moneda_cb.grid(row=6, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         moneda_cb.set('')
         self.tooltip_register(moneda_cb, "Tipo de moneda principal del caso.")
-        self.badges.create_and_register("producto_moneda", self.frame, row=6, column=5)
+        self.badges.claim("producto_moneda", self.frame, row=6, column=5)
 
         ttk.Label(self.frame, text="Monto pérdida fraude:").grid(
             row=7, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1095,7 +1082,7 @@ class ProductFrame:
                 "Si falta un dato, usa “Ir al primer faltante” para saltar directo a la fila incompleta."
             ),
         )
-        self.badges.create_and_register("monto_perdida", self.frame, row=7, column=4)
+        self.badges.claim("monto_perdida", self.frame, row=7, column=4)
 
         ttk.Label(self.frame, text="Monto falla procesos:").grid(
             row=7, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1110,7 +1097,7 @@ class ProductFrame:
                 "Pulsa “Ir al primer faltante” si necesitas llegar al reclamo pendiente."
             ),
         )
-        self.badges.create_and_register("monto_falla", self.frame, row=7, column=5)
+        self.badges.claim("monto_falla", self.frame, row=7, column=5)
 
         ttk.Label(self.frame, text="Monto contingencia:").grid(
             row=8, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1125,7 +1112,7 @@ class ProductFrame:
                 "Apóyate en “Ir al primer faltante” para navegar al reclamo incompleto."
             ),
         )
-        self.badges.create_and_register("monto_contingencia", self.frame, row=8, column=4)
+        self.badges.claim("monto_contingencia", self.frame, row=8, column=4)
 
         self._register_claim_requirement_triggers(
             cont_entry,
@@ -1140,7 +1127,7 @@ class ProductFrame:
         rec_entry.grid(row=8, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.rec_entry = rec_entry
         self.tooltip_register(rec_entry, "Monto efectivamente recuperado.")
-        self.badges.create_and_register("monto_recuperado", self.frame, row=8, column=5)
+        self.badges.claim("monto_recuperado", self.frame, row=8, column=5)
 
         ttk.Label(self.frame, text="Monto pago deuda:").grid(
             row=9, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -1149,7 +1136,7 @@ class ProductFrame:
         pago_entry.grid(row=9, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.pago_entry = pago_entry
         self.tooltip_register(pago_entry, "Pago realizado por deuda vinculada.")
-        self.badges.create_and_register("monto_pago", self.frame, row=9, column=4)
+        self.badges.claim("monto_pago", self.frame, row=9, column=4)
 
         self._build_claim_guidance_banner(row=10)
 

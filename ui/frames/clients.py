@@ -26,7 +26,7 @@ from ui.frames.utils import (
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
 from theme_manager import ThemeManager
-from validation_badge import ValidationBadgeGroup
+from validation_badge import badge_registry
 
 
 ENTRY_STYLE = ThemeManager.ENTRY_STYLE
@@ -69,7 +69,7 @@ class ClientFrame:
         self._last_tracked_id = ''
         self._tree_sort_state: dict[str, bool] = {}
         self.summary_tree = None
-        self.badges = ValidationBadgeGroup(parent=parent)
+        self.badges = badge_registry
 
         self.tipo_id_var = tk.StringVar()
         self.id_var = tk.StringVar()
@@ -268,7 +268,7 @@ class ClientFrame:
             self.accionado_listbox,
             "Marca las tribus o equipos accionados por la alerta. Puedes escoger varias opciones.",
         )
-        self.badges.create_and_register("cliente_accionado", accionado_list_container, row=0, column=2)
+        self.badges.claim("cliente_accionado", accionado_list_container, row=0, column=2)
 
         tel_label = build_required_label(
             self.frame,
@@ -477,7 +477,7 @@ class ClientFrame:
             container.columnconfigure(0, weight=1)
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
-        self.badges.create_and_register(key, container, row=0, column=1)
+        self.badges.claim(key, container, row=0, column=1)
         return container, widget
 
     def _register_title_traces(self):
