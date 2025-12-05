@@ -2563,9 +2563,11 @@ class FraudCaseApp:
         except Exception:
             return None
 
-    def _set_save_send_in_progress(self, in_progress: bool) -> None:
+    def _set_save_send_in_progress(self, in_progress: bool, message: str | None = None) -> None:
         button = self._get_save_anchor_widget()
         spinner = getattr(self, "save_send_spinner", None)
+        status_label = getattr(self, "save_send_status", None)
+        status_var = getattr(self, "save_send_status_var", None)
         if button:
             try:
                 button.state(["disabled"] if in_progress else ["!disabled"])
@@ -2579,6 +2581,16 @@ class FraudCaseApp:
                 else:
                     spinner.stop()
                     spinner.pack_forget()
+            except tk.TclError:
+                pass
+        if status_label and status_var:
+            try:
+                if in_progress:
+                    status_var.set(message or "Procesando…")
+                    status_label.pack(side="right", padx=(4, 0), pady=6)
+                else:
+                    status_var.set("")
+                    status_label.pack_forget()
             except tk.TclError:
                 pass
 
@@ -6274,6 +6286,7 @@ class FraudCaseApp:
         }
         action_bar_parent = ttk.Frame(action_group)
         action_bar_parent.grid(row=1, column=0, sticky="ew", padx=COL_PADX)
+        self._save_send_future = None
         self.actions_action_bar = ActionBar(
             action_bar_parent,
             commands=action_commands,
@@ -6281,6 +6294,10 @@ class FraudCaseApp:
         )
         self.save_send_spinner = ttk.Progressbar(
             self.actions_action_bar, mode="indeterminate", length=140
+        )
+        self.save_send_status_var = tk.StringVar(value="")
+        self.save_send_status = ttk.Label(
+            self.actions_action_bar, textvariable=self.save_send_status_var
         )
         self._actions_bar_anchor = (
             self.actions_action_bar.buttons.get("save_send")
@@ -12283,11 +12300,15 @@ class FraudCaseApp:
 
     def save_and_send(self):
         """Valida los datos y guarda CSVs normalizados y JSON en la carpeta de exportación."""
+        if getattr(self, "_save_send_future", None) and not self._save_send_future.done():
+            self._set_save_send_in_progress(True, message="Guardado en curso…")
+            return self._save_send_future
         log_event("navegacion", "Usuario pulsó guardar y enviar", self.logs)
-        self._set_save_send_in_progress(True)
+        self._set_save_send_in_progress(True, message="Guardando y enviando…")
         data, folder, case_id = self._prepare_case_data_for_export()
         if not data or not folder or not case_id:
             self._set_save_send_in_progress(False)
+            self._save_send_future = None
             return
 
         def task():
@@ -12295,10 +12316,12 @@ class FraudCaseApp:
 
         def on_success(result):
             self._set_save_send_in_progress(False)
+            self._save_send_future = None
             self._handle_save_success(result)
 
         def on_error(exc: BaseException):
             self._set_save_send_in_progress(False)
+            self._save_send_future = None
             message = f"No se pudieron guardar y enviar los datos: {exc}"
             log_event("validacion", message, self.logs)
             if not getattr(self, '_suppress_messagebox', False):
@@ -12314,7 +12337,8 @@ class FraudCaseApp:
                 on_success(result)
             return
 
-        run_guarded_task(task, on_success, on_error, root)
+        self._save_send_future = run_guarded_task(task, on_success, on_error, root)
+        return self._save_send_future
 
     def _handle_save_success(self, result) -> None:
         if not result:
