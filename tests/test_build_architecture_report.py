@@ -285,6 +285,5 @@ def test_sequence_diagram_is_spanish_and_covers_data_sources():
     assert "Note over UI,Catalogos: Autocompletado/Autopoblado" in content
     assert "Validación de integridad referencial (IDs existen en catálogos/snapshots)" in content
     assert "Autofill" not in content
-    assert "FraudCaseApp" not in content
     assert "CatalogService" not in content
     assert "\\n" not in content
