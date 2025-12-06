@@ -115,6 +115,8 @@ class _LoadingAppFactory:
         self.app._anexos_data = []
         self.app._firmas_data = []
         self.app._recomendaciones_categorias = {}
+        self.app.summary_tables = {}
+        self.app.root = None
         self.app.client_frames = []
         self.app.team_frames = []
         self.app.product_frames = []
@@ -236,9 +238,11 @@ def test_load_form_dialog_reports_invalid_json(monkeypatch, messagebox_spy, tmp_
 
     app.load_form_dialog()
 
-    assert messagebox_spy.errors
-    title, message = messagebox_spy.errors[0]
-    assert title == "Error"
+    notifications = getattr(app, "_ui_notifications", [])
+    assert notifications
+    level = notifications[0].get("level")
+    message = notifications[0].get("message", "")
+    assert level == "error"
     assert "No se pudo cargar el formulario" in message
     assert "invalid.json" in message
     assert not app.client_frames

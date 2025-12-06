@@ -117,6 +117,7 @@ from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
 from utils.background_worker import run_guarded_task
 from utils.mass_import_manager import MassImportManager
+from utils.persistence_manager import PersistenceError, PersistenceManager
 from utils.progress_dialog import ProgressDialog
 from validators import (drain_log_queue, FieldValidator, log_event,
                         LOG_FIELDNAMES, normalize_log_row,
@@ -657,6 +658,7 @@ class FraudCaseApp:
         self._suppress_messagebox = False
         self._consolidate_import_feedback = False
         self._startup_complete = False
+        self._ui_notifications: list[dict[str, str]] = []
         self._reset_navigation_metrics()
         self._hover_tooltips = []
         self.validators = []
@@ -678,6 +680,7 @@ class FraudCaseApp:
         self._walkthrough_state: dict[str, object] = self._load_walkthrough_state()
         self._user_settings_file = Path(AUTOSAVE_FILE).with_name("user_settings.json")
         self._user_settings: dict[str, object] = self._load_user_settings()
+        self._persistence_manager = PersistenceManager(self.root, self._validate_persistence_payload)
         self._walkthrough_overlay: Optional[tk.Toplevel] = None
         self._walkthrough_steps: list[dict[str, object]] = []
         self._walkthrough_step_index = 0
@@ -2881,6 +2884,26 @@ class FraudCaseApp:
         except tk.TclError:
             self._toast_after_id = None
             self._destroy_toast(toast)
+
+    def _notify_user(
+        self,
+        message: str,
+        *,
+        title: str = "",
+        level: str = "info",
+        show_toast: bool = True,
+    ) -> None:
+        notifications = getattr(self, "_ui_notifications", None)
+        if notifications is None:
+            notifications = []
+            self._ui_notifications = notifications
+        notifications.append({"title": title or "", "message": message, "level": level})
+        if not show_toast or getattr(self, "_suppress_messagebox", False):
+            return
+        try:
+            self._display_toast(self.root, message, duration_ms=2400)
+        except Exception:
+            return
 
     def _capture_widget_shine_state(self, widget: tk.Widget) -> dict[str, object]:
         state: dict[str, object] = {}
@@ -10192,37 +10215,55 @@ class FraudCaseApp:
     # ---------------------------------------------------------------------
     # Autoguardado y carga
 
+    def _get_persistence_manager(self) -> PersistenceManager:
+        manager = getattr(self, "_persistence_manager", None)
+        if manager is None:
+            manager = PersistenceManager(getattr(self, "root", None), self._validate_persistence_payload)
+            self._persistence_manager = manager
+        return manager
+
+    def _validate_persistence_payload(self, payload: Mapping[str, object]) -> Mapping[str, object]:
+        if not isinstance(payload, Mapping):
+            raise ValueError("El archivo debe contener un objeto JSON válido.")
+        dataset_payload = payload.get("dataset", payload)
+        if not isinstance(dataset_payload, Mapping):
+            raise ValueError("La sección 'dataset' debe ser un objeto JSON.")
+        form_state = payload.get("form_state", {}) if isinstance(payload, Mapping) else {}
+        if form_state and not isinstance(form_state, Mapping):
+            raise ValueError("La sección 'form_state' debe ser un objeto JSON.")
+        self._ensure_case_data(dataset_payload)
+        return payload
+
+    def _parse_persisted_payload(self, payload: Mapping[str, object]) -> tuple[CaseData, dict[str, object]]:
+        dataset_payload = payload.get("dataset", payload) if isinstance(payload, Mapping) else payload
+        dataset = self._ensure_case_data(dataset_payload)
+        form_state = payload.get("form_state") if isinstance(payload, Mapping) else {}
+        return dataset, form_state or {}
+
     def save_auto(self, data=None):
         """Guarda automáticamente el estado actual en un archivo JSON."""
 
         payload = self._serialize_full_form_state(data)
         dataset = self._ensure_case_data(payload.get("dataset", {}))
-        try:
-            with open(AUTOSAVE_FILE, 'w', encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
+        manager = self._get_persistence_manager()
+
+        def _on_success(_result):
             self._handle_session_saved(dataset)
             self._show_success_toast(self._progress_bar, "Autoguardado listo")
             self.refresh_autosave_list()
-        except Exception as ex:
-            log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
-        self._schedule_summary_refresh(data=dataset)
-        return dataset
+            self._schedule_summary_refresh(data=dataset)
 
-    def _load_dataset_from_path(self, path: Path) -> tuple[CaseData, dict[str, object]]:
-        try:
-            with path.open('r', encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError as exc:
-            log_event("validacion", f"Autosave corrupto {path}: {exc}", self.logs)
-            raise ValueError(f"El autosave {path.name} está dañado o incompleto") from exc
-        except UnicodeDecodeError as exc:
-            log_event("validacion", f"Autosave ilegible {path}: {exc}", self.logs)
-            raise ValueError(f"El autosave {path.name} no se pudo leer correctamente") from exc
-        if not isinstance(data, Mapping):
-            raise ValueError("El autosave debe ser un objeto JSON válido")
-        form_state = data.get("form_state") if isinstance(data, Mapping) else {}
-        dataset_payload = data.get("dataset") if "dataset" in data else data
-        return self._ensure_case_data(dataset_payload), form_state or {}
+        def _on_error(ex: BaseException):
+            log_event("validacion", f"Error guardando autosave: {ex}", self.logs)
+            self._notify_user(
+                f"No se pudo completar el autoguardado: {ex}",
+                title="Autoguardado fallido",
+                level="error",
+                show_toast=not getattr(self, "_suppress_messagebox", False),
+            )
+
+        manager.save(Path(AUTOSAVE_FILE), payload, on_success=_on_success, on_error=_on_error)
+        return dataset
 
     def _apply_loaded_dataset(
         self,
@@ -10315,53 +10356,52 @@ class FraudCaseApp:
         if not candidates:
             return
 
-        def _warn_user(title: str, message: str) -> None:
-            log_event("validacion", message, self.logs)
-            if getattr(self, "_suppress_messagebox", False):
-                return
-            try:
-                messagebox.showwarning(title, message)
-            except tk.TclError:
-                return
+        paths = [path for _mtime, path in candidates]
+        manager = self._get_persistence_manager()
 
-        def _notify_fallback(path: Path) -> None:
-            message = (
-                "El autosave más reciente no se pudo abrir; se restauró el respaldo "
-                f"{path.name}."
+        def _log_failures(failures: list[tuple[Path, BaseException]]) -> None:
+            for path, failure in failures:
+                log_event("validacion", f"No se pudo cargar {path.name}: {failure}", self.logs)
+
+        def _on_success(result):
+            dataset, form_state = self._parse_persisted_payload(result.payload)
+            self._apply_loaded_dataset(
+                dataset,
+                form_state=form_state,
+                source_label=f"el autosave desde {result.path}",
+                autosave=True,
+                show_toast=True,
             )
-            self._last_autosave_notice = message
-            log_event("navegacion", message, self.logs)
-            if getattr(self, "_suppress_messagebox", False):
-                return
-            try:
-                messagebox.showinfo("Autosave recuperado", message)
-            except tk.TclError:
-                return
-
-        errors_detected = False
-        for index, (_mtime, path) in enumerate(candidates):
-            try:
-                dataset, form_state = self._load_dataset_from_path(path)
-                self._apply_loaded_dataset(
-                    dataset,
-                    form_state=form_state,
-                    source_label=f"el autosave desde {path}",
-                    autosave=True,
-                    show_toast=True,
+            if result.failed:
+                _log_failures(result.failed)
+                message = (
+                    "El autosave más reciente no se pudo abrir; se restauró el respaldo "
+                    f"{result.path.name}."
                 )
-                if errors_detected or index > 0:
-                    _notify_fallback(path)
-                return
-            except Exception as ex:
-                errors_detected = True
-                _warn_user("Autosave inválido", f"No se pudo cargar {path.name}: {ex}")
-                continue
+                self._last_autosave_notice = message
+                log_event("navegacion", message, self.logs)
+                self._notify_user(
+                    message,
+                    title="Autosave recuperado",
+                    level="info",
+                    show_toast=not getattr(self, "_suppress_messagebox", False),
+                )
 
-        self._clear_case_state(save_autosave=False)
-        _warn_user(
-            "Autosave no disponible",
-            "No se pudo cargar ningún autosave válido; se restauró el formulario vacío.",
-        )
+        def _on_error(exc: BaseException):
+            failures = exc.failures if isinstance(exc, PersistenceError) else []
+            _log_failures(failures)
+            self._clear_case_state(save_autosave=False)
+            message = "No se pudo cargar ningún autosave válido; se restauró el formulario vacío."
+            self._last_autosave_notice = message
+            self._notify_user(
+                message,
+                title="Autosave no disponible",
+                level="warning",
+                show_toast=not getattr(self, "_suppress_messagebox", False),
+            )
+            log_event("navegacion", message, self.logs)
+
+        manager.load_first_valid(paths, on_success=_on_success, on_error=_on_error)
 
     def load_selected_autosave(self) -> None:
         """Carga el autosave seleccionado en la lista de autosaves disponibles."""
@@ -10388,25 +10428,35 @@ class FraudCaseApp:
                     pass
             return
 
-        try:
-            dataset, form_state = self._load_dataset_from_path(path)
+        manager = self._get_persistence_manager()
+
+        def _on_success(result):
+            dataset, form_state = self._parse_persisted_payload(result.payload)
             self._apply_loaded_dataset(
                 dataset,
                 form_state=form_state,
-                source_label=f"el autosave {path}",
+                source_label=f"el autosave {result.path}",
                 autosave=True,
                 show_toast=True,
-                success_dialog=("Autosave cargado", "El autosave seleccionado se cargó correctamente."),
             )
-        except Exception as exc:
+            self._notify_user(
+                "El autosave seleccionado se cargó correctamente.",
+                title="Autosave cargado",
+                level="info",
+                show_toast=not getattr(self, "_suppress_messagebox", False),
+            )
+
+        def _on_error(exc: BaseException):
             message = f"No se pudo cargar el autosave {path.name}: {exc}"
             log_event("validacion", message, self.logs)
-            if getattr(self, "_suppress_messagebox", False):
-                return
-            try:
-                messagebox.showerror("Error al cargar autosave", message)
-            except tk.TclError:
-                return
+            self._notify_user(
+                message,
+                title="Error al cargar autosave",
+                level="error",
+                show_toast=not getattr(self, "_suppress_messagebox", False),
+            )
+
+        manager.load(path, on_success=_on_success, on_error=_on_error)
 
     def _handle_window_close(self):
         self.flush_autosave()
@@ -10820,19 +10870,35 @@ class FraudCaseApp:
         if not filename:
             log_event("navegacion", f"Canceló cargar {display_label}", self.logs)
             return
-        try:
-            dataset, form_state = self._load_dataset_from_path(Path(filename))
-            success_title = f"{label.capitalize()} cargado"
-            success_message = f"{display_label.capitalize()} se cargó correctamente."
+
+        manager = self._get_persistence_manager()
+
+        def _on_success(result):
+            dataset, form_state = self._parse_persisted_payload(result.payload)
             self._apply_loaded_dataset(
                 dataset,
                 form_state=form_state,
                 source_label=f"{display_label} desde {filename}",
-                success_dialog=(success_title, success_message),
+                show_toast=True,
             )
-        except Exception as exc:
-            messagebox.showerror("Error", f"No se pudo cargar {display_label}: {exc}")
-            log_event("validacion", f"Error al cargar {display_label}: {exc}", self.logs)
+            self._notify_user(
+                f"{display_label.capitalize()} se cargó correctamente.",
+                title=f"{label.capitalize()} cargado",
+                level="info",
+                show_toast=not getattr(self, "_suppress_messagebox", False),
+            )
+
+        def _on_error(exc: BaseException):
+            message = f"No se pudo cargar {display_label} desde {filename}: {exc}"
+            log_event("validacion", message, self.logs)
+            self._notify_user(
+                message,
+                title="Error",  # Mantener el título original para contexto
+                level="error",
+                show_toast=not getattr(self, "_suppress_messagebox", False),
+            )
+
+        manager.load(Path(filename), on_success=_on_success, on_error=_on_error)
 
     def save_checkpoint(self):
         """Permite guardar manualmente el estado actual en un archivo JSON."""
@@ -10845,19 +10911,32 @@ class FraudCaseApp:
         )
         if not filename:
             message = "Guardado cancelado por el usuario."
-            messagebox.showinfo("Guardado cancelado", message)
             log_event("cancelado", message, self.logs)
             return
 
-        try:
-            payload = self._serialize_full_form_state()
-            with open(filename, "w", encoding="utf-8") as fh:
-                json.dump(payload, fh, indent=2, ensure_ascii=False)
-            messagebox.showinfo("Checkpoint guardado", "El estado se guardó correctamente.")
+        payload = self._serialize_full_form_state()
+        manager = self._get_persistence_manager()
+
+        def _on_success(_result):
+            self._notify_user(
+                "El estado se guardó correctamente.",
+                title="Checkpoint guardado",
+                level="info",
+                show_toast=not getattr(self, "_suppress_messagebox", False),
+            )
             log_event("navegacion", f"Checkpoint guardado en {filename}", self.logs)
-        except Exception as exc:
-            messagebox.showerror("Error al guardar", f"No se pudo guardar el checkpoint: {exc}")
-            log_event("validacion", f"Error al guardar checkpoint: {exc}", self.logs)
+
+        def _on_error(exc: BaseException):
+            message = f"No se pudo guardar el checkpoint: {exc}"
+            log_event("validacion", message, self.logs)
+            self._notify_user(
+                message,
+                title="Error al guardar",
+                level="error",
+                show_toast=not getattr(self, "_suppress_messagebox", False),
+            )
+
+        manager.save(Path(filename), payload, on_success=_on_success, on_error=_on_error)
 
     def _clear_case_state(self, *, save_autosave: bool = True) -> None:
         """Elimina los datos cargados y restablece los frames dinámicos."""
