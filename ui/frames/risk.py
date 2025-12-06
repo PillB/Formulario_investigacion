@@ -644,7 +644,10 @@ class RiskFrame:
         self.new_risk_var.set(not enabled)
 
     def is_catalog_mode(self) -> bool:
-        return not self.new_risk_var.get()
+        var = getattr(self, "new_risk_var", None)
+        if var is None:
+            return True
+        return not var.get()
 
     def assign_new_auto_id(self, value: str):
         """Asigna un identificador automático sin marcarlo como editado."""

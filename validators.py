@@ -325,12 +325,12 @@ def validate_product_id(tipo_producto: str, value: str) -> Optional[str]:
         return "Debe ingresar el ID del producto."
     tipo_normalized = normalize_without_accents((tipo_producto or "").strip()).lower()
     if "tarjeta" in tipo_normalized:
-        if not (text.isdigit() and len(text) == 16):
-            return "Para tarjetas el ID debe ser numérico de 16 dígitos."
+        if not (text.isalnum() and len(text) == 16):
+            return "Para tarjetas el ID debe tener 16 caracteres alfanuméricos."
         return None
     if "credito" in tipo_normalized:
-        if not (text.isdigit() and len(text) in PRODUCT_CREDIT_LENGTHS):
-            return "Para créditos el ID debe ser numérico de 13, 14, 16 o 20 dígitos."
+        if not (text.isalnum() and len(text) in PRODUCT_CREDIT_LENGTHS):
+            return "Para créditos el ID debe tener 13, 14, 16 o 20 caracteres alfanuméricos."
         return None
     family_rule = _match_product_family_rule(tipo_normalized)
     if family_rule:
