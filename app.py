@@ -67,6 +67,7 @@ import shutil
 import threading
 import wave
 import zipfile
+from concurrent.futures import CancelledError
 from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import suppress
@@ -74,6 +75,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from importlib import util as importlib_util
 from pathlib import Path
+from queue import SimpleQueue
 from typing import Iterable, Optional
 
 import tkinter as tk
@@ -115,6 +117,7 @@ from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
 from utils.background_worker import run_guarded_task
 from utils.mass_import_manager import MassImportManager
+from utils.progress_dialog import ProgressDialog
 from validators import (drain_log_queue, FieldValidator, log_event,
                         LOG_FIELDNAMES, normalize_log_row,
                         normalize_without_accents, parse_decimal_amount,
@@ -1298,9 +1301,9 @@ class FraudCaseApp:
             return
         log_event("navegacion", "Inició importación de datos combinados", self.logs)
         manager = self.mass_import_manager
-        def worker():
+        def worker(progress_callback, cancel_event):
             prepared_rows = []
-            for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 raw_row = self._sanitize_import_row(row, row_number=index)
                 client_row, client_found = self._hydrate_row_from_details(raw_row, 'id_cliente', CLIENT_ID_ALIASES)
                 team_row, team_found = self._hydrate_row_from_details(raw_row, 'id_colaborador', TEAM_ID_ALIASES)
@@ -1342,9 +1345,9 @@ class FraudCaseApp:
             return
         log_event("navegacion", "Inició importación de riesgos", self.logs)
         manager = self.mass_import_manager
-        def worker():
+        def worker(progress_callback, cancel_event):
             payload = []
-            for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 sanitized_row = self._sanitize_import_row(row, row_number=index)
                 hydrated, _ = self._hydrate_row_from_details(sanitized_row, 'id_riesgo', RISK_ID_ALIASES)
                 payload.append(hydrated)
@@ -1369,9 +1372,9 @@ class FraudCaseApp:
             return
         log_event("navegacion", "Inició importación de normas", self.logs)
         manager = self.mass_import_manager
-        def worker():
+        def worker(progress_callback, cancel_event):
             payload = []
-            for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 sanitized_row = self._sanitize_import_row(row, row_number=index)
                 hydrated, _ = self._hydrate_row_from_details(sanitized_row, 'id_norma', NORM_ID_ALIASES)
                 payload.append(hydrated)
@@ -1396,9 +1399,9 @@ class FraudCaseApp:
             return
         log_event("navegacion", "Inició importación de reclamos", self.logs)
         manager = self.mass_import_manager
-        def worker():
+        def worker(progress_callback, cancel_event):
             payload = []
-            for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 sanitized_row = self._sanitize_import_row(row, row_number=index)
                 hydrated, found = self._hydrate_row_from_details(sanitized_row, 'id_producto', PRODUCT_ID_ALIASES)
                 payload.append({'row': hydrated, 'found': found})
@@ -6916,6 +6919,26 @@ class FraudCaseApp:
 
     def _start_background_import(self, task_label, button, worker, ui_callback, error_prefix, ui_error_prefix=None):
         self._ensure_import_runtime_state()
+        ui_error_prefix = ui_error_prefix or error_prefix
+        cancel_event = threading.Event()
+        progress_queue: SimpleQueue[tuple[int, int]] = SimpleQueue()
+        future_holder: list = [None]
+
+        def progress_callback(current: int, total: int):
+            try:
+                progress_queue.put_nowait((current, total))
+            except Exception:
+                pass
+
+        def _request_cancel():
+            cancel_event.set()
+            future = future_holder[0]
+            if future is not None:
+                try:
+                    future.cancel()
+                except Exception:
+                    pass
+
         if button is not None:
             try:
                 button.state(['disabled'])
@@ -6923,11 +6946,13 @@ class FraudCaseApp:
                 pass
         self._on_import_started(task_label)
         run_async = getattr(self, 'root', None) is not None
-        ui_error_prefix = ui_error_prefix or error_prefix
 
         def _execute_worker():
             try:
-                payload = worker()
+                payload = worker(progress_callback, cancel_event)
+            except CancelledError:
+                self._handle_import_cancelled(task_label, button)
+                return
             except Exception as exc:  # pragma: no cover - errores inesperados
                 self._handle_import_failure(task_label, button, exc, error_prefix)
                 return
@@ -6937,19 +6962,28 @@ class FraudCaseApp:
             _execute_worker()
             return
 
-        def _thread_target():
-            try:
-                payload = worker()
-            except Exception as exc:  # pragma: no cover - errores inesperados
-                self._dispatch_to_ui(self._handle_import_failure, task_label, button, exc, error_prefix)
-                return
-            self._dispatch_to_ui(self._handle_import_success, task_label, button, ui_callback, payload, ui_error_prefix)
+        dialog = ProgressDialog(self.root, f"Importando {task_label}", on_cancel=_request_cancel)
 
-        threading.Thread(
-            target=_thread_target,
-            name=f"import-{task_label}",
-            daemon=True,
-        ).start()
+        def _on_success(payload):
+            dialog.close()
+            self._handle_import_success(task_label, button, ui_callback, payload, ui_error_prefix)
+
+        def _on_error(exc: BaseException):
+            dialog.close()
+            if isinstance(exc, CancelledError):
+                self._handle_import_cancelled(task_label, button)
+                return
+            self._handle_import_failure(task_label, button, exc, error_prefix)
+
+        future = run_guarded_task(
+            lambda: worker(progress_callback, cancel_event),
+            _on_success,
+            _on_error,
+            self.root,
+            poll_interval_ms=50,
+        )
+        future_holder[0] = future
+        dialog.track_future(future, progress_queue)
 
     def _handle_import_success(self, task_label, button, ui_callback, payload, error_prefix):
         message = f"Importación de {task_label} finalizada."
@@ -6988,6 +7022,14 @@ class FraudCaseApp:
             pass
         if getattr(self, 'root', None) is None:
             raise error
+
+    def _handle_import_cancelled(self, task_label, button):
+        if button is not None and not self._catalog_loading:
+            try:
+                button.state(['!disabled'])
+            except tk.TclError:
+                pass
+        self._finalize_import_task(f"Importación de {task_label} cancelada.")
 
     def _normalize_detail_catalog_payload(self, raw_catalogs):
         normalized = {
@@ -8450,6 +8492,26 @@ class FraudCaseApp:
                 )
             return False
         return True
+
+    def _count_massive_rows(self, filename: str) -> int:
+        try:
+            return sum(1 for _ in iter_massive_csv_rows(filename))
+        except Exception as exc:
+            log_event(
+                "validacion",
+                f"No se pudo contar filas de {filename}: {exc}",
+                self.logs,
+            )
+            return 0
+
+    def _iter_rows_with_progress(self, filename: str, progress_callback, cancel_event):
+        total_rows = self._count_massive_rows(filename)
+        progress_callback(0, total_rows)
+        for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
+            if cancel_event.is_set():
+                raise CancelledError("Importación cancelada por el usuario")
+            progress_callback(index, total_rows)
+            yield index, row
 
     def _get_detail_lookup(self, id_column):
         """Obtiene el diccionario de detalles considerando alias configurados."""
@@ -10027,9 +10089,9 @@ class FraudCaseApp:
             return
         log_event("navegacion", "Inició importación de clientes", self.logs)
         manager = self.mass_import_manager
-        def worker():
+        def worker(progress_callback, cancel_event):
             payload = []
-            for row in iter_massive_csv_rows(filename):
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 hydrated, found = self._hydrate_row_from_details(row, 'id_cliente', CLIENT_ID_ALIASES)
                 id_cliente = (hydrated.get('id_cliente') or '').strip()
                 if not id_cliente:
@@ -10056,9 +10118,9 @@ class FraudCaseApp:
             return
         log_event("navegacion", "Inició importación de colaboradores", self.logs)
         manager = self.mass_import_manager
-        def worker():
+        def worker(progress_callback, cancel_event):
             payload = []
-            for row in iter_massive_csv_rows(filename):
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 hydrated, found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
                 collaborator_id = (hydrated.get('id_colaborador') or '').strip()
                 if not collaborator_id:
@@ -10085,9 +10147,9 @@ class FraudCaseApp:
             return
         log_event("navegacion", "Inició importación de productos", self.logs)
         manager = self.mass_import_manager
-        def worker():
+        def worker(progress_callback, cancel_event):
             payload = []
-            for row in iter_massive_csv_rows(filename):
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
                 product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
