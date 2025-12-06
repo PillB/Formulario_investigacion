@@ -117,7 +117,12 @@ from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
 from utils.background_worker import run_guarded_task
 from utils.mass_import_manager import MassImportManager
-from utils.persistence_manager import PersistenceError, PersistenceManager
+from utils.persistence_manager import (
+    CURRENT_SCHEMA_VERSION,
+    PersistenceError,
+    PersistenceManager,
+    validate_schema_payload,
+)
 from utils.progress_dialog import ProgressDialog
 from validators import (drain_log_queue, FieldValidator, log_event,
                         LOG_FIELDNAMES, normalize_log_row,
@@ -10223,22 +10228,36 @@ class FraudCaseApp:
         return manager
 
     def _validate_persistence_payload(self, payload: Mapping[str, object]) -> Mapping[str, object]:
-        if not isinstance(payload, Mapping):
-            raise ValueError("El archivo debe contener un objeto JSON válido.")
-        dataset_payload = payload.get("dataset", payload)
-        if not isinstance(dataset_payload, Mapping):
-            raise ValueError("La sección 'dataset' debe ser un objeto JSON.")
-        form_state = payload.get("form_state", {}) if isinstance(payload, Mapping) else {}
-        if form_state and not isinstance(form_state, Mapping):
-            raise ValueError("La sección 'form_state' debe ser un objeto JSON.")
+        validated = validate_schema_payload(payload)
+        dataset_payload = validated.get("dataset", {})
         self._ensure_case_data(dataset_payload)
-        return payload
+        return validated
 
     def _parse_persisted_payload(self, payload: Mapping[str, object]) -> tuple[CaseData, dict[str, object]]:
         dataset_payload = payload.get("dataset", payload) if isinstance(payload, Mapping) else payload
         dataset = self._ensure_case_data(dataset_payload)
         form_state = payload.get("form_state") if isinstance(payload, Mapping) else {}
         return dataset, form_state or {}
+
+    def _report_persistence_failure(
+        self,
+        *,
+        label: str,
+        filename: str | Path,
+        error: BaseException,
+        failures: Iterable[tuple[Path, BaseException]] | None = None,
+    ) -> None:
+        details = [f"{Path(filename).name}: {error}"]
+        for path, exc in failures or []:
+            details.append(f"{Path(path).name}: {exc}")
+        message = "\n".join(details)
+        log_event("validacion", f"No se pudo cargar {label}: {message}", self.logs)
+        self._notify_user(
+            f"No se pudo cargar {label}: {message}",
+            title="Error al cargar",
+            level="error",
+            show_toast=not getattr(self, "_suppress_messagebox", False),
+        )
 
     def save_auto(self, data=None):
         """Guarda automáticamente el estado actual en un archivo JSON."""
@@ -10393,11 +10412,8 @@ class FraudCaseApp:
             self._clear_case_state(save_autosave=False)
             message = "No se pudo cargar ningún autosave válido; se restauró el formulario vacío."
             self._last_autosave_notice = message
-            self._notify_user(
-                message,
-                title="Autosave no disponible",
-                level="warning",
-                show_toast=not getattr(self, "_suppress_messagebox", False),
+            self._report_persistence_failure(
+                label="el autosave", filename=paths[0] if paths else "autosave", error=exc, failures=failures
             )
             log_event("navegacion", message, self.logs)
 
@@ -10447,13 +10463,8 @@ class FraudCaseApp:
             )
 
         def _on_error(exc: BaseException):
-            message = f"No se pudo cargar el autosave {path.name}: {exc}"
-            log_event("validacion", message, self.logs)
-            self._notify_user(
-                message,
-                title="Error al cargar autosave",
-                level="error",
-                show_toast=not getattr(self, "_suppress_messagebox", False),
+            self._report_persistence_failure(
+                label=f"el autosave {path.name}", filename=path, error=exc
             )
 
         manager.load(path, on_success=_on_success, on_error=_on_error)
@@ -10889,13 +10900,10 @@ class FraudCaseApp:
             )
 
         def _on_error(exc: BaseException):
-            message = f"No se pudo cargar {display_label} desde {filename}: {exc}"
-            log_event("validacion", message, self.logs)
-            self._notify_user(
-                message,
-                title="Error",  # Mantener el título original para contexto
-                level="error",
-                show_toast=not getattr(self, "_suppress_messagebox", False),
+            self._report_persistence_failure(
+                label=display_label,
+                filename=filename,
+                error=exc,
             )
 
         manager.load(Path(filename), on_success=_on_success, on_error=_on_error)
@@ -11283,6 +11291,7 @@ class FraudCaseApp:
         dataset = self._ensure_case_data(data or self.gather_data())
         dataset_dict = dataset.as_dict()
         return {
+            "schema_version": CURRENT_SCHEMA_VERSION,
             **dataset_dict,
             "dataset": dataset_dict,
             "form_state": self._collect_form_state_snapshot(),
