@@ -812,6 +812,9 @@ class FraudCaseApp:
         self._rich_text_fonts = {}
         self._toast_window: Optional[tk.Toplevel] = None
         self._toast_after_id: Optional[str] = None
+        self.btn_docx = None
+        self.btn_md = None
+        self.btn_clear_form = None
         self.clients_detail_wrapper = None
         self.team_detail_wrapper = None
         self.clients_summary_tree = None
@@ -820,8 +823,9 @@ class FraudCaseApp:
         self._client_summary_owner = None
         self._product_summary_owner = None
         self._team_summary_owner = None
-        self.autosave_tree = None
-        self._autosave_candidate_paths: list[Path] = []
+        self._recovery_dialog: Optional[tk.Toplevel] = None
+        self._recovery_tree: Optional[ttk.Treeview] = None
+        self._recovery_sources: list[dict[str, object]] = []
         self._autosave_cycle_job_id: Optional[str] = None
         self._autosave_cycle_slots: dict[str, int] = {}
         self._autosave_cycle_last_run: dict[str, datetime] = {}
@@ -3308,16 +3312,15 @@ class FraudCaseApp:
                 getattr(self, "_actions_bar_anchor", None),
                 getattr(self, "actions_action_bar", None),
                 getattr(self, "btn_docx", None),
-                getattr(self, "actions_action_bar", None)
-                and getattr(self.actions_action_bar, "buttons", {}).get("md"),
+                getattr(self, "btn_md", None),
+                getattr(self, "btn_clear_form", None),
             ]
         elif key == "export":
             action_bar = getattr(self, "actions_action_bar", None)
             candidates = [
                 getattr(self, "_export_anchor_widget", None),
-                getattr(action_bar, "buttons", {}).get("export") if action_bar else None,
                 getattr(self, "btn_docx", None),
-                getattr(action_bar, "buttons", {}).get("md") if action_bar else None,
+                getattr(self, "btn_md", None),
                 action_bar,
             ]
         elif key == "validation":
@@ -6238,31 +6241,24 @@ class FraudCaseApp:
         ttk.Label(
             action_group,
             text=(
-                "Ejecuta las acciones principales de guardado, carga y exportación. "
-                "Estas opciones se mantienen visibles aunque el resto del contenido se desplace."
+                "Accesos rápidos para guardar y recuperar respaldos recientes. "
+                "Usa estas opciones para garantizar la persistencia continua del formulario."
             ),
             wraplength=520,
             justify="left",
         ).grid(row=0, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY, ROW_PADY // 2))
 
         action_buttons = (
-            ("Guardar y enviar", "save_send"),
-            ("Guardar checkpoint", "checkpoint"),
-            ("Cargar formulario", "load_form"),
-            ("Cargar autosave", "load_autosave"),
-            ("Borrar todos los datos", "clear"),
-            (None, None),
-            ("Generar Word (.docx)", "docx"),
-            ("Generar informe (.md)", "md"),
+            ("Guardar ahora", "save_send"),
+            ("Cargar archivo…", "load_form"),
+            ("Recuperar último autosave", "load_autosave"),
+            ("Historial de recuperación", "recovery_history"),
         )
         action_commands = {
             "save_send": self.save_and_send,
-            "checkpoint": self.save_checkpoint,
             "load_form": self.load_form_dialog,
-            "load_autosave": self.load_selected_autosave,
-            "clear": lambda: self.clear_all(notify=True),
-            "docx": self.generate_docx_report,
-            "md": self.generate_md_report,
+            "load_autosave": self.load_autosave,
+            "recovery_history": self.show_recovery_history_dialog,
         }
         action_bar_parent = ttk.Frame(action_group)
         action_bar_parent.grid(row=1, column=0, sticky="ew", padx=COL_PADX)
@@ -6281,31 +6277,52 @@ class FraudCaseApp:
         )
         self._actions_bar_anchor = (
             self.actions_action_bar.buttons.get("save_send")
-            or self.actions_action_bar.buttons.get("docx")
+            or self.actions_action_bar.buttons.get("recovery_history")
             or self.actions_action_bar
         )
         self.register_tooltip(
             self.actions_action_bar.buttons.get("save_send"),
-            "Valida el formulario, previene duplicados y genera los archivos obligatorios.",
+            "Valida el formulario, previene duplicados y guarda el respaldo activo.",
         )
         self.register_tooltip(
             self.actions_action_bar.buttons.get("load_form"),
-            "Carga un respaldo JSON ya guardado (versión, checkpoint o autosave manual).",
-        )
-        self.register_tooltip(
-            self.actions_action_bar.buttons.get("clear"),
-            "Limpia el formulario completo para iniciar desde cero.",
-        )
-        self.register_tooltip(
-            self.actions_action_bar.buttons.get("checkpoint"),
-            "Guarda un archivo JSON con el estado actual sin enviar el caso.",
+            "Carga un respaldo JSON ya guardado (versión, autosave o checkpoint).",
         )
         self.register_tooltip(
             self.actions_action_bar.buttons.get("load_autosave"),
-            "Carga el autosave seleccionado de la lista inferior.",
+            "Recupera automáticamente el último autosave válido encontrado.",
+        )
+        self.register_tooltip(
+            self.actions_action_bar.buttons.get("recovery_history"),
+            "Abre un historial con autosaves y checkpoints recientes para restaurar.",
         )
 
-        self.btn_docx = self.actions_action_bar.buttons.get("docx")
+        report_frame = ttk.Frame(action_group)
+        report_frame.grid(row=2, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
+        self.btn_docx = ttk.Button(
+            report_frame,
+            text="Generar Word (.docx)",
+            command=self.generate_docx_report,
+            style="ActionBar.TButton",
+        )
+        self.btn_docx.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
+        md_button = ttk.Button(
+            report_frame,
+            text="Generar informe (.md)",
+            command=self.generate_md_report,
+            style="ActionBar.TButton",
+        )
+        md_button.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
+        clear_button = ttk.Button(
+            report_frame,
+            text="Borrar todos los datos",
+            command=lambda: self.clear_all(notify=True),
+            style="ActionBar.TButton",
+        )
+        clear_button.pack(side="left", pady=(0, ROW_PADY // 2))
+        self.btn_md = md_button
+        self.btn_clear_form = clear_button
+
         docx_tooltip = (
             "Genera el informe principal en Word utilizando los datos validados."
             if self._docx_available
@@ -6318,18 +6335,17 @@ class FraudCaseApp:
                 pass
             self.register_tooltip(self.btn_docx, docx_tooltip)
 
-        md_button = self.actions_action_bar.buttons.get("md")
         self.register_tooltip(
             md_button,
-            "Crea una copia del informe en Markdown como respaldo manual.",
+            "Genera un informe detallado en Markdown. Siempre disponible como respaldo.",
         )
+        self.register_tooltip(
+            clear_button,
+            "Limpia el formulario completo para iniciar desde cero.",
+        )
+
         if getattr(self, "_export_anchor_widget", None) is None:
-            self._export_anchor_widget = (
-                self.actions_action_bar.buttons.get("export")
-                or self.btn_docx
-                or md_button
-                or self.actions_action_bar
-            )
+            self._export_anchor_widget = self.btn_docx or md_button or self.actions_action_bar
         if md_button is not None and self._actions_bar_anchor is None:
             self._actions_bar_anchor = md_button
 
@@ -6344,60 +6360,14 @@ class FraudCaseApp:
                 foreground="#b26a00",
                 wraplength=520,
                 justify="left",
-            ).grid(row=2, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
-
-        autosave_frame = ttk.LabelFrame(action_group, text="Autosaves disponibles")
-        autosave_frame.grid(row=3, column=0, sticky="nsew", padx=COL_PADX, pady=(ROW_PADY // 2, ROW_PADY))
-        autosave_frame.columnconfigure(0, weight=1)
-        autosave_frame.rowconfigure(1, weight=1)
-
-        ttk.Label(
-            autosave_frame,
-            text=(
-                "Selecciona un autosave reciente para restaurar los datos. "
-                "Se muestra la fecha de modificación y el nombre del archivo encontrado."
-            ),
-            wraplength=520,
-            justify="left",
-        ).grid(row=0, column=0, columnspan=2, sticky="we", pady=(ROW_PADY // 2, ROW_PADY // 2))
-
-        columns = ("timestamp", "filename")
-        self.autosave_tree = ttk.Treeview(
-            autosave_frame,
-            columns=columns,
-            show="headings",
-            height=5,
-            selectmode="browse",
-        )
-        self.autosave_tree.heading("timestamp", text="Última modificación")
-        self.autosave_tree.heading("filename", text="Archivo")
-        self.autosave_tree.column("timestamp", width=180, anchor="center")
-        self.autosave_tree.column("filename", width=260, anchor="w")
-        self.autosave_tree.grid(row=1, column=0, sticky="nsew")
-
-        autosave_scroll = ttk.Scrollbar(autosave_frame, orient="vertical", command=self.autosave_tree.yview)
-        autosave_scroll.grid(row=1, column=1, sticky="ns")
-        self.autosave_tree.configure(yscrollcommand=autosave_scroll.set)
-        self.autosave_tree.bind("<Double-1>", lambda *_args: self.load_selected_autosave())
-
-        autosave_actions = ttk.Frame(autosave_frame)
-        autosave_actions.grid(row=2, column=0, columnspan=2, sticky="e", pady=(ROW_PADY // 2, 0))
-        ttk.Button(
-            autosave_actions,
-            text="Actualizar lista",
-            command=self.refresh_autosave_list,
-            style="ActionBar.TButton",
-        ).pack(side="left", padx=(0, 8))
-        ttk.Button(
-            autosave_actions,
-            text="Cargar autosave seleccionado",
-            command=self.load_selected_autosave,
-            style="ActionBar.TButton",
-        ).pack(side="left")
+            ).grid(row=3, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
 
         ttk.Label(
             action_group,
-            text="El auto‑guardado se realiza automáticamente en un archivo JSON",
+            text=(
+                "El auto-guardado se ejecuta de fondo. Usa \"Historial de recuperación\" "
+                "para elegir versiones anteriores o respaldos recientes."
+            ),
             wraplength=520,
             justify="left",
         ).grid(row=4, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
@@ -10228,7 +10198,16 @@ class FraudCaseApp:
         return manager
 
     def _validate_persistence_payload(self, payload: Mapping[str, object]) -> Mapping[str, object]:
-        validated = validate_schema_payload(payload)
+        try:
+            validated = validate_schema_payload(payload)
+        except ValueError:
+            if isinstance(payload, Mapping) and payload.get("schema_version") is not None:
+                raise
+            dataset_payload = payload.get("dataset", payload) if isinstance(payload, Mapping) else payload
+            dataset = self._ensure_case_data(dataset_payload)
+            form_state = payload.get("form_state") if isinstance(payload, Mapping) else {}
+            return {"dataset": dataset, "form_state": form_state or {}}
+
         dataset_payload = validated.get("dataset", {})
         self._ensure_case_data(dataset_payload)
         return validated
@@ -10268,7 +10247,8 @@ class FraudCaseApp:
 
         def _on_success(_result):
             self._handle_session_saved(dataset)
-            self._show_success_toast(self._progress_bar, "Autoguardado listo")
+            progress_widget = getattr(self, "_progress_bar", None)
+            self._show_success_toast(progress_widget, "Autoguardado listo")
             self.refresh_autosave_list()
             self._schedule_summary_refresh(data=dataset)
 
@@ -10312,7 +10292,9 @@ class FraudCaseApp:
             except tk.TclError:
                 return
 
-    def _discover_autosave_candidates(self) -> list[tuple[float, Path]]:
+    def _discover_autosave_candidates(
+        self, extra_patterns: Iterable[str] | None = None
+    ) -> list[tuple[float, Path]]:
         seen: set[Path] = set()
         autosave_path = Path(AUTOSAVE_FILE)
         primary_root = autosave_path.parent if autosave_path.parent else Path(BASE_DIR)
@@ -10322,6 +10304,8 @@ class FraudCaseApp:
         if external_base:
             search_roots.append(Path(external_base))
         patterns = (autosave_path.name, "*autosave*.json", "*_temp_*.json", "auto_*.json")
+        if extra_patterns:
+            patterns = tuple(patterns) + tuple(extra_patterns)
 
         def _yield_matches(root: Path):
             for pattern in patterns:
@@ -10359,14 +10343,7 @@ class FraudCaseApp:
         return candidates
 
     def refresh_autosave_list(self) -> None:
-        if not self.autosave_tree:
-            return
-        self.autosave_tree.delete(*self.autosave_tree.get_children())
-        self._autosave_candidate_paths.clear()
-        for index, (mtime, path) in enumerate(self._discover_autosave_candidates()):
-            timestamp = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-            self.autosave_tree.insert("", "end", iid=str(index), values=(timestamp, path.name))
-            self._autosave_candidate_paths.append(path)
+        self._refresh_recovery_sources()
 
     def load_autosave(self):
         """Carga el estado guardado automáticamente si el archivo existe."""
@@ -10419,31 +10396,155 @@ class FraudCaseApp:
 
         manager.load_first_valid(paths, on_success=_on_success, on_error=_on_error)
 
-    def load_selected_autosave(self) -> None:
-        """Carga el autosave seleccionado en la lista de autosaves disponibles."""
+    def show_recovery_history_dialog(self) -> None:
+        """Muestra un diálogo con los autosaves y checkpoints disponibles."""
 
-        log_event("navegacion", "Usuario solicitó cargar un autosave desde la lista", self.logs)
-        if not self.autosave_tree:
+        log_event("navegacion", "Usuario abrió historial de recuperación", self.logs)
+        if self._recovery_dialog and self._recovery_dialog.winfo_exists():
+            try:
+                self._recovery_dialog.lift()
+                self._recovery_dialog.focus_force()
+            except tk.TclError:
+                pass
+            self._refresh_recovery_sources()
             return
-        selection = self.autosave_tree.selection()
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Historial de recuperación")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.protocol("WM_DELETE_WINDOW", self._destroy_recovery_dialog)
+        self._recovery_dialog = dialog
+
+        ttk.Label(
+            dialog,
+            text=(
+                "Selecciona un respaldo para restaurar el formulario. Se muestran autosaves "
+                "y checkpoints encontrados en las ubicaciones configuradas."
+            ),
+            wraplength=520,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=14, pady=(12, 6))
+
+        columns = ("tipo", "modificado", "tamano", "ubicacion")
+        tree = ttk.Treeview(
+            dialog,
+            columns=columns,
+            show="headings",
+            height=8,
+            selectmode="browse",
+        )
+        tree.heading("tipo", text="Tipo")
+        tree.heading("modificado", text="Fecha de guardado")
+        tree.heading("tamano", text="Tamaño")
+        tree.heading("ubicacion", text="Ubicación")
+        tree.column("tipo", width=100, anchor="center")
+        tree.column("modificado", width=170, anchor="center")
+        tree.column("tamano", width=80, anchor="e")
+        tree.column("ubicacion", width=340, anchor="w")
+        tree.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=(12, 0), pady=(0, 8))
+        scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=tree.yview)
+        scrollbar.grid(row=1, column=2, sticky="ns", pady=(0, 8), padx=(0, 12))
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.bind("<Double-1>", lambda *_args: self._load_selected_recovery())
+        self._recovery_tree = tree
+
+        buttons_frame = ttk.Frame(dialog)
+        buttons_frame.grid(row=2, column=0, columnspan=3, sticky="e", padx=12, pady=(0, 12))
+        ttk.Button(
+            buttons_frame,
+            text="Refrescar",
+            command=self._refresh_recovery_sources,
+            style="ActionBar.TButton",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            buttons_frame,
+            text="Cargar seleccionado",
+            command=self._load_selected_recovery,
+            style="ActionBar.TButton",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            buttons_frame,
+            text="Cerrar",
+            command=self._destroy_recovery_dialog,
+            style="ActionBar.TButton",
+        ).pack(side="left")
+
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        self._refresh_recovery_sources()
+
+    def _destroy_recovery_dialog(self) -> None:
+        dialog = getattr(self, "_recovery_dialog", None)
+        if dialog is None:
+            return
+        try:
+            dialog.destroy()
+        except tk.TclError:
+            pass
+        self._recovery_dialog = None
+        self._recovery_tree = None
+
+    def _refresh_recovery_sources(self) -> list[dict[str, object]]:
+        records: list[dict[str, object]] = []
+        patterns = ("*checkpoint*.json", "*respaldo*.json")
+        for mtime, path in self._discover_autosave_candidates(extra_patterns=patterns):
+            timestamp = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+            size_label = self._format_file_size(path)
+            kind = self._describe_recovery_item(path)
+            records.append(
+                {
+                    "path": path,
+                    "timestamp": timestamp,
+                    "size": size_label,
+                    "kind": kind,
+                    "location": str(path),
+                }
+            )
+        self._recovery_sources = records
+
+        tree = getattr(self, "_recovery_tree", None)
+        if tree is not None:
+            tree.delete(*tree.get_children())
+            for index, record in enumerate(records):
+                tree.insert(
+                    "",
+                    "end",
+                    iid=str(index),
+                    values=(
+                        record["kind"],
+                        record["timestamp"],
+                        record["size"],
+                        record["location"],
+                    ),
+                )
+        return records
+
+    def _load_selected_recovery(self) -> None:
+        tree = getattr(self, "_recovery_tree", None)
+        if tree is None:
+            return
+        selection = tree.selection()
         if not selection:
             if not getattr(self, "_suppress_messagebox", False):
                 try:
-                    messagebox.showinfo("Selecciona un autosave", "Elige un archivo de la lista para restaurar.")
+                    messagebox.showinfo("Selecciona un respaldo", "Elige un archivo de la lista para restaurar.")
                 except tk.TclError:
                     pass
             return
         try:
             index = int(selection[0])
-            path = self._autosave_candidate_paths[index]
+            record = self._recovery_sources[index]
         except (ValueError, IndexError):
             if not getattr(self, "_suppress_messagebox", False):
                 try:
-                    messagebox.showerror("Selección inválida", "No se pudo determinar el autosave seleccionado.")
+                    messagebox.showerror("Selección inválida", "No se pudo determinar el respaldo seleccionado.")
                 except tk.TclError:
                     pass
             return
 
+        path: Path = record["path"]  # type: ignore[assignment]
+        label = f"{record['kind'].lower()} {path.name}"
         manager = self._get_persistence_manager()
 
         def _on_success(result):
@@ -10451,23 +10552,42 @@ class FraudCaseApp:
             self._apply_loaded_dataset(
                 dataset,
                 form_state=form_state,
-                source_label=f"el autosave {result.path}",
-                autosave=True,
+                source_label=f"el respaldo {result.path}",
+                autosave=str(record.get("kind", "")).lower().startswith("auto"),
                 show_toast=True,
             )
             self._notify_user(
-                "El autosave seleccionado se cargó correctamente.",
-                title="Autosave cargado",
+                "El respaldo seleccionado se cargó correctamente.",
+                title="Respaldo cargado",
                 level="info",
                 show_toast=not getattr(self, "_suppress_messagebox", False),
             )
 
         def _on_error(exc: BaseException):
-            self._report_persistence_failure(
-                label=f"el autosave {path.name}", filename=path, error=exc
-            )
+            self._report_persistence_failure(label=label, filename=path, error=exc)
 
         manager.load(path, on_success=_on_success, on_error=_on_error)
+
+    @staticmethod
+    def _format_file_size(path: Path) -> str:
+        try:
+            size_bytes = path.stat().st_size
+        except OSError:
+            return "?"
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        size_kb = size_bytes / 1024
+        if size_kb < 1024:
+            return f"{size_kb:.1f} KB"
+        size_mb = size_kb / 1024
+        return f"{size_mb:.1f} MB"
+
+    @staticmethod
+    def _describe_recovery_item(path: Path) -> str:
+        name = path.name.lower()
+        if "checkpoint" in name or "temp" in name:
+            return "Checkpoint"
+        return "Autosave"
 
     def _handle_window_close(self):
         self.flush_autosave()
@@ -12473,9 +12593,8 @@ class FraudCaseApp:
         )
 
     def generate_md_report(self):
-        md_button = self.actions_action_bar.buttons.get("md") if hasattr(self, "actions_action_bar") else None
         self._generate_report_file(
-            "md", save_md, "Markdown (.md)", source_widget=md_button
+            "md", save_md, "Markdown (.md)", source_widget=self.btn_md
         )
 
     def _build_export_definitions(self, data: CaseData) -> list[dict[str, object]]:
