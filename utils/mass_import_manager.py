@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
+
+from validators import log_event
 
 
 @dataclass
@@ -52,6 +54,48 @@ class MassImportManager:
     def __init__(self, log_directory: Path | str):
         self.log_directory = Path(log_directory)
         self.log_directory.mkdir(parents=True, exist_ok=True)
+
+    def orchestrate_csv_import(
+        self,
+        *,
+        app,
+        sample_key: str,
+        task_label: str,
+        button,
+        worker_factory: Callable[[str], Callable],
+        ui_callback: Callable[[object, str], None],
+        error_prefix: str,
+        ui_error_prefix: str | None = None,
+        filename: str | None = None,
+        dialog_title: str | None = None,
+        click_log: str | None = None,
+        start_log: str | None = None,
+        log_handler: Callable[[str, str], None] | None = None,
+    ) -> None:
+        """Centraliza la selección, validación y ejecución de importaciones masivas."""
+
+        logger = log_handler or (lambda category, message: log_event(category, message, getattr(app, "logs", None)))
+        if click_log:
+            logger("navegacion", click_log)
+
+        file_path = filename or app._select_csv_file(sample_key, dialog_title or f"Seleccionar CSV de {task_label}")
+        if not file_path:
+            return
+        if not app._validate_import_headers(file_path, sample_key):
+            return
+
+        if start_log:
+            logger("navegacion", start_log)
+
+        worker = worker_factory(file_path)
+        app._start_background_import(
+            task_label,
+            button,
+            worker,
+            lambda payload: ui_callback(payload, file_path),
+            error_prefix,
+            ui_error_prefix,
+        )
 
     def run_import(
         self,

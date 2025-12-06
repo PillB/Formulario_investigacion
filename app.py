@@ -1293,126 +1293,77 @@ class FraudCaseApp:
     def import_combined(self, filename=None):
         """Importa datos combinados de productos, clientes y colaboradores."""
 
-        log_event("navegacion", "Usuario pulsó importar datos combinados", self.logs)
-        filename = filename or self._select_csv_file("combinado", "Seleccionar CSV combinado")
-        if not filename:
-            return
-        if not self._validate_import_headers(filename, "combinado"):
-            return
-        log_event("navegacion", "Inició importación de datos combinados", self.logs)
         manager = self.mass_import_manager
-        def worker(progress_callback, cancel_event):
-            prepared_rows = []
-            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                raw_row = self._sanitize_import_row(row, row_number=index)
-                client_row, client_found = self._hydrate_row_from_details(raw_row, 'id_cliente', CLIENT_ID_ALIASES)
-                team_row, team_found = self._hydrate_row_from_details(raw_row, 'id_colaborador', TEAM_ID_ALIASES)
-                product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
-                collaborator_id = (team_row.get('id_colaborador') or '').strip()
-                involvement_pairs = parse_involvement_entries(raw_row.get('involucramiento', ''))
-                if not involvement_pairs and collaborator_id and raw_row.get('monto_asignado'):
-                    involvement_pairs = [(collaborator_id, (raw_row.get('monto_asignado') or '').strip())]
-                prepared_rows.append(
-                    {
-                        'raw_row': raw_row,
-                        'client_row': client_row,
-                        'client_found': client_found,
-                        'team_row': team_row,
-                        'team_found': team_found,
-                        'product_row': product_row,
-                        'product_found': product_found,
-                        'involvement_pairs': involvement_pairs,
-                    }
-                )
-            return prepared_rows
-
-        self._start_background_import(
-            "datos combinados",
-            getattr(self, 'import_combined_button', None),
-            worker,
-            lambda payload: self._apply_combined_import_payload(payload, manager=manager, file_path=filename),
-            "No se pudo importar el CSV combinado",
+        manager.orchestrate_csv_import(
+            app=self,
+            sample_key="combinado",
+            task_label="datos combinados",
+            button=getattr(self, 'import_combined_button', None),
+            worker_factory=lambda file_path: self._build_combined_worker(file_path),
+            ui_callback=lambda payload, file_path: self._apply_combined_import_payload(payload, manager=manager, file_path=file_path),
+            error_prefix="No se pudo importar el CSV combinado",
+            filename=filename,
+            dialog_title="Seleccionar CSV combinado",
+            click_log="Usuario pulsó importar datos combinados",
+            start_log="Inició importación de datos combinados",
+            log_handler=lambda category, message: log_event(category, message, self.logs),
         )
 
     def import_risks(self, filename=None):
         """Importa riesgos desde un archivo CSV."""
 
-        log_event("navegacion", "Usuario pulsó importar riesgos", self.logs)
-        filename = filename or self._select_csv_file("riesgos", "Seleccionar CSV de riesgos")
-        if not filename:
-            return
-        if not self._validate_import_headers(filename, "riesgos"):
-            return
-        log_event("navegacion", "Inició importación de riesgos", self.logs)
         manager = self.mass_import_manager
-        def worker(progress_callback, cancel_event):
-            payload = []
-            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                sanitized_row = self._sanitize_import_row(row, row_number=index)
-                hydrated, _ = self._hydrate_row_from_details(sanitized_row, 'id_riesgo', RISK_ID_ALIASES)
-                payload.append(hydrated)
-            return payload
-
-        self._start_background_import(
-            "riesgos",
-            getattr(self, 'import_risks_button', None),
-            worker,
-            lambda payload: self._apply_risk_import_payload(payload, manager=manager, file_path=filename),
-            "No se pudo importar riesgos",
+        manager.orchestrate_csv_import(
+            app=self,
+            sample_key="riesgos",
+            task_label="riesgos",
+            button=getattr(self, 'import_risks_button', None),
+            worker_factory=lambda file_path: self._build_risk_worker(file_path),
+            ui_callback=lambda payload, file_path: self._apply_risk_import_payload(payload, manager=manager, file_path=file_path),
+            error_prefix="No se pudo importar riesgos",
+            filename=filename,
+            dialog_title="Seleccionar CSV de riesgos",
+            click_log="Usuario pulsó importar riesgos",
+            start_log="Inició importación de riesgos",
+            log_handler=lambda category, message: log_event(category, message, self.logs),
         )
 
     def import_norms(self, filename=None):
         """Importa normas transgredidas desde un archivo CSV."""
 
-        log_event("navegacion", "Usuario pulsó importar normas", self.logs)
-        filename = filename or self._select_csv_file("normas", "Seleccionar CSV de normas")
-        if not filename:
-            return
-        if not self._validate_import_headers(filename, "normas"):
-            return
-        log_event("navegacion", "Inició importación de normas", self.logs)
         manager = self.mass_import_manager
-        def worker(progress_callback, cancel_event):
-            payload = []
-            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                sanitized_row = self._sanitize_import_row(row, row_number=index)
-                hydrated, _ = self._hydrate_row_from_details(sanitized_row, 'id_norma', NORM_ID_ALIASES)
-                payload.append(hydrated)
-            return payload
-
-        self._start_background_import(
-            "normas",
-            getattr(self, 'import_norms_button', None),
-            worker,
-            lambda payload: self._apply_norm_import_payload(payload, manager=manager, file_path=filename),
-            "No se pudo importar normas",
+        manager.orchestrate_csv_import(
+            app=self,
+            sample_key="normas",
+            task_label="normas",
+            button=getattr(self, 'import_norms_button', None),
+            worker_factory=lambda file_path: self._build_norm_worker(file_path),
+            ui_callback=lambda payload, file_path: self._apply_norm_import_payload(payload, manager=manager, file_path=file_path),
+            error_prefix="No se pudo importar normas",
+            filename=filename,
+            dialog_title="Seleccionar CSV de normas",
+            click_log="Usuario pulsó importar normas",
+            start_log="Inició importación de normas",
+            log_handler=lambda category, message: log_event(category, message, self.logs),
         )
 
     def import_claims(self, filename=None):
         """Importa reclamos desde un archivo CSV."""
 
-        log_event("navegacion", "Usuario pulsó importar reclamos", self.logs)
-        filename = filename or self._select_csv_file("reclamos", "Seleccionar CSV de reclamos")
-        if not filename:
-            return
-        if not self._validate_import_headers(filename, "reclamos"):
-            return
-        log_event("navegacion", "Inició importación de reclamos", self.logs)
         manager = self.mass_import_manager
-        def worker(progress_callback, cancel_event):
-            payload = []
-            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                sanitized_row = self._sanitize_import_row(row, row_number=index)
-                hydrated, found = self._hydrate_row_from_details(sanitized_row, 'id_producto', PRODUCT_ID_ALIASES)
-                payload.append({'row': hydrated, 'found': found})
-            return payload
-
-        self._start_background_import(
-            "reclamos",
-            getattr(self, 'import_claims_button', None),
-            worker,
-            lambda payload: self._apply_claim_import_payload(payload, manager=manager, file_path=filename),
-            "No se pudo importar reclamos",
+        manager.orchestrate_csv_import(
+            app=self,
+            sample_key="reclamos",
+            task_label="reclamos",
+            button=getattr(self, 'import_claims_button', None),
+            worker_factory=lambda file_path: self._build_claim_worker(file_path),
+            ui_callback=lambda payload, file_path: self._apply_claim_import_payload(payload, manager=manager, file_path=file_path),
+            error_prefix="No se pudo importar reclamos",
+            filename=filename,
+            dialog_title="Seleccionar CSV de reclamos",
+            click_log="Usuario pulsó importar reclamos",
+            start_log="Inició importación de reclamos",
+            log_handler=lambda category, message: log_event(category, message, self.logs),
         )
 
     # ---------------------------------------------------------------------
@@ -8504,6 +8455,9 @@ class FraudCaseApp:
             )
             return 0
 
+    
+
+
     def _iter_rows_with_progress(self, filename: str, progress_callback, cancel_event):
         total_rows = self._count_massive_rows(filename)
         progress_callback(0, total_rows)
@@ -8512,6 +8466,106 @@ class FraudCaseApp:
                 raise CancelledError("Importación cancelada por el usuario")
             progress_callback(index, total_rows)
             yield index, row
+
+    def _build_combined_worker(self, filename: str):
+        def worker(progress_callback, cancel_event):
+            prepared_rows = []
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
+                raw_row = self._sanitize_import_row(row, row_number=index)
+                client_row, client_found = self._hydrate_row_from_details(raw_row, 'id_cliente', CLIENT_ID_ALIASES)
+                team_row, team_found = self._hydrate_row_from_details(raw_row, 'id_colaborador', TEAM_ID_ALIASES)
+                product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
+                collaborator_id = (team_row.get('id_colaborador') or '').strip()
+                involvement_pairs = parse_involvement_entries(raw_row.get('involucramiento', ''))
+                if not involvement_pairs and collaborator_id and raw_row.get('monto_asignado'):
+                    involvement_pairs = [(collaborator_id, (raw_row.get('monto_asignado') or '').strip())]
+                prepared_rows.append(
+                    {
+                        'raw_row': raw_row,
+                        'client_row': client_row,
+                        'client_found': client_found,
+                        'team_row': team_row,
+                        'team_found': team_found,
+                        'product_row': product_row,
+                        'product_found': product_found,
+                        'involvement_pairs': involvement_pairs,
+                    }
+                )
+            return prepared_rows
+
+        return worker
+
+    def _build_risk_worker(self, filename: str):
+        def worker(progress_callback, cancel_event):
+            payload = []
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, _ = self._hydrate_row_from_details(sanitized_row, 'id_riesgo', RISK_ID_ALIASES)
+                payload.append(hydrated)
+            return payload
+
+        return worker
+
+    def _build_norm_worker(self, filename: str):
+        def worker(progress_callback, cancel_event):
+            payload = []
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, _ = self._hydrate_row_from_details(sanitized_row, 'id_norma', NORM_ID_ALIASES)
+                payload.append(hydrated)
+            return payload
+
+        return worker
+
+    def _build_claim_worker(self, filename: str):
+        def worker(progress_callback, cancel_event):
+            payload = []
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, found = self._hydrate_row_from_details(sanitized_row, 'id_producto', PRODUCT_ID_ALIASES)
+                payload.append({'row': hydrated, 'found': found})
+            return payload
+
+        return worker
+
+    def _build_client_worker(self, filename: str):
+        def worker(progress_callback, cancel_event):
+            payload = []
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
+                hydrated, found = self._hydrate_row_from_details(row, 'id_cliente', CLIENT_ID_ALIASES)
+                id_cliente = (hydrated.get('id_cliente') or '').strip()
+                if not id_cliente:
+                    continue
+                payload.append({'row': hydrated, 'found': found})
+            return payload
+
+        return worker
+
+    def _build_team_worker(self, filename: str):
+        def worker(progress_callback, cancel_event):
+            payload = []
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
+                hydrated, found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
+                collaborator_id = (hydrated.get('id_colaborador') or '').strip()
+                if not collaborator_id:
+                    continue
+                payload.append({'row': hydrated, 'found': found})
+            return payload
+
+        return worker
+
+    def _build_product_worker(self, filename: str):
+        def worker(progress_callback, cancel_event):
+            payload = []
+            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
+                hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
+                product_id = (hydrated.get('id_producto') or '').strip()
+                if not product_id:
+                    continue
+                payload.append({'row': hydrated, 'found': found})
+            return payload
+
+        return worker
 
     def _get_detail_lookup(self, id_column):
         """Obtiene el diccionario de detalles considerando alias configurados."""
@@ -10081,88 +10135,58 @@ class FraudCaseApp:
     def import_clients(self, filename=None):
         """Importa clientes desde un archivo CSV y los añade a la lista."""
 
-        log_event("navegacion", "Usuario pulsó importar clientes", self.logs)
-        filename = filename or self._select_csv_file("clientes", "Seleccionar CSV de clientes")
-        if not filename:
-            return
-        if not self._validate_import_headers(filename, "clientes"):
-            return
-        log_event("navegacion", "Inició importación de clientes", self.logs)
         manager = self.mass_import_manager
-        def worker(progress_callback, cancel_event):
-            payload = []
-            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                hydrated, found = self._hydrate_row_from_details(row, 'id_cliente', CLIENT_ID_ALIASES)
-                id_cliente = (hydrated.get('id_cliente') or '').strip()
-                if not id_cliente:
-                    continue
-                payload.append({'row': hydrated, 'found': found})
-            return payload
-
-        self._start_background_import(
-            "clientes",
-            getattr(self, 'import_clients_button', None),
-            worker,
-            lambda payload: self._apply_client_import_payload(payload, manager=manager, file_path=filename),
-            "No se pudo importar clientes",
+        manager.orchestrate_csv_import(
+            app=self,
+            sample_key="clientes",
+            task_label="clientes",
+            button=getattr(self, 'import_clients_button', None),
+            worker_factory=lambda file_path: self._build_client_worker(file_path),
+            ui_callback=lambda payload, file_path: self._apply_client_import_payload(payload, manager=manager, file_path=file_path),
+            error_prefix="No se pudo importar clientes",
+            filename=filename,
+            dialog_title="Seleccionar CSV de clientes",
+            click_log="Usuario pulsó importar clientes",
+            start_log="Inició importación de clientes",
+            log_handler=lambda category, message: log_event(category, message, self.logs),
         )
 
     def import_team_members(self, filename=None):
         """Importa colaboradores desde un archivo CSV y los añade a la lista."""
 
-        log_event("navegacion", "Usuario pulsó importar colaboradores", self.logs)
-        filename = filename or self._select_csv_file("colaboradores", "Seleccionar CSV de colaboradores")
-        if not filename:
-            return
-        if not self._validate_import_headers(filename, "colaboradores"):
-            return
-        log_event("navegacion", "Inició importación de colaboradores", self.logs)
         manager = self.mass_import_manager
-        def worker(progress_callback, cancel_event):
-            payload = []
-            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                hydrated, found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
-                collaborator_id = (hydrated.get('id_colaborador') or '').strip()
-                if not collaborator_id:
-                    continue
-                payload.append({'row': hydrated, 'found': found})
-            return payload
-
-        self._start_background_import(
-            "colaboradores",
-            getattr(self, 'import_team_button', None),
-            worker,
-            lambda payload: self._apply_team_import_payload(payload, manager=manager, file_path=filename),
-            "No se pudo importar colaboradores",
+        manager.orchestrate_csv_import(
+            app=self,
+            sample_key="colaboradores",
+            task_label="colaboradores",
+            button=getattr(self, 'import_team_button', None),
+            worker_factory=lambda file_path: self._build_team_worker(file_path),
+            ui_callback=lambda payload, file_path: self._apply_team_import_payload(payload, manager=manager, file_path=file_path),
+            error_prefix="No se pudo importar colaboradores",
+            filename=filename,
+            dialog_title="Seleccionar CSV de colaboradores",
+            click_log="Usuario pulsó importar colaboradores",
+            start_log="Inició importación de colaboradores",
+            log_handler=lambda category, message: log_event(category, message, self.logs),
         )
 
     def import_products(self, filename=None):
         """Importa productos desde un archivo CSV y los añade a la lista."""
 
-        log_event("navegacion", "Usuario pulsó importar productos", self.logs)
-        filename = filename or self._select_csv_file("productos", "Seleccionar CSV de productos")
-        if not filename:
-            return
-        if not self._validate_import_headers(filename, "productos"):
-            return
-        log_event("navegacion", "Inició importación de productos", self.logs)
         manager = self.mass_import_manager
-        def worker(progress_callback, cancel_event):
-            payload = []
-            for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
-                product_id = (hydrated.get('id_producto') or '').strip()
-                if not product_id:
-                    continue
-                payload.append({'row': hydrated, 'found': found})
-            return payload
-
-        self._start_background_import(
-            "productos",
-            getattr(self, 'import_products_button', None),
-            worker,
-            lambda payload: self._apply_product_import_payload(payload, manager=manager, file_path=filename),
-            "No se pudo importar productos",
+        manager.orchestrate_csv_import(
+            app=self,
+            sample_key="productos",
+            task_label="productos",
+            button=getattr(self, 'import_products_button', None),
+            worker_factory=lambda file_path: self._build_product_worker(file_path),
+            ui_callback=lambda payload, file_path: self._apply_product_import_payload(payload, manager=manager, file_path=file_path),
+            error_prefix="No se pudo importar productos",
+            filename=filename,
+            dialog_title="Seleccionar CSV de productos",
+            click_log="Usuario pulsó importar productos",
+            start_log="Inició importación de productos",
+            log_handler=lambda category, message: log_event(category, message, self.logs),
         )
 
     # ---------------------------------------------------------------------
