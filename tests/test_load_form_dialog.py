@@ -4,7 +4,9 @@ from collections import defaultdict
 from pathlib import Path
 
 import app as app_module
+import json
 from app import FraudCaseApp
+from utils.persistence_manager import CURRENT_SCHEMA_VERSION
 from tests.stubs import DummyVar, InvolvementRowStub, RichTextWidgetStub
 
 
@@ -245,6 +247,50 @@ def test_load_form_dialog_reports_invalid_json(monkeypatch, messagebox_spy, tmp_
     assert level == "error"
     assert "No se pudo cargar el formulario" in message
     assert "invalid.json" in message
+    assert not app.client_frames
+
+
+def test_load_form_dialog_requires_dataset_section(monkeypatch, messagebox_spy, tmp_path):
+    missing_dataset = tmp_path / "missing_dataset.json"
+    missing_dataset.write_text(
+        json.dumps({"schema_version": CURRENT_SCHEMA_VERSION, "form_state": {}}),
+        encoding="utf-8",
+    )
+    app = _build_loading_app()
+    app._suppress_messagebox = False
+    monkeypatch.setattr(app_module.filedialog, "askopenfilename", lambda **_: str(missing_dataset))
+
+    app.load_form_dialog()
+
+    notifications = getattr(app, "_ui_notifications", [])
+    assert notifications
+    assert notifications[0].get("level") == "error"
+    assert "dataset" in notifications[0].get("message", "").lower()
+    assert not app.client_frames
+
+
+def test_load_form_dialog_detects_schema_version_mismatch(monkeypatch, messagebox_spy, tmp_path):
+    incompatible = tmp_path / "wrong_version.json"
+    incompatible.write_text(
+        json.dumps(
+            {
+                "schema_version": "0.5",
+                "dataset": {"caso": {}},
+                "form_state": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    app = _build_loading_app()
+    app._suppress_messagebox = False
+    monkeypatch.setattr(app_module.filedialog, "askopenfilename", lambda **_: str(incompatible))
+
+    app.load_form_dialog()
+
+    notifications = getattr(app, "_ui_notifications", [])
+    assert notifications
+    assert notifications[0].get("level") == "error"
+    assert "versión" in notifications[0].get("message", "").lower()
     assert not app.client_frames
 
 

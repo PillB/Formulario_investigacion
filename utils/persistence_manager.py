@@ -13,6 +13,9 @@ from utils.background_worker import run_guarded_task
 
 SchemaValidator = Callable[[Mapping[str, object]], Mapping[str, object]]
 
+CURRENT_SCHEMA_VERSION = "1.0"
+SUPPORTED_SCHEMA_VERSIONS = {CURRENT_SCHEMA_VERSION}
+
 
 @dataclass
 class PersistenceResult:
@@ -40,7 +43,7 @@ class PersistenceManager:
         schema_validator: SchemaValidator | None = None,
     ) -> None:
         self.root = root
-        self.schema_validator = schema_validator
+        self.schema_validator = schema_validator or validate_schema_payload
 
     def save(
         self,
@@ -129,9 +132,15 @@ class PersistenceManager:
 
     def _load_payload(self, path: Path) -> PersistenceResult:
         normalized = Path(path)
-        with normalized.open("r", encoding="utf-8") as fh:
-            payload = json.load(fh)
-        self._validate_payload(payload)
+        try:
+            with normalized.open("r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except json.JSONDecodeError as exc:  # pragma: no cover - contextualiza el error
+            raise ValueError(f"JSON inválido en {normalized}: {exc}") from exc
+        try:
+            self._validate_payload(payload)
+        except Exception as exc:  # pragma: no cover - asegura rastreo del archivo
+            raise ValueError(f"{normalized}: {exc}") from exc
         return PersistenceResult(path=normalized, payload=payload)
 
     def _validate_payload(self, payload: Mapping[str, object]) -> Mapping[str, object]:
@@ -140,3 +149,30 @@ class PersistenceManager:
         if not isinstance(payload, Mapping):
             raise ValueError("El archivo debe contener un objeto JSON válido.")
         return payload
+
+
+def validate_schema_payload(payload: Mapping[str, object]) -> Mapping[str, object]:
+    """Validates the required structure and version metadata for persistence files."""
+
+    if not isinstance(payload, Mapping):
+        raise ValueError("El archivo debe contener un objeto JSON válido.")
+
+    version = payload.get("schema_version")
+    if version is None:
+        raise ValueError("Falta el campo requerido 'schema_version'.")
+    if str(version) not in SUPPORTED_SCHEMA_VERSIONS:
+        raise ValueError(
+            f"Versión de esquema incompatible: {version}; se espera {CURRENT_SCHEMA_VERSION}."
+        )
+
+    if "dataset" not in payload:
+        raise ValueError("Falta la sección obligatoria 'dataset'.")
+    dataset_payload = payload.get("dataset")
+    if not isinstance(dataset_payload, Mapping):
+        raise ValueError("La sección 'dataset' debe ser un objeto JSON.")
+
+    form_state = payload.get("form_state")
+    if form_state is not None and not isinstance(form_state, Mapping):
+        raise ValueError("La sección 'form_state' debe ser un objeto JSON.")
+
+    return payload
