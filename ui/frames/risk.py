@@ -62,6 +62,7 @@ class RiskFrame:
         self.header_tree = None
 
         self.id_var = tk.StringVar()
+        self.new_risk_var = tk.BooleanVar(value=False)
         self._auto_id_value = ""
         self._id_user_modified = False
         self._suppress_id_trace = False
@@ -107,17 +108,39 @@ class RiskFrame:
         remove_btn.grid(row=0, column=1, sticky="e")
         self.tooltip_register(remove_btn, "Quita este riesgo del caso.")
 
-        ttk.Label(self.frame, text="ID riesgo:").grid(
+        ttk.Label(self.frame, text="ID riesgo (catálogo o nuevo):").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
+        id_row = ttk.Frame(self.frame)
+        ensure_grid_support(id_row)
+        id_row.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        if hasattr(id_row, "columnconfigure"):
+            id_row.columnconfigure(0, weight=1)
         id_entry = self._make_badged_field(
-            self.frame,
+            id_row,
             "riesgo_id",
             lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=15),
-            row=1,
-            column=1,
+            row=0,
+            column=0,
         )
-        self.tooltip_register(id_entry, "Usa el formato RSK-000000.")
+        toggle_btn = ttk.Checkbutton(
+            id_row,
+            text="Agregar riesgo nuevo",
+            variable=self.new_risk_var,
+            command=self._on_mode_toggle,
+        )
+        toggle_btn.grid(row=0, column=1, padx=(COL_PADX // 2, 0), sticky="w")
+        self.tooltip_register(
+            id_entry,
+            (
+                "Selecciona un riesgo catalogado para autopoblar campos o marca "
+                "'Agregar riesgo nuevo' para capturar un ID libre sin buscar en el catálogo."
+            ),
+        )
+        self.tooltip_register(
+            toggle_btn,
+            "Activa para registrar un riesgo nuevo sin búsqueda de catálogo; desactiva para usar el catálogo.",
+        )
         self._bind_identifier_triggers(id_entry)
 
         ttk.Label(self.frame, text="Criticidad:").grid(
@@ -445,6 +468,11 @@ class RiskFrame:
         rid = self.id_var.get().strip()
         if not rid:
             self._last_missing_lookup_id = None
+            self._schedule_refresh()
+            return
+        if not self.is_catalog_mode():
+            self._last_missing_lookup_id = None
+            self._schedule_refresh()
             return
         data = self.risk_lookup.get(rid)
         if not data:
@@ -465,6 +493,7 @@ class RiskFrame:
                 self._last_missing_lookup_id = rid
             else:
                 self._last_missing_lookup_id = None
+            self._schedule_refresh()
             return
 
         def set_if_present(var, key):
@@ -506,6 +535,7 @@ class RiskFrame:
         if not values:
             return
         self.id_var.set(values[0])
+        self._set_catalog_mode(True)
         self.on_id_change(preserve_existing=True, silent=True)
 
     def _on_tree_double_click(self, _event=None):
@@ -516,6 +546,7 @@ class RiskFrame:
         if not values:
             return
         self.id_var.set(values[0])
+        self._set_catalog_mode(True)
         self.on_id_change(from_focus=True, explicit_lookup=True)
 
     def _first_selected_item(self):
@@ -602,6 +633,19 @@ class RiskFrame:
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
+    def _on_mode_toggle(self):
+        if self.is_catalog_mode():
+            self.on_id_change(preserve_existing=True, silent=True)
+        else:
+            self._last_missing_lookup_id = None
+            self._schedule_refresh()
+
+    def _set_catalog_mode(self, enabled: bool):
+        self.new_risk_var.set(not enabled)
+
+    def is_catalog_mode(self) -> bool:
+        return not self.new_risk_var.get()
+
     def assign_new_auto_id(self, value: str):
         """Asigna un identificador automático sin marcarlo como editado."""
 
@@ -641,6 +685,7 @@ class RiskFrame:
     def _register_refresh_traces(self):
         for var in (
             self.id_var,
+            self.new_risk_var,
             self.lider_var,
             self.descripcion_var,
             self.criticidad_var,
