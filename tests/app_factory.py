@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import types
+from pathlib import Path
 
 from app import FraudCaseApp
+from settings import BASE_DIR
 from settings import TIPO_ID_LIST, TIPO_SANCION_LIST
 from tests.stubs import (ClientFrameStub, NormFrameStub, ProductFrameStub,
                          RiskFrameStub, TeamFrameStub, build_involvement_slot,
                          build_populate_method, build_slot_factory)
+from utils.mass_import_manager import MassImportManager
 
 
 class SummaryTableStub:
@@ -31,6 +34,7 @@ def build_import_app(monkeypatch, messagebox_spy=None):
     app = FraudCaseApp.__new__(FraudCaseApp)
     app._suppress_messagebox = True
     app.logs = []
+    app.mass_import_manager = MassImportManager(Path(BASE_DIR) / "logs")
     app.client_frames = []
     app.team_frames = []
     app.product_frames = []

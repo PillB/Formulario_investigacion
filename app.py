@@ -114,6 +114,7 @@ from ui.layout import ActionBar
 from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
 from utils.background_worker import run_guarded_task
+from utils.mass_import_manager import MassImportManager
 from validators import (drain_log_queue, FieldValidator, log_event,
                         LOG_FIELDNAMES, normalize_log_row,
                         normalize_without_accents, parse_decimal_amount,
@@ -645,11 +646,13 @@ class FraudCaseApp:
         self._last_temp_saved_at = None
         # Lista para logs de navegación y validación
         self.logs = []
+        self.mass_import_manager = MassImportManager(Path(BASE_DIR) / "logs")
         self._streak_file = Path(AUTOSAVE_FILE).with_name("streak_status.json")
         self._streak_info: dict[str, object] = self._load_streak_info()
         self._scroll_binder = GlobalScrollBinding(self.root)
         self.root.title(self._build_window_title())
         self._suppress_messagebox = False
+        self._consolidate_import_feedback = False
         self._startup_complete = False
         self._reset_navigation_metrics()
         self._hover_tooltips = []
@@ -1294,6 +1297,7 @@ class FraudCaseApp:
         if not self._validate_import_headers(filename, "combinado"):
             return
         log_event("navegacion", "Inició importación de datos combinados", self.logs)
+        manager = self.mass_import_manager
         def worker():
             prepared_rows = []
             for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
@@ -1323,7 +1327,7 @@ class FraudCaseApp:
             "datos combinados",
             getattr(self, 'import_combined_button', None),
             worker,
-            self._apply_combined_import_payload,
+            lambda payload: self._apply_combined_import_payload(payload, manager=manager, file_path=filename),
             "No se pudo importar el CSV combinado",
         )
 
@@ -1337,6 +1341,7 @@ class FraudCaseApp:
         if not self._validate_import_headers(filename, "riesgos"):
             return
         log_event("navegacion", "Inició importación de riesgos", self.logs)
+        manager = self.mass_import_manager
         def worker():
             payload = []
             for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
@@ -1349,7 +1354,7 @@ class FraudCaseApp:
             "riesgos",
             getattr(self, 'import_risks_button', None),
             worker,
-            self._apply_risk_import_payload,
+            lambda payload: self._apply_risk_import_payload(payload, manager=manager, file_path=filename),
             "No se pudo importar riesgos",
         )
 
@@ -1363,6 +1368,7 @@ class FraudCaseApp:
         if not self._validate_import_headers(filename, "normas"):
             return
         log_event("navegacion", "Inició importación de normas", self.logs)
+        manager = self.mass_import_manager
         def worker():
             payload = []
             for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
@@ -1375,7 +1381,7 @@ class FraudCaseApp:
             "normas",
             getattr(self, 'import_norms_button', None),
             worker,
-            self._apply_norm_import_payload,
+            lambda payload: self._apply_norm_import_payload(payload, manager=manager, file_path=filename),
             "No se pudo importar normas",
         )
 
@@ -1389,6 +1395,7 @@ class FraudCaseApp:
         if not self._validate_import_headers(filename, "reclamos"):
             return
         log_event("navegacion", "Inició importación de reclamos", self.logs)
+        manager = self.mass_import_manager
         def worker():
             payload = []
             for index, row in enumerate(iter_massive_csv_rows(filename), start=1):
@@ -1401,7 +1408,7 @@ class FraudCaseApp:
             "reclamos",
             getattr(self, 'import_claims_button', None),
             worker,
-            self._apply_claim_import_payload,
+            lambda payload: self._apply_claim_import_payload(payload, manager=manager, file_path=filename),
             "No se pudo importar reclamos",
         )
 
@@ -8577,18 +8584,27 @@ class FraudCaseApp:
     def _report_missing_detail_ids(self, entity_label, missing_ids):
         """Registra y muestra un único aviso de IDs sin detalle catalogado."""
 
-        unique_ids = sorted({mid for mid in missing_ids if mid})
-        if not unique_ids:
-            return
-        message = (
-            f"No se encontraron detalles catalogados para los {entity_label} con ID: "
-            f"{', '.join(unique_ids)}."
-        )
+        message = self._build_missing_detail_warning(entity_label, missing_ids)
+        if not message:
+            return ""
         log_event("validacion", message, self.logs)
+        if getattr(self, "_consolidate_import_feedback", False):
+            return message
         try:
             messagebox.showwarning("Detalles faltantes", message)
         except tk.TclError:
             pass
+        return message
+
+    @staticmethod
+    def _build_missing_detail_warning(entity_label, missing_ids):
+        unique_ids = sorted({mid for mid in missing_ids if mid})
+        if not unique_ids:
+            return ""
+        return (
+            f"No se encontraron detalles catalogados para los {entity_label} con ID: "
+            f"{', '.join(unique_ids)}."
+        )
 
     def _notify_products_created_without_details(self, product_ids):
         """Advierte que ciertos productos se generaron sin información de catálogo."""
@@ -9410,12 +9426,14 @@ class FraudCaseApp:
         _update_status(0)
         _process_batch(0)
 
-    def _apply_client_import_payload(self, entries):
+    def _apply_client_import_payload(self, entries, *, manager=None, file_path=""):
+        manager = manager or self.mass_import_manager
         nuevos = 0
         actualizados = 0
         duplicados = 0
         errores = 0
         missing_ids = []
+        warnings: list[str] = []
         existing_ids = self._collect_existing_ids(self.client_frames)
         seen_ids = set()
         def process_chunk(chunk):
@@ -9447,6 +9465,8 @@ class FraudCaseApp:
                     missing_ids.append(id_cliente)
 
         def finalize():
+            previous_flag = getattr(self, "_consolidate_import_feedback", False)
+            self._consolidate_import_feedback = True
             self._notify_dataset_changed(summary_sections="clientes")
             total = nuevos + actualizados
             log_event(
@@ -9454,22 +9474,40 @@ class FraudCaseApp:
                 f"Clientes importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
                 self.logs,
             )
-            if total:
-                self.sync_main_form_after_import("clientes")
-                summary = self._format_import_summary("clientes", nuevos, actualizados, duplicados, errores)
-                messagebox.showinfo("Importación completa", summary)
-            else:
-                messagebox.showwarning("Sin cambios", "El archivo no aportó clientes nuevos.")
-            self._report_missing_detail_ids("clientes", missing_ids)
+            try:
+                if missing_ids:
+                    warning = self._report_missing_detail_ids("clientes", missing_ids)
+                    if warning:
+                        warnings.append(warning)
+                if total:
+                    self.sync_main_form_after_import("clientes")
+                summary = manager.run_import(
+                    file_path or "",
+                    "clientes",
+                    successes=nuevos,
+                    updates=actualizados,
+                    duplicates=duplicados,
+                    errors=errores,
+                    warnings=warnings,
+                )
+                dialog = messagebox.showinfo if summary.has_changes else messagebox.showwarning
+                try:
+                    dialog("Importación de clientes", summary.summary_text)
+                except tk.TclError:
+                    pass
+            finally:
+                self._consolidate_import_feedback = previous_flag
 
         self._run_import_batches(entries, "clientes", process_chunk, finalize)
 
-    def _apply_team_import_payload(self, entries):
+    def _apply_team_import_payload(self, entries, *, manager=None, file_path=""):
+        manager = manager or self.mass_import_manager
         nuevos = 0
         actualizados = 0
         duplicados = 0
         errores = 0
         missing_ids = []
+        warnings: list[str] = []
         existing_ids = self._collect_existing_ids(self.team_frames)
         seen_ids = set()
         def process_chunk(chunk):
@@ -9501,6 +9539,8 @@ class FraudCaseApp:
                     missing_ids.append(collaborator_id)
 
         def finalize():
+            previous_flag = getattr(self, "_consolidate_import_feedback", False)
+            self._consolidate_import_feedback = True
             self._notify_dataset_changed(summary_sections="colaboradores")
             total = nuevos + actualizados
             log_event(
@@ -9508,22 +9548,40 @@ class FraudCaseApp:
                 f"Colaboradores importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
                 self.logs,
             )
-            if total:
-                self.sync_main_form_after_import("colaboradores")
-                summary = self._format_import_summary("colaboradores", nuevos, actualizados, duplicados, errores)
-                messagebox.showinfo("Importación completa", summary)
-            else:
-                messagebox.showwarning("Sin cambios", "No se encontraron colaboradores nuevos en el archivo.")
-            self._report_missing_detail_ids("colaboradores", missing_ids)
+            try:
+                if missing_ids:
+                    warning = self._report_missing_detail_ids("colaboradores", missing_ids)
+                    if warning:
+                        warnings.append(warning)
+                if total:
+                    self.sync_main_form_after_import("colaboradores")
+                summary = manager.run_import(
+                    file_path or "",
+                    "colaboradores",
+                    successes=nuevos,
+                    updates=actualizados,
+                    duplicates=duplicados,
+                    errors=errores,
+                    warnings=warnings,
+                )
+                dialog = messagebox.showinfo if summary.has_changes else messagebox.showwarning
+                try:
+                    dialog("Importación de colaboradores", summary.summary_text)
+                except tk.TclError:
+                    pass
+            finally:
+                self._consolidate_import_feedback = previous_flag
 
         self._run_import_batches(entries, "colaboradores", process_chunk, finalize)
 
-    def _apply_product_import_payload(self, entries):
+    def _apply_product_import_payload(self, entries, *, manager=None, file_path=""):
+        manager = manager or self.mass_import_manager
         nuevos = 0
         actualizados = 0
         duplicados = 0
         errores = 0
         missing_ids = []
+        warnings: list[str] = []
         existing_ids = self._collect_existing_ids(self.product_frames)
         seen_ids = set()
         def process_chunk(chunk):
@@ -9559,6 +9617,8 @@ class FraudCaseApp:
                     missing_ids.append(product_id)
 
         def finalize():
+            previous_flag = getattr(self, "_consolidate_import_feedback", False)
+            self._consolidate_import_feedback = True
             self._notify_dataset_changed(summary_sections="productos")
             total = nuevos + actualizados
             log_event(
@@ -9566,25 +9626,44 @@ class FraudCaseApp:
                 f"Productos importados desde CSV: total={total}, nuevos={nuevos}, actualizados={actualizados}, duplicados={duplicados}, errores={errores}",
                 self.logs,
             )
-            if total:
-                self.sync_main_form_after_import("productos")
-                summary = self._format_import_summary("productos", nuevos, actualizados, duplicados, errores)
-                messagebox.showinfo("Importación completa", summary)
-            else:
-                messagebox.showwarning("Sin cambios", "No se detectaron productos nuevos en el archivo.")
-            self._report_missing_detail_ids("productos", missing_ids)
-            self._run_duplicate_check_post_load()
+            try:
+                if missing_ids:
+                    warning = self._report_missing_detail_ids("productos", missing_ids)
+                    if warning:
+                        warnings.append(warning)
+                if total:
+                    self.sync_main_form_after_import("productos")
+                summary = manager.run_import(
+                    file_path or "",
+                    "productos",
+                    successes=nuevos,
+                    updates=actualizados,
+                    duplicates=duplicados,
+                    errors=errores,
+                    warnings=warnings,
+                )
+                try:
+                    dialog = messagebox.showinfo if summary.has_changes else messagebox.showwarning
+                    dialog("Importación de productos", summary.summary_text)
+                except tk.TclError:
+                    pass
+            finally:
+                self._consolidate_import_feedback = previous_flag
+                self._run_duplicate_check_post_load()
 
         self._run_import_batches(entries, "productos", process_chunk, finalize)
 
-    def _apply_combined_import_payload(self, entries):
-        created_records = False
+    def _apply_combined_import_payload(self, entries, *, manager=None, file_path=""):
+        manager = manager or self.mass_import_manager
+        created_records = 0
+        changes_detected = False
         missing_clients = []
         missing_team = []
         missing_products = []
+        warnings: list[str] = []
 
         def process_chunk(chunk):
-            nonlocal created_records
+            nonlocal created_records, changes_detected
             for entry in chunk:
                 client_row = dict(entry.get('client_row') or {})
                 client_found = entry.get('client_found', False)
@@ -9604,7 +9683,10 @@ class FraudCaseApp:
                         if not value and raw_row.get(key):
                             client_row[key] = raw_row[key]
                     _client_frame, created_client = self._ensure_client_exists(client_id, client_row)
-                    created_records = created_records or created_client
+                    if created_client:
+                        created_records += 1
+                        changes_detected = True
+                    changes_detected = changes_detected or created_client
                     if not client_found and 'id_cliente' in self.detail_catalogs:
                         missing_clients.append(client_id)
                 team_row = dict(entry.get('team_row') or {})
@@ -9619,7 +9701,10 @@ class FraudCaseApp:
                             notify_on_missing=False,
                             preserve_existing=False,
                         )
-                    created_records = created_records or created_team
+                    if created_team:
+                        created_records += 1
+                        changes_detected = True
+                    changes_detected = changes_detected or created_team
                     if not team_found and 'id_colaborador' in self.detail_catalogs:
                         missing_team.append(collaborator_id)
                 product_row = dict(entry.get('product_row') or {})
@@ -9648,7 +9733,10 @@ class FraudCaseApp:
                         notify_on_missing=False,
                         preserve_existing=preserve_existing_product,
                     )
-                    created_records = created_records or new_product
+                    if new_product:
+                        created_records += 1
+                        changes_detected = True
+                    changes_detected = changes_detected or new_product or bool(product_row)
                     if not product_found and 'id_producto' in self.detail_catalogs:
                         missing_products.append(product_id)
                 involvement_pairs = entry.get('involvement_pairs') or []
@@ -9659,12 +9747,17 @@ class FraudCaseApp:
                             continue
                         collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
                         _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
-                        created_records = created_records or created_team
+                        if created_team:
+                            created_records += 1
+                            changes_detected = True
+                        changes_detected = changes_detected or created_team
                         if not collab_found and 'id_colaborador' in self.detail_catalogs:
                             missing_team.append(collab_id)
                         inv_row = next((inv for inv in product_frame.involvements if inv.team_var.get().strip() == collab_id), None)
                         if not inv_row:
                             inv_row = self._obtain_involvement_slot(product_frame)
+                            created_records += 1
+                            changes_detected = True
                         inv_row.team_var.set(collab_id)
                         amount_text = (amount or '').strip()
                         label = (
@@ -9678,24 +9771,52 @@ class FraudCaseApp:
                         if error:
                             raise ValueError(error)
                         inv_row.monto_var.set(normalized_text or amount_text)
-                        created_records = True
+                        changes_detected = True
 
         def finalize():
+            previous_flag = getattr(self, "_consolidate_import_feedback", False)
+            self._consolidate_import_feedback = True
             self._notify_dataset_changed()
             log_event("navegacion", "Datos combinados importados desde CSV", self.logs)
-            if created_records:
-                self.sync_main_form_after_import("datos combinados")
-                messagebox.showinfo("Importación completa", "Datos combinados importados correctamente.")
-            else:
-                messagebox.showwarning("Sin cambios", "No se detectaron registros nuevos en el archivo.")
-            self._report_missing_detail_ids("clientes", missing_clients)
-            self._report_missing_detail_ids("colaboradores", missing_team)
-            self._report_missing_detail_ids("productos", missing_products)
-            self._run_duplicate_check_post_load()
+            try:
+                if missing_clients:
+                    warning = self._report_missing_detail_ids("clientes", missing_clients)
+                    if warning:
+                        warnings.append(warning)
+                if missing_team:
+                    warning = self._report_missing_detail_ids("colaboradores", missing_team)
+                    if warning:
+                        warnings.append(warning)
+                if missing_products:
+                    warning = self._report_missing_detail_ids("productos", missing_products)
+                    if warning:
+                        warnings.append(warning)
+                if changes_detected:
+                    self.sync_main_form_after_import("datos combinados")
+                summary = manager.run_import(
+                    file_path or "",
+                    "datos combinados",
+                    successes=created_records,
+                    duplicates=0,
+                    errors=0,
+                    warnings=warnings,
+                )
+                dialog = messagebox.showinfo if summary.has_changes else messagebox.showwarning
+                message = summary.summary_text
+                if summary.has_changes:
+                    message = f"Datos combinados importados correctamente.\n\n{message}"
+                try:
+                    dialog("Importación de datos combinados", message)
+                except tk.TclError:
+                    pass
+            finally:
+                self._consolidate_import_feedback = previous_flag
+                self._run_duplicate_check_post_load()
 
         self._run_import_batches(entries, "datos combinados", process_chunk, finalize)
 
-    def _apply_risk_import_payload(self, entries):
+    def _apply_risk_import_payload(self, entries, *, manager=None, file_path=""):
+        manager = manager or self.mass_import_manager
         nuevos = 0
         duplicados = 0
         errores = 0
@@ -9729,13 +9850,21 @@ class FraudCaseApp:
             f"Riesgos importados desde CSV: total={total}, nuevos={nuevos}, actualizados=0, duplicados={duplicados}, errores={errores}",
             self.logs,
         )
-        if total:
-            summary = self._format_import_summary("riesgos", nuevos, 0, duplicados, errores)
-            messagebox.showinfo("Importación completa", summary)
-        else:
-            messagebox.showwarning("Sin cambios", "No se añadieron riesgos nuevos.")
+        summary = manager.run_import(
+            file_path or "",
+            "riesgos",
+            successes=nuevos,
+            duplicates=duplicados,
+            errors=errores,
+        )
+        dialog = messagebox.showinfo if summary.has_changes else messagebox.showwarning
+        try:
+            dialog("Importación de riesgos", summary.summary_text)
+        except tk.TclError:
+            pass
 
-    def _apply_norm_import_payload(self, entries):
+    def _apply_norm_import_payload(self, entries, *, manager=None, file_path=""):
+        manager = manager or self.mass_import_manager
         nuevos = 0
         duplicados = 0
         errores = 0
@@ -9765,17 +9894,26 @@ class FraudCaseApp:
             f"Normas importadas desde CSV: total={total}, nuevos={nuevos}, actualizados=0, duplicados={duplicados}, errores={errores}",
             self.logs,
         )
-        if total:
-            summary = self._format_import_summary("normas", nuevos, 0, duplicados, errores)
-            messagebox.showinfo("Importación completa", summary)
-        else:
-            messagebox.showwarning("Sin cambios", "No se añadieron normas nuevas.")
+        summary = manager.run_import(
+            file_path or "",
+            "normas",
+            successes=nuevos,
+            duplicates=duplicados,
+            errors=errores,
+        )
+        dialog = messagebox.showinfo if summary.has_changes else messagebox.showwarning
+        try:
+            dialog("Importación de normas", summary.summary_text)
+        except tk.TclError:
+            pass
 
-    def _apply_claim_import_payload(self, entries):
+    def _apply_claim_import_payload(self, entries, *, manager=None, file_path=""):
+        manager = manager or self.mass_import_manager
         nuevos = 0
         duplicados = 0
         errores = 0
         missing_products = []
+        warnings: list[str] = []
         existing_claims = set()
         for product_frame in self.product_frames:
             pid_var = getattr(product_frame, 'id_var', None)
@@ -9843,6 +9981,8 @@ class FraudCaseApp:
                     missing_products.append(product_id)
 
         def finalize():
+            previous_flag = getattr(self, "_consolidate_import_feedback", False)
+            self._consolidate_import_feedback = True
             self._notify_dataset_changed(summary_sections="reclamos")
             total = nuevos
             log_event(
@@ -9850,14 +9990,29 @@ class FraudCaseApp:
                 f"Reclamos importados desde CSV: total={total}, nuevos={nuevos}, actualizados=0, duplicados={duplicados}, errores={errores}",
                 self.logs,
             )
-            if total:
-                self.sync_main_form_after_import("reclamos")
-                summary = self._format_import_summary("reclamos", nuevos, 0, duplicados, errores)
-                messagebox.showinfo("Importación completa", summary)
-            else:
-                messagebox.showwarning("Sin cambios", "Ningún reclamo se pudo vincular a productos existentes.")
-            self._report_missing_detail_ids("productos", missing_products)
-            self._run_duplicate_check_post_load()
+            try:
+                if missing_products:
+                    warning = self._report_missing_detail_ids("productos", missing_products)
+                    if warning:
+                        warnings.append(warning)
+                if total:
+                    self.sync_main_form_after_import("reclamos")
+                summary = manager.run_import(
+                    file_path or "",
+                    "reclamos",
+                    successes=nuevos,
+                    duplicates=duplicados,
+                    errors=errores,
+                    warnings=warnings,
+                )
+                dialog = messagebox.showinfo if summary.has_changes else messagebox.showwarning
+                try:
+                    dialog("Importación de reclamos", summary.summary_text)
+                except tk.TclError:
+                    pass
+            finally:
+                self._consolidate_import_feedback = previous_flag
+                self._run_duplicate_check_post_load()
 
         self._run_import_batches(entries, "reclamos", process_chunk, finalize)
 
@@ -9871,6 +10026,7 @@ class FraudCaseApp:
         if not self._validate_import_headers(filename, "clientes"):
             return
         log_event("navegacion", "Inició importación de clientes", self.logs)
+        manager = self.mass_import_manager
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -9885,7 +10041,7 @@ class FraudCaseApp:
             "clientes",
             getattr(self, 'import_clients_button', None),
             worker,
-            self._apply_client_import_payload,
+            lambda payload: self._apply_client_import_payload(payload, manager=manager, file_path=filename),
             "No se pudo importar clientes",
         )
 
@@ -9899,6 +10055,7 @@ class FraudCaseApp:
         if not self._validate_import_headers(filename, "colaboradores"):
             return
         log_event("navegacion", "Inició importación de colaboradores", self.logs)
+        manager = self.mass_import_manager
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -9913,7 +10070,7 @@ class FraudCaseApp:
             "colaboradores",
             getattr(self, 'import_team_button', None),
             worker,
-            self._apply_team_import_payload,
+            lambda payload: self._apply_team_import_payload(payload, manager=manager, file_path=filename),
             "No se pudo importar colaboradores",
         )
 
@@ -9927,6 +10084,7 @@ class FraudCaseApp:
         if not self._validate_import_headers(filename, "productos"):
             return
         log_event("navegacion", "Inició importación de productos", self.logs)
+        manager = self.mass_import_manager
         def worker():
             payload = []
             for row in iter_massive_csv_rows(filename):
@@ -9941,7 +10099,7 @@ class FraudCaseApp:
             "productos",
             getattr(self, 'import_products_button', None),
             worker,
-            self._apply_product_import_payload,
+            lambda payload: self._apply_product_import_payload(payload, manager=manager, file_path=filename),
             "No se pudo importar productos",
         )
 
