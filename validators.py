@@ -207,8 +207,10 @@ def validate_risk_id(value: str) -> Optional[str]:
     text = (value or "").strip()
     if not text:
         return "Debe ingresar el ID de riesgo."
-    if not re.fullmatch(r"RSK-\d{6}$", text):
-        return "El ID de riesgo debe seguir el formato RSK-XXXXXX."
+    if len(text) > 60:
+        return "El ID de riesgo no puede tener más de 60 caracteres."
+    if not all(ch.isprintable() for ch in text):
+        return "El ID de riesgo solo puede usar caracteres imprimibles."
     return None
 
 

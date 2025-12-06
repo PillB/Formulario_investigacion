@@ -189,6 +189,10 @@ def _patch_products_module(monkeypatch):
 
     class _TkStub:
         StringVar = DummyVar
+        BooleanVar = DummyVar
+        BooleanVar = DummyVar
+        BooleanVar = DummyVar
+        BooleanVar = DummyVar
 
     class _TtkStub:
         LabelFrame = _UIStubWidget
@@ -211,6 +215,7 @@ def _patch_risk_module(monkeypatch):
 
     class _TkStub:
         StringVar = DummyVar
+        BooleanVar = DummyVar
 
     class _TtkStub:
         LabelFrame = _UIStubWidget
@@ -219,6 +224,7 @@ def _patch_risk_module(monkeypatch):
         Entry = _UIStubWidget
         Combobox = _UIStubWidget
         Button = _UIStubWidget
+        Checkbutton = _UIStubWidget
         Scrollbar = _UIStubWidget
 
         class Treeview(_UIStubWidget):
@@ -320,6 +326,7 @@ def _patch_team_module(monkeypatch):
 
     class _TkStub:
         StringVar = DummyVar
+        BooleanVar = DummyVar
         Label = _UIStubWidget
 
     class _TtkStub:

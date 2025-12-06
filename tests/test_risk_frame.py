@@ -8,6 +8,7 @@ from ui.frames import risk
 def patch_risk_widgets(monkeypatch):
     class _TkStub:
         StringVar = DummyVar
+        BooleanVar = DummyVar
 
     class _TtkStub:
         LabelFrame = DummyWidget
@@ -15,6 +16,7 @@ def patch_risk_widgets(monkeypatch):
         Label = DummyWidget
         Entry = DummyWidget
         Button = DummyWidget
+        Checkbutton = DummyWidget
         Combobox = DummyWidget
         Scrollbar = DummyWidget
 
@@ -204,3 +206,48 @@ def test_set_lookup_does_not_populate_shared_tree_with_catalog_data():
     frame.set_lookup({"RSK-999999": {"descripcion": "Catálogo"}})
 
     assert header_tree.get_children() == tuple()
+
+
+def test_risk_frame_skips_catalog_lookup_in_new_mode():
+    frame = _build_risk_frame()
+    frame.risk_lookup = {"RSK-000010": {"descripcion": "Catálogo"}}
+    frame.new_risk_var.set(True)
+    frame.id_var.set("RSK-000010")
+
+    refresh_calls = []
+    frame._schedule_refresh = lambda: refresh_calls.append("refresh")
+
+    frame.on_id_change()
+
+    assert frame.descripcion_var.get() == ""
+    assert refresh_calls == ["refresh"]
+
+
+def test_toggle_back_to_catalog_uses_lookup(monkeypatch):
+    frame = _build_risk_frame()
+    frame.risk_lookup = {"LIBRE-01": {"descripcion": "Desde catálogo"}}
+    frame.new_risk_var.set(True)
+    frame.id_var.set("LIBRE-01")
+    frame.on_id_change()
+
+    assert frame.descripcion_var.get() == ""
+
+    frame.new_risk_var.set(False)
+    frame._on_mode_toggle()
+
+    assert frame.is_catalog_mode()
+    assert frame.descripcion_var.get() == "Desde catálogo"
+
+
+def test_tree_selection_forces_catalog_mode():
+    frame = _build_risk_frame()
+    header_tree = risk.RiskFrame.build_header_tree(DummyWidget())
+    frame.attach_header_tree(header_tree)
+    iid = header_tree.insert("", "end", values=("RSK-123456", "", "", "", ""))
+    header_tree.selection_set(iid)
+    frame.new_risk_var.set(True)
+
+    frame._on_tree_select()
+
+    assert frame.is_catalog_mode()
+    assert frame.id_var.get() == "RSK-123456"
