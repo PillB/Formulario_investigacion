@@ -9416,6 +9416,7 @@ class FraudCaseApp:
                     finalize()
             except Exception as exc:  # pragma: no cover - errores inesperados en lotes diferidos
                 _handle_batch_error(exc)
+                raise
 
         _update_status(0)
         _process_batch(0)
