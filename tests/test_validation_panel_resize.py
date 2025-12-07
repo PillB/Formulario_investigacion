@@ -34,7 +34,7 @@ def test_validation_panel_resizes_with_sash(app_instance):
     initial_width = panel.winfo_width()
 
     sash_position = panes.sashpos(0)
-    panes.sashpos(0, sash_position + 180)
+    panes.sashpos(0, max(sash_position - 180, 0))
     app.root.update_idletasks()
 
     assert panel.winfo_width() > initial_width
