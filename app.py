@@ -9393,19 +9393,29 @@ class FraudCaseApp:
             finalize()
             return
 
+        def _handle_batch_error(exc):
+            try:
+                messagebox.showerror("Error", f"Error al importar {task_label}: {exc}")
+            except tk.TclError:
+                pass
+            self._finalize_import_task(f"Importación de {task_label} con errores.", failed=True)
+
         def _process_batch(start_index=0):
-            end_index = min(start_index + batch_size, total)
-            chunk = rows[start_index:end_index]
-            if chunk:
-                process_chunk(chunk)
-            _update_status(end_index)
-            if end_index < total:
-                try:
-                    root.after(1, lambda: _process_batch(end_index))
-                except tk.TclError:
-                    _process_batch(end_index)
-            else:
-                finalize()
+            try:
+                end_index = min(start_index + batch_size, total)
+                chunk = rows[start_index:end_index]
+                if chunk:
+                    process_chunk(chunk)
+                _update_status(end_index)
+                if end_index < total:
+                    try:
+                        root.after(1, lambda: _process_batch(end_index))
+                    except tk.TclError:
+                        _process_batch(end_index)
+                else:
+                    finalize()
+            except Exception as exc:  # pragma: no cover - errores inesperados en lotes diferidos
+                _handle_batch_error(exc)
 
         _update_status(0)
         _process_batch(0)
