@@ -199,13 +199,13 @@ class InvolvementRow:
         self.product_frame.log_change(
             f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto"
         )
-        self.product_frame.trigger_duplicate_check()
+        self.product_frame.trigger_duplicate_check(show_popup=False)
 
     def _handle_team_focus_out(self):
         self.product_frame.log_change(
             f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó colaborador"
         )
-        self.product_frame.trigger_duplicate_check()
+        self.product_frame.trigger_duplicate_check(show_popup=False)
 
     def _notify_summary_change(self):
         self.product_frame._schedule_product_summary_refresh()
@@ -573,7 +573,7 @@ class ClaimRow:
             )
         self.product_frame.persist_lookup_snapshot()
         if from_focus:
-            self.product_frame.trigger_duplicate_check()
+            self.product_frame.trigger_duplicate_check(show_popup=False)
         refresher = getattr(self.product_frame, "refresh_claim_guidance", None)
         if callable(refresher):
             refresher()
@@ -1753,7 +1753,7 @@ class ProductFrame:
         target = self._get_target_product_frame()
         target.id_var.set(values[0])
         target.on_id_change(preserve_existing=True, silent=True)
-        target.trigger_duplicate_check()
+        target.trigger_duplicate_check(show_popup=False)
 
     def _on_tree_double_click(self, _event=None):
         item = self._first_selected_item()
@@ -1765,7 +1765,7 @@ class ProductFrame:
         target = self._get_target_product_frame()
         target.id_var.set(values[0])
         target.on_id_change(from_focus=True)
-        target.trigger_duplicate_check()
+        target.trigger_duplicate_check(show_popup=False)
 
     def _first_selected_item(self):
         selection = self.header_tree.selection()
@@ -2039,7 +2039,7 @@ class ProductFrame:
                     return
             except Exception:
                 pass
-        self.trigger_duplicate_check(dataset_signature=signature)
+        self.trigger_duplicate_check(dataset_signature=signature, show_popup=False)
         self._refresh_badges()
 
     def _register_claim_requirement_triggers(self, cont_entry, falla_entry, perdida_entry):
@@ -2646,15 +2646,18 @@ class ProductFrame:
         if callable(self.id_change_callback):
             self.id_change_callback(self, previous, new_id)
 
-    def trigger_duplicate_check(self, dataset_signature=None):
+    def trigger_duplicate_check(self, dataset_signature=None, *, show_popup: bool = False):
         result = None
         if callable(self.duplicate_key_checker):
             try:
                 result = self.duplicate_key_checker(
-                    armed=True, dataset_signature=dataset_signature
+                    armed=True, dataset_signature=dataset_signature, show_popup=show_popup
                 )
             except TypeError:
-                result = self.duplicate_key_checker(armed=True)
+                try:
+                    result = self.duplicate_key_checker(armed=True, show_popup=show_popup)
+                except TypeError:
+                    result = self.duplicate_key_checker(armed=True)
         self._update_duplicate_status_label(result)
         return result
 

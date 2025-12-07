@@ -805,7 +805,8 @@ class FraudCaseApp:
         self._duplicate_warning_signature: Optional[str] = None
         self._duplicate_warning_cooldown_until: Optional[datetime] = None
         self._last_duplicate_warning_message: Optional[str] = None
-        self._duplicate_warning_dismissed: bool = False
+        self._duplicate_warning_shown_count: int = 0
+        self._duplicate_warning_popup_limit: int = 3
         self._last_fraud_warning_at: Optional[datetime] = None
         self._rich_text_images = defaultdict(list)
         self._rich_text_image_sources = {}
@@ -7223,6 +7224,7 @@ class FraudCaseApp:
             claim_errors = self._collect_claim_requirement_errors()
             if claim_errors:
                 messagebox.showerror("Reclamos requeridos", "\n".join(claim_errors))
+            self._check_duplicate_technical_keys_realtime(armed=True, show_popup=True)
         if self._is_summary_tab_visible():
             self._flush_summary_refresh()
 
@@ -8826,7 +8828,9 @@ class FraudCaseApp:
 
         def _perform_check():
             try:
-                self._check_duplicate_technical_keys_realtime(armed=True)
+                self._check_duplicate_technical_keys_realtime(
+                    armed=True, show_popup=False
+                )
             except AttributeError:
                 return
 
@@ -8836,7 +8840,10 @@ class FraudCaseApp:
             _perform_check()
 
     def _check_duplicate_technical_keys_realtime(
-        self, armed: bool = False, dataset_signature: Optional[str] = None
+        self,
+        armed: bool = False,
+        dataset_signature: Optional[str] = None,
+        show_popup: bool = True,
     ):
         status_message = "Clave técnica sin validar"
         if armed:
@@ -8992,13 +8999,15 @@ class FraudCaseApp:
             if duplicate_messages and not cooldown_active:
                 self._activate_duplicate_warning_cooldown(signature, message)
             should_show_popup = (
-                not getattr(self, "_suppress_messagebox", False)
-                and not self._duplicate_warning_dismissed
+                show_popup
+                and not getattr(self, "_suppress_messagebox", False)
+                and not cooldown_active
+                and self._duplicate_warning_shown_count < self._duplicate_warning_popup_limit
             )
             if should_show_popup:
                 try:
                     messagebox.showerror("Validación de clave técnica", message)
-                    self._duplicate_warning_dismissed = True
+                    self._duplicate_warning_shown_count += 1
                 except tk.TclError:
                     return "Validación interrumpida"
             return status
@@ -9006,6 +9015,8 @@ class FraudCaseApp:
         self._update_duplicate_validation_entry(None)
         self._last_duplicate_warning_message = None
         self._duplicate_warning_cooldown_until = None
+        self._duplicate_warning_signature = None
+        self._duplicate_warning_shown_count = 0
         return "Sin duplicados detectados"
 
     @staticmethod
