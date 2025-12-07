@@ -226,7 +226,7 @@ class ValidationPanel(ttk.Frame):
     }
     COLLAPSED_WIDTH = 90
 
-    def __init__(self, parent, *, on_focus_request=None):
+    def __init__(self, parent, *, on_focus_request=None, pane_manager: ttk.Panedwindow | None = None):
         super().__init__(parent)
         self.on_focus_request = on_focus_request
         self._entries: dict[str, str] = {}
@@ -235,6 +235,8 @@ class ValidationPanel(ttk.Frame):
         self._placeholder_id: Optional[str] = None
         self._collapsed = True
         self._issue_count_var = tk.StringVar(value="⚠️ 0")
+        self._pane_manager = pane_manager
+        self._last_expanded_width = 420
         self._init_ui()
         self.collapse(force=True)
 
@@ -304,6 +306,11 @@ class ValidationPanel(ttk.Frame):
         )
         expand_button.grid(row=1, column=0, padx=6, pady=5, sticky="s")
         self._collapsed_strip.grid_remove()
+        self.bind("<Configure>", self._record_width, add="+")
+
+    def set_pane_manager(self, manager: ttk.Panedwindow | None) -> None:
+        self._pane_manager = manager
+        self._apply_pane_width(self.COLLAPSED_WIDTH)
 
     def get_anchor_widget(self) -> tk.Widget | None:
         """Devuelve el widget ideal para anclar overlays o ayudas visuales."""
@@ -359,6 +366,7 @@ class ValidationPanel(ttk.Frame):
         self._content_container.grid_remove()
         self._collapsed_strip.grid(row=0, column=0, sticky="ns")
         self._toggle_button.configure(text="⇥")
+        self._apply_pane_width(self.COLLAPSED_WIDTH)
 
     def expand(self) -> None:
         if not self._collapsed:
@@ -367,6 +375,8 @@ class ValidationPanel(ttk.Frame):
         self._collapsed_strip.grid_remove()
         self._content_container.grid(row=0, column=0, sticky="nsew")
         self._toggle_button.configure(text="⇤")
+        target_width = max(self._last_expanded_width, 360)
+        self._apply_pane_width(target_width)
 
     def update_entry(
         self,
@@ -406,6 +416,42 @@ class ValidationPanel(ttk.Frame):
         self._update_focus_button_state()
         if created and (not self.tree.selection() or self.tree.selection() == (self._placeholder_id,)):
             self._select_first_actionable()
+
+    def _record_width(self, _event: tk.Event | None = None) -> None:
+        if self._collapsed:
+            return
+        try:
+            width = self.winfo_width()
+        except tk.TclError:
+            return
+        if width > self.COLLAPSED_WIDTH:
+            self._last_expanded_width = max(self._last_expanded_width, width)
+
+    def _apply_pane_width(self, width: int) -> None:
+        if self._pane_manager is None:
+            return
+        try:
+            panes = self._pane_manager.panes()
+        except Exception:
+            panes = []
+        if str(self) not in panes:
+            return
+        try:
+            total_width = self._pane_manager.winfo_width()
+        except tk.TclError:
+            return
+        if total_width <= 1:
+            try:
+                self.after(20, lambda w=width: self._apply_pane_width(w))
+            except Exception:
+                pass
+            return
+        target_width = max(self.COLLAPSED_WIDTH, min(width, total_width - 40))
+        try:
+            self._pane_manager.paneconfigure(self, minsize=self.COLLAPSED_WIDTH)
+            self._pane_manager.sashpos(0, max(0, total_width - target_width))
+        except Exception:
+            return
 
     def focus_selected(self) -> None:
         selection = self.tree.selection()
@@ -1394,8 +1440,12 @@ class FraudCaseApp:
         main_container.grid_columnconfigure(0, weight=1)
         main_container.grid_rowconfigure(0, weight=1)
 
+        content_panes = ttk.Panedwindow(main_container, orient="horizontal")
+        content_panes.grid(row=0, column=0, sticky="nsew")
+        self._content_panes = content_panes
+
         progress_container = ttk.Frame(main_container)
-        progress_container.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 5))
+        progress_container.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
         progress_container.columnconfigure(1, weight=1)
         ttk.Label(progress_container, text="Avance del caso").grid(
             row=0, column=0, padx=(0, 8), pady=(5, 0), sticky="w"
@@ -1421,20 +1471,34 @@ class FraudCaseApp:
         self._quality_badge.grid(row=0, column=3, padx=(8, 0), pady=(5, 0), sticky="e")
         self._apply_quality_style(self.quality_var.get())
 
-        self.notebook = ttk.Notebook(main_container)
+        notebook_container = ttk.Frame(content_panes)
+        notebook_container.grid_rowconfigure(0, weight=1)
+        notebook_container.grid_columnconfigure(0, weight=1)
+
+        self.notebook = ttk.Notebook(notebook_container)
         self.notebook.grid(row=0, column=0, sticky="nsew")
         self.notebook.bind("<<NotebookTabChanged>>", self._handle_notebook_tab_change)
         bind_notebook_refresh_handlers(self.root, self.notebook)
         self._register_navigation_bindings()
 
         self._validation_panel = ValidationPanel(
-            main_container, on_focus_request=self._focus_widget_from_validation_panel
+            content_panes,
+            on_focus_request=self._focus_widget_from_validation_panel,
+            pane_manager=content_panes,
         )
         FieldValidator.set_status_consumer(self._publish_field_validation)
-        main_container.grid_columnconfigure(
-            1, weight=0, minsize=ValidationPanel.COLLAPSED_WIDTH
+
+        content_panes.add(
+            notebook_container,
+            weight=4,
+            minsize=ValidationPanel.COLLAPSED_WIDTH * 3,
         )
-        self._validation_panel.grid(row=0, column=1, sticky="ns")
+        content_panes.add(
+            self._validation_panel,
+            weight=1,
+            minsize=ValidationPanel.COLLAPSED_WIDTH,
+        )
+        self._validation_panel.set_pane_manager(content_panes)
 
         # --- Pestaña principal: caso y participantes ---
         self.main_tab = ttk.Frame(self.notebook)
