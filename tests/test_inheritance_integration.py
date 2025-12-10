@@ -142,6 +142,8 @@ def test_inherited_modalidad_alignment_and_warning(monkeypatch):
     app.add_product = types.MethodType(_add_aligned, app)
     aligned_product = app.add_product_inheriting_case()
     assert aligned_product.mod_var.get() == modalidad
+    assert aligned_product.cat1_calls == [cat1]
+    assert aligned_product.cat2_calls == [cat2]
     assert not warnings
 
     warnings.clear()
@@ -158,3 +160,40 @@ def test_inherited_modalidad_alignment_and_warning(monkeypatch):
     assert misaligned_product.mod_var.get() != modalidad
     assert warnings
     assert any(log["tipo"] == "herencia" and "desalineado" in log["mensaje"] for log in app.logs)
+
+
+def test_apply_inherited_fields_detects_callback_side_effects(monkeypatch):
+    warnings: list[tuple[str, str]] = []
+    monkeypatch.setattr("app.messagebox.showwarning", lambda title, message: warnings.append((title, message)))
+
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app.logs = []
+    app._suppress_messagebox = False
+
+    cat1 = list(TAXONOMIA.keys())[0]
+    cat2 = list(TAXONOMIA[cat1].keys())[0]
+    modalidad = TAXONOMIA[cat1][cat2][0]
+    inherited_values = {
+        "categoria1": cat1,
+        "categoria2": cat2,
+        "modalidad": modalidad,
+        "fecha_ocurrencia": "2024-01-01",
+        "fecha_descubrimiento": "2024-01-02",
+        "canal": CANAL_LIST[0],
+        "proceso": PROCESO_LIST[0],
+    }
+
+    product = _ProductStubWithCallbacks(0, misalign_modalidad=True)
+
+    app._apply_inherited_fields_to_product(product, inherited_values)
+    app._check_inheritance_alignment(product, inherited_values, origin="prueba_post_aplicacion")
+
+    assert product.cat1_calls == [cat1]
+    assert product.cat2_calls == [cat2]
+    assert warnings
+    assert any(
+        log["tipo"] == "herencia"
+        and "prueba_post_aplicacion" in log["mensaje"]
+        and "desalineado" in log["mensaje"]
+        for log in app.logs
+    )
