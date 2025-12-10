@@ -227,8 +227,10 @@ class RiskFrame:
                 lider_entry,
                 self.badges.wrap_validation(
                     "riesgo_lider",
-                    lambda: validate_required_text(
-                        self.lider_var.get(), "el líder del riesgo"
+                    lambda: self._validate_when_catalog(
+                        lambda: validate_required_text(
+                            self.lider_var.get(), "el líder del riesgo"
+                        )
                     ),
                 ),
                 self.logs,
@@ -245,7 +247,8 @@ class RiskFrame:
             FieldValidator(
                 expos_entry,
                 self.badges.wrap_validation(
-                    "riesgo_exposicion", _validate_exposure_amount
+                    "riesgo_exposicion",
+                    lambda: self._validate_when_catalog(_validate_exposure_amount),
                 ),
                 self.logs,
                 f"Riesgo {self.idx+1} - Exposición",
@@ -257,7 +260,8 @@ class RiskFrame:
             FieldValidator(
                 crit_cb,
                 self.badges.wrap_validation(
-                    "riesgo_criticidad", self._validate_criticidad
+                    "riesgo_criticidad",
+                    lambda: self._validate_when_catalog(self._validate_criticidad),
                 ),
                 self.logs,
                 f"Riesgo {self.idx+1} - Criticidad",
@@ -285,8 +289,10 @@ class RiskFrame:
                 planes_entry,
                 self.badges.wrap_validation(
                     "riesgo_planes",
-                    lambda: validate_required_text(
-                        self.planes_var.get(), "los planes de acción"
+                    lambda: self._validate_when_catalog(
+                        lambda: validate_required_text(
+                            self.planes_var.get(), "los planes de acción"
+                        )
                     ),
                 ),
                 self.logs,
@@ -571,7 +577,20 @@ class RiskFrame:
             self.section.destroy()
             self.remove_callback(self)
 
+    def _validate_when_catalog(self, validator):
+        if self.is_catalog_mode():
+            return validator()
+        return None
+
     def _validate_risk_id(self):
+        if self.is_catalog_mode():
+            return self._validate_catalog_risk_id()
+        return self._validate_new_risk_id()
+
+    def _validate_catalog_risk_id(self):
+        return validate_risk_id(self.id_var.get())
+
+    def _validate_new_risk_id(self):
         return validate_risk_id(self.id_var.get())
 
     def _validate_criticidad(self):
