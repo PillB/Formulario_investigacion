@@ -175,7 +175,6 @@ class CaseFrame:
         cat2_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(case_cat2_cb, "Selecciona la subcategoría del caso.")
         case_cat2_cb.bind("<<ComboboxSelected>>", lambda _e: owner.on_case_cat2_change())
-        case_cat2_cb.bind("<FocusOut>", lambda _e: owner.on_case_cat2_change())
         owner.case_cat2_cb = case_cat2_cb
         case_cat2_cb.set('')
 
