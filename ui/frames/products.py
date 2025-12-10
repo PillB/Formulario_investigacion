@@ -1170,6 +1170,9 @@ class ProductFrame:
         self.focc_entry = focc_entry
         self.tooltip_register(focc_entry, "Fecha exacta del evento.")
         self._register_duplicate_triggers(focc_entry)
+        focc_entry.bind(
+            "<<Paste>>", lambda _e: self._refresh_date_validation_after_programmatic_update(), add="+"
+        )
         self.badges.claim("fecha_oc", self.frame, row=5, column=4)
 
         ttk.Label(self.frame, text="Fecha de descubrimiento:\n(YYYY-MM-DD)").grid(
@@ -1191,6 +1194,9 @@ class ProductFrame:
         )
         self.fdesc_entry = fdesc_entry
         self.tooltip_register(fdesc_entry, "Fecha en la que se detectó el evento.")
+        fdesc_entry.bind(
+            "<<Paste>>", lambda _e: self._refresh_date_validation_after_programmatic_update(), add="+"
+        )
         self.date_badge = self.badges.claim("fecha_desc", self.frame, row=5, column=5)
 
         ttk.Label(self.frame, text="Monto investigado:").grid(
@@ -1494,6 +1500,15 @@ class ProductFrame:
             ]
         )
 
+        (
+            self.monto_inv_validator,
+            self.monto_perdida_validator,
+            self.monto_falla_validator,
+            self.monto_cont_validator,
+            self.monto_rec_validator,
+            self.monto_pago_validator,
+        ) = self.validators[-6:]
+
         amount_vars = [
             self.monto_inv_var,
             self.monto_perdida_var,
@@ -1570,6 +1585,23 @@ class ProductFrame:
             if badge_key in getattr(badge_manager, "_registry", {}):
                 badge_manager.update_badge(badge_key, False, None)
 
+    def _trigger_validator_refresh(self, validator) -> None:
+        if validator is None:
+            return
+        validate_callback = getattr(validator, "validate_callback", None)
+        show_custom_error = getattr(validator, "show_custom_error", None)
+        suppress = getattr(validator, "suppress_during", None)
+        if not callable(validate_callback) or not callable(show_custom_error):
+            return
+
+        def _execute():
+            show_custom_error(validate_callback())
+
+        if callable(suppress):
+            suppress(_execute)
+        else:
+            _execute()
+
     def _sync_amount_validation_state(self, *_args) -> bool:
         if getattr(self, "_amount_validation_ready", False):
             return False
@@ -1590,6 +1622,27 @@ class ProductFrame:
     def _refresh_amount_validation_after_programmatic_update(self):
         """Activa y reevalúa la consistencia de montos tras cambios automáticos."""
         self._enable_amount_validation(force_refresh=True)
+        for validator in self._iter_amount_validators():
+            self._trigger_validator_refresh(validator)
+
+    def _iter_amount_validators(self):
+        return tuple(
+            validator
+            for validator in (
+                getattr(self, "monto_inv_validator", None),
+                getattr(self, "monto_perdida_validator", None),
+                getattr(self, "monto_falla_validator", None),
+                getattr(self, "monto_cont_validator", None),
+                getattr(self, "monto_rec_validator", None),
+                getattr(self, "monto_pago_validator", None),
+            )
+            if validator is not None
+        )
+
+    def _refresh_date_validation_after_programmatic_update(self):
+        """Reaplica validaciones de fechas tras pegados o autopoblados."""
+        for validator in (self.fecha_oc_validator, self.fecha_desc_validator):
+            self._trigger_validator_refresh(validator)
 
     def _attach_amount_listeners(self, amount_vars, amount_widgets):
         for var in amount_vars:
@@ -1599,6 +1652,11 @@ class ProductFrame:
         for widget in amount_widgets:
             widget.bind("<KeyRelease>", self._enable_amount_validation, add="+")
             widget.bind("<<Paste>>", self._enable_amount_validation, add="+")
+            widget.bind(
+                "<<Paste>>",
+                lambda _e: self._refresh_amount_validation_after_programmatic_update(),
+                add="+",
+            )
             widget.bind("<<Cut>>", self._enable_amount_validation, add="+")
 
     def _create_section(self, parent):
@@ -2764,6 +2822,7 @@ class ProductFrame:
         set_if_present(self.monto_rec_var, 'monto_recuperado')
         set_if_present(self.monto_pago_var, 'monto_pago_deuda')
         self._refresh_amount_validation_after_programmatic_update()
+        self._refresh_date_validation_after_programmatic_update()
         cat1 = data.get('categoria1')
         cat2 = data.get('categoria2')
         mod = data.get('modalidad')
