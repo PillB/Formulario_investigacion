@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 
 import pytest
 
@@ -38,3 +39,13 @@ def test_validation_panel_resizes_with_sash(app_instance):
     app.root.update_idletasks()
 
     assert panel.winfo_width() > initial_width
+
+
+def test_content_panes_initialized_without_unsupported_options(app_instance):
+    panes = getattr(app_instance, "_content_panes", None)
+
+    assert isinstance(panes, ttk.Panedwindow)
+
+    pane_ids = panes.panes()
+    assert len(pane_ids) == 2
+    assert str(app_instance._validation_panel) in pane_ids

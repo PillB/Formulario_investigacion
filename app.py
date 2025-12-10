@@ -451,6 +451,10 @@ class ValidationPanel(ttk.Frame):
         target_width = max(self.COLLAPSED_WIDTH, min(width, total_width - 40))
         try:
             self._pane_manager.paneconfigure(self, minsize=self.COLLAPSED_WIDTH)
+        except tk.TclError:
+            # Some pane managers (e.g., ttk.Panedwindow) ignore unsupported options.
+            pass
+        try:
             self._pane_manager.sashpos(0, max(0, total_width - target_width))
         except Exception:
             return
@@ -1493,12 +1497,10 @@ class FraudCaseApp:
         content_panes.add(
             notebook_container,
             weight=4,
-            minsize=ValidationPanel.COLLAPSED_WIDTH * 3,
         )
         content_panes.add(
             self._validation_panel,
             weight=1,
-            minsize=ValidationPanel.COLLAPSED_WIDTH,
         )
         self._validation_panel.set_pane_manager(content_panes)
 
