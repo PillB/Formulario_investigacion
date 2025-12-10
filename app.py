@@ -117,7 +117,7 @@ from ui.frames.utils import (build_grid_container, create_scrollable_container,
 from ui.layout import ActionBar
 from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
-from utils.background_worker import run_guarded_task
+from utils.background_worker import run_guarded_task, shutdown_background_workers
 from utils.mass_import_manager import MassImportManager
 from utils.persistence_manager import (
     CURRENT_SCHEMA_VERSION,
@@ -738,7 +738,11 @@ class FraudCaseApp:
         self._walkthrough_state: dict[str, object] = self._load_walkthrough_state()
         self._user_settings_file = Path(AUTOSAVE_FILE).with_name("user_settings.json")
         self._user_settings: dict[str, object] = self._load_user_settings()
-        self._persistence_manager = PersistenceManager(self.root, self._validate_persistence_payload)
+        self._persistence_manager = PersistenceManager(
+            self.root,
+            self._validate_persistence_payload,
+            task_category="autosave",
+        )
         self._walkthrough_overlay: Optional[tk.Toplevel] = None
         self._walkthrough_steps: list[dict[str, object]] = []
         self._walkthrough_step_index = 0
@@ -7052,6 +7056,7 @@ class FraudCaseApp:
             _on_error,
             self.root,
             poll_interval_ms=50,
+            category="imports",
         )
         future_holder[0] = future
         dialog.track_future(future, progress_queue)
@@ -10329,7 +10334,11 @@ class FraudCaseApp:
     def _get_persistence_manager(self) -> PersistenceManager:
         manager = getattr(self, "_persistence_manager", None)
         if manager is None:
-            manager = PersistenceManager(getattr(self, "root", None), self._validate_persistence_payload)
+            manager = PersistenceManager(
+                getattr(self, "root", None),
+                self._validate_persistence_payload,
+                task_category="autosave",
+            )
             self._persistence_manager = manager
         return manager
 
@@ -10733,6 +10742,7 @@ class FraudCaseApp:
             with suppress(tk.TclError):
                 self.root.after_cancel(self._autosave_cycle_job_id)
             self._autosave_cycle_job_id = None
+        shutdown_background_workers(cancel_futures=False)
         with suppress(tk.TclError):
             self.root.destroy()
 
@@ -12993,7 +13003,13 @@ class FraudCaseApp:
                 on_success(result)
             return
 
-        self._save_send_future = run_guarded_task(task, on_success, on_error, root)
+        self._save_send_future = run_guarded_task(
+            task,
+            on_success,
+            on_error,
+            root,
+            category="reports",
+        )
         return self._save_send_future
 
     def _handle_save_success(self, result) -> None:
