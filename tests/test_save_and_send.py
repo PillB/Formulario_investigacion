@@ -174,9 +174,13 @@ def test_save_and_send_updates_architecture_diagram(tmp_path, messagebox_spy):
     content = architecture_path.read_text(encoding='utf-8')
     assert 'legacy' not in content
     assert 'erDiagram' in content
-    for table in ['CASOS', 'CLIENTES', 'PRODUCTOS', 'ANALISIS']:
+    for table in ['CASOS', 'CLIENTES', 'PRODUCTOS', 'ANALISIS', 'EVENTOS']:
         assert table in content
     assert 'CASOS ||--o{ PRODUCTOS' in content
+    assert 'CASOS ||--o{ EVENTOS' in content
+    assert 'PRODUCTOS ||--o{ EVENTOS : id_producto' in content
+    assert 'CLIENTES ||--o{ EVENTOS : id_cliente' in content
+    assert 'COLABORADORES ||--o{ EVENTOS : id_colaborador' in content
 
 
 def test_save_and_send_reports_catalog_errors_once(messagebox_spy):

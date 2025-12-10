@@ -12716,7 +12716,7 @@ class FraudCaseApp:
                 "header": llave_header,
             },
             {
-                "name": "eventos",
+                "name": "eventos.csv",
                 "rows": event_rows,
                 "header": event_header,
             },
