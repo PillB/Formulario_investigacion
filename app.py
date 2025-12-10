@@ -4476,7 +4476,7 @@ class FraudCaseApp:
         product_snapshot = self._snapshot_product_inheritance_fields(product_frame)
         log_event(
             "herencia_debug",
-            f"Prefill taxonomía producto {product_frame.idx + 1}: caso={case_snapshot} estado_inicial={product_snapshot}",
+            f"Prefill taxonomía producto {product_frame.idx + 1}: entrada_caso={case_snapshot} estado_inicial={product_snapshot}",
             self.logs,
         )
 
@@ -4505,9 +4505,14 @@ class FraudCaseApp:
         finally:
             product_frame._suppress_change_notifications = previous_suppression
         final_snapshot = self._snapshot_product_inheritance_fields(product_frame)
+        mutations = {
+            key: {"before": product_snapshot.get(key, ""), "after": final_snapshot.get(key, "")}
+            for key in product_snapshot
+            if product_snapshot.get(key, "") != final_snapshot.get(key, "")
+        }
         log_event(
             "herencia_debug",
-            f"Prefill taxonomía producto {product_frame.idx + 1} completado: estado_final={final_snapshot}",
+            f"Prefill taxonomía producto {product_frame.idx + 1} completado: estado_final={final_snapshot} mutaciones={mutations or 'sin cambios'}",
             self.logs,
         )
 
@@ -4561,14 +4566,19 @@ class FraudCaseApp:
         finally:
             product_frame._suppress_change_notifications = previous_suppression
         after_snapshot = self._snapshot_product_inheritance_fields(product_frame)
+        mutations = {
+            key: {"before": before_snapshot.get(key, ""), "after": after_snapshot.get(key, "")}
+            for key in before_snapshot
+            if before_snapshot.get(key, "") != after_snapshot.get(key, "")
+        }
         log_event(
             "herencia_debug",
-            f"Herencia aplicada a producto {product_frame.idx + 1}: estado_final={after_snapshot}",
+            f"Herencia aplicada a producto {product_frame.idx + 1}: estado_final={after_snapshot} mutaciones={mutations or 'sin cambios'}",
             self.logs,
         )
         product_frame.focus_first_field()
 
-    def _warn_on_inheritance_deviation(self, product_frame, inherited_values):
+    def _check_inheritance_alignment(self, product_frame, inherited_values, *, origin: str):
         field_labels = {
             "categoria1": "Categoría 1",
             "categoria2": "Categoría 2",
@@ -4589,18 +4599,34 @@ class FraudCaseApp:
                 mismatches.append((label, expected, actual))
 
         if not mismatches:
-            return
+            log_event(
+                "herencia_debug",
+                f"Verificación de herencia ({origin}) producto {product_frame.idx + 1} sin diferencias: estado_actual={current_state}",
+                self.logs,
+            )
+            return []
 
         detail = "; ".join(
             f"{label}: esperado '{expected}' vs actual '{actual}'" for label, expected, actual in mismatches
         )
         message = (
-            f"Producto {product_frame.idx + 1} desalineado con el caso tras heredar campos. "
+            f"Producto {product_frame.idx + 1} desalineado con el caso tras heredar campos ({origin}). "
             f"Revisa valores antes de continuar. {detail}"
         )
         log_event("herencia", message, self.logs)
+        log_event(
+            "herencia_debug",
+            f"Desalineación detectada ({origin}) producto {product_frame.idx + 1}: esperado={inherited_values} actual={current_state}",
+            self.logs,
+        )
         if not getattr(self, "_suppress_messagebox", False):
             messagebox.showwarning("Campos heredados inconsistentes", message)
+        return mismatches
+
+    def _warn_on_inheritance_deviation(self, product_frame, inherited_values):
+        return self._check_inheritance_alignment(
+            product_frame, inherited_values, origin="verificacion_post_herencia"
+        )
 
     def _show_inheritance_messages(self, result):
         if getattr(self, "_suppress_messagebox", False):
@@ -4632,7 +4658,9 @@ class FraudCaseApp:
         except TypeError:
             prod = self.add_product()
         self._apply_inherited_fields_to_product(prod, result.values)
-        self._warn_on_inheritance_deviation(prod, result.values)
+        self._check_inheritance_alignment(
+            prod, result.values, origin="post_aplicacion_de_herencia"
+        )
         self._show_inheritance_messages(result)
         return prod
 
