@@ -130,6 +130,13 @@ def _build_risk_frame():
     )
 
 
+def _find_validator(label):
+    for validator in RecordingValidator.instances:
+        if label in validator.field_name:
+            return validator
+    return None
+
+
 def test_risk_frame_starts_with_empty_id():
     frame = _build_risk_frame()
 
@@ -251,3 +258,51 @@ def test_tree_selection_forces_catalog_mode():
 
     assert frame.is_catalog_mode()
     assert frame.id_var.get() == "RSK-123456"
+
+
+def test_new_risk_mode_allows_minimal_fields():
+    frame = _build_risk_frame()
+    frame.new_risk_var.set(True)
+
+    id_validator = _find_validator("ID")
+    lider_validator = _find_validator("Líder")
+    criticidad_validator = _find_validator("Criticidad")
+    expos_validator = _find_validator("Exposición")
+    desc_validator = _find_validator("Descripción")
+    planes_validator = _find_validator("Planes")
+
+    assert id_validator is not None
+    assert desc_validator is not None
+    assert id_validator.validate_callback() is not None
+
+    frame.id_var.set("LIBRE-0001")
+    frame.descripcion_var.set("Riesgo libre")
+
+    assert id_validator.validate_callback() is None
+    assert desc_validator.validate_callback() is None
+    assert lider_validator.validate_callback() is None
+    assert criticidad_validator.validate_callback() is None
+    assert expos_validator.validate_callback() is None
+    assert planes_validator.validate_callback() is None
+
+
+def test_catalog_mode_requires_previous_omitted_fields():
+    frame = _build_risk_frame()
+    frame.new_risk_var.set(True)
+    frame.id_var.set("LIBRE-0002")
+    frame.descripcion_var.set("Descripción libre")
+
+    lider_validator = _find_validator("Líder")
+    criticidad_validator = _find_validator("Criticidad")
+    planes_validator = _find_validator("Planes")
+
+    assert lider_validator.validate_callback() is None
+    assert criticidad_validator.validate_callback() is None
+    assert planes_validator.validate_callback() is None
+
+    frame.new_risk_var.set(False)
+    frame._on_mode_toggle()
+
+    assert lider_validator.validate_callback() is not None
+    assert criticidad_validator.validate_callback() is not None
+    assert planes_validator.validate_callback() is not None
