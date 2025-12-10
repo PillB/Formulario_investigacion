@@ -41,9 +41,12 @@ class PersistenceManager:
         self,
         root,
         schema_validator: SchemaValidator | None = None,
+        *,
+        task_category: str = "persistence",
     ) -> None:
         self.root = root
         self.schema_validator = schema_validator or validate_schema_payload
+        self.task_category = task_category
 
     def save(
         self,
@@ -110,7 +113,13 @@ class PersistenceManager:
         on_error: Callable[[BaseException], None] | None,
     ):
         if self.root is not None:
-            return run_guarded_task(task_func, on_success, on_error, self.root)
+            return run_guarded_task(
+                task_func,
+                on_success,
+                on_error,
+                self.root,
+                category=self.task_category,
+            )
         try:
             result = task_func()
         except BaseException as exc:  # pragma: no cover - fallback cuando no hay root
