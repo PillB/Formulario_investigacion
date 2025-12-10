@@ -87,7 +87,7 @@ from inheritance_service import InheritanceService
 from models import (AutofillService, build_detail_catalog_id_index,
                     CatalogService, iter_massive_csv_rows,
                     normalize_detail_catalog_key, parse_involvement_entries)
-from report_builder import (build_docx, build_llave_tecnica_rows,
+from report_builder import (build_docx, build_event_rows, build_llave_tecnica_rows,
                             build_report_filename, CaseData, DOCX_AVAILABLE,
                             DOCX_MISSING_MESSAGE, save_md)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
@@ -12506,6 +12506,7 @@ class FraudCaseApp:
         report_prefix = self._build_report_prefix(data)
         created_files = []
         llave_rows, llave_header = build_llave_tecnica_rows(data)
+        event_rows, event_header = build_event_rows(data)
         warnings: list[str] = []
 
         def write_csv(file_name, rows, header):
@@ -12540,6 +12541,7 @@ class FraudCaseApp:
             ],
         )
         write_csv('llave_tecnica.csv', llave_rows, llave_header)
+        write_csv('eventos.csv', event_rows, event_header)
         write_csv(
             'clientes.csv',
             data['clientes'],
@@ -12676,6 +12678,7 @@ class FraudCaseApp:
         """Devuelve los esquemas de exportación basados en el contenido actual."""
 
         llave_rows, llave_header = build_llave_tecnica_rows(data)
+        event_rows, event_header = build_event_rows(data)
         analisis_data = data.get("analisis") if isinstance(data, Mapping) else {}
         analysis_texts = self._normalize_analysis_texts(analisis_data or {})
         caso = data.get("caso") if isinstance(data, Mapping) else {}
@@ -12711,6 +12714,11 @@ class FraudCaseApp:
                 "name": "llave_tecnica",
                 "rows": llave_rows,
                 "header": llave_header,
+            },
+            {
+                "name": "eventos",
+                "rows": event_rows,
+                "header": event_header,
             },
             {
                 "name": "clientes",
