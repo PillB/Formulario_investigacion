@@ -93,3 +93,29 @@ def test_inheritance_creates_snapshot_not_reference():
     case_state["fecha_de_ocurrencia_caso"] = "2030-01-01"
 
     assert result.values == copied_values
+
+
+def test_invalid_modalidad_marks_invalid_and_keeps_categories():
+    case_state = _base_case_state()
+    case_state["modalidad_caso"] = "modalidad inexistente"
+
+    result = InheritanceService.inherit_product_fields_from_case(case_state)
+
+    assert result.values["categoria1"] == case_state["categoria_1_caso"]
+    assert result.values["categoria2"] == case_state["categoria_2_caso"]
+    assert "modalidad" not in result.values
+    assert "modalidad" in result.invalid_fields
+    assert not result.missing_fields
+
+
+def test_invalid_second_category_preserves_first_and_marks_invalid():
+    case_state = _base_case_state()
+    case_state["categoria_2_caso"] = "categoria fuera de catalogo"
+
+    result = InheritanceService.inherit_product_fields_from_case(case_state)
+
+    assert result.values["categoria1"] == case_state["categoria_1_caso"]
+    assert "categoria2" not in result.values
+    assert "modalidad" not in result.values
+    assert "categoria2" in result.invalid_fields
+    assert not result.missing_fields
