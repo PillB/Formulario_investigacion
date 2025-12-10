@@ -2088,10 +2088,11 @@ class ProductFrame:
     def _compose_duplicate_key_tuple(self) -> str:
         case_var = getattr(self.owner, "id_caso_var", None)
         placeholder = "-"
+        collaborator_placeholder = "—"
         case_id = (case_var.get().strip() if case_var else "") or placeholder
         product_id = self.id_var.get().strip() or placeholder
         client_id = self.client_var.get().strip() or placeholder
-        collaborator_id = self._get_primary_collaborator() or placeholder
+        collaborator_id = self._get_primary_collaborator() or collaborator_placeholder
         occ_date = self.fecha_oc_var.get().strip()
         desc_date = self.fecha_desc_var.get().strip()
         date_block = f"{occ_date or placeholder} / {desc_date or placeholder}"
