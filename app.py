@@ -865,6 +865,7 @@ class FraudCaseApp:
         self._duplicate_warning_shown_count: int = 0
         self._duplicate_warning_popup_limit: int = 3
         self._last_fraud_warning_at: Optional[datetime] = None
+        self._last_fraud_warning_value: Optional[str] = None
         self._rich_text_images = defaultdict(list)
         self._rich_text_image_sources = {}
         self._rich_text_fonts = {}
@@ -3881,15 +3882,23 @@ class FraudCaseApp:
         self.mod_caso_var.set('')
         self.case_mod_cb.set('')
         self._log_navigation_change("Modificó categoría 2 del caso")
-        if self.cat_caso2_var.get() == 'Fraude Interno':
-            now = datetime.now()
-            if self._last_fraud_warning_at and now - self._last_fraud_warning_at < timedelta(seconds=20):
-                return
-            messagebox.showwarning(
-                "Analítica de fraude interno",
-                "Recuerda coordinar con el equipo de reclamos para registrar la analítica correcta en casos de Fraude Interno.",
-            )
-            self._last_fraud_warning_at = now
+        if cat2 != 'Fraude Interno':
+            self._last_fraud_warning_value = None
+            return
+
+        if cat2 == self._last_fraud_warning_value:
+            return
+
+        now = datetime.now()
+        if self._last_fraud_warning_at and now - self._last_fraud_warning_at < timedelta(seconds=20):
+            return
+
+        messagebox.showwarning(
+            "Analítica de fraude interno",
+            "Recuerda coordinar con el equipo de reclamos para registrar la analítica correcta en casos de Fraude Interno.",
+        )
+        self._last_fraud_warning_at = now
+        self._last_fraud_warning_value = cat2
 
     def build_clients_tab(self, parent):
         """Construye la pestaña de clientes con lista dinámica."""
