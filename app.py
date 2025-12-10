@@ -1551,6 +1551,18 @@ class FraudCaseApp:
         if tab_to_select:
             try:
                 self.notebook.select(tab_to_select)
+                if hasattr(self, "_scroll_binder"):
+                    self._scroll_binder.activate_tab(tab_to_select)
+            except Exception:
+                pass
+
+        try:
+            scrolled = self._scroll_widget_into_view(target_widget)
+        except Exception:
+            scrolled = False
+        if not scrolled:
+            try:
+                self._scroll_to_widget(target_widget)
             except Exception:
                 pass
 
