@@ -137,7 +137,9 @@ def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy)
     app.save_and_send()
     prefix_first = Path(build_report_filename(TIPO_INFORME_LIST[0], '2024-0001', 'csv')).stem
     first_log = export_dir / f'{prefix_first}_logs.csv'
+    first_events = export_dir / f'{prefix_first}_eventos.csv'
     assert 'primer caso' in first_log.read_text(encoding='utf-8')
+    assert first_events.exists()
 
     app._reset_form_state(confirm=False, save_autosave=False)
     assert app.logs == []
@@ -153,9 +155,11 @@ def test_save_and_send_exports_fresh_logs(tmp_path, monkeypatch, messagebox_spy)
     app.save_and_send()
     prefix_second = Path(build_report_filename(TIPO_INFORME_LIST[0], '2024-0002', 'csv')).stem
     second_log = export_dir / f'{prefix_second}_logs.csv'
+    second_events = export_dir / f'{prefix_second}_eventos.csv'
     log_contents = second_log.read_text(encoding='utf-8')
     assert 'segundo caso' in log_contents
     assert 'primer caso' not in log_contents
+    assert second_events.exists()
 
 
 def test_save_and_send_updates_architecture_diagram(tmp_path, messagebox_spy):
