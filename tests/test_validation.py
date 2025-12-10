@@ -114,6 +114,7 @@ class _UIStubWidget:
         self._bindings = []
         self.command = kwargs.get("command")
         self._packed = False
+        self._state_flags: set[str] = set()
         if "values" in kwargs:
             self._config['values'] = kwargs["values"]
 
@@ -147,6 +148,27 @@ class _UIStubWidget:
 
     def configure(self, **kwargs):
         self._config.update(kwargs)
+        if "state" in kwargs:
+            state_value = kwargs.get("state")
+            self._state_flags = {state_value} if state_value else set()
+            if state_value:
+                self._config["state"] = state_value
+
+    def state(self, states=None):
+        if states:
+            for entry in states:
+                if isinstance(entry, str) and entry.startswith("!"):
+                    self._state_flags.discard(entry[1:])
+                elif entry:
+                    self._state_flags.add(entry)
+            self._config["state"] = self._resolve_state()
+        return list(self._state_flags)
+
+    def _resolve_state(self):
+        for candidate in ("disabled", "readonly", "normal"):
+            if candidate in self._state_flags:
+                return candidate
+        return self._config.get("state")
 
     def __setitem__(self, key, value):
         self._config[key] = value

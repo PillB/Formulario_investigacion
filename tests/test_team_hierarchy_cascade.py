@@ -39,6 +39,26 @@ def test_cascade_for_division_without_area(monkeypatch):
     assert "EJECUTIVO DE VENTAS PYME" in puesto_values
 
 
+def test_cascade_enables_service_and_puesto_after_valid_selection(monkeypatch):
+    frame = _build_frame(monkeypatch)
+
+    frame._on_division_change()
+    assert frame._servicio_combo._config.get("state") == "disabled"
+    assert frame._puesto_combo._config.get("state") == "disabled"
+
+    frame.division_var.set("2036")
+    frame._on_division_change()
+    assert frame._area_combo._config.get("state") == "readonly"
+
+    frame.area_var.set("AREA COMERCIAL LIMA 1")
+    frame._on_area_change()
+    assert frame._servicio_combo._config.get("state") == "readonly"
+
+    frame.servicio_var.set("AREA LIMA 1 - REGION 62")
+    frame._on_service_change()
+    assert frame._puesto_combo._config.get("state") == "readonly"
+
+
 def test_cascade_preserves_valid_selections(monkeypatch):
     frame = _build_frame(monkeypatch)
 
@@ -59,6 +79,30 @@ def test_cascade_preserves_valid_selections(monkeypatch):
 
     assert frame.area_var.get() == area_choice
     assert frame.servicio_var.get() == service_choice
+
+
+def test_cascade_filters_options_on_area_change(monkeypatch):
+    frame = _build_frame(monkeypatch)
+
+    frame.division_var.set("2036")
+    frame._on_division_change()
+
+    frame.area_var.set("AREA COMERCIAL LIMA 1")
+    frame._on_area_change()
+    lima_services = set(frame._servicio_combo["values"])
+    assert "AREA LIMA 1 - REGION 62" in lima_services
+
+    frame.area_var.set("GERENCIA ZONAL DE VENTAS Y TLMK I")
+    frame._on_area_change()
+    zonal_services = set(frame._servicio_combo["values"])
+    assert "AREA LIMA 1 - REGION 62" not in zonal_services
+    assert "GERENCIA ZONAL DE VENTAS Y TLMK I" in zonal_services
+
+    frame.servicio_var.set("GERENCIA ZONAL DE VENTAS Y TLMK I")
+    frame._on_service_change()
+    puestos = set(frame._puesto_combo["values"])
+    assert "GERENTE DE AGENCIA" not in puestos
+    assert "ASESOR OUTBOUND PYME" in puestos
 
 
 def test_manual_entry_enabled_when_catalog_missing_children(monkeypatch):

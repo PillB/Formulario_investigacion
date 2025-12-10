@@ -765,14 +765,17 @@ class TeamMemberFrame:
                 pass
         if not enabled:
             target_state = "disabled"
+            state_updates = [target_state]
         elif self.team_catalog.has_data and not allow_free_text:
             target_state = "readonly"
+            state_updates = ["!disabled", target_state]
         else:
             target_state = "normal"
+            state_updates = ["!disabled", target_state]
         state_method = getattr(widget, "state", None)
         if callable(state_method):
             try:
-                state_method([target_state])
+                state_method(state_updates)
                 return
             except Exception:
                 pass
