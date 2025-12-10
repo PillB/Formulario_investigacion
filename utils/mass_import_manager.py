@@ -5,6 +5,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
 
+import tkinter as tk
+from tkinter import messagebox
+
 from validators import log_event
 
 
@@ -87,15 +90,45 @@ class MassImportManager:
         if start_log:
             logger("navegacion", start_log)
 
-        worker = worker_factory(file_path)
-        app._start_background_import(
-            task_label,
-            button,
-            worker,
-            lambda payload: ui_callback(payload, file_path),
-            error_prefix,
-            ui_error_prefix,
-        )
+        def _restore_button_state():
+            if button is None or getattr(app, "_catalog_loading", False):
+                return
+            try:
+                button.state(['!disabled'])
+            except tk.TclError:
+                pass
+
+        def _notify_ui_error(exc: Exception):
+            message = (
+                f"No se pudo importar {task_label} desde {Path(file_path).name}: {exc}"
+            )
+            try:
+                messagebox.showerror("Error", message)
+            except tk.TclError:
+                pass
+            return message
+
+        try:
+            worker = worker_factory(file_path)
+        except Exception as exc:
+            logger("validacion", f"{error_prefix} ({file_path}): {exc}")
+            _restore_button_state()
+            _notify_ui_error(exc)
+            return
+
+        try:
+            app._start_background_import(
+                task_label,
+                button,
+                worker,
+                lambda payload: ui_callback(payload, file_path),
+                error_prefix,
+                ui_error_prefix,
+            )
+        except Exception as exc:
+            logger("validacion", f"{error_prefix} ({file_path}): {exc}")
+            _restore_button_state()
+            _notify_ui_error(exc)
 
     def run_import(
         self,
