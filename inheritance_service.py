@@ -61,7 +61,7 @@ class InheritanceService:
         cat2 = cls._get_field(case_state, "categoria2")
         modalidad = cls._get_field(case_state, "modalidad")
 
-        cls._copy_taxonomy_fields(cat1, cat2, modalidad, values, missing_fields)
+        cls._copy_taxonomy_fields(cat1, cat2, modalidad, values, missing_fields, invalid_fields)
 
         fecha_oc = cls._get_field(case_state, "fecha_ocurrencia")
         fecha_desc = cls._get_field(case_state, "fecha_descubrimiento")
@@ -91,30 +91,30 @@ class InheritanceService:
         modalidad: str,
         values: Dict[str, str],
         missing_fields: Set[str],
+        invalid_fields: Set[str],
     ) -> None:
         if not cat1:
             missing_fields.add("categoria1")
-            return
-        if cat1 not in TAXONOMIA:
-            missing_fields.add("categoria1")
-            return
-        values["categoria1"] = cat1
+        elif cat1 not in TAXONOMIA:
+            invalid_fields.add("categoria1")
+        else:
+            values["categoria1"] = cat1
 
         if not cat2:
             missing_fields.add("categoria2")
-            return
-        if cat2 not in TAXONOMIA.get(cat1, {}):
-            missing_fields.add("categoria2")
-            return
-        values["categoria2"] = cat2
+        elif cat1 in TAXONOMIA:
+            if cat2 in TAXONOMIA.get(cat1, {}):
+                values["categoria2"] = cat2
+            else:
+                invalid_fields.add("categoria2")
 
         if not modalidad:
             missing_fields.add("modalidad")
-            return
-        if modalidad not in TAXONOMIA.get(cat1, {}).get(cat2, []):
-            missing_fields.add("modalidad")
-            return
-        values["modalidad"] = modalidad
+        elif cat1 in TAXONOMIA and cat2 in TAXONOMIA.get(cat1, {}):
+            if modalidad in TAXONOMIA.get(cat1, {}).get(cat2, []):
+                values["modalidad"] = modalidad
+            else:
+                invalid_fields.add("modalidad")
 
     @staticmethod
     def _copy_dates(

@@ -4514,7 +4514,16 @@ class FraudCaseApp:
     def _show_inheritance_messages(self, result):
         if getattr(self, "_suppress_messagebox", False):
             return
-        if result.has_invalid:
+        taxonomy_errors = result.invalid_fields & {"categoria1", "categoria2", "modalidad"}
+        date_errors = result.invalid_fields & {"fecha_ocurrencia", "fecha_descubrimiento"}
+
+        if taxonomy_errors:
+            messagebox.showwarning(
+                "Campos heredados",
+                "Se detectaron valores de taxonomía fuera del catálogo; revisa las categorías y la modalidad heredadas.",
+            )
+
+        if date_errors:
             messagebox.showwarning(
                 "Campos heredados", "Fecha heredada inválida; revisar fecha de caso."
             )
