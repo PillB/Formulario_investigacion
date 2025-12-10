@@ -13,6 +13,7 @@ def start_confetti_burst(
     screen_x: int,
     screen_y: int,
     *,
+    enabled: bool = True,
     particles_per_frame: int = 6,
     frame_delay_ms: int = 16,
     max_frames: int = 60,
@@ -23,6 +24,9 @@ def start_confetti_burst(
     de la animación para liberar recursos. Se generan unas pocas partículas por
     cuadro para minimizar operaciones sobre el lienzo.
     """
+
+    if not enabled:
+        return
 
     if root is None or not root.winfo_exists():
         return
@@ -94,3 +98,11 @@ def start_confetti_burst(
 
 # Alias conservado para compatibilidad con llamadas existentes
 ConfettiBurst = start_confetti_burst
+
+
+def maybe_start_confetti(*args, enabled: bool = True, **kwargs) -> None:
+    """Ejecuta ``start_confetti_burst`` sólo si está habilitado."""
+
+    if not enabled:
+        return
+    start_confetti_burst(*args, enabled=enabled, **kwargs)

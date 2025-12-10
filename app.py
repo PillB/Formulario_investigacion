@@ -93,8 +93,8 @@ from report_builder import (build_docx, build_event_rows, build_llave_tecnica_ro
                             build_report_filename, CaseData, DOCX_AVAILABLE,
                             DOCX_MISSING_MESSAGE, save_md)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
-                      CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
-                      ENABLE_EXTENDED_ANALYSIS_SECTIONS,
+                      CONFETTI_ENABLED, CRITICIDAD_LIST,
+                      DETAIL_LOOKUP_ALIASES, ENABLE_EXTENDED_ANALYSIS_SECTIONS,
                       ensure_external_drive_dir, EXPORTS_DIR,
                       EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
@@ -715,6 +715,7 @@ class FraudCaseApp:
         self._suppress_messagebox = False
         self._consolidate_import_feedback = False
         self._startup_complete = False
+        self._confetti_enabled = bool(CONFETTI_ENABLED)
         self._ui_notifications: list[dict[str, str]] = []
         self._reset_navigation_metrics()
         self._hover_tooltips = []
@@ -13023,12 +13024,16 @@ class FraudCaseApp:
         self._handle_session_saved(data)
         save_button = self.actions_action_bar.buttons.get("save_send") if hasattr(self, "actions_action_bar") else None
         self._show_success_toast(save_button)
-        if hasattr(self, "root") and self.root:
-            start_confetti_burst(
-                self.root,
-                self.root.winfo_pointerx(),
-                self.root.winfo_pointery(),
-            )
+        if getattr(self, "_confetti_enabled", False) and hasattr(self, "root") and self.root:
+            try:
+                start_confetti_burst(
+                    self.root,
+                    self.root.winfo_pointerx(),
+                    self.root.winfo_pointery(),
+                    enabled=self._confetti_enabled,
+                )
+            except tk.TclError:
+                pass
 
     def _mirror_exports_to_external_drive(
         self, file_paths, case_id: str, *, notify_user: bool = True
