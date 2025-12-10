@@ -1749,6 +1749,44 @@ def test_duplicate_check_allows_collaborator_without_client():
     assert not app.logs
 
 
+def test_duplicate_check_marks_placeholder_when_collaborator_missing():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app._duplicate_checks_armed = False
+    app._duplicate_warning_signature = None
+    app._duplicate_warning_cooldown_until = None
+    app._last_duplicate_warning_message = None
+    app._validation_panel = None
+    app._suppress_messagebox = True
+    app.logs = []
+    app.id_caso_var = DummyVar("2024-0004")
+
+    class _ClaimStub:
+        def __init__(self, claim_id: str):
+            self._claim_id = claim_id
+
+        def get_data(self):
+            return {"id_reclamo": self._claim_id}
+
+    class _ProductStub:
+        def __init__(self):
+            self.id_var = DummyVar("3456789012345")
+            self.client_var = DummyVar("CLI002")
+            self.fecha_oc_var = DummyVar("2024-03-15")
+            self.claims = [_ClaimStub("CLM00003"), _ClaimStub("CLM00003")]
+            self.involvements = []
+
+        def _get_product_label(self):
+            return f"Producto {self.id_var.get()}"
+
+    app.product_frames = [_ProductStub()]
+
+    result = app._check_duplicate_technical_keys_realtime(armed=True, dataset_signature="sig3")
+
+    assert "Duplicado detectado" in result
+    assert app._last_duplicate_warning_message
+    assert "colaborador -" in app._last_duplicate_warning_message
+
+
 def test_validate_data_detects_duplicate_technical_keys_without_claims():
     product_configs = [
         {
