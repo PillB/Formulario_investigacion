@@ -28,6 +28,12 @@ from validation_badge import (
     ValidationBadgeRegistry,
     badge_registry,
 )
+from models.analitica_catalog import (
+    find_analitica_by_code,
+    find_analitica_by_name,
+    get_analitica_codes,
+    get_analitica_names,
+)
 from validators import (FieldValidator, log_event, normalize_without_accents,
                         should_autofill_field, sum_investigation_components,
                         validate_codigo_analitica, validate_date_text,
@@ -375,6 +381,9 @@ class ClaimRow:
         self.name_var = tk.StringVar()
         self.code_var = tk.StringVar()
         self.badge_manager = None
+        self._analitica_sync_in_progress = False
+        self._analitica_codes = get_analitica_codes()
+        self._analitica_names = get_analitica_names()
 
         self.section = self._create_section(parent)
         self._sync_section_title()
@@ -411,13 +420,30 @@ class ClaimRow:
         code_container, code_entry = self._create_badged_container(
             parent=self.frame,
             badge_key=self._badge_key("code"),
-            widget_factory=lambda container: ttk.Entry(
-                container, textvariable=self.code_var, width=12, style=ENTRY_STYLE
+            widget_factory=lambda container: ttk.Combobox(
+                container,
+                textvariable=self.code_var,
+                width=12,
+                state="readonly",
+                style=COMBOBOX_STYLE,
+                values=self._analitica_codes,
             ),
         )
         code_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.code_entry = code_entry
+        try:
+            self.code_entry.set("")
+        except Exception:
+            pass
         self.tooltip_register(code_entry, "Código numérico de 10 dígitos.")
+        for sequence in ("<<ComboboxSelected>>", "<FocusOut>"):
+            code_entry.bind(
+                sequence,
+                lambda _e, seq=sequence: self._on_analitica_code_change(
+                    from_focus=seq == "<FocusOut>"
+                ),
+                add="+",
+            )
         self._bind_claim_field_triggers(code_entry)
 
         ttk.Label(self.frame, text="Analítica nombre:").grid(
@@ -426,15 +452,32 @@ class ClaimRow:
         name_container, name_entry = self._create_badged_container(
             parent=self.frame,
             badge_key=self._badge_key("name"),
-            widget_factory=lambda container: ttk.Entry(
-                container, textvariable=self.name_var, width=20, style=ENTRY_STYLE
+            widget_factory=lambda container: ttk.Combobox(
+                container,
+                textvariable=self.name_var,
+                width=20,
+                state="readonly",
+                style=COMBOBOX_STYLE,
+                values=self._analitica_names,
             ),
         )
         name_container.grid(
             row=1, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
         self.name_entry = name_entry
+        try:
+            self.name_entry.set("")
+        except Exception:
+            pass
         self.tooltip_register(name_entry, "Nombre descriptivo de la analítica.")
+        for sequence in ("<<ComboboxSelected>>", "<FocusOut>"):
+            name_entry.bind(
+                sequence,
+                lambda _e, seq=sequence: self._on_analitica_name_change(
+                    from_focus=seq == "<FocusOut>"
+                ),
+                add="+",
+            )
         self._bind_claim_field_triggers(name_entry)
 
         remove_btn = ttk.Button(
@@ -489,6 +532,75 @@ class ClaimRow:
     def _bind_claim_field_triggers(self, widget) -> None:
         for event_name in ("<FocusOut>", "<KeyRelease>", "<<Paste>>", "<<Cut>>"):
             widget.bind(event_name, lambda _e: self._refresh_claim_summary(), add="+")
+
+    def _on_analitica_code_change(self, *, from_focus: bool = False, silent: bool = False) -> None:
+        self._sync_analitica_pair(source="code", from_focus=from_focus, silent=silent)
+        self._refresh_claim_summary()
+
+    def _on_analitica_name_change(self, *, from_focus: bool = False, silent: bool = False) -> None:
+        self._sync_analitica_pair(source="name", from_focus=from_focus, silent=silent)
+        self._refresh_claim_summary()
+
+    def _sync_analitica_pair(
+        self,
+        *,
+        source: str,
+        from_focus: bool = False,
+        silent: bool = False,
+        preserve_existing: bool = False,
+    ) -> None:
+        if self._analitica_sync_in_progress:
+            return
+
+        code = self.code_var.get().strip()
+        name = self.name_var.get().strip()
+        self._analitica_sync_in_progress = True
+        try:
+            if source == "code":
+                if not code:
+                    self.name_var.set("")
+                    return
+                match = find_analitica_by_code(code)
+                if not match:
+                    if from_focus and not silent:
+                        messagebox.showerror(
+                            "Analítica desconocida",
+                            (
+                                "El código seleccionado no existe en el catálogo de analíticas contables. "
+                                "Selecciona un código válido."
+                            ),
+                        )
+                    return
+                _, target_name = match
+                if (
+                    normalize_without_accents(target_name).lower()
+                    != normalize_without_accents(name).lower()
+                ):
+                    if preserve_existing and name:
+                        return
+                    self.name_var.set(target_name)
+            else:
+                if not name:
+                    self.code_var.set("")
+                    return
+                match = find_analitica_by_name(name)
+                if not match:
+                    if from_focus and not silent:
+                        messagebox.showerror(
+                            "Analítica desconocida",
+                            (
+                                "El nombre seleccionado no existe en el catálogo de analíticas contables. "
+                                "Selecciona un nombre válido."
+                            ),
+                        )
+                    return
+                target_code, target_name = match
+                if code != target_code:
+                    self.code_var.set(target_code)
+                if normalize_without_accents(target_name).lower() != normalize_without_accents(name).lower():
+                    self.name_var.set(target_name)
+        finally:
+            self._analitica_sync_in_progress = False
 
     def _refresh_claim_summary(self):
         snapshot = self.get_data()
@@ -566,6 +678,12 @@ class ClaimRow:
 
         set_if_present(self.name_var, "nombre_analitica")
         set_if_present(self.code_var, "codigo_analitica")
+        if self.code_var.get().strip():
+            self._sync_analitica_pair(
+                source="code", silent=True, preserve_existing=preserve_existing
+            )
+        elif self.name_var.get().strip():
+            self._sync_analitica_pair(source="name", silent=True)
         self._last_missing_lookup_id = None
         if not silent:
             self.product_frame.log_change(
@@ -695,13 +813,35 @@ class ClaimRow:
         value = self.name_var.get()
         if not value.strip():
             return validate_required_text(value, "el nombre de la analítica") if self._claims_required else None
-        return validate_required_text(value, "el nombre de la analítica")
+        base_error = validate_required_text(value, "el nombre de la analítica")
+        if base_error:
+            return base_error
+        return self._validate_analitica_catalog(source="name")
 
     def _validate_claim_code(self):
         value = self.code_var.get()
         if not value.strip():
             return validate_codigo_analitica(value) if self._claims_required else None
-        return validate_codigo_analitica(value)
+        format_error = validate_codigo_analitica(value)
+        if format_error:
+            return format_error
+        return self._validate_analitica_catalog(source="code")
+
+    def _validate_analitica_catalog(self, *, source: str) -> str | None:
+        code = self.code_var.get().strip()
+        name = self.name_var.get().strip()
+        code_lookup = find_analitica_by_code(code) if code else None
+        name_lookup = find_analitica_by_name(name) if name else None
+
+        if source == "code" and code and not code_lookup:
+            return "El código de analítica no existe en el catálogo disponible."
+        if source == "name" and name and not name_lookup:
+            return "El nombre de analítica no existe en el catálogo disponible."
+
+        if code and name and code_lookup and name_lookup and code_lookup[0] != name_lookup[0]:
+            return "El nombre y el código de analítica no corresponden al mismo elemento del catálogo."
+
+        return None
 
     def clear_values(self):
         """Restablece los campos del reclamo sin quitarlo del layout."""
@@ -712,6 +852,14 @@ class ClaimRow:
             self.code_var.set("")
             try:
                 self.id_cb.set("")
+            except Exception:
+                pass
+            try:
+                self.code_entry.set("")
+            except Exception:
+                pass
+            try:
+                self.name_entry.set("")
             except Exception:
                 pass
 

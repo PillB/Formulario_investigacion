@@ -85,7 +85,9 @@ from tkinter import messagebox, scrolledtext, ttk
 
 from inheritance_service import InheritanceService
 from models import (AutofillService, build_detail_catalog_id_index,
-                    CatalogService, iter_massive_csv_rows,
+                    CatalogService, extract_code_from_display,
+                    find_analitica_by_code, format_analitica_option,
+                    get_analitica_display_options, iter_massive_csv_rows,
                     normalize_detail_catalog_key, parse_involvement_entries)
 from report_builder import (build_docx, build_event_rows, build_llave_tecnica_rows,
                             build_report_filename, CaseData, DOCX_AVAILABLE,
@@ -5086,32 +5088,55 @@ class FraudCaseApp:
                 value=self._encabezado_data.get(key, "")
             )
             self._encabezado_vars[key] = var
-            entry = ttk.Entry(header_group, textvariable=var)
-            entry.grid(row=row, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
-            var.trace_add("write", lambda *_args, k=key: self._update_encabezado_value(k))
-            if key == "centro_costos":
-                self._register_post_edit_validation(entry, self._validate_cost_centers, "Centro de costos")
-                self.register_tooltip(
-                    entry,
-                    "Ingresa centros de costos separados por punto y coma. Cada valor debe ser numérico y de al menos 5 dígitos.",
+            if key == "analitica_contable":
+                display_value = format_analitica_option(var.get()) if var.get() else ""
+                if display_value:
+                    var.set(display_value)
+                entry = ttk.Combobox(
+                    header_group,
+                    textvariable=var,
+                    values=get_analitica_display_options(),
+                    state="readonly",
+                    style=ThemeManager.COMBOBOX_STYLE,
                 )
-            elif key == "fecha_reporte":
+                entry.grid(row=row, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+                var.trace_add("write", lambda *_args: self._update_header_analitica_value())
                 self._register_post_edit_validation(
                     entry,
-                    lambda: validate_date_text(
-                        self._encabezado_vars["fecha_reporte"].get(),
-                        "La fecha de reporte",
-                        allow_blank=True,
-                        enforce_max_today=True,
-                    ),
-                    "Fecha de reporte",
+                    self._validate_header_analitica,
+                    "Analítica contable",
                 )
-                self.register_tooltip(entry, "Fecha opcional del informe con formato YYYY-MM-DD.")
-            elif key == "numero_reclamos":
-                self._register_post_edit_validation(entry, self._validate_reclamos_count, "Número de reclamos")
-                self.register_tooltip(entry, "Si se conoce, ingresa la cantidad total de reclamos asociados.")
+                self.register_tooltip(
+                    entry,
+                    "Selecciona el código de analítica contable desde el catálogo controlado.",
+                )
             else:
-                self.register_tooltip(entry, "Campo opcional para complementar el encabezado del informe.")
+                entry = ttk.Entry(header_group, textvariable=var)
+                entry.grid(row=row, column=1, padx=COL_PADX, pady=(ROW_PADY // 2), sticky="we")
+                var.trace_add("write", lambda *_args, k=key: self._update_encabezado_value(k))
+                if key == "centro_costos":
+                    self._register_post_edit_validation(entry, self._validate_cost_centers, "Centro de costos")
+                    self.register_tooltip(
+                        entry,
+                        "Ingresa centros de costos separados por punto y coma. Cada valor debe ser numérico y de al menos 5 dígitos.",
+                    )
+                elif key == "fecha_reporte":
+                    self._register_post_edit_validation(
+                        entry,
+                        lambda: validate_date_text(
+                            self._encabezado_vars["fecha_reporte"].get(),
+                            "La fecha de reporte",
+                            allow_blank=True,
+                            enforce_max_today=True,
+                        ),
+                        "Fecha de reporte",
+                    )
+                    self.register_tooltip(entry, "Fecha opcional del informe con formato YYYY-MM-DD.")
+                elif key == "numero_reclamos":
+                    self._register_post_edit_validation(entry, self._validate_reclamos_count, "Número de reclamos")
+                    self.register_tooltip(entry, "Si se conoce, ingresa la cantidad total de reclamos asociados.")
+                else:
+                    self.register_tooltip(entry, "Campo opcional para complementar el encabezado del informe.")
 
     def _build_recommendations_fields(self, parent):
         rec_group = ttk.LabelFrame(parent, text="Recomendaciones categorizadas")
@@ -5317,6 +5342,20 @@ class FraudCaseApp:
         if changed:
             self._notify_dataset_changed()
 
+    def _update_header_analitica_value(self) -> None:
+        if "analitica_contable" not in self._encabezado_vars:
+            return
+        raw_value = self._encabezado_vars["analitica_contable"].get()
+        code_value = extract_code_from_display(raw_value)
+        changed = self._encabezado_data.get("analitica_contable") != code_value
+        self._encabezado_data["analitica_contable"] = code_value
+        if self._syncing_case_to_header:
+            self._encabezado_autofill_keys.add("analitica_contable")
+        else:
+            self._encabezado_autofill_keys.discard("analitica_contable")
+        if changed:
+            self._notify_dataset_changed()
+
     def _sanitize_cost_centers_text(self, raw_value: str) -> str:
         entries = [item.strip() for item in (raw_value or "").split(";") if item.strip()]
         return "; ".join(entries)
@@ -5342,6 +5381,21 @@ class FraudCaseApp:
             return None
         if not value.isdigit():
             return "El número de reclamos debe ser numérico."
+        return None
+
+    def _validate_header_analitica(self) -> Optional[str]:
+        value = (self._encabezado_vars.get("analitica_contable") or tk.StringVar()).get()
+        code = extract_code_from_display(value)
+        if not code.strip():
+            return None
+        message = validate_codigo_analitica(code)
+        if message:
+            messagebox.showerror("Analítica contable", message)
+            return message
+        if not find_analitica_by_code(code):
+            not_found = "El código seleccionado no pertenece al catálogo de analíticas contables."
+            messagebox.showerror("Analítica contable", not_found)
+            return not_found
         return None
 
     def _update_recommendation_category(self, key: str, widget: scrolledtext.ScrolledText) -> None:

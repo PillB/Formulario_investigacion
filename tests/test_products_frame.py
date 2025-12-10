@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from ui.frames import products
+from models.analitica_catalog import get_analitica_codes, get_analitica_names
 
 
 class DummyVar:
@@ -256,6 +257,38 @@ def test_claim_row_preserves_manual_fields_when_requested():
 
     assert row.name_var.get() == "Manual"
     assert row.code_var.get() == "4300000002"
+
+
+def test_claim_row_catalog_lists_are_populated():
+    product = _build_product_frame()
+    row = product.add_claim()
+
+    assert list(row.code_entry["values"]) == get_analitica_codes()
+    assert list(row.name_entry["values"]) == get_analitica_names()
+
+
+def test_claim_row_catalog_selection_syncs_fields():
+    product = _build_product_frame()
+    row = product.add_claim()
+    codes = get_analitica_codes()
+    names = get_analitica_names()
+
+    row.code_var.set(codes[0])
+    row._on_analitica_code_change(from_focus=True)
+    assert row.name_var.get() == names[0]
+
+    row.name_var.set(names[1])
+    row._on_analitica_name_change(from_focus=True)
+    assert row.code_var.get() == codes[1]
+
+
+def test_claim_row_validation_rejects_unknown_catalog_entries():
+    product = _build_product_frame()
+    row = product.add_claim()
+
+    row.code_var.set("4300999999")
+
+    assert row._validate_claim_code() is not None
 
 
 def test_duplicate_key_tuple_does_not_use_team_options_without_assignments():
