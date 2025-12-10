@@ -25,6 +25,32 @@ from validators import parse_decimal_amount, sanitize_rich_text
 PLACEHOLDER = "No aplica / Sin información registrada."
 
 
+def _group_relations_by_product(items: Iterable[Any]) -> dict[str, list[Mapping[str, Any]]]:
+    grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for item in items or []:
+        if not isinstance(item, Mapping):
+            continue
+        producto_id = item.get("id_producto", "")
+        grouped[producto_id].append(item)
+    return grouped
+
+
+def _iter_product_combinations(
+    productos: Iterable[Any],
+    reclamos_por_producto: Mapping[str, list[Mapping[str, Any]]],
+    involucramientos_por_producto: Mapping[str, list[Mapping[str, Any]]],
+):
+    for product in productos or []:
+        if not isinstance(product, Mapping):
+            continue
+        producto_id = product.get("id_producto", "")
+        invs = involucramientos_por_producto.get(producto_id) or [None]
+        claims = reclamos_por_producto.get(producto_id) or [None]
+        for inv in invs:
+            for claim in claims:
+                yield product, inv or {}, claim or {}
+
+
 def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict[str, str]], list[str]]:
     """Construye las combinaciones de llave técnica a partir de los datos capturados.
 
@@ -67,35 +93,175 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
     reclamos = case_data.get("reclamos") if isinstance(case_data, Mapping) else []
     involucramientos = case_data.get("involucramientos") if isinstance(case_data, Mapping) else []
 
-    reclamos_por_producto: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for reclamo in reclamos or []:
-        producto_id = reclamo.get("id_producto", "") if isinstance(reclamo, Mapping) else ""
-        reclamos_por_producto[producto_id].append(reclamo if isinstance(reclamo, Mapping) else {})
-
-    involucramientos_por_producto: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for inv in involucramientos or []:
-        producto_id = inv.get("id_producto", "") if isinstance(inv, Mapping) else ""
-        involucramientos_por_producto[producto_id].append(inv if isinstance(inv, Mapping) else {})
+    reclamos_por_producto = _group_relations_by_product(reclamos)
+    involucramientos_por_producto = _group_relations_by_product(involucramientos)
 
     rows: list[dict[str, str]] = []
-    for product in productos or []:
-        if not isinstance(product, Mapping):
-            continue
-        producto_id = product.get("id_producto", "")
-        invs = involucramientos_por_producto.get(producto_id) or [None]
-        claims = reclamos_por_producto.get(producto_id) or [None]
-        for inv in invs:
-            for claim in claims:
-                rows.append(
-                    {
-                        **base_row,
-                        "id_producto": producto_id,
-                        "id_cliente": product.get("id_cliente", ""),
-                        "id_colaborador": (inv or {}).get("id_colaborador", ""),
-                        "id_reclamo": (claim or {}).get("id_reclamo", ""),
-                        "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
-                    }
-                )
+    for product, inv, claim in _iter_product_combinations(
+        productos, reclamos_por_producto, involucramientos_por_producto
+    ):
+        rows.append(
+            {
+                **base_row,
+                "id_producto": product.get("id_producto", ""),
+                "id_cliente": product.get("id_cliente", ""),
+                "id_colaborador": inv.get("id_colaborador", ""),
+                "id_reclamo": claim.get("id_reclamo", ""),
+                "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
+            }
+        )
+    return rows, header
+
+
+def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict[str, str]], list[str]]:
+    """Combina productos con clientes, reclamos e involucramientos vinculados.
+
+    Usa la misma lógica de combinaciones que ``build_llave_tecnica_rows``
+    para garantizar que cada fila conserve la llave técnica
+    ``[id_caso, id_producto, id_cliente, id_colaborador, id_reclamo, fecha_ocurrencia]``
+    y añade atributos relevantes de producto, cliente y colaborador. Cuando
+    no exista la relación correspondiente, se rellenan los campos con
+    cadenas vacías.
+    """
+
+    caso = case_data.get("caso", {}) if isinstance(case_data, Mapping) else {}
+    investigator = caso.get("investigador") if isinstance(caso, Mapping) else {}
+    investigator = investigator if isinstance(investigator, Mapping) else {}
+    base_row = {
+        "id_caso": caso.get("id_caso", ""),
+        "tipo_informe": caso.get("tipo_informe", ""),
+        "categoria1": caso.get("categoria1", ""),
+        "categoria2": caso.get("categoria2", ""),
+        "modalidad": caso.get("modalidad", ""),
+        "canal": caso.get("canal", ""),
+        "proceso": caso.get("proceso", ""),
+        "fecha_de_ocurrencia": caso.get("fecha_de_ocurrencia", ""),
+        "fecha_de_descubrimiento": caso.get("fecha_de_descubrimiento", ""),
+        "centro_costos": caso.get("centro_costos", "") or caso.get("centro_costo", ""),
+        "matricula_investigador": caso.get("matricula_investigador", ""),
+        "investigador_nombre": caso.get("investigador_nombre", "")
+        or investigator.get("nombre", ""),
+        "investigador_cargo": caso.get("investigador_cargo", "")
+        or investigator.get("cargo", ""),
+    }
+
+    header = list(base_row.keys()) + [
+        "id_producto",
+        "id_cliente",
+        "id_colaborador",
+        "id_reclamo",
+        "fecha_ocurrencia",
+        "fecha_descubrimiento",
+        "tipo_producto",
+        "tipo_moneda",
+        "monto_investigado",
+        "monto_perdida_fraude",
+        "monto_falla_procesos",
+        "monto_contingencia",
+        "monto_recuperado",
+        "monto_pago_deuda",
+        "nombre_analitica",
+        "codigo_analitica",
+        "cliente_nombres",
+        "cliente_apellidos",
+        "cliente_tipo_id",
+        "cliente_flag",
+        "cliente_telefonos",
+        "cliente_correos",
+        "cliente_direcciones",
+        "cliente_accionado",
+        "colaborador_flag",
+        "colaborador_nombres",
+        "colaborador_apellidos",
+        "colaborador_division",
+        "colaborador_area",
+        "colaborador_servicio",
+        "colaborador_puesto",
+        "colaborador_fecha_carta_inmediatez",
+        "colaborador_fecha_carta_renuncia",
+        "colaborador_nombre_agencia",
+        "colaborador_codigo_agencia",
+        "colaborador_tipo_falta",
+        "colaborador_tipo_sancion",
+        "monto_asignado",
+    ]
+
+    productos = case_data.get("productos") if isinstance(case_data, Mapping) else []
+    reclamos = case_data.get("reclamos") if isinstance(case_data, Mapping) else []
+    involucramientos = case_data.get("involucramientos") if isinstance(case_data, Mapping) else []
+    clientes = case_data.get("clientes") if isinstance(case_data, Mapping) else []
+    colaboradores = case_data.get("colaboradores") if isinstance(case_data, Mapping) else []
+
+    reclamos_por_producto = _group_relations_by_product(reclamos)
+    involucramientos_por_producto = _group_relations_by_product(involucramientos)
+    clientes_por_id = {
+        client.get("id_cliente", ""): client for client in clientes if isinstance(client, Mapping)
+    }
+    colaboradores_por_id = {
+        collaborator.get("id_colaborador", ""): collaborator
+        for collaborator in colaboradores
+        if isinstance(collaborator, Mapping)
+    }
+
+    rows: list[dict[str, str]] = []
+    for product, inv, claim in _iter_product_combinations(
+        productos, reclamos_por_producto, involucramientos_por_producto
+    ):
+        client = clientes_por_id.get(product.get("id_cliente", ""), {})
+        collaborator = colaboradores_por_id.get(inv.get("id_colaborador", ""), {})
+        rows.append(
+            {
+                **base_row,
+                "categoria1": product.get("categoria1", base_row.get("categoria1", "")),
+                "categoria2": product.get("categoria2", base_row.get("categoria2", "")),
+                "modalidad": product.get("modalidad", base_row.get("modalidad", "")),
+                "canal": product.get("canal", base_row.get("canal", "")),
+                "proceso": product.get("proceso", base_row.get("proceso", "")),
+                "id_producto": product.get("id_producto", ""),
+                "id_cliente": product.get("id_cliente", ""),
+                "id_colaborador": inv.get("id_colaborador", ""),
+                "id_reclamo": claim.get("id_reclamo", ""),
+                "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
+                "fecha_descubrimiento": product.get("fecha_descubrimiento", ""),
+                "tipo_producto": product.get("tipo_producto", ""),
+                "tipo_moneda": product.get("tipo_moneda", ""),
+                "monto_investigado": product.get("monto_investigado", ""),
+                "monto_perdida_fraude": product.get("monto_perdida_fraude", ""),
+                "monto_falla_procesos": product.get("monto_falla_procesos", ""),
+                "monto_contingencia": product.get("monto_contingencia", ""),
+                "monto_recuperado": product.get("monto_recuperado", ""),
+                "monto_pago_deuda": product.get("monto_pago_deuda", ""),
+                "nombre_analitica": claim.get("nombre_analitica", ""),
+                "codigo_analitica": claim.get("codigo_analitica", ""),
+                "cliente_nombres": client.get("nombres", ""),
+                "cliente_apellidos": client.get("apellidos", ""),
+                "cliente_tipo_id": client.get("tipo_id", ""),
+                "cliente_flag": client.get("flag", ""),
+                "cliente_telefonos": client.get("telefonos", ""),
+                "cliente_correos": client.get("correos", ""),
+                "cliente_direcciones": client.get("direcciones", ""),
+                "cliente_accionado": client.get("accionado", ""),
+                "colaborador_flag": collaborator.get("flag", ""),
+                "colaborador_nombres": collaborator.get("nombres", ""),
+                "colaborador_apellidos": collaborator.get("apellidos", ""),
+                "colaborador_division": collaborator.get("division", ""),
+                "colaborador_area": collaborator.get("area", ""),
+                "colaborador_servicio": collaborator.get("servicio", ""),
+                "colaborador_puesto": collaborator.get("puesto", ""),
+                "colaborador_fecha_carta_inmediatez": collaborator.get(
+                    "fecha_carta_inmediatez", ""
+                ),
+                "colaborador_fecha_carta_renuncia": collaborator.get(
+                    "fecha_carta_renuncia", ""
+                ),
+                "colaborador_nombre_agencia": collaborator.get("nombre_agencia", ""),
+                "colaborador_codigo_agencia": collaborator.get("codigo_agencia", ""),
+                "colaborador_tipo_falta": collaborator.get("tipo_falta", ""),
+                "colaborador_tipo_sancion": collaborator.get("tipo_sancion", ""),
+                "monto_asignado": inv.get("monto_asignado", ""),
+            }
+        )
+
     return rows, header
 
 

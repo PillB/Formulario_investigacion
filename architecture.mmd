@@ -1,5 +1,5 @@
 %% Diagramas de arquitectura y flujos de artefactos
-%% Actualizado automáticamente el 2025-12-05 05:45:36
+%% Actualizado automáticamente el 2025-12-10 05:06:04
 %%{init: { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif', 'themeVariables': { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif' } } }%%
 
 erDiagram
@@ -37,6 +37,59 @@ erDiagram
     string id_colaborador
     string id_reclamo
     string fecha_ocurrencia
+  }
+  EVENTOS {
+    string id_caso
+    string tipo_informe
+    string categoria1
+    string categoria2
+    string modalidad
+    string canal
+    string proceso
+    string fecha_de_ocurrencia
+    string fecha_de_descubrimiento
+    string centro_costos
+    string matricula_investigador
+    string investigador_nombre
+    string investigador_cargo
+    string id_producto
+    string id_cliente
+    string id_colaborador
+    string id_reclamo
+    string fecha_ocurrencia
+    string fecha_descubrimiento
+    string tipo_producto
+    string tipo_moneda
+    string monto_investigado
+    string monto_perdida_fraude
+    string monto_falla_procesos
+    string monto_contingencia
+    string monto_recuperado
+    string monto_pago_deuda
+    string nombre_analitica
+    string codigo_analitica
+    string cliente_nombres
+    string cliente_apellidos
+    string cliente_tipo_id
+    string cliente_flag
+    string cliente_telefonos
+    string cliente_correos
+    string cliente_direcciones
+    string cliente_accionado
+    string colaborador_flag
+    string colaborador_nombres
+    string colaborador_apellidos
+    string colaborador_division
+    string colaborador_area
+    string colaborador_servicio
+    string colaborador_puesto
+    string colaborador_fecha_carta_inmediatez
+    string colaborador_fecha_carta_renuncia
+    string colaborador_nombre_agencia
+    string colaborador_codigo_agencia
+    string colaborador_tipo_falta
+    string colaborador_tipo_sancion
+    string monto_asignado
   }
   CLIENTES {
     string id_cliente
@@ -133,34 +186,26 @@ erDiagram
     string mensaje
   }
 
-  LLAVE_TECNICA {
-    string case_id FK
-    string id_producto FK
-    string id_cliente FK
-    string id_colaborador FK
-    string id_reclamo FK
-    date fecha_ocurrencia
-  }
-
+  CASOS ||--o{ ANALISIS : contiene
   CASOS ||--o{ CLIENTES : contiene
-  CASOS ||--o{ TEAM_MEMBERS : tiene
-  CASOS ||--o{ PRODUCTS : incluye
-  CASOS ||--o{ RISK_DETAILS : identifica
-  CASOS ||--o{ NORM_DETAILS : transgrede
-  RISK_DETAILS ||--o{ RISK_PLANS : "tiene planes"
-  CASOS ||--o{ ANALYSIS : documenta
-  CLIENTES ||--o{ CLIENT_PHONES : "tiene teléfonos"
-  CLIENTES ||--o{ CLIENT_EMAILS : "tiene correos"
-  CLIENTES ||--o{ CLIENT_ADDRESSES : "tiene direcciones"
-  CLIENTES ||--o{ PRODUCTS : posee
-  TEAM_MEMBERS ||--o{ INVOLVEMENT : participa
-  PRODUCTS ||--o{ INVOLVEMENT : "asigna colaboradores"
-  PRODUCTS ||--o{ PRODUCT_CLAIMS : "origina reclamos"
-  LLAVE_TECNICA ||--|| PRODUCTS : "usa"
-  LLAVE_TECNICA ||--|| CLIENTES : "usa"
-  LLAVE_TECNICA ||--|| TEAM_MEMBERS : "usa"
-  LLAVE_TECNICA ||--|| PRODUCT_CLAIMS : "usa"
-  PRODUCTS ||--o{ ACCIONADO : "accionado por"
+  CASOS ||--o{ COLABORADORES : contiene
+  CASOS ||--o{ DETALLES_NORMA : contiene
+  CASOS ||--o{ DETALLES_RIESGO : contiene
+  CASOS ||--o{ EVENTOS : contiene
+  CASOS ||--o{ INVOLUCRAMIENTO : contiene
+  CASOS ||--o{ LLAVE_TECNICA : contiene
+  CASOS ||--o{ PRODUCTOS : contiene
+  CASOS ||--o{ PRODUCTO_RECLAMO : contiene
+  CLIENTES ||--o{ EVENTOS : id_cliente
+  CLIENTES ||--o{ LLAVE_TECNICA : id_cliente
+  CLIENTES ||--o{ PRODUCTOS : id_cliente
+  COLABORADORES ||--o{ EVENTOS : id_colaborador
+  COLABORADORES ||--o{ INVOLUCRAMIENTO : id_colaborador
+  COLABORADORES ||--o{ LLAVE_TECNICA : id_colaborador
+  PRODUCTOS ||--o{ EVENTOS : id_producto
+  PRODUCTOS ||--o{ INVOLUCRAMIENTO : id_producto
+  PRODUCTOS ||--o{ LLAVE_TECNICA : id_producto
+  PRODUCTOS ||--o{ PRODUCTO_RECLAMO : id_producto
 
 %% Notas de almacenamiento de logs:
 %% - Los eventos del formulario se escriben en `logs.csv` (carpeta local) y se espejan a `external drive/logs.csv`.
