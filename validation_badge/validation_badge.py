@@ -10,9 +10,9 @@ from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import ensure_grid_support
 
-WARNING_STYLE = "warning.badge"
-SUCCESS_STYLE = "success.badge"
-NEUTRAL_STYLE = "neutral.badge"
+WARNING_STYLE = "WarningBadge.TLabel"
+SUCCESS_STYLE = "SuccessBadge.TLabel"
+NEUTRAL_STYLE = "NeutralBadge.TLabel"
 
 WARNING_ICON = "⚠️"
 SUCCESS_ICON = "✅"
@@ -334,6 +334,13 @@ class ValidationBadge:
             return base_name
         if self._style is None:
             return base_name
+        layout = getattr(self._style, "layout", None)
+        if callable(layout):
+            try:
+                if not layout(base_name):
+                    layout(base_name, layout("TLabel"))
+            except Exception:
+                pass
         palette = _resolve_palette(self._style, base_name, role=role)
         self._style.configure(
             base_name,
