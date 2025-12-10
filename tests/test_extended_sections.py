@@ -1,10 +1,16 @@
 """Cobertura para las secciones extendidas del informe."""
 
 import json
+import os
 from pathlib import Path
+import tkinter as tk
+from tkinter import ttk
+
+import pytest
 
 import app as app_module
 from app import FraudCaseApp
+from models.analitica_catalog import format_analitica_option, get_analitica_display_options
 from tests.test_validation import build_headless_app
 
 
@@ -89,3 +95,48 @@ def test_autosave_persists_extended_sections(tmp_path, monkeypatch):
     assert saved["firmas"] == [{"nombre": "Firmante"}]
     assert saved["recomendaciones_categorias"]["extra"] == ["Nota"]
     assert dataset.get("encabezado", {}).get("analitica_contable") == ""
+
+
+@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="Tk display not available")
+def test_header_analitica_combobox_uses_catalog():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app._encabezado_vars = {}
+    app._encabezado_data = {"analitica_contable": "4300000000"}
+    app._encabezado_autofill_keys = set()
+    app._syncing_case_to_header = False
+    app._notify_dataset_changed = lambda: None
+    app._register_post_edit_validation = lambda *args, **kwargs: None
+    app.register_tooltip = lambda *args, **kwargs: None
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        app._build_header_fields(root)
+        header_group = root.winfo_children()[0]
+        combos = [child for child in header_group.winfo_children() if isinstance(child, ttk.Combobox)]
+        assert combos, "Se esperaba un combobox para analítica contable"
+        analitica_combo = combos[0]
+        assert list(analitica_combo["values"]) == get_analitica_display_options()
+        assert app._encabezado_vars["analitica_contable"].get() == format_analitica_option("4300000000")
+    finally:
+        root.destroy()
+
+
+@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="Tk display not available")
+def test_header_analitica_updates_dataset():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app._encabezado_vars = {}
+    app._encabezado_data = {"analitica_contable": ""}
+    app._encabezado_autofill_keys = set()
+    app._syncing_case_to_header = False
+    app._notify_dataset_changed = lambda: None
+    app._register_post_edit_validation = lambda *args, **kwargs: None
+    app.register_tooltip = lambda *args, **kwargs: None
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        app._build_header_fields(root)
+        app._encabezado_vars["analitica_contable"].set(format_analitica_option("4300000002"))
+        app._update_header_analitica_value()
+        assert app._encabezado_data["analitica_contable"] == "4300000002"
+    finally:
+        root.destroy()
