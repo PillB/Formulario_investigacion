@@ -1655,6 +1655,78 @@ def test_duplicate_check_normalizes_occurrence_date_formats():
     assert "Registro duplicado de clave técnica" in app._last_duplicate_warning_message
 
 
+def test_duplicate_check_allows_client_without_collaborator():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app._duplicate_checks_armed = False
+    app._duplicate_warning_signature = None
+    app._duplicate_warning_cooldown_until = None
+    app._last_duplicate_warning_message = None
+    app._validation_panel = None
+    app._suppress_messagebox = True
+    app.logs = []
+    app.id_caso_var = DummyVar("2024-0002")
+
+    class _ClaimStub:
+        def get_data(self):
+            return {"id_reclamo": "CLM00001"}
+
+    class _ProductStub:
+        def __init__(self):
+            self.id_var = DummyVar("1234567890123")
+            self.client_var = DummyVar("CL001")
+            self.fecha_oc_var = DummyVar("2024-01-05")
+            self.claims = [_ClaimStub()]
+            self.involvements = []
+
+        def _get_product_label(self):
+            return f"Producto {self.id_var.get()}"
+
+    app.product_frames = [_ProductStub()]
+
+    result = app._check_duplicate_technical_keys_realtime(armed=True, dataset_signature="sig")
+
+    assert result == "Sin duplicados detectados"
+    assert not app.logs
+
+
+def test_duplicate_check_allows_collaborator_without_client():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    app._duplicate_checks_armed = False
+    app._duplicate_warning_signature = None
+    app._duplicate_warning_cooldown_until = None
+    app._last_duplicate_warning_message = None
+    app._validation_panel = None
+    app._suppress_messagebox = True
+    app.logs = []
+    app.id_caso_var = DummyVar("2024-0003")
+
+    class _ClaimStub:
+        def get_data(self):
+            return {"id_reclamo": "CLM00002"}
+
+    class _InvolvementStub:
+        def get_data(self):
+            return {"id_colaborador": "T12345"}
+
+    class _ProductStub:
+        def __init__(self):
+            self.id_var = DummyVar("2345678901234")
+            self.client_var = DummyVar("")
+            self.fecha_oc_var = DummyVar("2024-02-10")
+            self.claims = [_ClaimStub()]
+            self.involvements = [_InvolvementStub()]
+
+        def _get_product_label(self):
+            return f"Producto {self.id_var.get()}"
+
+    app.product_frames = [_ProductStub()]
+
+    result = app._check_duplicate_technical_keys_realtime(armed=True, dataset_signature="sig2")
+
+    assert result == "Sin duplicados detectados"
+    assert not app.logs
+
+
 def test_validate_data_detects_duplicate_technical_keys_without_claims():
     product_configs = [
         {
