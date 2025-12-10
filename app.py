@@ -8977,6 +8977,7 @@ class FraudCaseApp:
 
         signature = dataset_signature or self._build_duplicate_dataset_signature()
 
+        EMPTY_PART = "-"
         seen_keys = {}
         duplicate_messages: list[str] = []
         missing_association_messages: list[str] = []
@@ -9047,18 +9048,21 @@ class FraudCaseApp:
                 )
 
             if not has_collaborator_association:
-                collaborator_ids = [""] if has_client_association else ["<FALTA_ASOCIACION>"]
+                collaborator_ids = [EMPTY_PART]
 
             for claim in claim_rows:
                 claim_id_raw = (claim.get('id_reclamo') or '').strip()
-                claim_norm = self._normalize_identifier(claim_id_raw)
+                claim_norm = self._normalize_identifier(claim_id_raw) or EMPTY_PART
                 for collaborator_norm in collaborator_ids:
+                    collaborator_key = collaborator_norm or EMPTY_PART
+                    client_key = client_norm or EMPTY_PART
+                    occ_date_key = occ_date_norm or EMPTY_PART
                     key = (
                         normalized_case_id,
                         pid_norm,
-                        client_norm,
-                        collaborator_norm,
-                        occ_date_norm,
+                        client_key,
+                        collaborator_key,
+                        occ_date_key,
                         claim_norm,
                     )
                     if key in seen_keys:

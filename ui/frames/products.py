@@ -2078,29 +2078,31 @@ class ProductFrame:
             "Si el sistema marca un duplicado, ajusta cualquiera de los campos de la "
             "clave técnica (caso, producto, cliente, colaborador, fecha de ocurrencia "
             "o reclamo) hasta que la combinación sea única y vuelve a editar un campo "
-            "para revalidar. Debes tener al menos un colaborador asignado en "
-            "'Involucramiento de colaboradores' para que la validación sea completa."
+            "para revalidar. Puedes validar con cliente, con colaborador o con ambos; "
+            "si falta alguno, la clave mostrará un guion en su lugar para indicar que "
+            "ese componente está vacío."
         )
         self.tooltip_register(label, tooltip_text)
         self.duplicate_status_label = label
 
     def _compose_duplicate_key_tuple(self) -> str:
         case_var = getattr(self.owner, "id_caso_var", None)
-        case_id = (case_var.get().strip() if case_var else "")
-        product_id = self.id_var.get().strip()
-        client_id = self.client_var.get().strip()
-        collaborator_id = self._get_primary_collaborator()
+        placeholder = "-"
+        case_id = (case_var.get().strip() if case_var else "") or placeholder
+        product_id = self.id_var.get().strip() or placeholder
+        client_id = self.client_var.get().strip() or placeholder
+        collaborator_id = self._get_primary_collaborator() or placeholder
         occ_date = self.fecha_oc_var.get().strip()
         desc_date = self.fecha_desc_var.get().strip()
-        date_block = f"{occ_date or '—'} / {desc_date or '—'}"
-        claim_id = self._get_primary_claim_id()
+        date_block = f"{occ_date or placeholder} / {desc_date or placeholder}"
+        claim_id = self._get_primary_claim_id() or placeholder
         tuple_parts = (
-            case_id or "—",
-            product_id or "—",
-            client_id or "—",
-            collaborator_id or "—",
+            case_id,
+            product_id,
+            client_id,
+            collaborator_id,
             date_block,
-            claim_id or "—",
+            claim_id,
         )
         return f"({', '.join(tuple_parts)})"
 

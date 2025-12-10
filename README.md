@@ -139,7 +139,7 @@ el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con la
 - **Obligatoriedad condicional**:
   - Si Pérdida/Falla/Contingencia > 0 ⇒ Reclamo, Nombre analítica y Código analítica son obligatorios.
   - Si División = DCA o Canales de atención **y** Área contiene "area comercial" ⇒ Nombre y Código de agencia requeridos.
-- **Duplicados**: Se bloquea la combinación repetida de `[Número de caso, Id producto, Id cliente, Id team member, Fecha de ocurrencia, Id de reclamo]`.
+- **Duplicados**: Se bloquea la combinación repetida de `[Número de caso, Id producto, Id cliente, Id team member, Fecha de ocurrencia, Id de reclamo]`. Para validar basta con cliente o con colaborador (o ambos). Si un componente de la clave se deja vacío de forma intencional, se muestra como `-` en la vista y en los mensajes para que quede claro que ese segmento está ausente.
 
 ## Importación y exportación
 - **Importar CSV**: desde **Acciones**, selecciona el archivo adecuado; la app valida, omite duplicados y sincroniza combobox/listados.
@@ -166,6 +166,12 @@ el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con la
 - **Permisos**: verifica acceso a `exports/` y `external drive/` si fallan los respaldos.
 - **CSV inválidos**: confirma encabezados/separadores; la app indicará filas omitidas.
 - **Autopoblado**: si un ID existe en `client_details.csv` o `team_details.csv`, se rellenan datos; de lo contrario, se registra advertencia.
+
+### Análisis de causa raíz (clave técnica)
+- **Síntoma observado**: se interpretó que faltaba una validación porque algunas combinaciones carecían de colaborador o cliente.
+- **Causa**: el texto del tooltip y el marcador interno para valores vacíos no dejaban claro que la regla de negocio permite validar con solo cliente o solo colaborador; el marcador `"<FALTA_ASOCIACION>"` generaba ruido al depurar la clave.
+- **Corrección**: se alineó la visualización y la generación de claves para mostrar `-` cuando un componente está vacío y se aclaró en la documentación que basta con una de las dos asociaciones.
+- **Cómo validar/fiscalizar**: edita cualquiera de los campos de la clave (caso, producto, cliente, colaborador, fecha de ocurrencia o reclamo) para lanzar la validación; verifica que el resumen de clave muestre `-` en componentes omitidos y que los duplicados se reporten aun cuando falte uno de los dos identificadores.
 
 ## FAQ
 - **¿Cómo reinicio el formulario?** Usa **Acciones → Borrar todos los datos**.
