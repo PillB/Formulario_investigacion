@@ -4439,6 +4439,28 @@ class FraudCaseApp:
         self._log_navigation_change("Agregó producto heredado")
         return self.add_product_inheriting_case(user_initiated=True)
 
+    def _snapshot_product_inheritance_fields(self, product_frame):
+        def _safe_get(attr_name):
+            var = getattr(product_frame, attr_name, None)
+            getter = getattr(var, "get", None)
+            if callable(getter):
+                try:
+                    value = getter()
+                    return "" if value is None else str(value).strip()
+                except Exception:
+                    return ""
+            return ""
+
+        return {
+            "categoria1": _safe_get("cat1_var"),
+            "categoria2": _safe_get("cat2_var"),
+            "modalidad": _safe_get("mod_var"),
+            "fecha_ocurrencia": _safe_get("fecha_oc_var"),
+            "fecha_descubrimiento": _safe_get("fecha_desc_var"),
+            "canal": _safe_get("canal_var"),
+            "proceso": _safe_get("proceso_var"),
+        }
+
     def _apply_case_taxonomy_defaults(self, product_frame):
         """Configura un producto nuevo con la taxonomía seleccionada en el caso."""
 
@@ -4446,7 +4468,24 @@ class FraudCaseApp:
         cat2 = self.cat_caso2_var.get().strip()
         modalidad = self.mod_caso_var.get().strip()
 
+        case_snapshot = {
+            "categoria1": cat1,
+            "categoria2": cat2,
+            "modalidad": modalidad,
+        }
+        product_snapshot = self._snapshot_product_inheritance_fields(product_frame)
+        log_event(
+            "herencia_debug",
+            f"Prefill taxonomía producto {product_frame.idx + 1}: caso={case_snapshot} estado_inicial={product_snapshot}",
+            self.logs,
+        )
+
         if not cat1 or cat1 not in TAXONOMIA:
+            log_event(
+                "herencia_debug",
+                f"Prefill taxonomía producto {product_frame.idx + 1} omitido por categoría vacía/invalidada: {case_snapshot}",
+                self.logs,
+            )
             return
 
         previous_suppression = getattr(product_frame, '_suppress_change_notifications', False)
@@ -4465,6 +4504,12 @@ class FraudCaseApp:
                         product_frame.mod_cb.set(modalidad)
         finally:
             product_frame._suppress_change_notifications = previous_suppression
+        final_snapshot = self._snapshot_product_inheritance_fields(product_frame)
+        log_event(
+            "herencia_debug",
+            f"Prefill taxonomía producto {product_frame.idx + 1} completado: estado_final={final_snapshot}",
+            self.logs,
+        )
 
     def _collect_case_state_for_inheritance(self):
         return {
@@ -4478,6 +4523,12 @@ class FraudCaseApp:
         }
 
     def _apply_inherited_fields_to_product(self, product_frame, inherited_values):
+        before_snapshot = self._snapshot_product_inheritance_fields(product_frame)
+        log_event(
+            "herencia_debug",
+            f"Aplicando herencia a producto {product_frame.idx + 1}: esperado={inherited_values} estado_inicial={before_snapshot}",
+            self.logs,
+        )
         previous_suppression = getattr(product_frame, "_suppress_change_notifications", False)
         product_frame._suppress_change_notifications = True
         try:
@@ -4509,7 +4560,47 @@ class FraudCaseApp:
             _set_if_blank(product_frame.proceso_var, proceso, getattr(product_frame, "proc_cb", None))
         finally:
             product_frame._suppress_change_notifications = previous_suppression
+        after_snapshot = self._snapshot_product_inheritance_fields(product_frame)
+        log_event(
+            "herencia_debug",
+            f"Herencia aplicada a producto {product_frame.idx + 1}: estado_final={after_snapshot}",
+            self.logs,
+        )
         product_frame.focus_first_field()
+
+    def _warn_on_inheritance_deviation(self, product_frame, inherited_values):
+        field_labels = {
+            "categoria1": "Categoría 1",
+            "categoria2": "Categoría 2",
+            "modalidad": "Modalidad",
+            "fecha_ocurrencia": "Fecha de ocurrencia",
+            "fecha_descubrimiento": "Fecha de descubrimiento",
+            "canal": "Canal",
+            "proceso": "Proceso",
+        }
+        current_state = self._snapshot_product_inheritance_fields(product_frame)
+        mismatches = []
+        for key, label in field_labels.items():
+            expected = (inherited_values.get(key) or "").strip()
+            if not expected:
+                continue
+            actual = (current_state.get(key) or "").strip()
+            if actual != expected:
+                mismatches.append((label, expected, actual))
+
+        if not mismatches:
+            return
+
+        detail = "; ".join(
+            f"{label}: esperado '{expected}' vs actual '{actual}'" for label, expected, actual in mismatches
+        )
+        message = (
+            f"Producto {product_frame.idx + 1} desalineado con el caso tras heredar campos. "
+            f"Revisa valores antes de continuar. {detail}"
+        )
+        log_event("herencia", message, self.logs)
+        if not getattr(self, "_suppress_messagebox", False):
+            messagebox.showwarning("Campos heredados inconsistentes", message)
 
     def _show_inheritance_messages(self, result):
         if getattr(self, "_suppress_messagebox", False):
@@ -4541,6 +4632,7 @@ class FraudCaseApp:
         except TypeError:
             prod = self.add_product()
         self._apply_inherited_fields_to_product(prod, result.values)
+        self._warn_on_inheritance_deviation(prod, result.values)
         self._show_inheritance_messages(result)
         return prod
 

@@ -40,6 +40,22 @@ class _ProductStub:
         self.focus_called = True
 
 
+class _ProductStubWithCallbacks(_ProductStub):
+    def __init__(self, idx, *, misalign_modalidad=False):
+        super().__init__(idx)
+        self.misalign_modalidad = misalign_modalidad
+        self.cat1_calls = []
+        self.cat2_calls = []
+
+    def on_cat1_change(self):
+        self.cat1_calls.append(self.cat1_var.get())
+
+    def on_cat2_change(self):
+        self.cat2_calls.append(self.cat2_var.get())
+        if self.misalign_modalidad:
+            self.mod_var.set("otra modalidad")
+
+
 def test_inheritance_creation_matches_manual_copy(monkeypatch):
     app = FraudCaseApp.__new__(FraudCaseApp)
     app.logs = []
@@ -89,3 +105,56 @@ def test_inheritance_creation_matches_manual_copy(monkeypatch):
 
     assert manual_product.cat1_var.get() == product_frame.cat1_var.get()
     assert manual_product.fecha_desc_var.get() == product_frame.fecha_desc_var.get()
+
+
+def test_inherited_modalidad_alignment_and_warning(monkeypatch):
+    warnings: list[tuple[str, str]] = []
+    monkeypatch.setattr("app.messagebox.showwarning", lambda title, message: warnings.append((title, message)))
+
+    def _build_app():
+        app = FraudCaseApp.__new__(FraudCaseApp)
+        app.logs = []
+        app.product_frames = []
+        app._suppress_messagebox = False
+        app._schedule_summary_refresh = lambda *_args, **_kwargs: None
+        return app
+
+    cat1 = list(TAXONOMIA.keys())[0]
+    cat2 = list(TAXONOMIA[cat1].keys())[0]
+    modalidad = TAXONOMIA[cat1][cat2][0]
+    canal = CANAL_LIST[0]
+    proceso = PROCESO_LIST[0]
+
+    app = _build_app()
+    app.cat_caso1_var = DummyVar(cat1)
+    app.cat_caso2_var = DummyVar(cat2)
+    app.mod_caso_var = DummyVar(modalidad)
+    app.fecha_caso_var = DummyVar("2024-01-01")
+    app.fecha_descubrimiento_caso_var = DummyVar("2024-01-02")
+    app.canal_caso_var = DummyVar(canal)
+    app.proceso_caso_var = DummyVar(proceso)
+
+    def _add_aligned(self, initialize_rows=True, user_initiated=False):
+        frame = _ProductStubWithCallbacks(len(self.product_frames), misalign_modalidad=False)
+        self.product_frames.append(frame)
+        return frame
+
+    app.add_product = types.MethodType(_add_aligned, app)
+    aligned_product = app.add_product_inheriting_case()
+    assert aligned_product.mod_var.get() == modalidad
+    assert not warnings
+
+    warnings.clear()
+    app.logs.clear()
+
+    def _add_misaligned(self, initialize_rows=True, user_initiated=False):
+        frame = _ProductStubWithCallbacks(len(self.product_frames), misalign_modalidad=True)
+        self.product_frames.append(frame)
+        return frame
+
+    app.add_product = types.MethodType(_add_misaligned, app)
+    misaligned_product = app.add_product_inheriting_case()
+
+    assert misaligned_product.mod_var.get() != modalidad
+    assert warnings
+    assert any(log["tipo"] == "herencia" and "desalineado" in log["mensaje"] for log in app.logs)
