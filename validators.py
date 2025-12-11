@@ -242,8 +242,11 @@ TEAM_MEMBER_ID_PATTERN = re.compile(r"^[A-Za-z][0-9]{5}$")
 AGENCY_CODE_PATTERN = re.compile(r"^\d{6}$")
 PRODUCT_CREDIT_LENGTHS = {13, 14, 16, 20}
 ACCOUNT_PRODUCT_RULE: ProductFamilyRule = (
-    re.compile(r"^\d{10,18}$"),
-    "Los productos de ahorro, cuentas y depósitos deben usar IDs numéricos de 10 a 18 dígitos (formato CM BCP).",
+    re.compile(r"^(?:\d{10,18}|(?=.*[A-Za-z])[A-Za-z0-9]{20})$"),
+    (
+        "Los productos de ahorro, cuentas y depósitos deben usar IDs numéricos de 10 a 18 dígitos "
+        "(formato CM BCP) o un identificador alfanumérico de 20 caracteres que incluya al menos una letra."
+    ),
 )
 RAW_PRODUCT_FAMILY_RULES: Dict[str, ProductFamilyRule] = {
     "cuenta de ahorro": ACCOUNT_PRODUCT_RULE,
