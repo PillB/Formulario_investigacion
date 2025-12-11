@@ -12,6 +12,7 @@ from validators import (
     should_autofill_field,
     validate_money_bounds,
     validate_required_text,
+    validate_catalog_risk_id,
     validate_risk_id,
 )
 from ui.frames.utils import (
@@ -52,6 +53,8 @@ class RiskFrame:
         self.logs = logs
         self.tooltip_register = tooltip_register
         self.validators = []
+        self._catalog_validators_suspended = False
+        self._validation_state_initialized = False
         self._refresh_after_id = None
         self._summary_refresher = None
         self._shared_tree_refresher = None
@@ -212,94 +215,88 @@ class RiskFrame:
         )
         self.tooltip_register(planes_entry, "Lista de planes registrados en OTRS o Aranda.")
 
-        self.validators.append(
-            FieldValidator(
-                id_entry,
-                self.badges.wrap_validation("riesgo_id", self._validate_risk_id),
-                self.logs,
-                f"Riesgo {self.idx+1} - ID",
-                variables=[self.id_var],
-            )
+        self.id_validator = FieldValidator(
+            id_entry,
+            self.badges.wrap_validation("riesgo_id", self._validate_risk_id),
+            self.logs,
+            f"Riesgo {self.idx+1} - ID",
+            variables=[self.id_var],
         )
+        self.validators.append(self.id_validator)
 
-        self.validators.append(
-            FieldValidator(
-                lider_entry,
-                self.badges.wrap_validation(
-                    "riesgo_lider",
-                    lambda: self._validate_when_catalog(
-                        lambda: validate_required_text(
-                            self.lider_var.get(), "el líder del riesgo"
-                        )
-                    ),
+        self.lider_validator = FieldValidator(
+            lider_entry,
+            self.badges.wrap_validation(
+                "riesgo_lider",
+                lambda: self._validate_when_catalog(
+                    lambda: validate_required_text(
+                        self.lider_var.get(), "el líder del riesgo"
+                    )
                 ),
-                self.logs,
-                f"Riesgo {self.idx+1} - Líder",
-                variables=[self.lider_var],
-            )
+            ),
+            self.logs,
+            f"Riesgo {self.idx+1} - Líder",
+            variables=[self.lider_var],
         )
+        self.validators.append(self.lider_validator)
 
         def _validate_exposure_amount():
             message, _normalized_text = self._normalize_exposure_amount()
             return message
 
-        self.validators.append(
-            FieldValidator(
-                expos_entry,
-                self.badges.wrap_validation(
-                    "riesgo_exposicion",
-                    lambda: self._validate_when_catalog(_validate_exposure_amount),
-                ),
-                self.logs,
-                f"Riesgo {self.idx+1} - Exposición",
-                variables=[self.exposicion_var],
-            )
+        self.expos_validator = FieldValidator(
+            expos_entry,
+            self.badges.wrap_validation(
+                "riesgo_exposicion",
+                lambda: self._validate_when_catalog(_validate_exposure_amount),
+            ),
+            self.logs,
+            f"Riesgo {self.idx+1} - Exposición",
+            variables=[self.exposicion_var],
         )
+        self.validators.append(self.expos_validator)
 
-        self.validators.append(
-            FieldValidator(
-                crit_cb,
-                self.badges.wrap_validation(
-                    "riesgo_criticidad",
-                    lambda: self._validate_when_catalog(self._validate_criticidad),
-                ),
-                self.logs,
-                f"Riesgo {self.idx+1} - Criticidad",
-                variables=[self.criticidad_var],
-            )
+        self.criticidad_validator = FieldValidator(
+            crit_cb,
+            self.badges.wrap_validation(
+                "riesgo_criticidad",
+                lambda: self._validate_when_catalog(self._validate_criticidad),
+            ),
+            self.logs,
+            f"Riesgo {self.idx+1} - Criticidad",
+            variables=[self.criticidad_var],
         )
+        self.validators.append(self.criticidad_validator)
 
-        self.validators.append(
-            FieldValidator(
-                desc_entry,
-                self.badges.wrap_validation(
-                    "riesgo_desc",
+        self.desc_validator = FieldValidator(
+            desc_entry,
+            self.badges.wrap_validation(
+                "riesgo_desc",
+                lambda: validate_required_text(
+                    self.descripcion_var.get(), "la descripción del riesgo"
+                ),
+            ),
+            self.logs,
+            f"Riesgo {self.idx+1} - Descripción",
+            variables=[self.descripcion_var],
+        )
+        self.validators.append(self.desc_validator)
+
+        self.planes_validator = FieldValidator(
+            planes_entry,
+            self.badges.wrap_validation(
+                "riesgo_planes",
+                lambda: self._validate_when_catalog(
                     lambda: validate_required_text(
-                        self.descripcion_var.get(), "la descripción del riesgo"
-                    ),
+                        self.planes_var.get(), "los planes de acción"
+                    )
                 ),
-                self.logs,
-                f"Riesgo {self.idx+1} - Descripción",
-                variables=[self.descripcion_var],
-            )
+            ),
+            self.logs,
+            f"Riesgo {self.idx+1} - Planes",
+            variables=[self.planes_var],
         )
-
-        self.validators.append(
-            FieldValidator(
-                planes_entry,
-                self.badges.wrap_validation(
-                    "riesgo_planes",
-                    lambda: self._validate_when_catalog(
-                        lambda: validate_required_text(
-                            self.planes_var.get(), "los planes de acción"
-                        )
-                    ),
-                ),
-                self.logs,
-                f"Riesgo {self.idx+1} - Planes",
-                variables=[self.planes_var],
-            )
-        )
+        self.validators.append(self.planes_validator)
 
         self.attach_header_tree(header_tree)
         self._register_header_tree_focus(
@@ -312,6 +309,8 @@ class RiskFrame:
         )
 
         self._register_title_traces()
+        self.new_risk_var.trace_add("write", self.update_risk_validation_state)
+        self.update_risk_validation_state()
         self._sync_section_title()
 
     def _place_section(self):
@@ -588,10 +587,44 @@ class RiskFrame:
         return self._validate_new_risk_id()
 
     def _validate_catalog_risk_id(self):
-        return validate_risk_id(self.id_var.get())
+        return validate_catalog_risk_id(self.id_var.get())
 
     def _validate_new_risk_id(self):
         return validate_risk_id(self.id_var.get())
+
+    def update_risk_validation_state(self, *_args):
+        is_new_mode = bool(self.new_risk_var.get())
+        initializing = self._validation_state_initialized is False
+        self._validation_state_initialized = True
+
+        toggled_validators = [
+            (self.lider_validator, "riesgo_lider"),
+            (self.expos_validator, "riesgo_exposicion"),
+            (self.criticidad_validator, "riesgo_criticidad"),
+            (self.planes_validator, "riesgo_planes"),
+        ]
+
+        if is_new_mode:
+            if not self._catalog_validators_suspended:
+                for validator, _ in toggled_validators:
+                    validator.suspend()
+                self._catalog_validators_suspended = True
+            for _, badge_key in toggled_validators:
+                self.badges.update_badge(badge_key, False, None)
+            return
+
+        if self._catalog_validators_suspended:
+            for validator, _ in toggled_validators:
+                validator.resume()
+            self._catalog_validators_suspended = False
+
+        if initializing:
+            return
+
+        for validator, _ in toggled_validators:
+            validator.validate_callback()
+        self.id_validator.validate_callback()
+        self.desc_validator.validate_callback()
 
     def _validate_criticidad(self):
         value = (self.criticidad_var.get() or "").strip()

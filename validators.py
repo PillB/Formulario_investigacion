@@ -200,6 +200,9 @@ def validate_norm_id(value: str) -> Optional[str]:
     return None
 
 
+RISK_ID_PATTERN = re.compile(r"^RSK-\d+$")
+
+
 def validate_risk_id(value: str) -> Optional[str]:
     text = (value or "").strip()
     if not text:
@@ -208,6 +211,15 @@ def validate_risk_id(value: str) -> Optional[str]:
         return "El ID de riesgo no puede tener más de 60 caracteres."
     if not all(ch.isprintable() for ch in text):
         return "El ID de riesgo solo puede usar caracteres imprimibles."
+    return None
+
+
+def validate_catalog_risk_id(value: str) -> Optional[str]:
+    base_error = validate_risk_id(value)
+    if base_error:
+        return base_error
+    if not RISK_ID_PATTERN.fullmatch((value or "").strip()):
+        return "El ID de riesgo de catálogo debe seguir el formato RSK-########."
     return None
 
 
@@ -388,6 +400,13 @@ class FieldValidator:
             self._traces.append(var.trace_add("write", self._on_change))
         self._bind_widget_events(widget)
         self._register_instance()
+
+    def suspend(self) -> None:
+        self._suspend_count += 1
+
+    def resume(self) -> None:
+        if self._suspend_count > 0:
+            self._suspend_count -= 1
 
     def _register_instance(self) -> None:
         registry = getattr(self.__class__, "instance_registry", None)
@@ -726,6 +745,7 @@ __all__ = [
     'validate_product_id',
     'validate_reclamo_id',
     'validate_required_text',
+    'validate_catalog_risk_id',
     'validate_risk_id',
     'validate_team_member_id',
 ]

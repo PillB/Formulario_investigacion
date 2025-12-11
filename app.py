@@ -10584,6 +10584,8 @@ class FraudCaseApp:
                 rf.criticidad_var.set(crit)
             rf.exposicion_var.set((hydrated.get('exposicion_residual') or '').strip())
             rf.planes_var.set((hydrated.get('planes_accion') or '').strip())
+            if hasattr(rf, "update_risk_validation_state"):
+                rf.update_risk_validation_state()
             nuevos += 1
         self._notify_dataset_changed(summary_sections="riesgos")
         total = nuevos
@@ -12279,6 +12281,8 @@ class FraudCaseApp:
                 rf.planes_var.set(risk.get('planes_accion', ''))
                 if hasattr(rf, "on_id_change"):
                     rf.on_id_change(preserve_existing=True, silent=True)
+                if hasattr(rf, "update_risk_validation_state"):
+                    rf.update_risk_validation_state()
             # Normas
             for i, norm in enumerate(data.get('normas', [])):
                 if i >= len(self.norm_frames):

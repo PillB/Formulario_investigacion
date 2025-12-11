@@ -306,3 +306,47 @@ def test_catalog_mode_requires_previous_omitted_fields():
     assert lider_validator.validate_callback() is not None
     assert criticidad_validator.validate_callback() is not None
     assert planes_validator.validate_callback() is not None
+
+
+def test_catalog_mode_enforces_risk_id_pattern():
+    frame = _build_risk_frame()
+    id_validator = _find_validator("ID")
+
+    frame.id_var.set("LIBRE-01")
+
+    assert "RSK" in (id_validator.validate_callback() or "")
+
+
+def test_new_risk_mode_accepts_free_id_format():
+    frame = _build_risk_frame()
+    id_validator = _find_validator("ID")
+
+    frame.new_risk_var.set(True)
+    frame.id_var.set("LIBRE-ABC-01")
+    frame.update_risk_validation_state()
+
+    assert id_validator.validate_callback() is None
+
+
+def test_update_risk_validation_state_toggles_catalog_validators(monkeypatch):
+    frame = _build_risk_frame()
+    frame.new_risk_var.set(True)
+    frame.update_risk_validation_state()
+
+    suspended = [
+        _find_validator("Líder"),
+        _find_validator("Criticidad"),
+        _find_validator("Exposición"),
+        _find_validator("Planes"),
+    ]
+
+    assert all(v.suspend_count == 1 for v in suspended)
+    assert all(
+        frame.badges._registry[key]._state == "neutral"
+        for key in ("riesgo_lider", "riesgo_criticidad", "riesgo_exposicion", "riesgo_planes")
+    )
+
+    frame.new_risk_var.set(False)
+    frame.update_risk_validation_state()
+
+    assert all(v.suspend_count == 0 for v in suspended)

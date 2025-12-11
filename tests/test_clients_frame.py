@@ -86,10 +86,17 @@ class RecordingValidator:
         self.logs = logs
         self.field_name = field_name
         self.variables = list(variables or [])
+        self.suspend_count = 0
         RecordingValidator.instances.append(self)
 
     def add_widget(self, _widget):
         return None
+
+    def suspend(self):
+        self.suspend_count += 1
+
+    def resume(self):
+        self.suspend_count = max(0, self.suspend_count - 1)
 
     def suppress_during(self, callback):
         return callback()
