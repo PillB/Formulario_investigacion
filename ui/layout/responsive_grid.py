@@ -14,8 +14,11 @@ WidgetPair = tuple[ttk.Widget, ttk.Widget]
 def _get_width(widget: tk.Misc) -> int:
     """Return the current width for ``widget`` or its requested width."""
 
-    widget.update_idletasks()
-    width = widget.winfo_width()
+    try:
+        width = widget.winfo_width()
+    except Exception:
+        width = 0
+
     if width <= 1:
         try:
             width = widget.winfo_reqwidth()
@@ -34,7 +37,28 @@ def responsive_grid(parent: tk.Misc, widgets: Sequence[WidgetPair], max_width: i
     their related fields for readability.
     """
 
+    pending_attr = "_responsive_grid_pending"
+
     parent_width = _get_width(parent)
+    if parent_width <= 1:
+        scheduler = getattr(parent, "after_idle", None)
+        if callable(scheduler) and not getattr(parent, pending_attr, False):
+            setattr(parent, pending_attr, True)
+
+            def _rerun():
+                setattr(parent, pending_attr, False)
+                responsive_grid(parent, widgets, max_width)
+
+            try:
+                scheduler(_rerun)
+                return
+            except Exception:
+                setattr(parent, pending_attr, False)
+        elif getattr(parent, pending_attr, False):
+            return
+
+    setattr(parent, pending_attr, False)
+
     two_column = parent_width >= max_width
 
     columns = 2 if two_column else 1
