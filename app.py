@@ -713,6 +713,7 @@ class FraudCaseApp:
         self._scroll_binder = GlobalScrollBinding(self.root)
         self.root.title(self._build_window_title())
         self._suppress_messagebox = False
+        self._suppress_start_dialog = bool(os.environ.get("PYTEST_CURRENT_TEST"))
         self._consolidate_import_feedback = False
         self._startup_complete = False
         self._confetti_enabled = bool(CONFETTI_ENABLED)
@@ -746,9 +747,7 @@ class FraudCaseApp:
         self._walkthrough_overlay: Optional[tk.Toplevel] = None
         self._walkthrough_steps: list[dict[str, object]] = []
         self._walkthrough_step_index = 0
-        self.catalog_status_var = tk.StringVar(
-            value="Catálogos de detalle pendientes. Usa 'Cargar catálogos' para habilitar el autopoblado."
-        )
+        self.catalog_status_var = tk.StringVar(value=self._missing_catalog_message())
         self._catalog_loading = False
         self._catalog_ready = False
         self._catalog_prompted = False
@@ -888,6 +887,10 @@ class FraudCaseApp:
         self._autosave_cycle_job_id: Optional[str] = None
         self._autosave_cycle_slots: dict[str, int] = {}
         self._autosave_cycle_last_run: dict[str, datetime] = {}
+        self._autosave_start_guard = True
+        self._startup_choice: Optional[str] = None
+        self._startup_catalog_behavior: str = "prompt"
+        self._startup_walkthrough_allowed = True
         self.products_summary_section = None
         self._clients_detail_visible = False
         self._team_detail_visible = False
@@ -929,14 +932,193 @@ class FraudCaseApp:
 
         # Construir interfaz
         self.build_ui()
-        # Cargar autosave si existe
-        self.load_autosave()
+        self._handle_startup_choice()
         self._trim_all_temp_versions()
-        self._schedule_walkthrough()
+        if self._startup_walkthrough_allowed:
+            self._schedule_walkthrough()
         self._schedule_autosave_cycle()
-        self.root.after(250, self._prompt_initial_catalog_loading)
+        self._schedule_catalog_behavior()
         self._startup_complete = True
         self._suppress_case_header_sync = False
+
+    # ------------------------------------------------------------------
+    # Inicio guiado del formulario
+
+    def _handle_startup_choice(self) -> None:
+        self._startup_catalog_behavior = "prompt"
+        self._startup_walkthrough_allowed = True
+        choice = self._resolve_startup_choice()
+        self._startup_choice = choice
+        if choice == "new":
+            self._startup_catalog_behavior = "background"
+            self._startup_walkthrough_allowed = False
+            self._catalog_prompted = True
+            self._clear_case_state(save_autosave=False)
+            self._show_missing_catalog_hint()
+        elif choice == "continue":
+            self._startup_catalog_behavior = "status"
+            self._startup_walkthrough_allowed = False
+            if not self._load_latest_dataset():
+                self._clear_case_state(save_autosave=False)
+                self._startup_catalog_behavior = "background"
+                self._show_missing_catalog_hint()
+        elif choice == "open":
+            self._startup_catalog_behavior = "status"
+            self._startup_walkthrough_allowed = False
+            self._start_manual_load_flow()
+        else:
+            self._startup_catalog_behavior = "prompt"
+
+    def _resolve_startup_choice(self) -> str:
+        preferred = self._normalize_start_choice(self._user_settings.get("startup_preference"))
+        env_choice = self._normalize_start_choice(os.environ.get("APP_START_CHOICE"))
+        default_choice = env_choice or preferred or "continue"
+        if self._suppress_start_dialog:
+            return default_choice
+        try:
+            return self._present_startup_dialog(default_choice)
+        except tk.TclError:
+            return default_choice
+
+    @staticmethod
+    def _normalize_start_choice(choice: object) -> str:
+        text = str(choice or "").strip().lower()
+        if text in {"nuevo", "nuevo caso", "new", "fresh"}:
+            return "new"
+        if text in {"continuar", "continue", "ultimo", "último"}:
+            return "continue"
+        if text in {"abrir", "open", "otro"}:
+            return "open"
+        return ""
+
+    def _present_startup_dialog(self, default_choice: str) -> str:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("¿Cómo quieres iniciar?")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        ThemeManager.register_toplevel(dialog)
+        choice_var = tk.StringVar(value="")
+
+        def choose(value: str):
+            choice_var.set(value)
+            try:
+                dialog.destroy()
+            except tk.TclError:
+                return
+
+        dialog.protocol("WM_DELETE_WINDOW", lambda: choose(default_choice))
+        container = ttk.Frame(dialog, padding=14)
+        container.grid()
+        ttk.Label(
+            container,
+            text=(
+                "Selecciona cómo continuar. Puedes abrir un caso nuevo, retomar el último "
+                "respaldo o elegir manualmente otro archivo guardado."
+            ),
+            wraplength=420,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 12))
+        ttk.Button(
+            container,
+            text="Nuevo caso",
+            command=lambda: choose("new"),
+            style="ActionBar.TButton",
+        ).grid(row=1, column=0, padx=(0, 8), sticky="ew")
+        ttk.Button(
+            container,
+            text="Continuar último caso",
+            command=lambda: choose("continue"),
+            style="ActionBar.TButton",
+        ).grid(row=1, column=1, padx=(0, 8), sticky="ew")
+        ttk.Button(
+            container,
+            text="Abrir otro caso",
+            command=lambda: choose("open"),
+            style="ActionBar.TButton",
+        ).grid(row=1, column=2, sticky="ew")
+        for index in range(3):
+            container.columnconfigure(index, weight=1)
+        dialog.wait_variable(choice_var)
+        selected = self._normalize_start_choice(choice_var.get()) or default_choice
+        return selected
+
+    def _schedule_catalog_behavior(self) -> None:
+        behavior = getattr(self, "_startup_catalog_behavior", "prompt")
+        if behavior == "background":
+            self._catalog_prompted = True
+            self._show_missing_catalog_hint()
+            self.root.after(200, lambda: self.request_catalog_loading(silent_failure=True))
+            return
+        if behavior == "status":
+            self._catalog_prompted = True
+            self._show_missing_catalog_hint()
+            return
+        self.root.after(250, self._prompt_initial_catalog_loading)
+
+    def _start_manual_load_flow(self) -> None:
+        self._catalog_prompted = True
+        self._show_missing_catalog_hint()
+        try:
+            self.load_form_dialog(label="formulario", article="el")
+        except tk.TclError:
+            self._clear_case_state(save_autosave=False)
+
+    def _load_latest_dataset(self) -> bool:
+        patterns = ("*checkpoint*.json", "*respaldo*.json")
+        self._catalog_prompted = True
+        candidates = self._discover_autosave_candidates(extra_patterns=patterns)
+        if not candidates:
+            return False
+        paths = [path for _mtime, path in candidates]
+        manager = self._get_persistence_manager()
+
+        def _on_success(result):
+            dataset, form_state = self._parse_persisted_payload(result.payload)
+            label = f"el respaldo desde {result.path}" if result.path else "el respaldo"
+            autosave = str(result.path.name).lower().startswith("auto") if result.path else False
+            self._apply_loaded_dataset(
+                dataset,
+                form_state=form_state,
+                source_label=label,
+                autosave=autosave,
+                show_toast=False,
+            )
+            self._autosave_start_guard = True
+            self._warn_missing_catalogs_after_resume()
+
+        def _on_error(exc: BaseException):
+            failures = exc.failures if isinstance(exc, PersistenceError) else []
+            message = "No se pudo cargar ningún respaldo reciente; se iniciará un caso nuevo."
+            self._report_persistence_failure(
+                label="el respaldo más reciente",
+                filename=str(paths[0]) if paths else "autosave",
+                error=exc,
+                failures=failures,
+            )
+            log_event("validacion", message, self.logs)
+            self._clear_case_state(save_autosave=False)
+            self._show_missing_catalog_hint()
+
+        manager.load_first_valid(paths, on_success=_on_success, on_error=_on_error)
+        return True
+
+    def _warn_missing_catalogs_after_resume(self) -> None:
+        if not self._catalog_ready and not self._catalog_loading:
+            self._show_missing_catalog_hint()
+
+    def _missing_catalog_message(self) -> str:
+        return (
+            "No se encontraron catálogos de detalle. Coloca los archivos *_details.csv (client_details.csv, "
+            "product_details.csv, team_details.csv, norm_details.csv) en la carpeta base junto al programa. "
+            "Cada CSV debe incluir una columna principal id_* y los encabezados específicos del catálogo."
+        )
+
+    def _show_missing_catalog_hint(self) -> None:
+        try:
+            self.catalog_status_var.set(self._missing_catalog_message())
+        except tk.TclError:
+            pass
 
     class _PostEditValidator:
         def __init__(
@@ -2604,6 +2786,7 @@ class FraudCaseApp:
 
     def _mark_user_edited(self) -> None:
         self._user_has_edited = True
+        self._release_autosave_guard()
 
     def _get_save_anchor_widget(self) -> Optional[tk.Widget]:
         bar = getattr(self, "actions_action_bar", None)
@@ -6745,16 +6928,17 @@ class FraudCaseApp:
         self._catalog_prompted = True
         self._catalog_ready = False
         self.catalog_status_var.set(
-            "Trabajarás sin catálogos. Puedes cargarlos más adelante desde la pestaña Acciones."
+            f"Trabajarás sin catálogos. Puedes cargarlos más adelante desde la pestaña Acciones. {self._missing_catalog_message()}"
         )
         self._set_catalog_dependent_state(False)
 
-    def request_catalog_loading(self):
+    def request_catalog_loading(self, *, silent_failure: bool = False):
         if self._catalog_loading:
             return
         self._catalog_prompted = True
         self._catalog_loading = True
         self._catalog_ready = False
+        self._silent_catalog_load = silent_failure
         self.catalog_status_var.set(
             "Cargando catálogos de detalle. Este proceso puede tardar algunos segundos..."
         )
@@ -6798,21 +6982,19 @@ class FraudCaseApp:
                 "Catálogos de detalle cargados. El autopoblado e importación están habilitados."
             )
         else:
-            self.catalog_status_var.set(
-                "No se encontraron catálogos de detalle. Puedes seguir trabajando manualmente."
-            )
+            self._show_missing_catalog_hint()
         self._finalize_catalog_loading_state()
 
     def _handle_catalog_load_failure(self, error):
         self._catalog_ready = False
-        self.catalog_status_var.set(
-            "No se pudieron cargar los catálogos. Intenta nuevamente desde 'Cargar catálogos'."
-        )
+        self._show_missing_catalog_hint()
         self._finalize_catalog_loading_state(failed=True)
+        if getattr(self, "_silent_catalog_load", False):
+            return
         try:
             messagebox.showerror(
                 "Catálogos de detalle",
-                f"No se pudieron cargar los catálogos: {error}",
+                f"No se pudieron cargar los catálogos: {error}\n{self._missing_catalog_message()}",
             )
         except tk.TclError:
             pass
@@ -6823,6 +7005,7 @@ class FraudCaseApp:
         self._hide_catalog_progress()
         self._set_catalog_dependent_state(self._active_import_jobs > 0)
         self._catalog_loading_thread = None
+        self._silent_catalog_load = False
         target_text = "Recargar catálogos" if not failed else "Reintentar carga"
         if self.catalog_load_button is not None:
             try:
@@ -10663,6 +10846,7 @@ class FraudCaseApp:
                 autosave=True,
                 show_toast=True,
             )
+            self._autosave_start_guard = True
             if result.failed:
                 _log_failures(result.failed)
                 message = (
@@ -10851,6 +11035,7 @@ class FraudCaseApp:
                 autosave=str(record.get("kind", "")).lower().startswith("auto"),
                 show_toast=True,
             )
+            self._autosave_start_guard = True
             self._notify_user(
                 "El respaldo seleccionado se cargó correctamente.",
                 title="Respaldo cargado",
@@ -11062,6 +11247,10 @@ class FraudCaseApp:
         elapsed = (now - last_saved_at).total_seconds()
         return elapsed >= TEMP_AUTOSAVE_DEBOUNCE_SECONDS
 
+    def _release_autosave_guard(self) -> None:
+        if getattr(self, "_autosave_start_guard", False) and getattr(self, "_user_has_edited", False):
+            self._autosave_start_guard = False
+
     def request_autosave(self) -> None:
         if not hasattr(self, "_autosave_job_id"):
             self._autosave_job_id = None
@@ -11069,6 +11258,7 @@ class FraudCaseApp:
             self._autosave_dirty = False
         if not hasattr(self, "root") or self.root is None:
             return
+        self._release_autosave_guard()
         self._autosave_dirty = True
         if self._autosave_job_id is not None:
             return
@@ -11120,6 +11310,9 @@ class FraudCaseApp:
 
     def autosave_cycle(self) -> None:
         self._autosave_cycle_job_id = None
+        if getattr(self, "_autosave_start_guard", False):
+            self._schedule_autosave_cycle()
+            return
         try:
             dataset = self._ensure_case_data(self.gather_data())
         except Exception as exc:  # pragma: no cover - fallback defensivo
@@ -11308,6 +11501,7 @@ class FraudCaseApp:
                 source_label=f"{display_label} desde {filename}",
                 show_toast=True,
             )
+            self._autosave_start_guard = True
             self._notify_user(
                 f"{display_label.capitalize()} se cargó correctamente.",
                 title=f"{label.capitalize()} cargado",
@@ -11367,6 +11561,8 @@ class FraudCaseApp:
 
         # Limpiar campos del caso
         self._ensure_case_vars()
+        self._user_has_edited = False
+        self._autosave_start_guard = True
         self.id_caso_var.set("")
         self.tipo_informe_var.set(TIPO_INFORME_LIST[0])
         self.cat_caso1_var.set(list(TAXONOMIA.keys())[0])
