@@ -174,7 +174,17 @@ class CaseFrame:
         )
         cat2_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(case_cat2_cb, "Selecciona la subcategoría del caso.")
-        case_cat2_cb.bind("<<ComboboxSelected>>", lambda _e: owner.on_case_cat2_change())
+        def _handle_cat2_event(_event=None):
+            if not hasattr(owner, "_last_case_cat2_event_value"):
+                owner._last_case_cat2_event_value = None
+            current_value = owner.cat_caso2_var.get()
+            if current_value == owner._last_case_cat2_event_value:
+                return
+            owner._last_case_cat2_event_value = current_value
+            owner.on_case_cat2_change()
+
+        case_cat2_cb.bind("<<ComboboxSelected>>", _handle_cat2_event)
+        case_cat2_cb.bind("<FocusOut>", _handle_cat2_event)
         owner.case_cat2_cb = case_cat2_cb
         case_cat2_cb.set('')
 
