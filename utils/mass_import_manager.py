@@ -129,6 +129,8 @@ class MassImportManager:
             logger("validacion", f"{error_prefix} ({file_path}): {exc}")
             _restore_button_state()
             _notify_ui_error(exc)
+            if getattr(app, "_suppress_messagebox", False):
+                raise
 
     def run_import(
         self,
