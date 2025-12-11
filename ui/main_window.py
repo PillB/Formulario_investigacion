@@ -22,10 +22,14 @@ def bind_notebook_refresh_handlers(root: tk.Misc, notebook: ttk.Notebook) -> Non
     def _on_tab_changed(event) -> None:
         if event.widget is not notebook:
             return
+
+        # Avoid triggering a full geometry recalculation; badges already handle
+        # visual refresh so we only schedule a minimal idle callback.
         try:
-            root.after(10, root.update_idletasks)
+            root.after_idle(lambda: None)
         except tk.TclError:
             pass
+
         reapply_all_badges()
 
     notebook.bind("<<NotebookTabChanged>>", _on_tab_changed, add="+")
