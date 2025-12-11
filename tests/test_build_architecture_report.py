@@ -41,6 +41,20 @@ def test_render_mermaid_uses_high_resolution(monkeypatch, tmp_path):
     assert str(arch_report.MERMAID_EXPORT_WIDTH_PX) in cmd
 
 
+def test_render_mermaid_falls_back_without_cli(monkeypatch, tmp_path, capsys):
+    source = tmp_path / "diagram.mmd"
+    target = tmp_path / "diagram.png"
+    source.write_text("graph TD; A-->B;", encoding="utf-8")
+
+    monkeypatch.setattr(arch_report.shutil, "which", lambda _: None)
+
+    generated = arch_report.render_mermaid(source, target)
+
+    captured = capsys.readouterr()
+    assert "placeholder" in captured.err.lower()
+    assert generated.exists()
+
+
 def test_build_stylesheet_reuses_existing_heading_styles():
     first = arch_report._build_stylesheet()
     assert first["Heading1"].fontSize == 18
