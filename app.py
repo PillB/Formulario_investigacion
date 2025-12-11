@@ -875,6 +875,7 @@ class FraudCaseApp:
         self.btn_clear_form = None
         self.clients_detail_wrapper = None
         self.team_detail_wrapper = None
+        self.products_detail_wrapper = None
         self.clients_summary_tree = None
         self.product_summary_tree = None
         self.team_summary_tree = None
@@ -894,6 +895,7 @@ class FraudCaseApp:
         self.products_summary_section = None
         self._clients_detail_visible = False
         self._team_detail_visible = False
+        self._products_detail_visible = True
         self.clients_scrollable = None
         self.team_scrollable = None
         self.products_scrollable = None
@@ -2670,6 +2672,25 @@ class FraudCaseApp:
     def _refresh_all_scrollables(self):
         for container in self._scrollable_containers:
             self._refresh_scrollable(container)
+
+    def _apply_products_row_weights(self, *, expanded: bool) -> None:
+        frame = getattr(self, "products_tab_frame", None)
+        if frame is None:
+            return
+
+        weights = getattr(self, "_products_row_weights", None)
+        if not weights:
+            return
+
+        state = "expanded" if expanded else "default"
+        summary_weight = weights.get(state, {}).get("summary", 1)
+        detail_weight = weights.get(state, {}).get("detail", 1)
+
+        try:
+            frame.rowconfigure(0, weight=summary_weight)
+            frame.rowconfigure(2, weight=detail_weight)
+        except tk.TclError:
+            pass
 
     def _set_team_row_weights(self, *, detail_visible: bool) -> None:
         frame = getattr(self, "team_tab_frame", None)
@@ -4593,8 +4614,14 @@ class FraudCaseApp:
             column_weight=1,
         )
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
+        self.products_tab_frame = frame
+        self._products_row_weights = {
+            "default": {"summary": 1, "detail": 1},
+            "expanded": {"summary": 1, "detail": 3},
+        }
+        self._apply_products_row_weights(expanded=self._products_detail_visible)
+        frame.rowconfigure(1, weight=0)
+        frame.rowconfigure(3, weight=0)
 
         summary_section = ttk.LabelFrame(frame, text="Resumen de productos")
         summary_section.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
@@ -4602,10 +4629,33 @@ class FraudCaseApp:
         summary_section.rowconfigure(0, weight=1)
         self.products_summary_section = summary_section
 
-        scrollable, inner = create_scrollable_container(
-            frame, scroll_binder=self._scroll_binder, tab_id=parent
+        toggle_row = ttk.Frame(frame)
+        toggle_row.grid(row=1, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY // 2))
+        toggle_row.columnconfigure(0, weight=1)
+        toggle_label = "Ocultar formulario" if self._products_detail_visible else "Mostrar formulario"
+        self.products_toggle_btn = ttk.Button(
+            toggle_row,
+            text=toggle_label,
+            command=self.toggle_products_detail,
         )
-        scrollable.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+        self.products_toggle_btn.grid(row=0, column=1, sticky="e")
+
+        self.products_detail_wrapper = ttk.LabelFrame(frame, text="Detalle de productos")
+        ensure_grid_support(self.products_detail_wrapper)
+        self.products_detail_wrapper.grid(
+            row=2,
+            column=0,
+            sticky="nsew",
+            padx=COL_PADX,
+            pady=(0, ROW_PADY),
+        )
+        self.products_detail_wrapper.columnconfigure(0, weight=1)
+        self.products_detail_wrapper.rowconfigure(0, weight=1)
+
+        scrollable, inner = create_scrollable_container(
+            self.products_detail_wrapper, scroll_binder=self._scroll_binder, tab_id=parent
+        )
+        scrollable.grid(row=0, column=0, sticky="nsew")
         self.products_scrollable = scrollable
         self._register_scrollable(scrollable)
         self.product_container = inner
@@ -4619,7 +4669,7 @@ class FraudCaseApp:
             "inherit_case": self._on_add_inherited_product,
         }
         product_action_parent = ttk.Frame(frame)
-        product_action_parent.grid(row=2, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
+        product_action_parent.grid(row=3, column=0, sticky="ew", padx=COL_PADX, pady=(0, ROW_PADY))
         self.product_action_bar = ActionBar(
             product_action_parent,
             commands=product_commands,
@@ -4642,6 +4692,65 @@ class FraudCaseApp:
     def _on_add_inherited_product(self):
         self._log_navigation_change("Agregó producto heredado")
         return self.add_product_inheriting_case(user_initiated=True)
+
+    def toggle_products_detail(self):
+        if self._products_detail_visible:
+            self.hide_products_detail()
+        else:
+            self.show_products_detail()
+
+    def show_products_detail(self):
+        if self.products_detail_wrapper is None:
+            return
+        try:
+            self.products_detail_wrapper.grid()
+        except Exception:
+            pass
+        self._products_detail_visible = True
+        self._apply_products_row_weights(expanded=True)
+
+        scrollable = getattr(self, "products_scrollable", None)
+        self._refresh_scrollable(scrollable)
+        if scrollable is not None:
+
+            def _resize_products_scrollable():
+                max_height = None
+                root = getattr(self, "root", None)
+                if root is not None:
+                    try:
+                        root.update_idletasks()
+                        window_height = root.winfo_height() or root.winfo_reqheight()
+                        if window_height:
+                            max_height = int(window_height * 3)
+                    except Exception:
+                        pass
+
+                resize_scrollable_to_content(scrollable, max_height=max_height)
+
+            try:
+                scrollable.after_idle(_resize_products_scrollable)
+            except Exception:
+                _resize_products_scrollable()
+
+        if getattr(self, "products_toggle_btn", None):
+            try:
+                self.products_toggle_btn.config(text="Ocultar formulario")
+            except Exception:
+                pass
+
+    def hide_products_detail(self):
+        if self.products_detail_wrapper is None:
+            return
+        remover = getattr(self.products_detail_wrapper, "grid_remove", None)
+        if callable(remover):
+            remover()
+        self._products_detail_visible = False
+        self._apply_products_row_weights(expanded=False)
+        if getattr(self, "products_toggle_btn", None):
+            try:
+                self.products_toggle_btn.config(text="Mostrar formulario")
+            except Exception:
+                pass
 
     def _snapshot_product_inheritance_fields(self, product_frame):
         def _safe_get(attr_name):
@@ -4868,7 +4977,17 @@ class FraudCaseApp:
         self._show_inheritance_messages(result)
         return prod
 
-    def add_product(self, initialize_rows=True, user_initiated: bool = False, summary_parent=None):
+    def add_product(
+        self,
+        initialize_rows=True,
+        user_initiated: bool = False,
+        summary_parent=None,
+        *,
+        keep_detail_visible: bool = False,
+    ):
+        keep_detail_visible = keep_detail_visible or not self.product_frames
+        was_visible = self._products_detail_visible
+        self.show_products_detail()
         idx = len(self.product_frames)
         prod = ProductFrame(
             self.product_container,
@@ -4897,7 +5016,10 @@ class FraudCaseApp:
         self._renumber_products()
         self._maybe_show_milestone_badge(len(self.product_frames), "Productos", user_initiated=user_initiated)
         self._schedule_summary_refresh({'productos', 'reclamos'})
-        self._refresh_scrollable(getattr(self, "products_scrollable", None))
+        if self._products_detail_visible:
+            self._refresh_scrollable(getattr(self, "products_scrollable", None))
+        if not was_visible and not keep_detail_visible:
+            self.hide_products_detail()
         prod.focus_first_field()
         if user_initiated:
             self._mark_user_edited()
