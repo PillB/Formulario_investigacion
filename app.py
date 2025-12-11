@@ -1052,6 +1052,8 @@ class FraudCaseApp:
         if behavior == "status":
             self._catalog_prompted = True
             self._show_missing_catalog_hint()
+            if not self._catalog_ready and not self._catalog_loading:
+                self.root.after(200, lambda: self.request_catalog_loading(silent_failure=True))
             return
         self.root.after(250, self._prompt_initial_catalog_loading)
 
