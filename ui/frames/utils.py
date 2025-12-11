@@ -795,31 +795,59 @@ def resize_scrollable_to_content(container: Any, *, max_height: int | None = Non
     if container is None:
         return
 
-    canvas = getattr(container, "_scroll_canvas", None)
-    inner = getattr(container, "_scroll_inner", None)
-    if canvas is None or inner is None:
-        return
+    def _perform_resize():
+        setattr(container, "_resize_scroll_pending", False)
 
-    try:
-        container.update_idletasks()
-    except Exception:
-        pass
+        canvas = getattr(container, "_scroll_canvas", None)
+        inner = getattr(container, "_scroll_inner", None)
+        if canvas is None or inner is None:
+            return
 
-    try:
-        required_height = inner.winfo_reqheight()
-        available_height = max_height if max_height is not None else container.winfo_height()
+        try:
+            required_height = inner.winfo_reqheight()
+        except Exception:
+            return
+
+        try:
+            available_height = max_height if max_height is not None else container.winfo_height()
+        except Exception:
+            available_height = 0
+
+        if not available_height:
+            try:
+                available_height = container.winfo_reqheight()
+            except Exception:
+                available_height = 0
+
         if not available_height:
             parent = getattr(container, "master", None)
             try:
-                available_height = parent.winfo_height() if parent else 0
+                available_height = (parent.winfo_height() or parent.winfo_reqheight()) if parent else 0
             except Exception:
                 available_height = 0
+
         target_height = required_height if not available_height else min(required_height, available_height)
-        canvas.configure(height=target_height)
-        canvas.configure(scrollregion=canvas.bbox("all"))
-        canvas.yview_moveto(0)
-    except Exception:
+
+        try:
+            canvas.configure(height=target_height)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.yview_moveto(0)
+        except Exception:
+            return
+
+    if getattr(container, "_resize_scroll_pending", False):
         return
+
+    setattr(container, "_resize_scroll_pending", True)
+    scheduler = getattr(container, "after_idle", None)
+    if callable(scheduler):
+        try:
+            scheduler(_perform_resize)
+            return
+        except Exception:
+            pass
+
+    _perform_resize()
 
 
 def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
@@ -1317,6 +1345,8 @@ class ToggleWarningBadge:
             except Exception:
                 self._display_var = textvariable
         self._current_units = 0
+        self._last_req_width = wraplength
+        self._size_refresh_pending = False
         self._is_mapped = False
         container_style, label_style = _configure_warning_badge_styles(parent)
 
@@ -1360,6 +1390,8 @@ class ToggleWarningBadge:
         else:
             self.expand(animate=False)
 
+        self._schedule_size_refresh()
+
         for widget in (self._frame, self._icon_label, self._text_label):
             bind = getattr(widget, "bind", None)
             if callable(bind):
@@ -1391,10 +1423,33 @@ class ToggleWarningBadge:
             self._text_label.configure(width=self._current_units)
         except Exception:
             pass
+
+        self._schedule_size_refresh()
+
+    def _schedule_size_refresh(self) -> None:
+        if self._size_refresh_pending:
+            return
+
+        self._size_refresh_pending = True
+        scheduler = getattr(self._frame, "after_idle", None)
+        if callable(scheduler):
+            try:
+                scheduler(self._update_requested_width)
+                return
+            except Exception:
+                pass
+
+        self._update_requested_width()
+
+    def _update_requested_width(self) -> None:
+        self._size_refresh_pending = False
         try:
-            self._frame.update_idletasks()
+            req_width = self._text_label.winfo_reqwidth()
         except Exception:
-            pass
+            req_width = self._wraplength
+
+        if req_width:
+            self._last_req_width = req_width
 
     def _safe_get_message(self) -> str:
         getter = getattr(self.message_var, "get", None)
@@ -1410,6 +1465,7 @@ class ToggleWarningBadge:
         if callable(setter):
             try:
                 setter(text)
+                self._schedule_size_refresh()
                 return
             except Exception:
                 pass
@@ -1418,6 +1474,7 @@ class ToggleWarningBadge:
                 self._display_var._value = text
             except Exception:
                 pass
+        self._schedule_size_refresh()
 
     def _get_display_text(self) -> str:
         getter = getattr(self._display_var, "get", None)
@@ -1447,11 +1504,13 @@ class ToggleWarningBadge:
 
     def _target_units(self) -> int:
         try:
-            self._text_label.update_idletasks()
-            req_width = self._text_label.winfo_reqwidth()
+            req_width = self._last_req_width or self._text_label.winfo_reqwidth()
         except Exception:
             req_width = self._wraplength
-        return max(1, min(int(req_width / 6), int(self._wraplength / 6)))
+
+        max_units = max(1, int(self._wraplength / 6))
+        target = int(req_width / 6) if req_width else 1
+        return max(1, min(target, max_units))
 
     def _refresh_display(self) -> str:
         message = self._safe_get_message()
