@@ -110,10 +110,18 @@ def test_generate_assets_logs_and_architecture_table(
     assert iso8601_log_line.search(log_text)
 
 
-def test_generate_assets_requires_mermaid_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generate_assets_falls_back_to_placeholder(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PATH", "")
-    with pytest.raises(RuntimeError, match="Mermaid CLI"):
-        generate_assets(base_dir=Path("."), mmd_files=["example.mmd"], renderer=None)
+    source = tmp_path / "example.mmd"
+    source.write_text("graph TD; A-->B;", encoding="utf-8")
+
+    generate_assets(base_dir=tmp_path, mmd_files=[source.name], renderer=None)
+
+    placeholder = source.with_suffix(".png")
+    assert placeholder.exists(), "Placeholder PNG should be generated when mmdc is missing"
+
+    log_text = (tmp_path / "wireframes_generation.log").read_text(encoding="utf-8")
+    assert "WARNING" in log_text
 
 
 def test_mermaid_renderer_uses_scale(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

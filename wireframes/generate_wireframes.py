@@ -7,11 +7,11 @@ CSV manifests and logs.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import csv
 import datetime as dt
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Callable, Dict, List, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
@@ -188,6 +188,26 @@ def _mermaid_cli_renderer(
     return render
 
 
+def _placeholder_renderer(message: str | None = None) -> Callable[[Path, Path], None]:
+    """Return a renderer that creates a placeholder PNG using Pillow."""
+
+    def render(source: Path, target: Path) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        text = message or "Mermaid CLI unavailable. Generated placeholder diagram."
+        text = f"{source.name}\n{text}\nInstala mermaid-cli para renderizar el diagrama real"
+
+        image = Image.new("RGB", (1000, 600), color="white")
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()
+        draw.rectangle((18, 18, 982, 582), outline="black", width=3)
+        draw.multiline_text((36, 36), text, fill="black", font=font, spacing=6)
+
+        image.save(target, format="PNG")
+
+    return render
+
+
 def _render_sketch(layout: Dict[str, List[str]], target: Path, size: tuple[int, int] = (1400, 1000)) -> None:
     """Render a lightweight B&W sketch to approximate the Tkinter layout.
 
@@ -274,11 +294,27 @@ def generate_assets(
     manifest_rows: List[dict] = []
     log_lines: List[str] = []
 
-    render_png = renderer or _mermaid_cli_renderer(scale=mermaid_scale)
+    fallback_reason: str | None = None
+    if renderer is not None:
+        render_png = renderer
+    else:
+        try:
+            render_png = _mermaid_cli_renderer(scale=mermaid_scale)
+        except RuntimeError as exc:
+            fallback_reason = str(exc)
+            render_png = _placeholder_renderer(message=f"{exc}")
+            print(
+                "WARN: Mermaid CLI not available; generating placeholder PNGs instead.",
+                f"Details: {exc}",
+            )
     sketch_data = sketch_layouts or SKETCH_LAYOUTS
 
     architecture_table = _write_architecture_table(base, mmd_sequence)
     log_lines.append(f"[{dt.datetime.utcnow().isoformat()}Z] INFO: Created {architecture_table.name}")
+    if fallback_reason:
+        log_lines.append(
+            f"[{dt.datetime.utcnow().isoformat()}Z] WARNING: Mermaid rendering fallback in use: {fallback_reason}"
+        )
 
     for filename in mmd_sequence:
         source = base / filename
