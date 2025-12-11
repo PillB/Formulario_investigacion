@@ -366,6 +366,8 @@ class InvolvementRow:
 class ClaimRow:
     """Fila dinámica que captura los reclamos asociados a un producto."""
 
+    _analitica_sync_in_progress: bool = False
+
     def __init__(self, parent, product_frame, idx, remove_callback, logs, tooltip_register):
         self.parent = parent
         self.product_frame = product_frame
@@ -549,7 +551,7 @@ class ClaimRow:
         silent: bool = False,
         preserve_existing: bool = False,
     ) -> None:
-        if self._analitica_sync_in_progress:
+        if getattr(self, "_analitica_sync_in_progress", False):
             return
 
         code = self.code_var.get().strip()
@@ -1641,8 +1643,13 @@ class ProductFrame:
 
     def _refresh_date_validation_after_programmatic_update(self):
         """Reaplica validaciones de fechas tras pegados o autopoblados."""
-        for validator in (self.fecha_oc_validator, self.fecha_desc_validator):
-            self._trigger_validator_refresh(validator)
+        validators = (
+            getattr(self, "fecha_oc_validator", None),
+            getattr(self, "fecha_desc_validator", None),
+        )
+        for validator in validators:
+            if validator is not None:
+                self._trigger_validator_refresh(validator)
 
     def _attach_amount_listeners(self, amount_vars, amount_widgets):
         for var in amount_vars:
@@ -2145,7 +2152,7 @@ class ProductFrame:
 
     def _compose_duplicate_key_tuple(self) -> str:
         case_var = getattr(self.owner, "id_caso_var", None)
-        placeholder = "-"
+        placeholder = "—"
         case_id = (case_var.get().strip() if case_var else "") or placeholder
         product_id = self.id_var.get().strip() or placeholder
         client_id = self.client_var.get().strip() or placeholder
