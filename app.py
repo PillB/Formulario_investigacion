@@ -67,9 +67,9 @@ import shutil
 import threading
 import wave
 import zipfile
-from concurrent.futures import CancelledError
 from collections import defaultdict
 from collections.abc import Mapping
+from concurrent.futures import CancelledError
 from contextlib import suppress
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -89,12 +89,13 @@ from models import (AutofillService, build_detail_catalog_id_index,
                     find_analitica_by_code, format_analitica_option,
                     get_analitica_display_options, iter_massive_csv_rows,
                     normalize_detail_catalog_key, parse_involvement_entries)
-from report_builder import (build_docx, build_event_rows, build_llave_tecnica_rows,
-                            build_report_filename, CaseData, DOCX_AVAILABLE,
-                            DOCX_MISSING_MESSAGE, save_md)
+from report_builder import (build_docx, build_event_rows,
+                            build_llave_tecnica_rows, build_report_filename,
+                            CaseData, DOCX_AVAILABLE, DOCX_MISSING_MESSAGE,
+                            save_md)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
-                      CONFETTI_ENABLED, CRITICIDAD_LIST,
-                      DETAIL_LOOKUP_ALIASES, ENABLE_EXTENDED_ANALYSIS_SECTIONS,
+                      CONFETTI_ENABLED, CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
+                      ENABLE_EXTENDED_ANALYSIS_SECTIONS,
                       ensure_external_drive_dir, EXPORTS_DIR,
                       EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
@@ -107,7 +108,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST, TIPO_SANCION_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, FONT_BASE, ROW_PADY
-from ui.effects.confetti import start_confetti_burst
+from ui.effects.confetti import cancel_confetti_jobs, start_confetti_burst
 from ui.frames import (CaseFrame, ClientFrame, NormFrame, PRODUCT_MONEY_SPECS,
                        ProductFrame, RiskFrame, TeamMemberFrame)
 from ui.frames.utils import (build_grid_container, create_scrollable_container,
@@ -117,14 +118,12 @@ from ui.frames.utils import (build_grid_container, create_scrollable_container,
 from ui.layout import ActionBar
 from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
-from utils.background_worker import run_guarded_task, shutdown_background_workers
+from utils.background_worker import (run_guarded_task,
+                                     shutdown_background_workers)
 from utils.mass_import_manager import MassImportManager
-from utils.persistence_manager import (
-    CURRENT_SCHEMA_VERSION,
-    PersistenceError,
-    PersistenceManager,
-    validate_schema_payload,
-)
+from utils.persistence_manager import (CURRENT_SCHEMA_VERSION,
+                                       PersistenceError, PersistenceManager,
+                                       validate_schema_payload)
 from utils.progress_dialog import ProgressDialog
 from validators import (drain_log_queue, FieldValidator, log_event,
                         LOG_FIELDNAMES, normalize_log_row,
@@ -11229,6 +11228,7 @@ class FraudCaseApp:
         self.flush_autosave()
         self._cancel_summary_refresh_job()
         self.flush_logs_now(reschedule=False)
+        cancel_confetti_jobs(self.root)
         if self._autosave_cycle_job_id is not None:
             with suppress(tk.TclError):
                 self.root.after_cancel(self._autosave_cycle_job_id)
