@@ -188,6 +188,7 @@ def _make_recording_validator():
             self.field_name = field_name
             self.variables = list(variables or [])
             self.last_custom_error = None
+            self.suspend_count = 0
             RecordingValidator.instances.append(self)
 
         def add_widget(self, _widget):
@@ -199,6 +200,12 @@ def _make_recording_validator():
         def show_custom_error(self, message):
             self.last_custom_error = message
             return None
+
+        def suspend(self):
+            self.suspend_count += 1
+
+        def resume(self):
+            self.suspend_count = max(0, self.suspend_count - 1)
 
     RecordingValidator.instances = []
     return RecordingValidator
