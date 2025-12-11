@@ -4091,6 +4091,8 @@ class FraudCaseApp:
     def on_case_cat2_change(self):
         cat1 = self.cat_caso1_var.get()
         cat2 = self.cat_caso2_var.get()
+        if not hasattr(self, "_last_fraud_warning_value"):
+            self._last_fraud_warning_value = None
         mods = TAXONOMIA.get(cat1, {}).get(cat2, [])
         if not mods:
             mods = [""]
@@ -8686,7 +8688,7 @@ class FraudCaseApp:
 
         self._refresh_inline_section_tables(sections=sections, data=data)
         self._update_completion_progress()
-        if not self.summary_tables:
+        if not getattr(self, "summary_tables", None):
             return
         normalized = self._normalize_summary_sections(sections)
         requested_sections = set(normalized)
@@ -8767,7 +8769,10 @@ class FraudCaseApp:
         else:
             targets = set(sections)
         inline_trees = getattr(self, "inline_summary_trees", {}) or {}
-        dataset = data or (self.gather_data() if targets else {})
+        if data is None:
+            dataset = self.gather_data() if targets else {}
+        else:
+            dataset = data
         if "clientes" in targets:
             if inline_trees.get("clientes"):
                 rows = self._build_summary_rows("clientes", dataset)
@@ -11715,6 +11720,7 @@ class FraudCaseApp:
         self.logs.clear()
         drain_log_queue()
         self._reset_navigation_metrics()
+        self._last_fraud_warning_value = None
         # Volver a crear uno por cada sección donde corresponde
         self.add_client()
         self.add_team()
@@ -11725,8 +11731,27 @@ class FraudCaseApp:
         for widget in self._analysis_text_widgets().values():
             self._set_text_content(widget, "")
         self._reset_extended_sections()
+        empty_dataset = self._build_empty_summary_dataset()
+        summary_sections = set(getattr(self, "summary_tables", {}) or {})
+        if summary_sections:
+            self.refresh_summary_tables(data=empty_dataset, sections=summary_sections)
+        self._refresh_inline_section_tables(sections=summary_sections, data=empty_dataset)
+        self._schedule_summary_refresh(sections=summary_sections, data=empty_dataset)
         if save_autosave:
             self.save_auto()
+
+    def _build_empty_summary_dataset(self) -> dict[str, object]:
+        return {
+            "caso": {},
+            "clientes": [],
+            "colaboradores": [],
+            "involucramientos": [],
+            "productos": [],
+            "reclamos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {},
+        }
 
     def _reset_form_state(self, confirm=True, save_autosave=True):
         """Restablece el formulario a su estado inicial.
