@@ -864,6 +864,8 @@ class FraudCaseApp:
         self._duplicate_warning_shown_count: int = 0
         self._duplicate_warning_popup_limit: int = 3
         self._last_fraud_warning_at: Optional[datetime] = None
+        self._last_case_cat2_event_value: Optional[str] = None
+        self._last_fraud_warning_selection: Optional[str] = None
         self._last_fraud_warning_value: Optional[str] = None
         self._rich_text_images = defaultdict(list)
         self._rich_text_image_sources = {}
@@ -4086,11 +4088,19 @@ class FraudCaseApp:
         self.case_mod_cb['values'] = []
         self.mod_caso_var.set('')
         self.case_mod_cb.set('')
+        self._last_case_cat2_event_value = None
         self._log_navigation_change("Modificó categoría 1 del caso")
 
     def on_case_cat2_change(self):
+        if not hasattr(self, "_last_case_cat2_event_value"):
+            self._last_case_cat2_event_value = None
+        if not hasattr(self, "_last_fraud_warning_selection"):
+            self._last_fraud_warning_selection = None
         cat1 = self.cat_caso1_var.get()
         cat2 = self.cat_caso2_var.get()
+        previous_selection = self._last_case_cat2_event_value
+        selection_changed = cat2 != previous_selection
+        self._last_case_cat2_event_value = cat2
         if not hasattr(self, "_last_fraud_warning_value"):
             self._last_fraud_warning_value = None
         mods = TAXONOMIA.get(cat1, {}).get(cat2, [])
@@ -4102,9 +4112,10 @@ class FraudCaseApp:
         self._log_navigation_change("Modificó categoría 2 del caso")
         if cat2 != 'Fraude Interno':
             self._last_fraud_warning_value = None
+            self._last_fraud_warning_selection = None
             return
 
-        if cat2 == self._last_fraud_warning_value:
+        if not selection_changed and self._last_fraud_warning_selection == cat2:
             return
 
         now = datetime.now()
@@ -4117,6 +4128,7 @@ class FraudCaseApp:
         )
         self._last_fraud_warning_at = now
         self._last_fraud_warning_value = cat2
+        self._last_fraud_warning_selection = cat2
 
     def build_clients_tab(self, parent):
         """Construye la pestaña de clientes con lista dinámica."""
@@ -11720,6 +11732,8 @@ class FraudCaseApp:
         self.logs.clear()
         drain_log_queue()
         self._reset_navigation_metrics()
+        self._last_case_cat2_event_value = None
+        self._last_fraud_warning_selection = None
         self._last_fraud_warning_value = None
         # Volver a crear uno por cada sección donde corresponde
         self.add_client()
