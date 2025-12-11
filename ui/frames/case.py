@@ -13,7 +13,6 @@ from ui.frames.utils import (
     ensure_grid_support,
     grid_and_configure,
 )
-from ui.layout import responsive_grid
 from validation_badge import badge_registry
 from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
@@ -38,29 +37,21 @@ class CaseFrame:
         grid_and_configure(self.frame, parent, padx=5, pady=5)
         self.frame.grid_rowconfigure(0, weight=1)
         self.frame.grid_columnconfigure(0, weight=1)
-        self._left_fields: list[tuple[ttk.Widget, ttk.Widget]] = []
-        self._right_fields: list[tuple[ttk.Widget, ttk.Widget]] = []
-        self._paned = ttk.Panedwindow(self.frame, orient="horizontal")
-        grid_and_configure(self._paned, self.frame)
-        self._left_column = ttk.Frame(self._paned)
-        self._right_column = ttk.Frame(self._paned)
-        ensure_grid_support(self._left_column)
-        ensure_grid_support(self._right_column)
+        case_frame = ttk.LabelFrame(self.frame)
+        grid_and_configure(case_frame, self.frame, padx=5, pady=5, sticky="nsew")
+        ensure_grid_support(case_frame)
+        case_frame.columnconfigure(1, weight=1)
+        case_frame.columnconfigure(3, weight=1)
+        case_frame.columnconfigure(5, weight=1)
         self.badges = badge_registry
-        self._paned.add(self._left_column, weight=1)
-        self._paned.add(self._right_column, weight=1)
         owner._case_inputs = {}
-        self._build_header_fields(self._left_column, self._left_fields)
-        self._build_taxonomy_fields(self._left_column, self._left_fields)
-        self._build_investigator_block(self._right_column, self._right_fields)
-        self._build_dates_block(self._right_column, self._right_fields)
-        self._build_cost_center_field(self._right_column, self._right_fields)
-        self.frame.bind("<Configure>", lambda _e: self._layout_columns())
+        next_row = 0
+        next_row = self._build_header_fields(case_frame, next_row)
+        next_row = self._build_taxonomy_fields(case_frame, next_row)
+        next_row = self._build_investigator_block(case_frame, next_row)
+        next_row = self._build_dates_block(case_frame, next_row)
+        self._build_cost_center_field(case_frame, next_row)
         self._register_validators()
-
-    def _layout_columns(self) -> None:
-        responsive_grid(self._left_column, self._left_fields)
-        responsive_grid(self._right_column, self._right_fields)
 
     def _make_badged_field(self, parent, key: str, widget_factory):
         container = ttk.Frame(parent)
@@ -72,13 +63,14 @@ class CaseFrame:
         badge = self.badges.claim(key, container, row=0, column=1)
         return container, widget, badge
 
-    def _build_header_fields(self, frame, collector):
+    def _build_header_fields(self, frame, row: int) -> int:
         owner = self.owner
         case_id_label = build_required_label(
             frame,
             "Número de caso (AAAA-XXXX):",
             tooltip_register=owner.register_tooltip,
         )
+        case_id_label.grid(row=row, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         id_container, id_entry, _ = self._make_badged_field(
             frame,
             "case_id",
@@ -86,6 +78,7 @@ class CaseFrame:
                 parent, textvariable=owner.id_caso_var, width=20, style=ENTRY_STYLE
             ),
         )
+        id_container.grid(row=row, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(
             id_entry, "Formato AAAA-XXXX. Se usa para detectar duplicados."
         )
@@ -95,6 +88,7 @@ class CaseFrame:
             "Tipo de informe:",
             tooltip_register=owner.register_tooltip,
         )
+        tipo_label.grid(row=row, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         tipo_container, tipo_cb, _ = self._make_badged_field(
             frame,
             "case_tipo",
@@ -107,24 +101,24 @@ class CaseFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
+        tipo_container.grid(row=row, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(tipo_cb, "Selecciona el tipo de reporte a generar.")
         tipo_cb.set('')
         owner._case_inputs.update({"id_entry": id_entry, "tipo_cb": tipo_cb})
-        collector.extend(
-            [
-                (case_id_label, id_container),
-                (tipo_label, tipo_container),
-            ]
-        )
+        return row + 1
 
-    def _build_taxonomy_fields(self, frame, collector):
+    def _build_taxonomy_fields(self, frame, row: int) -> int:
         owner = self.owner
         taxonomy_label = ttk.Label(frame, text="Taxonomía del caso:")
+        taxonomy_label.grid(row=row, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="ne")
         taxonomy_container = ttk.Frame(frame)
         ensure_grid_support(taxonomy_container)
         if hasattr(taxonomy_container, "columnconfigure"):
             taxonomy_container.columnconfigure(1, weight=1)
             taxonomy_container.columnconfigure(3, weight=1)
+        taxonomy_container.grid(
+            row=row, column=1, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="nsew"
+        )
 
         cat1_label = build_required_label(
             taxonomy_container,
@@ -274,15 +268,21 @@ class CaseFrame:
                 "proc_cb": proc_cb,
             }
         )
-        collector.append((taxonomy_label, taxonomy_container))
+        return row + 1
 
-    def _build_investigator_block(self, frame, collector):
+    def _build_investigator_block(self, frame, row: int) -> int:
         owner = self.owner
         investigator_label = ttk.Label(frame, text="Investigador principal:")
+        investigator_label.grid(
+            row=row, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="ne"
+        )
         investigator_container = ttk.Frame(frame)
         ensure_grid_support(investigator_container)
         investigator_container.columnconfigure(1, weight=1)
         investigator_container.columnconfigure(2, weight=1)
+        investigator_container.grid(
+            row=row, column=1, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="nsew"
+        )
         ttk.Label(investigator_container, text="Matrícula:").grid(
             row=0, column=0, padx=(0, COL_PADX // 2), pady=(0, ROW_PADY // 2), sticky="e"
         )
@@ -338,15 +338,19 @@ class CaseFrame:
                 "investigator_role": investigator_role,
             }
         )
-        collector.append((investigator_label, investigator_container))
+        return row + 1
 
-    def _build_dates_block(self, frame, collector):
+    def _build_dates_block(self, frame, row: int) -> int:
         owner = self.owner
         dates_label = ttk.Label(frame, text="Fechas del caso:")
+        dates_label.grid(row=row, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="ne")
         dates_container = ttk.Frame(frame)
         ensure_grid_support(dates_container)
         dates_container.columnconfigure(1, weight=1)
         dates_container.columnconfigure(3, weight=1)
+        dates_container.grid(
+            row=row, column=1, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="nsew"
+        )
         occurrence_label = build_required_label(
             dates_container,
             "Ocurrencia:\n(YYYY-MM-DD)",
@@ -415,22 +419,28 @@ class CaseFrame:
                 "fecha_desc_entry": fecha_desc_entry,
             }
         )
-        collector.append((dates_label, dates_container))
+        return row + 1
 
-    def _build_cost_center_field(self, frame, collector):
+    def _build_cost_center_field(self, frame, row: int) -> None:
         owner = self.owner
         cost_center_label = ttk.Label(
             frame, text="Centro de costos del caso (; separados):"
         )
+        cost_center_label.grid(
+            row=row, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
         centro_costo_entry = ttk.Entry(
             frame, textvariable=owner.centro_costo_caso_var, width=35, style=ENTRY_STYLE
+        )
+        centro_costo_entry.grid(
+            row=row, column=1, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we"
         )
         owner.register_tooltip(
             centro_costo_entry,
             "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
         )
         owner._case_inputs["centro_costo_entry"] = centro_costo_entry
-        collector.append((cost_center_label, centro_costo_entry))
+        return None
 
     def _register_validators(self):
         owner = self.owner
