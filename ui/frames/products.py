@@ -378,6 +378,7 @@ class ClaimRow:
         self.validators = []
         self._claims_required = bool(getattr(product_frame, "claim_fields_required", True))
         self._refresh_after_id = None
+        self._duplicate_trace_after_id = None
 
         self.id_var = tk.StringVar()
         self.name_var = tk.StringVar()
@@ -415,6 +416,9 @@ class ClaimRow:
         self.id_entry = id_entry
         self.tooltip_register(id_entry, "Número del reclamo (C + 8 dígitos).")
         self._bind_identifier_triggers(id_entry)
+        register_duplicate = getattr(self.product_frame, "_register_duplicate_triggers", None)
+        if callable(register_duplicate):
+            register_duplicate(id_entry)
 
         ttk.Label(self.frame, text="Código:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -447,6 +451,8 @@ class ClaimRow:
                 add="+",
             )
         self._bind_claim_field_triggers(code_entry)
+        if callable(register_duplicate):
+            register_duplicate(code_entry)
 
         ttk.Label(self.frame, text="Analítica nombre:").grid(
             row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -522,6 +528,7 @@ class ClaimRow:
         self._last_summary_snapshot = self.get_data()
 
         self._register_title_traces()
+        self._register_duplicate_trace()
         self._sync_section_title()
 
     def _bind_identifier_triggers(self, widget) -> None:
@@ -728,6 +735,32 @@ class ClaimRow:
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
+
+    def _register_duplicate_trace(self) -> None:
+        trace_add = getattr(self.id_var, "trace_add", None)
+        if not callable(trace_add):
+            return
+        trace_add("write", self._schedule_duplicate_check_from_trace)
+
+    def _schedule_duplicate_check_from_trace(self, *_args):
+        if self._duplicate_trace_after_id:
+            try:
+                self.frame.after_cancel(self._duplicate_trace_after_id)
+            except Exception:
+                self._duplicate_trace_after_id = None
+        try:
+            self._duplicate_trace_after_id = self.frame.after(
+                100, self._trigger_duplicate_check_from_trace
+            )
+        except Exception:
+            self._duplicate_trace_after_id = None
+            self._trigger_duplicate_check_from_trace()
+
+    def _trigger_duplicate_check_from_trace(self):
+        self._duplicate_trace_after_id = None
+        handler = getattr(self.product_frame, "_handle_duplicate_check_event", None)
+        if callable(handler):
+            handler()
 
     def _build_section_title(self) -> str:
         base_title = f"Reclamo {self.idx+1}"
