@@ -2152,7 +2152,7 @@ class ProductFrame:
 
     def _compose_duplicate_key_tuple(self) -> str:
         case_var = getattr(self.owner, "id_caso_var", None)
-        placeholder = "—"
+        placeholder = "-"
         case_id = (case_var.get().strip() if case_var else "") or placeholder
         product_id = self.id_var.get().strip() or placeholder
         client_id = self.client_var.get().strip() or placeholder
