@@ -300,7 +300,7 @@ def test_duplicate_key_tuple_does_not_use_team_options_without_assignments():
 
     parts = key_tuple.strip("()\n").split(", ")
     assert len(parts) == 6
-    assert parts[3] == "—"
+    assert parts[3] == "-"
     assert "T12345" not in key_tuple
 
 

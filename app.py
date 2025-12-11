@@ -9075,6 +9075,21 @@ class FraudCaseApp:
                 product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
                 collaborator_id = (team_row.get('id_colaborador') or '').strip()
                 involvement_pairs = parse_involvement_entries(raw_row.get('involucramiento', ''))
+                validated_pairs = []
+                for collaborator, amount_text in involvement_pairs:
+                    cleaned_amount = (amount_text or '').strip()
+                    if not cleaned_amount:
+                        validated_pairs.append((collaborator, cleaned_amount))
+                        continue
+                    label = (
+                        f"Monto asignado del colaborador {collaborator or 'sin ID'} "
+                        f"en el producto {(raw_row.get('id_producto') or 'sin ID')}"
+                    )
+                    error, _amount, normalized = validate_money_bounds(cleaned_amount, label)
+                    if error:
+                        raise ValueError(error)
+                    validated_pairs.append((collaborator, normalized or cleaned_amount))
+                involvement_pairs = validated_pairs
                 if not involvement_pairs and collaborator_id and raw_row.get('monto_asignado'):
                     involvement_pairs = [(collaborator_id, (raw_row.get('monto_asignado') or '').strip())]
                 prepared_rows.append(
