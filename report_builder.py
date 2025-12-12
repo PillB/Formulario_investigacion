@@ -9,8 +9,12 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import nsdecls
 except ImportError:  # pragma: no cover - se usa el respaldo integrado
     DocxDocument = None
+    parse_xml = None
+    nsdecls = None
 
 DOCX_AVAILABLE = DocxDocument is not None
 DOCX_MISSING_MESSAGE = (
@@ -822,17 +826,47 @@ def _build_report_context(case_data: CaseData):
                 ]
             )
 
-    risk_rows = [
-        [
+    def _is_new_risk(risk: Mapping[str, Any]) -> bool:
+        if not isinstance(risk, Mapping):
+            return False
+        new_risk_markers = [
+            risk.get("nuevo_riesgo"),
+            risk.get("estado"),
+            risk.get("estado_riesgo"),
+            risk.get("tipo"),
+            risk.get("tipo_riesgo"),
+            risk.get("flag"),
+            risk.get("etiqueta"),
+            risk.get("indicador"),
+            risk.get("planes_accion"),
+            risk.get("id_plan_accion"),
+        ]
+        return any(
+            isinstance(value, str) and value.strip().lower() == "nuevo riesgo"
+            for value in new_risk_markers
+        )
+
+    risk_rows: list[list[str]] = []
+    risk_new_flags: list[bool] = []
+    for risk in riesgos:
+        plan_accion = _safe_text(
+            risk.get("planes_accion") or risk.get("id_plan_accion"), placeholder="-"
+        )
+        row = [
             _safe_text(risk.get("lider") or risk.get("lider_riesgo"), placeholder="-"),
             _safe_text(risk.get("id_riesgo") or risk.get("id_riesgo_grc"), placeholder="-"),
-            _safe_text(risk.get("descripcion") or risk.get("descripcion_riesgo"), placeholder="-"),
+            _safe_text(
+                risk.get("descripcion") or risk.get("descripcion_riesgo"),
+                placeholder="-",
+            ),
             _safe_text(risk.get("criticidad") or risk.get("criticidad_riesgo"), placeholder="-"),
             _format_decimal_value(parse_decimal_amount(risk.get("exposicion_residual"))),
-            _safe_text(risk.get("planes_accion") or risk.get("id_plan_accion"), placeholder="-"),
+            plan_accion,
         ]
-        for risk in riesgos
-    ]
+        risk_rows.append(row)
+        risk_new_flags.append(
+            _is_new_risk(risk) or plan_accion.strip().lower() == "nuevo riesgo"
+        )
 
     norm_rows = [
         [
@@ -877,6 +911,7 @@ def _build_report_context(case_data: CaseData):
         "collaborator_rows": collaborator_rows,
         "operation_rows": operation_table_rows,
         "risk_rows": risk_rows,
+        "risk_new_flags": risk_new_flags,
         "norm_rows": norm_rows,
         "recomendaciones": {
             "laboral": rec_laborales,
@@ -1090,6 +1125,13 @@ def build_md(case_data: CaseData) -> str:
             context["risk_rows"],
         )
     )
+    if any(context.get("risk_new_flags", [])):
+        lines.extend(
+            [
+                "",
+                "_Filas con la etiqueta \"Nuevo Riesgo\" serán resaltadas en el informe Word._",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -1137,7 +1179,9 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         for line in lines:
             document.add_paragraph(line)
 
-    def append_table(headers: List[str], rows: List[List[Any]]) -> None:
+    def append_table(
+        headers: List[str], rows: List[List[Any]], *, highlight_predicate=None
+    ) -> None:
         if not rows:
             document.add_paragraph(PLACEHOLDER)
             return
@@ -1145,10 +1189,22 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         table.style = "Table Grid"
         for idx, header in enumerate(headers):
             table.rows[0].cells[idx].text = header
-        for row in rows:
+        for row_idx, row in enumerate(rows):
             docx_row = table.add_row()
+            highlight_row = False
+            if highlight_predicate:
+                try:
+                    highlight_row = highlight_predicate(row, row_idx)
+                except TypeError:
+                    highlight_row = highlight_predicate(row)
             for idx, value in enumerate(row):
-                docx_row.cells[idx].text = str(value or "")
+                cell = docx_row.cells[idx]
+                if highlight_row and parse_xml and nsdecls:
+                    shade = parse_xml(
+                        rf'<w:shd {nsdecls("w")} w:fill="FFEBEE"/>'
+                    )
+                    cell._element.get_or_add_tcPr().append(shade)
+                cell.text = str(value or "")
 
     def add_list(items: List[str]) -> None:
         if not items:
@@ -1254,6 +1310,9 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     document.add_heading("Descargos", level=2)
     _add_rich_text_paragraphs(document, raw_analysis.get("descargos"))
     document.add_heading("Riesgos identificados y debilidades de los controles", level=2)
+    new_risk_row_indexes = {
+        idx for idx, is_new in enumerate(context.get("risk_new_flags", [])) if is_new
+    }
     append_table(
         [
             "Líder del riesgo",
@@ -1264,6 +1323,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             "ID Plan de Acción",
         ],
         context["risk_rows"],
+        highlight_predicate=lambda _row, idx: idx in new_risk_row_indexes,
     )
     document.add_heading("Normas transgredidas", level=2)
     append_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"])
