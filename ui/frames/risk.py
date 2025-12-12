@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 from settings import CRITICIDAD_LIST
 from validators import (
     FieldValidator,
+    RISK_ID_PATTERN,
     log_event,
     should_autofill_field,
     validate_money_bounds,
@@ -691,6 +692,13 @@ class RiskFrame:
         else:
             self._last_missing_lookup_id = None
             self._schedule_refresh()
+
+    def sync_mode_from_identifier(self):
+        risk_id = (self.id_var.get() or "").strip()
+        if not risk_id:
+            return
+        inferred_catalog = bool(RISK_ID_PATTERN.fullmatch(risk_id))
+        self._set_catalog_mode(inferred_catalog)
 
     def _set_catalog_mode(self, enabled: bool):
         self.new_risk_var.set(not enabled)
