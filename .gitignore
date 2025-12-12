@@ -8,3 +8,6 @@ __pycache__/
 docs/*.png
 wireframes/*.png
 wireframes/*.pdf
+
+# Proof assets (not tracked)
+proof/*.png
