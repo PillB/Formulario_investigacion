@@ -246,6 +246,17 @@ def test_md_renders_analysis_tags_into_markdown():
     assert "```\nCelda A\nCelda B\n```" in md
 
 
+def test_md_marks_new_risk_rows_when_text_contains_marker(sample_case_data):
+    sample_case_data.riesgos[0]["descripcion"] = "Nuevo Riesgo"
+
+    md = report_builder.build_md(sample_case_data)
+
+    assert (
+        "_Filas con la etiqueta \"Nuevo Riesgo\" serán resaltadas en el informe Word._"
+        in md
+    )
+
+
 def test_report_filename_normalization():
     assert report_builder.build_report_filename("Inicial", "2024-0001", "md") == "Informe_Inicial_2024-0001.md"
     assert report_builder.build_report_filename("Cierre Especial", "2024/0002", "docx") == "Informe_Cierre_Especial_2024_0002.docx"
@@ -267,3 +278,34 @@ def test_docx_missing_docx_document(monkeypatch, sample_case_data):
         report_builder.build_docx(sample_case_data, Path("dummy.docx"))
 
     assert report_builder.DOCX_MISSING_MESSAGE in str(excinfo.value)
+
+
+@pytest.mark.skipif(not report_builder.DOCX_AVAILABLE, reason="python-docx no está disponible")
+def test_docx_applies_shading_to_new_risk_rows(tmp_path, sample_case_data):
+    sample_case_data.riesgos[0]["descripcion"] = "Nuevo Riesgo"
+    docx_path = tmp_path / "riesgos.docx"
+
+    report_builder.build_docx(sample_case_data, docx_path)
+
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    doc = Document(docx_path)
+    expected_headers = [
+        "Líder del riesgo",
+        "ID Riesgo (GRC)",
+        "Descripción del riesgo de fraude",
+        "Criticidad del riesgo",
+        "Exposición residual (USD)",
+        "ID Plan de Acción",
+    ]
+    risk_table = next(
+        table
+        for table in doc.tables
+        if [cell.text for cell in table.rows[0].cells] == expected_headers
+    )
+
+    shaded_row = risk_table.rows[1]
+    for cell in shaded_row.cells:
+        shading_nodes = cell._tc.xpath(".//w:shd")
+        assert any(node.get(qn("w:fill")) == "FFEBEE" for node in shading_nodes)
