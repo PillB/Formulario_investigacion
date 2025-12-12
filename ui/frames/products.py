@@ -75,9 +75,7 @@ class InvolvementRow:
 
         self.frame = ttk.Frame(self.section.content)
         ensure_grid_support(self.frame)
-        if hasattr(self.frame, "grid_columnconfigure"):
-            self.frame.grid_columnconfigure(1, weight=1)
-            self.frame.grid_columnconfigure(3, weight=1)
+        self._configure_grid_columns()
         self.section.pack_content(self.frame, fill="x", expand=True)
         self.badge_manager = self._get_badge_manager(self.frame)
 
@@ -96,7 +94,7 @@ class InvolvementRow:
                 style=COMBOBOX_STYLE,
             ),
         )
-        team_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        team_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         self.team_cb.set('')
         self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
         self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
@@ -112,7 +110,7 @@ class InvolvementRow:
                 container, textvariable=self.monto_var, width=15, style=ENTRY_STYLE
             ),
         )
-        amount_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        amount_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
         self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
 
@@ -221,6 +219,42 @@ class InvolvementRow:
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
+
+    def _configure_grid_columns(self):
+        columnconfigure = getattr(self.frame, "columnconfigure", None)
+        if not callable(columnconfigure):
+            return
+
+        label_minsize = self._compute_label_minsize()
+        action_minsize = self._compute_action_minsize()
+        configs = (
+            (0, 0, label_minsize),
+            (1, 1, label_minsize),
+            (2, 0, label_minsize),
+            (3, 1, label_minsize),
+            (4, 0, action_minsize),
+        )
+        for col_idx, weight, minsize in configs:
+            try:
+                columnconfigure(col_idx, weight=weight, minsize=minsize)
+            except Exception:
+                continue
+
+    def _compute_label_minsize(self) -> int:
+        try:
+            base_font = tkfont.nametofont("TkDefaultFont")
+            labels = ("Colaborador:", "Monto asignado:")
+            widest = max(base_font.measure(text) for text in labels)
+            return widest + COL_PADX
+        except Exception:
+            return 140
+
+    def _compute_action_minsize(self) -> int:
+        try:
+            base_font = tkfont.nametofont("TkDefaultFont")
+            return base_font.measure("Eliminar") + (COL_PADX * 2)
+        except Exception:
+            return 120
 
     def _build_section_title(self) -> str:
         base_title = f"Asignación {self.idx+1}"
