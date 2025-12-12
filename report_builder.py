@@ -9,8 +9,12 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import nsdecls
 except ImportError:  # pragma: no cover - se usa el respaldo integrado
     DocxDocument = None
+    parse_xml = None
+    nsdecls = None
 
 DOCX_AVAILABLE = DocxDocument is not None
 DOCX_MISSING_MESSAGE = (
@@ -1137,7 +1141,9 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         for line in lines:
             document.add_paragraph(line)
 
-    def append_table(headers: List[str], rows: List[List[Any]]) -> None:
+    def append_table(
+        headers: List[str], rows: List[List[Any]], *, highlight_predicate=None
+    ) -> None:
         if not rows:
             document.add_paragraph(PLACEHOLDER)
             return
@@ -1147,8 +1153,15 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             table.rows[0].cells[idx].text = header
         for row in rows:
             docx_row = table.add_row()
+            highlight_row = highlight_predicate(row) if highlight_predicate else False
             for idx, value in enumerate(row):
-                docx_row.cells[idx].text = str(value or "")
+                cell = docx_row.cells[idx]
+                if highlight_row and parse_xml and nsdecls:
+                    shade = parse_xml(
+                        rf'<w:shd {nsdecls("w")} w:fill="FFEBEE"/>'
+                    )
+                    cell._element.get_or_add_tcPr().append(shade)
+                cell.text = str(value or "")
 
     def add_list(items: List[str]) -> None:
         if not items:
@@ -1264,6 +1277,9 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             "ID Plan de Acción",
         ],
         context["risk_rows"],
+        highlight_predicate=lambda row: any(
+            str(value).strip().lower() == "nuevo riesgo" for value in row
+        ),
     )
     document.add_heading("Normas transgredidas", level=2)
     append_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"])
