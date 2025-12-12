@@ -9,8 +9,15 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import nsdecls
+    from docx.shared import RGBColor, Pt
 except ImportError:  # pragma: no cover - se usa el respaldo integrado
     DocxDocument = None
+    parse_xml = None
+    nsdecls = None
+    RGBColor = None
+    Pt = None
 
 DOCX_AVAILABLE = DocxDocument is not None
 DOCX_MISSING_MESSAGE = (
@@ -1133,6 +1140,63 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     analysis = context["analysis"]
     raw_analysis = case_data.analisis or {}
 
+    blue_color = RGBColor(0, 48, 135)
+
+    def _style_title(paragraph) -> None:
+        for run in paragraph.runs:
+            font = run.font
+            font.name = "Segoe UI"
+            font.size = Pt(20)
+            font.color.rgb = blue_color
+
+    def _style_section_heading(paragraph) -> None:
+        for run in paragraph.runs:
+            font = run.font
+            font.name = "Segoe UI Semibold"
+            font.size = Pt(14)
+            font.color.rgb = blue_color
+            font.bold = True
+
+    def _apply_cell_shading(cell, fill: str) -> None:
+        shading = parse_xml(
+            rf'<w:shd {nsdecls("w")} w:val="clear" w:color="auto" w:fill="{fill}" />'
+        )
+        cell._tc.get_or_add_tcPr().append(shading)
+
+    def _apply_header_style(table) -> None:
+        if not table.rows:
+            return
+        for cell in table.rows[0].cells:
+            _apply_cell_shading(cell, "003087")
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    font = run.font
+                    font.name = "Segoe UI Semibold"
+                    font.color.rgb = RGBColor(255, 255, 255)
+                    font.bold = True
+
+    def _apply_zebra_striping(table) -> None:
+        for row_idx, row in enumerate(table.rows[1:], start=1):
+            if row_idx % 2 == 0:
+                for cell in row.cells:
+                    _apply_cell_shading(cell, "F5F5F5")
+
+    def _apply_table_borders(table) -> None:
+        borders_xml = (
+            r'<w:tblBorders {decl}>'
+            r'<w:top w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
+            r'<w:left w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
+            r'<w:bottom w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
+            r'<w:right w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
+            r'</w:tblBorders>'
+        ).format(decl=nsdecls("w"))
+        table._tbl.get_or_add_tblPr().append(parse_xml(borders_xml))
+
+    def _style_table(table) -> None:
+        _apply_header_style(table)
+        _apply_zebra_striping(table)
+        _apply_table_borders(table)
+
     def add_paragraphs(lines: List[str]) -> None:
         for line in lines:
             document.add_paragraph(line)
@@ -1149,6 +1213,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             docx_row = table.add_row()
             for idx, value in enumerate(row):
                 docx_row.cells[idx].text = str(value or "")
+        _style_table(table)
 
     def add_list(items: List[str]) -> None:
         if not items:
@@ -1165,8 +1230,10 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         f"{_safe_text(case.get('lugar'))}, {_safe_text(case.get('fecha_informe'))}",
     ]
 
-    add_paragraphs(header_lines)
-    document.add_heading("Encabezado Institucional", level=2)
+    title_paragraph = document.add_paragraph(header_lines[0])
+    _style_title(title_paragraph)
+    add_paragraphs(header_lines[1:])
+    _style_section_heading(document.add_heading("Encabezado Institucional", level=2))
     header_values = dict(zip(context["header_headers"], context["header_row"]))
     header_table = document.add_table(rows=11, cols=4)
     header_table.style = "Table Grid"
@@ -1217,9 +1284,10 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
 
     _set_cells(10, 0, "N° de Reclamos", header_values.get("N° de Reclamos", PLACEHOLDER))
     _merge_value(10, 1, 3)
-    document.add_heading("Antecedentes", level=2)
+    _style_table(header_table)
+    _style_section_heading(document.add_heading("Antecedentes", level=2))
     _add_rich_text_paragraphs(document, raw_analysis.get("antecedentes"))
-    document.add_heading("Detalle de los Colaboradores Involucrados", level=2)
+    _style_section_heading(document.add_heading("Detalle de los Colaboradores Involucrados", level=2))
     append_table(
         [
             "Nombres y Apellidos",
@@ -1231,9 +1299,9 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         ],
         context["collaborator_rows"],
     )
-    document.add_heading("Modus operandi", level=2)
+    _style_section_heading(document.add_heading("Modus operandi", level=2))
     _add_rich_text_paragraphs(document, raw_analysis.get("modus_operandi"))
-    document.add_heading("Principales Hallazgos", level=2)
+    _style_section_heading(document.add_heading("Principales Hallazgos", level=2))
     append_table(
         [
             "N°",
@@ -1251,9 +1319,9 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         context["operation_rows"],
     )
     _add_rich_text_paragraphs(document, raw_analysis.get("hallazgos"))
-    document.add_heading("Descargos", level=2)
+    _style_section_heading(document.add_heading("Descargos", level=2))
     _add_rich_text_paragraphs(document, raw_analysis.get("descargos"))
-    document.add_heading("Riesgos identificados y debilidades de los controles", level=2)
+    _style_section_heading(document.add_heading("Riesgos identificados y debilidades de los controles", level=2))
     append_table(
         [
             "Líder del riesgo",
@@ -1265,22 +1333,22 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         ],
         context["risk_rows"],
     )
-    document.add_heading("Normas transgredidas", level=2)
+    _style_section_heading(document.add_heading("Normas transgredidas", level=2))
     append_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"])
-    document.add_heading("Conclusiones", level=2)
+    _style_section_heading(document.add_heading("Conclusiones", level=2))
     _add_rich_text_paragraphs(document, raw_analysis.get("conclusiones"))
-    document.add_heading("Recomendaciones y Mejoras de Procesos", level=2)
-    document.add_heading("De carácter laboral", level=3)
+    _style_section_heading(document.add_heading("Recomendaciones y Mejoras de Procesos", level=2))
+    _style_section_heading(document.add_heading("De carácter laboral", level=3))
     add_list(context["recomendaciones"]["laboral"])
-    document.add_heading("De carácter operativo", level=3)
+    _style_section_heading(document.add_heading("De carácter operativo", level=3))
     add_list(context["recomendaciones"]["operativo"])
-    document.add_heading("De carácter legal", level=3)
+    _style_section_heading(document.add_heading("De carácter legal", level=3))
     add_list(context["recomendaciones"]["legal"])
-    document.add_heading("Anexos", level=2)
+    _style_section_heading(document.add_heading("Anexos", level=2))
     add_list(_format_anexos(context["anexos"]))
-    document.add_heading("Firma", level=2)
+    _style_section_heading(document.add_heading("Firma", level=2))
     add_list(_format_firmas(context["firmas"]))
-    document.add_heading("Resumen de Secciones y Tablas del Informe", level=2)
+    _style_section_heading(document.add_heading("Resumen de Secciones y Tablas del Informe", level=2))
     append_table(["Sección", "Tipo", "Estado"], _build_sections_summary(context, analysis))
     document.save(path)
     return Path(path)
