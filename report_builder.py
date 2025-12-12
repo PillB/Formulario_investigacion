@@ -1159,7 +1159,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
 
     def _apply_cell_shading(cell, fill: str) -> None:
         shading = parse_xml(
-            rf'<w:shd {nsdecls("w")} w:val="clear" w:color="auto" w:fill="{fill}" />'
+            f'<w:shd {nsdecls("w")} w:val="clear" w:color="auto" w:fill="{fill}" />'
         )
         cell._tc.get_or_add_tcPr().append(shading)
 
@@ -1183,12 +1183,12 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
 
     def _apply_table_borders(table) -> None:
         borders_xml = (
-            r'<w:tblBorders {decl}>'
-            r'<w:top w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
-            r'<w:left w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
-            r'<w:bottom w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
-            r'<w:right w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
-            r'</w:tblBorders>'
+            '<w:tblBorders {decl}>'
+            '<w:top w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
+            '<w:left w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
+            '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
+            '<w:right w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
+            '</w:tblBorders>'
         ).format(decl=nsdecls("w"))
         table._tbl.get_or_add_tblPr().append(parse_xml(borders_xml))
 
