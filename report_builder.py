@@ -1175,8 +1175,11 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
                     font.color.rgb = RGBColor(255, 255, 255)
                     font.bold = True
 
-    def _apply_zebra_striping(table) -> None:
+    def _apply_zebra_striping(table, skip_rows: Optional[Set[int]] = None) -> None:
+        skip_rows = skip_rows or set()
         for row_idx, row in enumerate(table.rows[1:], start=1):
+            if row_idx in skip_rows:
+                continue
             if row_idx % 2 == 0:
                 for cell in row.cells:
                     _apply_cell_shading(cell, "F5F5F5")
@@ -1190,18 +1193,29 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             r'<w:right w:val="single" w:sz="4" w:space="0" w:color="D9D9D9" />'
             r'</w:tblBorders>'
         ).format(decl=nsdecls("w"))
-        table._tbl.get_or_add_tblPr().append(parse_xml(borders_xml))
+        tbl_pr = table._tbl.tblPr
+        if tbl_pr is None:
+            tbl_pr = parse_xml(rf'<w:tblPr {nsdecls("w")} />')
+            table._tbl.append(tbl_pr)
+        tbl_pr.append(parse_xml(borders_xml))
 
-    def _style_table(table) -> None:
+    def _style_table(table, zebra_skip_rows: Optional[Set[int]] = None) -> None:
         _apply_header_style(table)
-        _apply_zebra_striping(table)
+        _apply_zebra_striping(table, skip_rows=zebra_skip_rows)
         _apply_table_borders(table)
+
+    def _is_nuevo_riesgo_row(row: List[Any]) -> bool:
+        return any(str(value).strip().lower() == "nuevo riesgo" for value in row)
 
     def add_paragraphs(lines: List[str]) -> None:
         for line in lines:
             document.add_paragraph(line)
 
-    def append_table(headers: List[str], rows: List[List[Any]]) -> None:
+    def append_table(
+        headers: List[str],
+        rows: List[List[Any]],
+        highlight_predicate: Optional[Any] = None,
+    ) -> None:
         if not rows:
             document.add_paragraph(PLACEHOLDER)
             return
@@ -1209,11 +1223,16 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         table.style = "Table Grid"
         for idx, header in enumerate(headers):
             table.rows[0].cells[idx].text = header
-        for row in rows:
+        highlighted_rows: Set[int] = set()
+        for row_index, row in enumerate(rows, start=1):
             docx_row = table.add_row()
+            if highlight_predicate and highlight_predicate(row):
+                highlighted_rows.add(row_index)
+                for cell in docx_row.cells:
+                    _apply_cell_shading(cell, "FFEBEE")
             for idx, value in enumerate(row):
                 docx_row.cells[idx].text = str(value or "")
-        _style_table(table)
+        _style_table(table, zebra_skip_rows=highlighted_rows)
 
     def add_list(items: List[str]) -> None:
         if not items:
@@ -1332,6 +1351,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             "ID Plan de Acción",
         ],
         context["risk_rows"],
+        highlight_predicate=_is_nuevo_riesgo_row,
     )
     _style_section_heading(document.add_heading("Normas transgredidas", level=2))
     append_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"])
