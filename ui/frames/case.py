@@ -13,7 +13,6 @@ from ui.frames.utils import (
     ensure_grid_support,
     grid_and_configure,
 )
-from ui.layout.responsive_grid import responsive_grid
 from validation_badge import badge_registry
 from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
@@ -59,7 +58,26 @@ class CaseFrame:
 
     def _build_case_fields(self, frame) -> None:
         owner = self.owner
-        pairs: list[tuple[ttk.Widget, ttk.Widget]] = []
+
+        for column in range(3):
+            frame.grid_columnconfigure(column, weight=1)
+
+        def place(label_widget: ttk.Widget, field_widget: ttk.Widget, *, row: int, column: int):
+            base_row = row * 2
+            label_widget.grid(
+                row=base_row,
+                column=column,
+                sticky="w",
+                padx=COL_PADX,
+                pady=(0, 2),
+            )
+            field_widget.grid(
+                row=base_row + 1,
+                column=column,
+                sticky="ew",
+                padx=COL_PADX,
+                pady=(0, ROW_PADY),
+            )
 
         case_id_label = build_required_label(
             frame,
@@ -76,7 +94,7 @@ class CaseFrame:
         owner.register_tooltip(
             id_entry, "Formato AAAA-XXXX. Se usa para detectar duplicados."
         )
-        pairs.append((case_id_label, id_container))
+        place(case_id_label, id_container, row=0, column=0)
 
         tipo_label = build_required_label(
             frame,
@@ -97,7 +115,7 @@ class CaseFrame:
         )
         owner.register_tooltip(tipo_cb, "Selecciona el tipo de reporte a generar.")
         tipo_cb.set('')
-        pairs.append((tipo_label, tipo_container))
+        place(tipo_label, tipo_container, row=0, column=1)
 
         cat1_label = build_required_label(
             frame,
@@ -120,7 +138,7 @@ class CaseFrame:
         cat1_cb.bind("<<ComboboxSelected>>", lambda _e: owner.on_case_cat1_change())
         cat1_cb.bind("<FocusOut>", lambda _e: owner.on_case_cat1_change())
         cat1_cb.set('')
-        pairs.append((cat1_label, cat1_container))
+        place(cat1_label, cat1_container, row=1, column=0)
 
         cat2_label = build_required_label(
             frame,
@@ -154,7 +172,7 @@ class CaseFrame:
         case_cat2_cb.bind("<FocusOut>", _handle_cat2_event)
         owner.case_cat2_cb = case_cat2_cb
         case_cat2_cb.set('')
-        pairs.append((cat2_label, cat2_container))
+        place(cat2_label, cat2_container, row=1, column=1)
 
         modalidad_label = build_required_label(
             frame,
@@ -176,7 +194,7 @@ class CaseFrame:
         owner.register_tooltip(case_mod_cb, "Selecciona la modalidad específica.")
         owner.case_mod_cb = case_mod_cb
         case_mod_cb.set('')
-        pairs.append((modalidad_label, mod_container))
+        place(modalidad_label, mod_container, row=1, column=2)
 
         canal_label = build_required_label(
             frame,
@@ -197,7 +215,7 @@ class CaseFrame:
         )
         owner.register_tooltip(canal_cb, "Canal donde se originó el evento.")
         canal_cb.set('')
-        pairs.append((canal_label, canal_container))
+        place(canal_label, canal_container, row=2, column=0)
 
         proc_label = build_required_label(
             frame,
@@ -218,7 +236,7 @@ class CaseFrame:
         )
         owner.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
         proc_cb.set('')
-        pairs.append((proc_label, proc_container))
+        place(proc_label, proc_container, row=2, column=1)
 
         cost_center_label = ttk.Label(
             frame, text="Centro de costos del caso (; separados):"
@@ -237,7 +255,7 @@ class CaseFrame:
             centro_costo_entry,
             "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
         )
-        pairs.append((cost_center_label, centro_container))
+        place(cost_center_label, centro_container, row=2, column=2)
 
         occurrence_label = build_required_label(
             frame,
@@ -254,7 +272,7 @@ class CaseFrame:
         owner.register_tooltip(
             fecha_case_entry, "Fecha en que se originó el caso a nivel general."
         )
-        pairs.append((occurrence_label, occ_container))
+        place(occurrence_label, occ_container, row=3, column=0)
 
         desc_label = build_required_label(
             frame,
@@ -275,7 +293,7 @@ class CaseFrame:
             fecha_desc_entry,
             "Fecha en que se detectó el caso. Debe ser posterior a la ocurrencia y no futura.",
         )
-        pairs.append((desc_label, desc_container))
+        place(desc_label, desc_container, row=3, column=1)
 
         investigator_label = ttk.Label(frame, text="Matrícula:")
         investigator_entry = ttk.Entry(
@@ -291,7 +309,7 @@ class CaseFrame:
             investigator_entry,
             "Ingresa la matrícula del investigador principal (letra + 5 dígitos) para autocompletar nombre y cargo.",
         )
-        pairs.append((investigator_label, investigator_entry))
+        place(investigator_label, investigator_entry, row=4, column=0)
 
         investigator_name_label = ttk.Label(frame, text="Nombre y apellidos:")
         investigator_name = ttk.Entry(
@@ -304,7 +322,7 @@ class CaseFrame:
             investigator_name,
             "Nombre del investigador obtenido automáticamente desde team_details.csv.",
         )
-        pairs.append((investigator_name_label, investigator_name))
+        place(investigator_name_label, investigator_name, row=4, column=1)
 
         investigator_role_label = ttk.Label(frame, text="Puesto:")
         investigator_role = ttk.Label(
@@ -315,9 +333,7 @@ class CaseFrame:
         owner.register_tooltip(
             investigator_role, "Cargo autocompletado según la matrícula del investigador."
         )
-        pairs.append((investigator_role_label, investigator_role))
-
-        responsive_grid(frame, pairs)
+        place(investigator_role_label, investigator_role, row=4, column=2)
 
         owner._case_inputs.update(
             {
