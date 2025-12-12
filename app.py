@@ -12279,6 +12279,8 @@ class FraudCaseApp:
                 rf.criticidad_var.set(risk.get('criticidad', CRITICIDAD_LIST[0]))
                 rf.exposicion_var.set(risk.get('exposicion_residual', ''))
                 rf.planes_var.set(risk.get('planes_accion', ''))
+                if hasattr(rf, "sync_mode_from_identifier"):
+                    rf.sync_mode_from_identifier()
                 if hasattr(rf, "on_id_change"):
                     rf.on_id_change(preserve_existing=True, silent=True)
                 if hasattr(rf, "update_risk_validation_state"):
