@@ -102,6 +102,10 @@ def test_validation_panel_tracks_user_corrections(app_instance, monkeypatch):
     product.fecha_oc_var.set(valid_occurrence)
     product.fecha_desc_var.set(valid_discovery)
     product.monto_inv_var.set("200")
+    product.monto_perdida_var.set("100")
+    product.monto_falla_var.set("50")
+    product.monto_cont_var.set("50")
+    product.monto_rec_var.set("0")
     product.monto_pago_var.set("150")
 
     for widget in (product.inv_entry, product.focc_entry, product.fdesc_entry, product.pago_entry):
