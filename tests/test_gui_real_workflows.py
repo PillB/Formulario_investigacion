@@ -26,7 +26,7 @@ def _build_app():
     return root, FraudCaseApp(root)
 
 
-def test_clients_section_starts_visible_with_placeholder(messagebox_spy):
+def test_clients_section_starts_collapsed_with_placeholder(messagebox_spy):
     root, app = _build_app()
     try:
         assert app._clients_detail_visible is True
@@ -36,7 +36,11 @@ def test_clients_section_starts_visible_with_placeholder(messagebox_spy):
         first_client = app.client_frames[0]
         section = getattr(first_client, "section", None)
         if section is not None:
-            assert getattr(section, "is_open", True) is True
+            assert getattr(section, "is_open", False) is False
+
+        product_section = getattr(app.product_frames[0], "section", None)
+        if product_section is not None:
+            assert getattr(product_section, "is_open", False) is False
 
         summary = getattr(app, "clients_summary_tree", None)
         assert summary is not None
