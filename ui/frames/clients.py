@@ -17,10 +17,12 @@ from validators import (
     validate_required_text,
 )
 from ui.frames.utils import (
-    build_required_label,
     build_grid_container,
+    build_required_label,
+    build_two_column_form,
     create_collapsible_card,
     ensure_grid_support,
+    grid_labeled_widget,
     grid_section,
 )
 from ui.config import COL_PADX, ROW_PADY
@@ -105,22 +107,27 @@ class ClientFrame:
         else:
             self.summary_tree = getattr(owner, "clients_summary_tree", None)
 
-        self.frame = ttk.LabelFrame(self.section.content)
-        self.section.pack_content(self.frame, fill="x", expand=True)
-        ensure_grid_support(self.frame)
-        if hasattr(self.frame, "columnconfigure"):
-            self.frame.columnconfigure(0, weight=0)
-            self.frame.columnconfigure(1, weight=1)
-            self.frame.columnconfigure(2, weight=0)
-            self.frame.columnconfigure(3, weight=1)
+        content_frame = ttk.Frame(self.section.content)
+        self.section.pack_content(content_frame, fill="x", expand=True)
+        ensure_grid_support(content_frame)
+        if hasattr(content_frame, "columnconfigure"):
+            try:
+                content_frame.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+        self.frame = build_two_column_form(
+            content_frame,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+        )
 
         tipo_id_label = build_required_label(
             self.frame,
             "Tipo de ID:",
             tooltip_register=self.tooltip_register,
-        )
-        tipo_id_label.grid(
-            row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         tipo_container, tipo_id_cb = self._make_badged_field(
             self.frame,
@@ -134,7 +141,12 @@ class ClientFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
-        tipo_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        grid_labeled_widget(
+            self.frame,
+            row=0,
+            label_widget=tipo_id_label,
+            field_widget=tipo_container,
+        )
         tipo_id_cb.set('')
         self.tooltip_register(tipo_id_cb, "Selecciona el tipo de documento del cliente.")
 
@@ -143,15 +155,17 @@ class ClientFrame:
             "ID del cliente:",
             tooltip_register=self.tooltip_register,
         )
-        client_id_label.grid(
-            row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
         id_container, id_entry = self._make_badged_field(
             self.frame,
             "cliente_id",
             lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=20, style=ENTRY_STYLE),
         )
-        id_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        grid_labeled_widget(
+            self.frame,
+            row=1,
+            label_widget=client_id_label,
+            field_widget=id_container,
+        )
         self._bind_identifier_triggers(id_entry)
         self.tooltip_register(id_entry, "Escribe el número de documento del cliente.")
 
@@ -160,9 +174,6 @@ class ClientFrame:
             "Nombres:",
             tooltip_register=self.tooltip_register,
         )
-        nombres_label.grid(
-            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
         nombres_container, nombres_entry = self._make_badged_field(
             self.frame,
             "cliente_nombres",
@@ -170,7 +181,12 @@ class ClientFrame:
                 parent, textvariable=self.nombres_var, width=25, style=ENTRY_STYLE
             ),
         )
-        nombres_container.grid(row=1, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        grid_labeled_widget(
+            self.frame,
+            row=2,
+            label_widget=nombres_label,
+            field_widget=nombres_container,
+        )
         nombres_entry.bind(
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó nombres"), add="+"
         )
@@ -181,9 +197,6 @@ class ClientFrame:
             "Apellidos:",
             tooltip_register=self.tooltip_register,
         )
-        apellidos_label.grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
         apellidos_container, apellidos_entry = self._make_badged_field(
             self.frame,
             "cliente_apellidos",
@@ -191,7 +204,12 @@ class ClientFrame:
                 parent, textvariable=self.apellidos_var, width=25, style=ENTRY_STYLE
             ),
         )
-        apellidos_container.grid(row=2, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        grid_labeled_widget(
+            self.frame,
+            row=3,
+            label_widget=apellidos_label,
+            field_widget=apellidos_container,
+        )
         apellidos_entry.bind(
             "<FocusOut>", lambda _e: self._log_change(f"Cliente {self.idx+1}: modificó apellidos"), add="+"
         )
@@ -201,9 +219,6 @@ class ClientFrame:
             self.frame,
             "Flag:",
             tooltip_register=self.tooltip_register,
-        )
-        flag_label.grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         flag_container, flag_cb = self._make_badged_field(
             self.frame,
@@ -217,7 +232,12 @@ class ClientFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
-        flag_container.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        grid_labeled_widget(
+            self.frame,
+            row=4,
+            label_widget=flag_label,
+            field_widget=flag_container,
+        )
         flag_cb.set('')
         self.tooltip_register(flag_cb, "Indica si el cliente es afectado, vinculado u otro estado.")
 
@@ -226,14 +246,8 @@ class ClientFrame:
             "Accionado (seleccione uno o varios):",
             tooltip_register=self.tooltip_register,
         )
-        accionado_label.grid(
-            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
         accionado_list_container = ttk.Frame(self.frame)
         ensure_grid_support(accionado_list_container)
-        accionado_list_container.grid(
-            row=4, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we"
-        )
         if hasattr(accionado_list_container, "columnconfigure"):
             accionado_list_container.columnconfigure(0, weight=1)
             accionado_list_container.columnconfigure(1, weight=0)
@@ -269,21 +283,30 @@ class ClientFrame:
             "Marca las tribus o equipos accionados por la alerta. Puedes escoger varias opciones.",
         )
         self.badges.claim("cliente_accionado", accionado_list_container, row=0, column=2)
+        grid_labeled_widget(
+            self.frame,
+            row=5,
+            label_widget=accionado_label,
+            field_widget=accionado_list_container,
+            field_sticky="nsew",
+        )
 
         tel_label = build_required_label(
             self.frame,
             "Teléfonos (separados por ;):",
             tooltip_register=self.tooltip_register,
         )
-        tel_label.grid(
-            row=5, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
         tel_container, tel_entry = self._make_badged_field(
             self.frame,
             "cliente_tel",
             lambda parent: ttk.Entry(parent, textvariable=self.telefonos_var, width=30, style=ENTRY_STYLE),
         )
-        tel_container.grid(row=5, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        grid_labeled_widget(
+            self.frame,
+            row=6,
+            label_widget=tel_label,
+            field_widget=tel_container,
+        )
         tel_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó teléfonos"))
         self.tooltip_register(
             tel_entry,
@@ -295,39 +318,50 @@ class ClientFrame:
             "Correos (separados por ;):",
             tooltip_register=self.tooltip_register,
         )
-        correo_label.grid(
-            row=5, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
         cor_container, cor_entry = self._make_badged_field(
             self.frame,
             "cliente_correo",
             lambda parent: ttk.Entry(parent, textvariable=self.correos_var, width=30, style=ENTRY_STYLE),
         )
-        cor_container.grid(row=5, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        grid_labeled_widget(
+            self.frame,
+            row=7,
+            label_widget=correo_label,
+            field_widget=cor_container,
+        )
         cor_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó correos"))
         self.tooltip_register(
             cor_entry,
             "Campo obligatorio. Coloca al menos un correo electrónico separado por ;.",
         )
 
-        ttk.Label(self.frame, text="Direcciones (separados por ;):").grid(
-            row=6, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
+        dir_label = ttk.Label(self.frame, text="Direcciones (separados por ;):")
         dir_entry = ttk.Entry(
             self.frame, textvariable=self.direcciones_var, width=30, style=ENTRY_STYLE
         )
-        dir_entry.grid(row=6, column=1, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        grid_labeled_widget(
+            self.frame,
+            row=8,
+            label_widget=dir_label,
+            field_widget=dir_entry,
+        )
         dir_entry.bind("<FocusOut>", lambda e: self._log_change(f"Cliente {self.idx+1}: modificó direcciones"))
         self.tooltip_register(dir_entry, "Puedes capturar varias direcciones separadas por ;.")
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=7, column=0, columnspan=4, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
         remove_btn = ttk.Button(action_row, text="Eliminar cliente", command=self.remove)
         remove_btn.grid(row=0, column=1, sticky="e")
+        grid_labeled_widget(
+            self.frame,
+            row=9,
+            label_widget=ttk.Frame(self.frame),
+            field_widget=action_row,
+            label_sticky="nsew",
+        )
         self.tooltip_register(remove_btn, "Quita al cliente y sus datos del caso.")
 
         self.validators.append(

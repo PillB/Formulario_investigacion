@@ -16,8 +16,10 @@ from validators import (
     validate_risk_id,
 )
 from ui.frames.utils import (
+    build_two_column_form,
     create_collapsible_card,
     ensure_grid_support,
+    grid_labeled_widget,
     grid_section,
 )
 from ui.config import COL_PADX, ROW_PADY
@@ -93,39 +95,55 @@ class RiskFrame:
         self._sync_section_title()
         self._place_section()
 
-        self.frame = ttk.LabelFrame(self.section.content, text="")
-        self.section.pack_content(self.frame, fill="x", expand=True)
-        ensure_grid_support(self.frame)
+        content_frame = ttk.Frame(self.section.content)
+        self.section.pack_content(content_frame, fill="x", expand=True)
+        ensure_grid_support(content_frame)
+        if hasattr(content_frame, "columnconfigure"):
+            try:
+                content_frame.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+
+        self.frame = build_two_column_form(
+            content_frame,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+        )
         self.badges = badge_registry
-        if hasattr(self.frame, "columnconfigure"):
-            self.frame.columnconfigure(1, weight=1)
-            self.frame.columnconfigure(3, weight=1)
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=0, column=0, columnspan=4, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
         remove_btn = ttk.Button(action_row, text="Eliminar riesgo", command=self.remove)
         remove_btn.grid(row=0, column=1, sticky="e")
         self.tooltip_register(remove_btn, "Quita este riesgo del caso.")
-
-        ttk.Label(self.frame, text="ID riesgo (catálogo o nuevo):").grid(
-            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        grid_labeled_widget(
+            self.frame,
+            row=0,
+            label_widget=ttk.Frame(self.frame),
+            field_widget=action_row,
+            label_sticky="nsew",
         )
+
+        risk_id_label = ttk.Label(self.frame, text="ID riesgo (catálogo o nuevo):")
         id_row = ttk.Frame(self.frame)
         ensure_grid_support(id_row)
-        id_row.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         if hasattr(id_row, "columnconfigure"):
             id_row.columnconfigure(0, weight=1)
-        id_entry = self._make_badged_field(
+        id_container, id_entry = self._make_badged_field(
             id_row,
             "riesgo_id",
             lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=15),
             row=0,
             column=0,
+            autogrid=False,
         )
+        id_container.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=0, sticky="we")
         toggle_btn = ttk.Checkbutton(
             id_row,
             text="Agregar riesgo nuevo",
@@ -145,11 +163,15 @@ class RiskFrame:
             "Activa para registrar un riesgo nuevo sin búsqueda de catálogo; desactiva para usar el catálogo.",
         )
         self._bind_identifier_triggers(id_entry)
-
-        ttk.Label(self.frame, text="Criticidad:").grid(
-            row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        grid_labeled_widget(
+            self.frame,
+            row=1,
+            label_widget=risk_id_label,
+            field_widget=id_row,
         )
-        crit_cb = self._make_badged_field(
+
+        crit_label = ttk.Label(self.frame, text="Criticidad:")
+        crit_container, crit_cb = self._make_badged_field(
             self.frame,
             "riesgo_criticidad",
             lambda parent: ttk.Combobox(
@@ -159,61 +181,86 @@ class RiskFrame:
                 state="readonly",
                 width=12,
             ),
-            row=1,
-            column=3,
+            row=2,
+            column=1,
+            autogrid=False,
         )
         crit_cb.set('')
         self.tooltip_register(crit_cb, "Nivel de severidad del riesgo.")
-
-        ttk.Label(self.frame, text="Líder:").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        grid_labeled_widget(
+            self.frame,
+            row=2,
+            label_widget=crit_label,
+            field_widget=crit_container,
         )
-        lider_entry = self._make_badged_field(
+
+        lider_label = ttk.Label(self.frame, text="Líder:")
+        lider_container, lider_entry = self._make_badged_field(
             self.frame,
             "riesgo_lider",
             lambda parent: ttk.Entry(parent, textvariable=self.lider_var, width=20),
-            row=2,
+            row=3,
             column=1,
+            autogrid=False,
         )
         self.tooltip_register(lider_entry, "Responsable del seguimiento del riesgo.")
-
-        ttk.Label(self.frame, text="Exposición residual (US$):").grid(
-            row=2, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        grid_labeled_widget(
+            self.frame,
+            row=3,
+            label_widget=lider_label,
+            field_widget=lider_container,
         )
-        expos_entry = self._make_badged_field(
+
+        expos_label = ttk.Label(self.frame, text="Exposición residual (US$):")
+        expos_container, expos_entry = self._make_badged_field(
             self.frame,
             "riesgo_exposicion",
             lambda parent: ttk.Entry(parent, textvariable=self.exposicion_var, width=15),
-            row=2,
-            column=3,
+            row=4,
+            column=1,
+            autogrid=False,
         )
         self.tooltip_register(expos_entry, "Monto estimado en dólares.")
-
-        ttk.Label(self.frame, text="Descripción del riesgo:").grid(
-            row=3, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        grid_labeled_widget(
+            self.frame,
+            row=4,
+            label_widget=expos_label,
+            field_widget=expos_container,
         )
-        desc_entry = self._make_badged_field(
+
+        desc_label = ttk.Label(self.frame, text="Descripción del riesgo:")
+        desc_container, desc_entry = self._make_badged_field(
             self.frame,
             "riesgo_desc",
             lambda parent: ttk.Entry(parent, textvariable=self.descripcion_var, width=60),
-            row=3,
+            row=5,
             column=1,
-            columnspan=3,
+            autogrid=False,
         )
         self.tooltip_register(desc_entry, "Describe el riesgo de forma clara.")
-
-        ttk.Label(self.frame, text="Planes de acción (IDs separados por ;):").grid(
-            row=4, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        grid_labeled_widget(
+            self.frame,
+            row=5,
+            label_widget=desc_label,
+            field_widget=desc_container,
         )
-        planes_entry = self._make_badged_field(
+
+        planes_label = ttk.Label(self.frame, text="Planes de acción (IDs separados por ;):")
+        planes_container, planes_entry = self._make_badged_field(
             self.frame,
             "riesgo_planes",
             lambda parent: ttk.Entry(parent, textvariable=self.planes_var, width=40),
-            row=4,
+            row=6,
             column=1,
-            columnspan=3,
+            autogrid=False,
         )
         self.tooltip_register(planes_entry, "Lista de planes registrados en OTRS o Aranda.")
+        grid_labeled_widget(
+            self.frame,
+            row=6,
+            label_widget=planes_label,
+            field_widget=planes_container,
+        )
 
         self.id_validator = FieldValidator(
             id_entry,
@@ -404,6 +451,7 @@ class RiskFrame:
         column: int,
         columnspan: int = 1,
         sticky: str = "we",
+        autogrid: bool = True,
     ):
         container = ttk.Frame(parent)
         ensure_grid_support(container)
@@ -413,15 +461,16 @@ class RiskFrame:
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
         self.badges.claim(key, container, row=0, column=1)
-        container.grid(
-            row=row,
-            column=column,
-            columnspan=columnspan,
-            padx=COL_PADX,
-            pady=ROW_PADY,
-            sticky=sticky,
-        )
-        return widget
+        if autogrid:
+            container.grid(
+                row=row,
+                column=column,
+                columnspan=columnspan,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky=sticky,
+            )
+        return container, widget
 
     def _register_title_traces(self):
         for var in (self.id_var, self.descripcion_var):

@@ -14,9 +14,11 @@ from validators import (
     validate_required_text,
 )
 from ui.frames.utils import (
+    build_two_column_form,
     create_date_entry,
     create_collapsible_card,
     ensure_grid_support,
+    grid_labeled_widget,
     grid_section,
 )
 from ui.config import COL_PADX, ROW_PADY
@@ -75,64 +77,91 @@ class NormFrame:
         self._sync_section_title()
         self._place_section()
 
-        self.frame = ttk.LabelFrame(self.section.content, text="")
-        self.section.pack_content(self.frame, fill="x", expand=True)
-        ensure_grid_support(self.frame)
+        content_frame = ttk.Frame(self.section.content)
+        self.section.pack_content(content_frame, fill="x", expand=True)
+        ensure_grid_support(content_frame)
+        if hasattr(content_frame, "columnconfigure"):
+            try:
+                content_frame.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+
+        self.frame = build_two_column_form(
+            content_frame,
+            row=0,
+            column=0,
+            padx=0,
+            pady=0,
+            sticky="nsew",
+        )
         self.badges = badge_registry
-        if hasattr(self.frame, "columnconfigure"):
-            self.frame.columnconfigure(1, weight=1)
-            self.frame.columnconfigure(3, weight=1)
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=0, column=0, columnspan=4, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
         remove_btn = ttk.Button(action_row, text="Eliminar norma", command=self.remove)
         remove_btn.grid(row=0, column=1, sticky="e")
+        grid_labeled_widget(
+            self.frame,
+            row=0,
+            label_widget=ttk.Frame(self.frame),
+            field_widget=action_row,
+            label_sticky="nsew",
+        )
         self.tooltip_register(remove_btn, "Quita esta norma del caso.")
 
-        ttk.Label(self.frame, text="ID de norma:").grid(
-            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        id_entry = self._make_badged_field(
+        id_label = ttk.Label(self.frame, text="ID de norma:")
+        id_container, id_entry = self._make_badged_field(
             self.frame,
             "norm_id",
             lambda parent: ttk.Entry(parent, textvariable=self.id_var, width=20),
             row=1,
             column=1,
+            autogrid=False,
+        )
+        grid_labeled_widget(
+            self.frame,
+            row=1,
+            label_widget=id_label,
+            field_widget=id_container,
         )
         self.tooltip_register(id_entry, "Formato requerido: XXXX.XXX.XX.XX")
         self._bind_identifier_triggers(id_entry)
 
-        ttk.Label(self.frame, text="Fecha de vigencia:\n(YYYY-MM-DD)").grid(
-            row=1,
-            column=2,
-            padx=COL_PADX,
-            pady=(ROW_PADY // 2, ROW_PADY // 2),
-            sticky="e",
-        )
-        fecha_entry = self._make_badged_field(
+        fecha_label = ttk.Label(self.frame, text="Fecha de vigencia:\n(YYYY-MM-DD)")
+        fecha_container, fecha_entry = self._make_badged_field(
             self.frame,
             "norm_fecha",
             lambda parent: create_date_entry(parent, textvariable=self.fecha_var, width=15),
-            row=1,
-            column=3,
+            row=2,
+            column=1,
+            autogrid=False,
+        )
+        grid_labeled_widget(
+            self.frame,
+            row=2,
+            label_widget=fecha_label,
+            field_widget=fecha_container,
         )
         self.fecha_entry = fecha_entry
         self.tooltip_register(fecha_entry, "Fecha de publicación o vigencia de la norma.")
 
-        ttk.Label(self.frame, text="Descripción de la norma:").grid(
-            row=2, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
-        )
-        desc_entry = self._make_badged_field(
+        desc_label = ttk.Label(self.frame, text="Descripción de la norma:")
+        desc_container, desc_entry = self._make_badged_field(
             self.frame,
             "norm_desc",
             lambda parent: ttk.Entry(parent, textvariable=self.descripcion_var, width=70),
-            row=2,
+            row=3,
             column=1,
-            columnspan=3,
+            autogrid=False,
+        )
+        grid_labeled_widget(
+            self.frame,
+            row=3,
+            label_widget=desc_label,
+            field_widget=desc_container,
         )
         self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
 
@@ -274,6 +303,7 @@ class NormFrame:
         column: int,
         columnspan: int = 1,
         sticky: str = "we",
+        autogrid: bool = True,
     ):
         container = ttk.Frame(parent)
         ensure_grid_support(container)
@@ -283,15 +313,16 @@ class NormFrame:
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
         self.badges.claim(key, container, row=0, column=1)
-        container.grid(
-            row=row,
-            column=column,
-            columnspan=columnspan,
-            padx=COL_PADX,
-            pady=ROW_PADY,
-            sticky=sticky,
-        )
-        return widget
+        if autogrid:
+            container.grid(
+                row=row,
+                column=column,
+                columnspan=columnspan,
+                padx=COL_PADX,
+                pady=ROW_PADY,
+                sticky=sticky,
+            )
+        return container, widget
 
     def _register_title_traces(self):
         for var in (self.id_var, self.descripcion_var):

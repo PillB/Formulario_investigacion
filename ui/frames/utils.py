@@ -655,6 +655,122 @@ def build_grid_container(
     return container
 
 
+def build_two_column_form(
+    parent: Any,
+    *,
+    row: int = 0,
+    column: int = 0,
+    padx: int | tuple[int, int] = COL_PADX,
+    pady: int | tuple[int, int] = ROW_PADY,
+    sticky: str = "nsew",
+    label_text: str = "",
+):
+    """Create a two-column ``LabelFrame`` gridded inside ``parent``.
+
+    The helper reuses :func:`build_grid_container` to place the frame and
+    configures column weights so labels remain compact (column ``0``) while
+    inputs stretch uniformly with the available width (column ``1``). It also
+    assigns weight to the first row to allow inner containers to expand when
+    the window resizes.
+    """
+
+    try:
+        form = ttk.LabelFrame(parent, text=label_text)
+    except Exception:
+        class _StubForm:
+            def __init__(self):
+                self._grid_last_args = ()
+                self._grid_last_kwargs = {}
+                self.column_weights: list[tuple[int, int]] = []
+                self.row_weights: list[tuple[int, int]] = []
+
+            def grid(self, *args, **kwargs):  # noqa: ANN001
+                self._grid_last_args = args
+                self._grid_last_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+                return None
+
+            def grid_configure(self, *args, **kwargs):  # noqa: ANN001
+                return self.grid(*args, **kwargs)
+
+            def columnconfigure(self, index, weight=0):  # noqa: ANN001
+                self.column_weights.append((index, weight))
+
+            def rowconfigure(self, index, weight=0):  # noqa: ANN001
+                self.row_weights.append((index, weight))
+
+            def winfo_manager(self):  # noqa: D401
+                """Simula gestor de geometría para pruebas sin Tk."""
+
+                return "grid"
+
+        form = _StubForm()
+
+    ensure_grid_support(form)
+    grid_and_configure(
+        form,
+        parent,
+        row=row,
+        column=column,
+        padx=padx,
+        pady=pady,
+        sticky=sticky,
+        row_weight=1,
+        column_weight=1,
+    )
+
+    if hasattr(form, "columnconfigure"):
+        try:
+            form.columnconfigure(0, weight=0)
+            form.columnconfigure(1, weight=1)
+        except Exception:
+            pass
+    if hasattr(form, "rowconfigure"):
+        try:
+            form.rowconfigure(0, weight=1)
+        except Exception:
+            pass
+
+    return form
+
+
+def grid_labeled_widget(
+    form: Any,
+    *,
+    row: int,
+    label_widget: Any,
+    field_widget: Any,
+    padx: int | tuple[int, int] = COL_PADX,
+    pady: int | tuple[int, int] = ROW_PADY,
+    label_sticky: str = "e",
+    field_sticky: str = "we",
+):
+    """Grid a label/field pair with consistent padding and stretch behavior."""
+
+    grid_and_configure(
+        label_widget,
+        form,
+        row=row,
+        column=0,
+        padx=padx,
+        pady=pady,
+        sticky=label_sticky,
+        row_weight=0,
+        column_weight=0,
+    )
+    grid_and_configure(
+        field_widget,
+        form,
+        row=row,
+        column=1,
+        padx=padx,
+        pady=pady,
+        sticky=field_sticky,
+        row_weight=0,
+        column_weight=1,
+    )
+    return field_widget
+
+
 def grid_section(
     section: Any,
     parent: Any,
