@@ -13,6 +13,7 @@ from ui.frames.utils import (
     ensure_grid_support,
     grid_and_configure,
 )
+from ui.layout.responsive_grid import responsive_grid
 from validation_badge import badge_registry
 from theme_manager import ThemeManager
 from validators import FieldValidator, validate_case_id, validate_required_text
@@ -34,15 +35,12 @@ class CaseFrame:
     def __init__(self, owner, parent):
         self.owner = owner
         self.frame = ttk.Frame(parent)
-        grid_and_configure(self.frame, parent, padx=5, pady=5)
+        grid_and_configure(self.frame, parent, padx=COL_PADX, pady=ROW_PADY)
         self.frame.grid_rowconfigure(0, weight=1)
         self.frame.grid_columnconfigure(0, weight=1)
         case_frame = ttk.LabelFrame(self.frame)
-        grid_and_configure(case_frame, self.frame, padx=5, pady=5, sticky="nsew")
+        grid_and_configure(case_frame, self.frame, padx=COL_PADX, pady=ROW_PADY, sticky="nsew")
         ensure_grid_support(case_frame)
-        case_frame.columnconfigure(1, weight=1)
-        case_frame.columnconfigure(3, weight=1)
-        case_frame.columnconfigure(5, weight=1)
         self.badges = badge_registry
         owner._case_inputs = {}
         self._build_case_fields(case_frame)
@@ -54,20 +52,20 @@ class CaseFrame:
         if hasattr(container, "columnconfigure"):
             container.columnconfigure(0, weight=1)
         widget = widget_factory(container)
-        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
+        widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), sticky="we")
         badge = self.badges.claim(key, container, row=0, column=1)
         return container, widget, badge
 
 
     def _build_case_fields(self, frame) -> None:
         owner = self.owner
-        # Row 0: Número de caso y tipo de informe
+        pairs: list[tuple[ttk.Widget, ttk.Widget]] = []
+
         case_id_label = build_required_label(
             frame,
             "Número de caso (AAAA-XXXX):",
             tooltip_register=owner.register_tooltip,
         )
-        case_id_label.grid(row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         id_container, id_entry, _ = self._make_badged_field(
             frame,
             "case_id",
@@ -75,17 +73,16 @@ class CaseFrame:
                 parent, textvariable=owner.id_caso_var, width=20, style=ENTRY_STYLE
             ),
         )
-        id_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(
             id_entry, "Formato AAAA-XXXX. Se usa para detectar duplicados."
         )
+        pairs.append((case_id_label, id_container))
 
         tipo_label = build_required_label(
             frame,
             "Tipo de informe:",
             tooltip_register=owner.register_tooltip,
         )
-        tipo_label.grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         tipo_container, tipo_cb, _ = self._make_badged_field(
             frame,
             "case_tipo",
@@ -98,17 +95,15 @@ class CaseFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
-        tipo_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(tipo_cb, "Selecciona el tipo de reporte a generar.")
         tipo_cb.set('')
+        pairs.append((tipo_label, tipo_container))
 
-        # Row 1: Categorías
         cat1_label = build_required_label(
             frame,
             "Categoría nivel 1:",
             tooltip_register=owner.register_tooltip,
         )
-        cat1_label.grid(row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         cat1_container, cat1_cb, _ = self._make_badged_field(
             frame,
             "case_cat1",
@@ -121,18 +116,17 @@ class CaseFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
-        cat1_container.grid(row=1, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(cat1_cb, "Selecciona la categoría principal del caso.")
         cat1_cb.bind("<<ComboboxSelected>>", lambda _e: owner.on_case_cat1_change())
         cat1_cb.bind("<FocusOut>", lambda _e: owner.on_case_cat1_change())
         cat1_cb.set('')
+        pairs.append((cat1_label, cat1_container))
 
         cat2_label = build_required_label(
             frame,
             "Categoría nivel 2:",
             tooltip_register=owner.register_tooltip,
         )
-        cat2_label.grid(row=1, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         cat2_container, case_cat2_cb, _ = self._make_badged_field(
             frame,
             "case_cat2",
@@ -145,7 +139,6 @@ class CaseFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
-        cat2_container.grid(row=1, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(case_cat2_cb, "Selecciona la subcategoría del caso.")
 
         def _handle_cat2_event(_event=None):
@@ -161,29 +154,15 @@ class CaseFrame:
         case_cat2_cb.bind("<FocusOut>", _handle_cat2_event)
         owner.case_cat2_cb = case_cat2_cb
         case_cat2_cb.set('')
-
-        # Row 2: Modalidad, canal y proceso + centro de costos
-        taxonomy_row = ttk.Frame(frame)
-        ensure_grid_support(taxonomy_row)
-        for column in (1, 3, 5):
-            taxonomy_row.columnconfigure(column, weight=1)
-        taxonomy_row.grid(
-            row=2,
-            column=0,
-            columnspan=6,
-            padx=COL_PADX,
-            pady=ROW_PADY,
-            sticky="nsew",
-        )
+        pairs.append((cat2_label, cat2_container))
 
         modalidad_label = build_required_label(
-            taxonomy_row,
+            frame,
             "Modalidad:",
             tooltip_register=owner.register_tooltip,
         )
-        modalidad_label.grid(row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         mod_container, case_mod_cb, _ = self._make_badged_field(
-            taxonomy_row,
+            frame,
             "case_mod",
             lambda parent: ttk.Combobox(
                 parent,
@@ -194,19 +173,18 @@ class CaseFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
-        mod_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(case_mod_cb, "Selecciona la modalidad específica.")
         owner.case_mod_cb = case_mod_cb
         case_mod_cb.set('')
+        pairs.append((modalidad_label, mod_container))
 
         canal_label = build_required_label(
-            taxonomy_row,
+            frame,
             "Canal:",
             tooltip_register=owner.register_tooltip,
         )
-        canal_label.grid(row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         canal_container, canal_cb, _ = self._make_badged_field(
-            taxonomy_row,
+            frame,
             "case_canal",
             lambda parent: ttk.Combobox(
                 parent,
@@ -217,18 +195,17 @@ class CaseFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
-        canal_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(canal_cb, "Canal donde se originó el evento.")
         canal_cb.set('')
+        pairs.append((canal_label, canal_container))
 
         proc_label = build_required_label(
-            taxonomy_row,
+            frame,
             "Proceso impactado:",
             tooltip_register=owner.register_tooltip,
         )
-        proc_label.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         proc_container, proc_cb, _ = self._make_badged_field(
-            taxonomy_row,
+            frame,
             "case_proc",
             lambda parent: ttk.Combobox(
                 parent,
@@ -239,18 +216,15 @@ class CaseFrame:
                 style=COMBOBOX_STYLE,
             ),
         )
-        proc_container.grid(row=0, column=5, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         owner.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
         proc_cb.set('')
+        pairs.append((proc_label, proc_container))
 
         cost_center_label = ttk.Label(
-            taxonomy_row, text="Centro de costos del caso (; separados):"
-        )
-        cost_center_label.grid(
-            row=1, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            frame, text="Centro de costos del caso (; separados):"
         )
         centro_container, centro_costo_entry, _ = self._make_badged_field(
-            taxonomy_row,
+            frame,
             "case_centro_costo",
             lambda parent: ttk.Entry(
                 parent,
@@ -259,66 +233,36 @@ class CaseFrame:
                 style=ENTRY_STYLE,
             ),
         )
-        centro_container.grid(
-            row=1, column=1, columnspan=5, padx=COL_PADX, pady=ROW_PADY, sticky="we"
-        )
         owner.register_tooltip(
             centro_costo_entry,
             "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
         )
+        pairs.append((cost_center_label, centro_container))
 
-        # Row 3: Fechas
-        dates_row = ttk.Frame(frame)
-        ensure_grid_support(dates_row)
-        dates_row.columnconfigure(1, weight=1)
-        dates_row.columnconfigure(3, weight=1)
-        dates_row.grid(
-            row=3, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="nsew"
-        )
         occurrence_label = build_required_label(
-            dates_row,
+            frame,
             "Ocurrencia:\n(YYYY-MM-DD)",
             tooltip_register=owner.register_tooltip,
         )
-        occurrence_label.grid(
-            row=0,
-            column=0,
-            padx=(0, COL_PADX // 2),
-            pady=(ROW_PADY // 2, ROW_PADY // 2),
-            sticky="e",
-        )
         occ_container, fecha_case_entry, _ = self._make_badged_field(
-            dates_row,
+            frame,
             "case_fecha_oc",
             lambda parent: create_date_entry(
                 parent, textvariable=owner.fecha_caso_var, width=16, style=ENTRY_STYLE
             ),
         )
-        occ_container.grid(
-            row=0,
-            column=1,
-            padx=(0, COL_PADX),
-            pady=(ROW_PADY // 2, ROW_PADY // 2),
-            sticky="we",
-        )
         owner.register_tooltip(
             fecha_case_entry, "Fecha en que se originó el caso a nivel general."
         )
+        pairs.append((occurrence_label, occ_container))
 
         desc_label = build_required_label(
-            dates_row,
+            frame,
             "Descubrimiento:\n(YYYY-MM-DD)",
             tooltip_register=owner.register_tooltip,
         )
-        desc_label.grid(
-            row=0,
-            column=2,
-            padx=(0, COL_PADX // 2),
-            pady=(ROW_PADY // 2, ROW_PADY // 2),
-            sticky="e",
-        )
         desc_container, fecha_desc_entry, _ = self._make_badged_field(
-            dates_row,
+            frame,
             "case_fecha_desc",
             lambda parent: create_date_entry(
                 parent,
@@ -327,45 +271,18 @@ class CaseFrame:
                 style=ENTRY_STYLE,
             ),
         )
-        desc_container.grid(
-            row=0,
-            column=3,
-            padx=(0, COL_PADX),
-            pady=(ROW_PADY // 2, ROW_PADY // 2),
-            sticky="we",
-        )
         owner.register_tooltip(
             fecha_desc_entry,
             "Fecha en que se detectó el caso. Debe ser posterior a la ocurrencia y no futura.",
         )
+        pairs.append((desc_label, desc_container))
 
-        # Row 4: Investigador principal
-        investigator_row = ttk.Frame(frame)
-        ensure_grid_support(investigator_row)
-        for column in (1, 3):
-            investigator_row.columnconfigure(column, weight=1)
-        investigator_row.grid(
-            row=4, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="nsew"
-        )
-        ttk.Label(investigator_row, text="Matrícula:").grid(
-            row=0,
-            column=0,
-            padx=(0, COL_PADX // 2),
-            pady=(0, ROW_PADY // 2),
-            sticky="e",
-        )
+        investigator_label = ttk.Label(frame, text="Matrícula:")
         investigator_entry = ttk.Entry(
-            investigator_row,
+            frame,
             textvariable=owner.investigator_id_var,
             width=16,
             style=ENTRY_STYLE,
-        )
-        investigator_entry.grid(
-            row=0,
-            column=1,
-            padx=(0, COL_PADX),
-            pady=(0, ROW_PADY // 2),
-            sticky="we",
         )
         investigator_entry.bind(
             "<FocusOut>", lambda _e: owner._autofill_investigator(show_errors=True)
@@ -374,54 +291,33 @@ class CaseFrame:
             investigator_entry,
             "Ingresa la matrícula del investigador principal (letra + 5 dígitos) para autocompletar nombre y cargo.",
         )
+        pairs.append((investigator_label, investigator_entry))
 
-        ttk.Label(investigator_row, text="Nombre y apellidos:").grid(
-            row=0,
-            column=2,
-            padx=(0, COL_PADX // 2),
-            pady=(0, ROW_PADY // 2),
-            sticky="e",
-        )
+        investigator_name_label = ttk.Label(frame, text="Nombre y apellidos:")
         investigator_name = ttk.Entry(
-            investigator_row,
+            frame,
             textvariable=owner.investigator_nombre_var,
             state="readonly",
             style=ENTRY_STYLE,
-        )
-        investigator_name.grid(
-            row=0,
-            column=3,
-            padx=(0, COL_PADX),
-            pady=(0, ROW_PADY // 2),
-            sticky="we",
         )
         owner.register_tooltip(
             investigator_name,
             "Nombre del investigador obtenido automáticamente desde team_details.csv.",
         )
+        pairs.append((investigator_name_label, investigator_name))
 
-        ttk.Label(investigator_row, text="Puesto:").grid(
-            row=0,
-            column=4,
-            padx=(0, COL_PADX // 2),
-            pady=(0, ROW_PADY // 2),
-            sticky="e",
-        )
+        investigator_role_label = ttk.Label(frame, text="Puesto:")
         investigator_role = ttk.Label(
-            investigator_row,
+            frame,
             textvariable=owner.investigator_cargo_var,
             anchor="w",
-        )
-        investigator_role.grid(
-            row=0,
-            column=5,
-            padx=(0, COL_PADX),
-            pady=(0, ROW_PADY // 2),
-            sticky="we",
         )
         owner.register_tooltip(
             investigator_role, "Cargo autocompletado según la matrícula del investigador."
         )
+        pairs.append((investigator_role_label, investigator_role))
+
+        responsive_grid(frame, pairs)
 
         owner._case_inputs.update(
             {
