@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import ttk
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable
 
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
@@ -44,17 +44,25 @@ class _FallbackLabel:
         self._config = {"textvariable": textvariable, **kwargs}
         self._bindings: list = []
         self._mapped = False
+        self._manager = ""
+        self._geometry_options: dict = {}
 
     def grid(self, *args, **kwargs):  # noqa: ANN001
         self._mapped = True
+        self._manager = "grid"
+        self._geometry_options = dict(kwargs)
         self._config.update(kwargs)
 
     def pack(self, *args, **kwargs):  # noqa: ANN001
         self._mapped = True
+        self._manager = "pack"
+        self._geometry_options = dict(kwargs)
         self._config.update(kwargs)
 
     def place(self, *args, **kwargs):  # noqa: ANN001
         self._mapped = True
+        self._manager = "place"
+        self._geometry_options = dict(kwargs)
         self._config.update(kwargs)
 
     def grid_remove(self, *args, **kwargs):  # noqa: ANN001
@@ -70,7 +78,16 @@ class _FallbackLabel:
         return self._mapped
 
     def winfo_manager(self):  # noqa: ANN001
-        return "grid" if self._mapped else ""
+        return self._manager if self._mapped else ""
+
+    def grid_info(self):
+        return self._geometry_options
+
+    def pack_info(self):
+        return self._geometry_options
+
+    def place_info(self):
+        return self._geometry_options
 
     def bind(self, *args, **kwargs):  # noqa: ANN001
         self._bindings.append((args, kwargs))
@@ -188,6 +205,8 @@ class ValidationBadge:
         self._display_mode = initial_display if initial_display in {"short", "full", "emoji"} else "short"
         self._message_full = ""
         self._message_short = ""
+        self._geometry_manager: str | None = None
+        self._geometry_options: dict[str, Any] | None = None
         try:
             self._text_var = self._tk.StringVar()
         except Exception:
@@ -221,16 +240,23 @@ class ValidationBadge:
         return self._label
 
     def grid(self, *args, **kwargs):  # noqa: ANN001
-        return self._label.grid(*args, **kwargs)
+        result = self._label.grid(*args, **kwargs)
+        self._remember_geometry()
+        return result
 
     def pack(self, *args, **kwargs):  # noqa: ANN001
-        return self._label.pack(*args, **kwargs)
+        result = self._label.pack(*args, **kwargs)
+        self._remember_geometry()
+        return result
 
     def place(self, *args, **kwargs):  # noqa: ANN001
-        return self._label.place(*args, **kwargs)
+        result = self._label.place(*args, **kwargs)
+        self._remember_geometry()
+        return result
 
     def hide(self) -> None:
-        manager = self._label.winfo_manager()
+        self._remember_geometry()
+        manager = self._geometry_manager or self._label.winfo_manager()
         if manager == "grid":
             remover = getattr(self._label, "grid_remove", None)
         elif manager == "pack":
@@ -241,15 +267,21 @@ class ValidationBadge:
             remover()
 
     def show(self) -> None:
-        manager = self._label.winfo_manager()
+        manager = self._geometry_manager or self._label.winfo_manager()
         if manager == "grid":
             shower = getattr(self._label, "grid", None)
         elif manager == "pack":
             shower = getattr(self._label, "pack", None)
+        elif manager == "place":
+            shower = getattr(self._label, "place", None)
         else:
             shower = getattr(self._label, "grid", None) or getattr(self._label, "pack", None)
         if callable(shower):
-            shower()
+            options = self._geometry_options or {}
+            if manager in {"grid", "pack", "place"} and options:
+                shower(**options)
+            else:
+                shower()
 
     def update_state(
         self,
@@ -375,6 +407,23 @@ class ValidationBadge:
 
         self._configured_styles.clear()
         self._apply_render()
+
+    def _remember_geometry(self) -> None:
+        manager = self._label.winfo_manager()
+        if manager == "grid":
+            info_fn = getattr(self._label, "grid_info", None)
+        elif manager == "pack":
+            info_fn = getattr(self._label, "pack_info", None)
+        elif manager == "place":
+            info_fn = getattr(self._label, "place_info", None)
+        else:
+            return
+
+        if callable(info_fn):
+            info = info_fn()
+            if info is not None:
+                self._geometry_manager = manager
+                self._geometry_options = dict(info)
 
 
 class ValidationBadgeRegistry:

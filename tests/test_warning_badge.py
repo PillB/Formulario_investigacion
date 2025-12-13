@@ -32,13 +32,25 @@ class StubWidget:
         self._mapped = False
         self._bindings = []
         self._config = {}
+        self._manager = ""
+        self._geometry_options = {}
 
     def grid(self, *args, **kwargs):
         self._mapped = True
+        self._manager = "grid"
+        self._geometry_options = dict(kwargs)
         return None
 
     def pack(self, *args, **kwargs):
         self._mapped = True
+        self._manager = "pack"
+        self._geometry_options = dict(kwargs)
+        return None
+
+    def place(self, *args, **kwargs):
+        self._mapped = True
+        self._manager = "place"
+        self._geometry_options = dict(kwargs)
         return None
 
     def grid_remove(self, *args, **kwargs):
@@ -53,7 +65,16 @@ class StubWidget:
         return self._mapped
 
     def winfo_manager(self):
-        return "grid" if self._mapped else ""
+        return self._manager if self._mapped else ""
+
+    def grid_info(self):
+        return self._geometry_options
+
+    def pack_info(self):
+        return self._geometry_options
+
+    def place_info(self):
+        return self._geometry_options
 
     def bind(self, *args, **kwargs):
         self._bindings.append(SimpleNamespace(args=args, kwargs=kwargs))
@@ -148,3 +169,16 @@ def test_validation_badge_hide_and_show_preserves_mapping():
 
     badge.show()
     assert badge.winfo_ismapped() is True
+
+
+def test_validation_badge_restores_geometry_options():
+    badge = ValidationBadge(StubWidget(), default_state="warning", tk_module=TK, ttk_module=TTK)
+    badge.grid(row=3, column=4, padx=5, pady=6, sticky="nsew")
+
+    initial = badge.widget.grid_info()
+    badge.hide()
+    badge.show()
+    restored = badge.widget.grid_info()
+
+    for key in ("row", "column", "padx", "pady", "sticky"):
+        assert restored.get(key) == initial.get(key)
