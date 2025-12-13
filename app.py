@@ -2658,6 +2658,36 @@ class FraudCaseApp:
             return
         self._scrollable_containers.append(container)
 
+    def _compute_scrollable_max_height(self, scrollable):
+        if scrollable is None:
+            return None
+
+        try:
+            scrollable.update_idletasks()
+        except Exception:
+            pass
+
+        max_height = None
+        root = getattr(self, "root", None)
+        if root is not None:
+            try:
+                root.update_idletasks()
+                window_height = root.winfo_height() or root.winfo_reqheight()
+                if window_height:
+                    max_height = int(window_height * 3)
+            except Exception:
+                max_height = None
+
+        if max_height is None:
+            inner = getattr(scrollable, "_scroll_inner", None)
+            if inner is not None:
+                try:
+                    max_height = inner.winfo_reqheight()
+                except Exception:
+                    max_height = None
+
+        return max_height
+
     def _refresh_scrollable(self, container, *, max_height: int | None = None):
         if container is None:
             return
@@ -4233,28 +4263,9 @@ class FraudCaseApp:
             pass
         self._clients_detail_visible = True
         self._apply_clients_row_weights(expanded=True)
-        self._refresh_scrollable(getattr(self, "clients_scrollable", None))
-        if getattr(self, "clients_scrollable", None):
-            scrollable = self.clients_scrollable
-
-            def _resize_clients_scrollable():
-                max_height = None
-                root = getattr(self, "root", None)
-                if root is not None:
-                    try:
-                        root.update_idletasks()
-                        window_height = root.winfo_height() or root.winfo_reqheight()
-                        if window_height:
-                            max_height = int(window_height * 3)
-                    except Exception:
-                        pass
-
-                resize_scrollable_to_content(scrollable, max_height=max_height)
-
-            try:
-                scrollable.after_idle(_resize_clients_scrollable)
-            except Exception:
-                _resize_clients_scrollable()
+        scrollable = getattr(self, "clients_scrollable", None)
+        max_height = self._compute_scrollable_max_height(scrollable)
+        self._refresh_scrollable(scrollable, max_height=max_height)
         if getattr(self, "clients_toggle_btn", None):
             try:
                 self.clients_toggle_btn.config(text="Ocultar formulario")
@@ -4460,45 +4471,8 @@ class FraudCaseApp:
         self._team_detail_visible = True
         self._set_team_row_weights(detail_visible=True)
         scrollable = getattr(self, "team_scrollable", None)
-
-        def _refresh_after_idle():
-            max_height = None
-            try:
-                window_height = int(self.root.winfo_height())
-            except Exception:
-                window_height = 0
-            if scrollable is not None:
-                try:
-                    scrollable.update_idletasks()
-                except Exception:
-                    pass
-                inner = getattr(scrollable, "_scroll_inner", None)
-                required_height = None
-                if inner is not None:
-                    try:
-                        required_height = int(inner.winfo_reqheight())
-                    except Exception:
-                        required_height = None
-                if window_height:
-                    allowance = window_height * 3
-                    max_height = (
-                        min(required_height, allowance)
-                        if required_height is not None
-                        else allowance
-                    )
-                elif required_height is not None:
-                    max_height = required_height
-
-            resize_scrollable_to_content(scrollable, max_height=max_height)
-            self._refresh_scrollable(scrollable, max_height=max_height)
-
-        if scrollable is not None:
-            try:
-                self.root.after_idle(_refresh_after_idle)
-            except tk.TclError:
-                _refresh_after_idle()
-        else:
-            self._refresh_scrollable(scrollable)
+        max_height = self._compute_scrollable_max_height(scrollable)
+        self._refresh_scrollable(scrollable, max_height=max_height)
         if getattr(self, "team_toggle_btn", None):
             try:
                 self.team_toggle_btn.config(text="Ocultar formulario")
@@ -4721,29 +4695,9 @@ class FraudCaseApp:
             pass
         self._products_detail_visible = True
         self._apply_products_row_weights(expanded=True)
-
         scrollable = getattr(self, "products_scrollable", None)
-        self._refresh_scrollable(scrollable)
-        if scrollable is not None:
-
-            def _resize_products_scrollable():
-                max_height = None
-                root = getattr(self, "root", None)
-                if root is not None:
-                    try:
-                        root.update_idletasks()
-                        window_height = root.winfo_height() or root.winfo_reqheight()
-                        if window_height:
-                            max_height = int(window_height * 3)
-                    except Exception:
-                        pass
-
-                resize_scrollable_to_content(scrollable, max_height=max_height)
-
-            try:
-                scrollable.after_idle(_resize_products_scrollable)
-            except Exception:
-                _resize_products_scrollable()
+        max_height = self._compute_scrollable_max_height(scrollable)
+        self._refresh_scrollable(scrollable, max_height=max_height)
 
         if getattr(self, "products_toggle_btn", None):
             try:

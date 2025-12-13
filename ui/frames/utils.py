@@ -913,6 +913,7 @@ def resize_scrollable_to_content(container: Any, *, max_height: int | None = Non
 
     def _perform_resize():
         setattr(container, "_resize_scroll_pending", False)
+        setattr(container, "_resize_scroll_job", None)
 
         canvas = getattr(container, "_scroll_canvas", None)
         inner = getattr(container, "_scroll_inner", None)
@@ -921,6 +922,7 @@ def resize_scrollable_to_content(container: Any, *, max_height: int | None = Non
 
         try:
             required_height = inner.winfo_reqheight()
+            child_count = len(inner.winfo_children())
         except Exception:
             return
 
@@ -944,21 +946,39 @@ def resize_scrollable_to_content(container: Any, *, max_height: int | None = Non
 
         target_height = required_height if not available_height else min(required_height, available_height)
 
+        last_height = getattr(container, "_last_scroll_required_height", None)
+        last_child_count = getattr(container, "_last_scroll_child_count", None)
+        setattr(container, "_last_scroll_required_height", required_height)
+        setattr(container, "_last_scroll_child_count", child_count)
+
+        height_delta = None if last_height is None else abs(required_height - last_height)
+        structural_change = last_child_count is None or child_count != last_child_count
+        significant_height_change = height_delta is None or height_delta >= 8
+        should_resize_height = structural_change or significant_height_change
+
         try:
-            canvas.configure(height=target_height)
+            if should_resize_height:
+                canvas.configure(height=target_height)
             canvas.configure(scrollregion=canvas.bbox("all"))
-            canvas.yview_moveto(0)
+            if structural_change:
+                canvas.yview_moveto(0)
         except Exception:
             return
 
-    if getattr(container, "_resize_scroll_pending", False):
-        return
+    pending_job = getattr(container, "_resize_scroll_job", None)
+    canceller = getattr(container, "after_cancel", None)
+    if pending_job and callable(canceller):
+        try:
+            canceller(pending_job)
+        except Exception:
+            pass
 
     setattr(container, "_resize_scroll_pending", True)
     scheduler = getattr(container, "after_idle", None)
     if callable(scheduler):
         try:
-            scheduler(_perform_resize)
+            job_id = scheduler(_perform_resize)
+            setattr(container, "_resize_scroll_job", job_id)
             return
         except Exception:
             pass
