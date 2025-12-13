@@ -51,6 +51,31 @@ class _ScrollableWidget(_Bindable):
         return self._parent if name == self._parent else self
 
 
+class _ComboboxStub(_Bindable):
+    def __init__(self, parent=None):
+        super().__init__()
+        self._parent = parent
+        self.values = ["uno", "dos", "tres"]
+        self.selection_index = 1
+
+    def winfo_parent(self):
+        return self._parent or ""
+
+    def nametowidget(self, name):  # noqa: ANN001
+        return self._parent if name == self._parent else self
+
+    def set(self, value):  # noqa: ANN001
+        if value in self.values:
+            self.selection_index = self.values.index(value)
+
+    def get(self):  # noqa: ANN001
+        return self.values[self.selection_index]
+
+    def apply_default_cycle(self, handler_result):
+        if handler_result != "break":
+            self.selection_index = (self.selection_index + 1) % len(self.values)
+
+
 def test_mousewheel_uses_minimum_step_for_small_delta():
     canvas = _CanvasStub()
     target = _Bindable()
@@ -95,6 +120,48 @@ def test_global_binder_scrolls_parent_canvas_on_boundary():
     handler(SimpleNamespace(widget=boundary_widget, delta=-240))
 
     assert canvas.scroll_calls == [(2, "units")]
+
+
+def test_combobox_scroll_forwarding_blocks_option_cycle(monkeypatch):
+    canvas = _CanvasStub()
+    target = _Bindable()
+    combobox = _ComboboxStub(parent=target)
+    target.children.append(combobox)
+
+    monkeypatch.setattr(utils.ttk, "Combobox", _ComboboxStub)
+
+    utils._enable_mousewheel_scrolling(canvas, target)
+
+    combobox.bound["<Enter>"](SimpleNamespace())
+    handler = combobox.bound["<MouseWheel>"]
+    previous_value = combobox.get()
+    result = handler(SimpleNamespace(widget=combobox, delta=-120))
+    combobox.apply_default_cycle(result)
+
+    assert canvas.scroll_calls == [(1, "units")]
+    assert combobox.get() == previous_value
+
+
+def test_global_binder_comboboxes_forward_scroll(monkeypatch):
+    root = _CanvasStub()
+    canvas = _CanvasStub()
+    target = _Bindable()
+    combobox = _ComboboxStub(parent=target)
+    target.children.append(combobox)
+
+    monkeypatch.setattr(utils.ttk, "Combobox", _ComboboxStub)
+
+    binder = utils.GlobalScrollBinding(root)
+    binder.register_tab_canvas("tab-combo", canvas, target)
+
+    combobox.bound["<Enter>"](SimpleNamespace())
+    handler = combobox.bound["<MouseWheel>"]
+    initial_value = combobox.get()
+    result = handler(SimpleNamespace(widget=combobox, delta=-240))
+    combobox.apply_default_cycle(result)
+
+    assert canvas.scroll_calls == [(2, "units")]
+    assert combobox.get() == initial_value
 
 
 def test_scrollable_container_wires_scrollbar_and_mousewheel(monkeypatch):
