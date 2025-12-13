@@ -21,6 +21,16 @@ class _CanvasStub(_Bindable):
         self.bound_all = {}
         self.scroll_calls = []
 
+    def after_idle(self, func=None):  # noqa: D401, ANN001
+        """Run callbacks immediately for idle jobs during tests."""
+        if callable(func):
+            func()
+        return "idle-job"
+
+    def after_cancel(self, _job):  # noqa: D401, ANN001
+        """Stub cancellation for idle jobs."""
+        return None
+
     def winfo_parent(self):
         return ""
 

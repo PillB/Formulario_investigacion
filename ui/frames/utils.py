@@ -1201,6 +1201,9 @@ class GlobalScrollBinding:
         self._hover_tab: str | None = None
         self._active_tab: str | None = None
         self._bound_targets: set[int] = set()
+        self._processed_children: dict[int, int] = {}
+        self._tab_scan_jobs: dict[str, str | None] = {}
+        self._tab_scan_roots: dict[str, set[Any]] = {}
         self._is_bound = False
 
     def bind_to_root(self) -> None:
@@ -1218,8 +1221,9 @@ class GlobalScrollBinding:
         if normalized is None:
             return
         self._tab_canvases[normalized] = canvas
-        self._bind_hover_targets(canvas, normalized)
-        self._bind_hover_targets(target, normalized)
+        self._register_scan_root(canvas, normalized)
+        self._register_scan_root(target, normalized)
+        self._queue_tab_scan(normalized)
 
     def activate_tab(self, tab_id) -> None:
         normalized = self._normalize_tab_id(tab_id)
@@ -1233,32 +1237,81 @@ class GlobalScrollBinding:
         except Exception:
             return None
 
-    def _bind_hover_targets(self, widget: Any, tab_id: str) -> None:
+    def _register_scan_root(self, widget: Any, tab_id: str) -> None:
         if widget is None:
             return
+        roots = self._tab_scan_roots.setdefault(tab_id, set())
+        roots.add(widget)
+        try:
+            widget.bind("<Configure>", lambda _e, tid=tab_id: self._queue_tab_scan(tid), add="+")
+        except Exception:
+            return
+
+    def _queue_tab_scan(self, tab_id: str) -> None:
+        if not tab_id:
+            return
+        if self._tab_scan_jobs.get(tab_id):
+            return
+        try:
+            self._tab_scan_jobs[tab_id] = self.root.after_idle(
+                lambda tid=tab_id: self._run_tab_scan(tid)
+            )
+        except Exception:
+            self._run_tab_scan(tab_id)
+
+    def _run_tab_scan(self, tab_id: str) -> None:
+        self._tab_scan_jobs[tab_id] = None
+        roots = self._tab_scan_roots.get(tab_id, set())
+        pending_again = False
+        for root in list(roots):
+            if self._bind_hover_targets(root, tab_id):
+                pending_again = True
+        if pending_again:
+            self._queue_tab_scan(tab_id)
+
+    def _bind_hover_targets(self, widget: Any, tab_id: str) -> bool:
+        if widget is None:
+            return False
         widget_id = id(widget)
-        already_bound = widget_id in self._bound_targets
-        if not already_bound:
+        newly_bound = False
+        if widget_id not in self._bound_targets:
             self._bound_targets.add(widget_id)
+            newly_bound = True
             widget.bind(
                 "<Enter>", lambda _e, tid=tab_id: self._set_hover_tab(tid), add="+"
             )
             widget.bind(
                 "<Leave>", lambda _e, tid=tab_id: self._clear_hover_tab(tid), add="+"
             )
-        _bind_combobox_mousewheel_forwarding(
-            widget, fallback_canvas=self._tab_canvases.get(tab_id)
-        )
-        children_fn = getattr(widget, "winfo_children", None)
-        if callable(children_fn):
-            for child in children_fn():
-                self._bind_hover_targets(child, tab_id)
-        if not already_bound:
-            widget.bind(
-                "<Configure>",
-                lambda _e, source=widget, tid=tab_id: self._bind_hover_targets(source, tid),
-                add="+",
+            _bind_combobox_mousewheel_forwarding(
+                widget, fallback_canvas=self._tab_canvases.get(tab_id)
             )
+
+        children_fn = getattr(widget, "winfo_children", None)
+        children = []
+        if callable(children_fn):
+            try:
+                children = list(children_fn())
+            except Exception:
+                children = []
+        previous_count = self._processed_children.get(widget_id, 0)
+        has_new_children = len(children) > previous_count
+        self._processed_children[widget_id] = len(children)
+
+        if not children:
+            return newly_bound
+
+        should_traverse = has_new_children or any(
+            id(child) not in self._bound_targets for child in children
+        )
+        if not should_traverse:
+            return newly_bound
+
+        for child in children:
+            if self._bind_hover_targets(child, tab_id):
+                newly_bound = True
+
+        return newly_bound
 
     def _set_hover_tab(self, tab_id: str) -> None:
         self._hover_tab = tab_id
