@@ -87,6 +87,7 @@ class ClientFrame:
         self.section = create_collapsible_card(
             parent,
             title="",
+            open=False,
             on_toggle=lambda _section: self._sync_section_title(),
             log_error=lambda exc: log_event(
                 "validacion",
