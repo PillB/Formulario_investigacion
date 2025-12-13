@@ -353,6 +353,27 @@ def _patch_team_module(monkeypatch):
 
     RecordingValidator = _make_recording_validator()
 
+    class _DummyBadgeRegistry:
+        def __init__(self):
+            self.claimed_keys: list[str] = []
+            self.updated: dict[str, str | None] = {}
+
+        def claim(self, key, _parent, *, row, column, pending_text=None, success_text=None):
+            self.claimed_keys.append(key)
+            return SimpleNamespace(
+                grid=lambda *args, **kwargs: None,
+                configure=lambda **kwargs: None,
+                set_neutral=lambda *_args, **_kwargs: None,
+            )
+
+        def wrap_validation(self, key, validate_fn, *, success_text=None, pending_text=None):
+            def _wrapped():
+                message = validate_fn()
+                self.updated[key] = None if message is None else message
+                return message
+
+            return _wrapped
+
     class _TkStub:
         StringVar = DummyVar
         BooleanVar = DummyVar
@@ -376,6 +397,7 @@ def _patch_team_module(monkeypatch):
     monkeypatch.setattr(team, "ttk", _TtkStub())
     monkeypatch.setattr(team, "messagebox", messagebox_stub)
     monkeypatch.setattr(team, "FieldValidator", RecordingValidator)
+    monkeypatch.setattr(team, "badge_registry", _DummyBadgeRegistry())
     return team, RecordingValidator
 
 
@@ -2028,6 +2050,62 @@ def test_team_frame_inline_agency_validation_clears_when_optional(monkeypatch):
 
     assert nombre_validator.last_custom_error is None
     assert codigo_validator.last_custom_error is None
+
+
+def test_team_badges_are_scoped_per_collaborator(monkeypatch):
+    team_module, RecordingValidator = _patch_team_module(monkeypatch)
+    badge_registry = team_module.badge_registry
+
+    frame_one = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=0,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+    frame_two = team_module.TeamMemberFrame(
+        parent=_UIStubWidget(),
+        idx=1,
+        remove_callback=lambda _frame: None,
+        update_team_options=lambda: None,
+        team_lookup={},
+        logs=[],
+        tooltip_register=lambda *_args, **_kwargs: None,
+    )
+
+    name_validator_one = _find_validator_instance(
+        RecordingValidator.instances, "Colaborador 1 - Nombres"
+    )
+    apellido_validator_two = _find_validator_instance(
+        RecordingValidator.instances, "Colaborador 2 - Apellidos"
+    )
+
+    assert name_validator_one is not None
+    assert apellido_validator_two is not None
+
+    frame_two.nombres_var.set("Jane")
+
+    initial_error = apellido_validator_two.validate_callback()
+    first_error = name_validator_one.validate_callback()
+
+    assert first_error is not None
+
+    assert len(badge_registry.claimed_keys) == len(set(badge_registry.claimed_keys))
+
+    first_name_key = "team0_team_nombres"
+    second_lastname_key = "team1_team_apellidos"
+
+    assert badge_registry.updated[first_name_key]
+    assert badge_registry.updated[second_lastname_key]
+
+    frame_one.nombres_var.set("John")
+    cleared_error = name_validator_one.validate_callback()
+
+    assert cleared_error is None
+    assert badge_registry.updated[first_name_key] is None
+    assert badge_registry.updated[second_lastname_key] == initial_error
 
 
 def test_location_validation_marks_missing_selections(monkeypatch):
