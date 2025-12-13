@@ -137,6 +137,18 @@ def _find_validator(label):
     return None
 
 
+def test_risk_frame_section_starts_collapsed_and_toggles():
+    frame = _build_risk_frame()
+
+    assert frame.section.is_open is False
+
+    frame.section.toggle()
+    assert frame.section.is_open is True
+
+    frame.section.toggle()
+    assert frame.section.is_open is False
+
+
 def test_risk_frame_starts_with_empty_id():
     frame = _build_risk_frame()
 

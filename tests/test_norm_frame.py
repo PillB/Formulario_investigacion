@@ -130,6 +130,18 @@ def _find_validator(label_fragment):
     return None
 
 
+def test_norm_frame_section_starts_collapsed_and_toggles():
+    frame = _build_norm_frame()
+
+    assert frame.section.is_open is False
+
+    frame.section.toggle()
+    assert frame.section.is_open is True
+
+    frame.section.toggle()
+    assert frame.section.is_open is False
+
+
 def test_norm_frame_fecha_validator_requires_value():
     frame = _build_norm_frame()
 
