@@ -966,6 +966,44 @@ def resize_scrollable_to_content(container: Any, *, max_height: int | None = Non
     _perform_resize()
 
 
+def _bind_combobox_mousewheel_forwarding(
+    widget: Any, *, fallback_canvas: Any, is_active: dict[str, bool] | None = None
+) -> bool:
+    """Desplaza el contenedor padre al usar la rueda sobre un ``ttk.Combobox``.
+
+    El enlace captura los eventos de rueda del ratón para reenviarlos al canvas
+    desplazable más cercano usando ``_scroll_lineage`` y retorna ``"break"`` para
+    evitar que la caja desplegable cambie la opción seleccionada al girar la
+    rueda.
+    """
+
+    try:
+        is_combobox = isinstance(widget, ttk.Combobox)
+    except Exception:
+        is_combobox = False
+
+    if not is_combobox:
+        return False
+
+    if getattr(widget, "_mousewheel_forwarding_bound", False):
+        return True
+
+    setattr(widget, "_mousewheel_forwarding_bound", True)
+
+    def _forward(event):  # noqa: ANN001
+        if is_active is not None and not is_active.get("value"):
+            return "break"
+        steps = _normalize_mousewheel_delta(event)
+        if steps:
+            _scroll_lineage(getattr(event, "widget", None), fallback_canvas, steps)
+        return "break"
+
+    widget.bind("<MouseWheel>", _forward, add="+")
+    widget.bind("<Button-4>", _forward, add="+")
+    widget.bind("<Button-5>", _forward, add="+")
+    return True
+
+
 def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
     """Permite desplazar el canvas usando la rueda del ratón o trackpad.
 
@@ -1001,9 +1039,13 @@ def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
         bound_widgets.add(widget_id)
         widget.bind("<Enter>", _activate, add="+")
         widget.bind("<Leave>", _deactivate, add="+")
-        widget.bind("<MouseWheel>", _on_mousewheel, add="+")
-        widget.bind("<Button-4>", _on_mousewheel, add="+")
-        widget.bind("<Button-5>", _on_mousewheel, add="+")
+        is_combobox = _bind_combobox_mousewheel_forwarding(
+            widget, fallback_canvas=canvas, is_active=is_active
+        )
+        if not is_combobox:
+            widget.bind("<MouseWheel>", _on_mousewheel, add="+")
+            widget.bind("<Button-4>", _on_mousewheel, add="+")
+            widget.bind("<Button-5>", _on_mousewheel, add="+")
         children_fn = getattr(widget, "winfo_children", None)
         if callable(children_fn):
             for child in children_fn():
@@ -1141,6 +1183,9 @@ class GlobalScrollBinding:
             widget.bind(
                 "<Leave>", lambda _e, tid=tab_id: self._clear_hover_tab(tid), add="+"
             )
+        _bind_combobox_mousewheel_forwarding(
+            widget, fallback_canvas=self._tab_canvases.get(tab_id)
+        )
         children_fn = getattr(widget, "winfo_children", None)
         if callable(children_fn):
             for child in children_fn():
