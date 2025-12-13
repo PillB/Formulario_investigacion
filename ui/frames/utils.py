@@ -366,8 +366,9 @@ def create_collapsible_card(
     """
 
     collapsible = collapsible_cls or CollapsibleSection
+    wrapped_toggle = _wrap_collapsible_toggle(on_toggle)
     try:
-        return collapsible(parent, title=title, open=open, on_toggle=on_toggle)
+        return collapsible(parent, title=title, open=open, on_toggle=wrapped_toggle)
     except Exception as exc:  # pragma: no cover - solo se ejecuta en entornos degradados
         if callable(log_error):
             try:
@@ -375,8 +376,20 @@ def create_collapsible_card(
             except Exception:
                 pass
         return _build_collapsible_fallback(
-            parent, title=title, open=open, on_toggle=on_toggle
+            parent, title=title, open=open, on_toggle=wrapped_toggle
         )
+
+
+def _wrap_collapsible_toggle(on_toggle):
+    def _handler(section):
+        if callable(on_toggle):
+            try:
+                on_toggle(section)
+            except Exception:
+                pass
+        _refresh_enclosing_scrollable(section)
+
+    return _handler
 
 def ensure_grid_support(widget: Any) -> None:
     """Garantiza que el widget exponga un método grid incluso en stubs de prueba.
@@ -1186,6 +1199,37 @@ def _iter_ancestors(widget: Any) -> Iterable[Any]:
             current = current.nametowidget(parent_name)
         except Exception:
             current = None
+
+
+def _refresh_enclosing_scrollable(widget: Any) -> None:
+    scrollable = next(
+        (
+            ancestor
+            for ancestor in _iter_ancestors(widget)
+            if hasattr(ancestor, "_scroll_canvas") and hasattr(ancestor, "_scroll_inner")
+        ),
+        None,
+    )
+    if scrollable is None:
+        return
+
+    max_height = getattr(scrollable, "_scroll_refresh_height", None)
+
+    def _apply_resize():
+        resize_scrollable_to_content(
+            scrollable, max_height=max_height, adjust_height=True, debounce_ms=0
+        )
+
+    for scheduler_name in ("after_idle", "after"):
+        scheduler = getattr(scrollable, scheduler_name, None)
+        if callable(scheduler):
+            try:
+                scheduler(_apply_resize)
+                return
+            except Exception:
+                continue
+
+    _apply_resize()
 
 
 def _can_scroll_widget(widget: Any, steps: int) -> bool:

@@ -418,3 +418,61 @@ def test_resize_scrollable_adjusts_height_and_toggles_scroll(monkeypatch):
     assert height_configs[-1]["height"] == 300
     assert scrollbar.grid_remove_calls
     assert scrollbar.grid_calls
+
+
+def test_collapsible_toggle_refreshes_scrollable(monkeypatch):
+    resize_calls = []
+
+    def fake_resize(container, **kwargs):  # noqa: ANN001
+        resize_calls.append((container, kwargs))
+
+    monkeypatch.setattr(utils, "resize_scrollable_to_content", fake_resize)
+
+    scrollable = SimpleNamespace(
+        _scroll_canvas=object(),
+        _scroll_inner=object(),
+        _scroll_refresh_height=180,
+        after_idle=lambda fn=None: fn() if callable(fn) else None,
+    )
+    parent = SimpleNamespace()
+    card_holder: dict[str, object] = {}
+
+    class _StubCollapsible:
+        def __init__(self, _parent, title, open=True, on_toggle=None):  # noqa: ANN001
+            self.parent = _parent
+            self.title = title
+            self.is_open = open
+            self._on_toggle = on_toggle
+            self.content = SimpleNamespace()
+            card_holder["instance"] = self
+
+        def toggle(self, _event=None):  # noqa: ANN001
+            self.is_open = not self.is_open
+            if callable(self._on_toggle):
+                self._on_toggle(self)
+
+    monkeypatch.setattr(utils, "CollapsibleSection", _StubCollapsible)
+
+    def _fake_lineage(_widget):
+        yield card_holder.get("instance")
+        yield parent
+        yield scrollable
+
+    monkeypatch.setattr(utils, "_iter_ancestors", _fake_lineage)
+
+    toggled: list[bool] = []
+    card = utils.create_collapsible_card(
+        parent,
+        title="Test",
+        on_toggle=lambda _section: toggled.append(True),
+        collapsible_cls=_StubCollapsible,
+    )
+
+    card.toggle()
+
+    assert toggled, "Debe invocar el manejador original del acordeón"
+    assert resize_calls, "Debe pedir el redimensionamiento del contenedor desplazable"
+    resize_kwargs = resize_calls[0][1]
+    assert resize_calls[0][0] is scrollable
+    assert resize_kwargs["max_height"] == 180
+    assert resize_kwargs["adjust_height"] is True
