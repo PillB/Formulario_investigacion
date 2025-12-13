@@ -555,7 +555,7 @@ class FraudCaseApp:
     IMAGE_MAX_BYTES = 3 * 1024 * 1024
     IMAGE_MAX_DIMENSION = 2000
     IMAGE_DISPLAY_MAX = 1000
-    SCROLLABLE_HEIGHT_MULTIPLIER = 12
+    SCROLLABLE_HEIGHT_MULTIPLIER = 10
     TEAM_ROW_DETAIL_WEIGHT = 3
     TEAM_ROW_DETAIL_HIDDEN_WEIGHT = 0
     CLIENT_ACTION_BUTTONS: tuple[tuple[str, str], ...] = (("Agregar cliente", "add"),)
@@ -2725,6 +2725,7 @@ class FraudCaseApp:
                 resize_scrollable_to_content(
                     container,
                     max_height=getattr(container, "_scroll_refresh_height", None),
+                    adjust_height=True,
                 )
             finally:
                 container._scroll_refresh_pending = False  # type: ignore[attr-defined]
