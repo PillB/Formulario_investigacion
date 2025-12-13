@@ -51,11 +51,15 @@ class CollapsibleSection(ttk.Frame):
             self._show_content()
 
         for widget in (self.header, self.title_label, self.indicator):
-            widget.bind("<Button-1>", self._on_click)
+            widget.configure(takefocus=True)
             widget.bind("<Enter>", self._on_enter)
             widget.bind("<Leave>", self._on_leave)
             widget.bind("<ButtonPress-1>", self._on_press)
-            widget.bind("<ButtonRelease-1>", self._on_release)
+            widget.bind("<ButtonRelease-1>", self._on_button_release)
+            widget.bind("<KeyPress-space>", self._on_press)
+            widget.bind("<KeyRelease-space>", self._on_key_activate)
+            widget.bind("<KeyPress-Return>", self._on_press)
+            widget.bind("<KeyRelease-Return>", self._on_key_activate)
 
     @property
     def is_open(self) -> bool:
@@ -120,9 +124,6 @@ class CollapsibleSection(ttk.Frame):
         self.title_label.configure(style=label_style)
         self.indicator.configure(style=indicator_style)
 
-    def _on_click(self, event: tk.Event | None = None) -> None:
-        self.toggle(event)
-
     def _on_enter(self, _event: tk.Event | None = None) -> None:
         self._hovering = True
         self._set_header_style("hover")
@@ -136,6 +137,15 @@ class CollapsibleSection(ttk.Frame):
 
     def _on_release(self, _event: tk.Event | None = None) -> None:
         self._set_header_style("hover" if self._hovering else "normal")
+
+    def _on_button_release(self, event: tk.Event | None = None) -> None:
+        self._on_release(event)
+        self.toggle(event)
+
+    def _on_key_activate(self, event: tk.Event | None = None) -> str:
+        self._on_release(event)
+        self.toggle(event)
+        return "break"
 
 
 def register_styles() -> None:
