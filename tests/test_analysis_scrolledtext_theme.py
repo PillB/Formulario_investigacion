@@ -63,3 +63,58 @@ def test_analysis_scrolledtext_theme_refresh(monkeypatch, messagebox_spy, tmp_pa
         ThemeManager._current = previous_current
         ThemeManager._base_style_configured = previous_base_configured
         ThemeManager._tracked_toplevels = previous_windows
+
+
+@pytest.mark.skipif(
+    os.name != "nt" and not os.environ.get("DISPLAY"),
+    reason="Tkinter no disponible en el entorno de pruebas",
+)
+def test_scrolledtext_without_text_attribute(monkeypatch, tmp_path):
+    class AtypicalScrolledText(scrolledtext.ScrolledText):
+        def __init__(self, master=None, **kwargs):
+            super().__init__(master, **kwargs)
+            if hasattr(self, "text"):
+                try:
+                    delattr(self, "text")
+                except Exception:
+                    self.text = None
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError:
+        pytest.skip("Tkinter no disponible en el entorno de pruebas")
+
+    monkeypatch.setattr(ThemeManager, "PREFERENCE_FILE", tmp_path / "theme_pref.txt")
+
+    previous_style = ThemeManager._style
+    previous_root = ThemeManager._root
+    previous_current = ThemeManager._current
+    previous_base_configured = ThemeManager._base_style_configured
+    previous_windows = set(ThemeManager._tracked_toplevels)
+
+    try:
+        style = ThemeManager.build_style(root)
+        widget = AtypicalScrolledText(root)
+        widget.pack()
+
+        ThemeManager.apply("light", root=root, style=style)
+
+        text_child = next(child for child in widget.winfo_children() if isinstance(child, tk.Text))
+        light_palette = ThemeManager.current()
+        assert text_child.cget("background") == light_palette["input_background"]
+        assert text_child.cget("foreground") == light_palette["input_foreground"]
+
+        ThemeManager.apply("dark")
+        ThemeManager.apply_to_widget_tree(root)
+
+        dark_palette = ThemeManager.current()
+        assert text_child.cget("background") == dark_palette["input_background"]
+        assert text_child.cget("foreground") == dark_palette["input_foreground"]
+    finally:
+        root.destroy()
+        ThemeManager._style = previous_style
+        ThemeManager._root = previous_root
+        ThemeManager._current = previous_current
+        ThemeManager._base_style_configured = previous_base_configured
+        ThemeManager._tracked_toplevels = previous_windows

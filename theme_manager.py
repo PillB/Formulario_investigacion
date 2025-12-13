@@ -12,6 +12,7 @@ asignaciones utilizadas en la aplicación sin depender de activos externos.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Set
 
@@ -43,6 +44,8 @@ DARK_THEME: Dict[str, str] = {
     "select_foreground": "#e9ecf1",
     "heading_background": "#181c22",
 }
+
+logger = logging.getLogger(__name__)
 
 
 class ThemeManager:
@@ -309,7 +312,10 @@ class ThemeManager:
                     cls._reapply_treeview_tags(widget, theme)
                 elif isinstance(widget, scrolledtext.ScrolledText):
                     text_area = getattr(widget, "text", None)
-                    cls._reapply_text_tags(text_area or widget, theme)
+                    if isinstance(text_area, tk.Text):
+                        cls._reapply_text_tags(text_area, theme)
+                    else:
+                        cls._force_text_children_refresh(widget, theme)
                 elif isinstance(widget, tk.Text):
                     cls._reapply_text_tags(widget, theme)
 
@@ -377,7 +383,8 @@ class ThemeManager:
                 background=theme["select_background"],
                 foreground=theme["select_foreground"],
             )
-        except tk.TclError:
+        except tk.TclError as exc:
+            logger.warning("No se pudieron reconfigurar los tags de texto: %s", exc)
             return
         for tag in widget.tag_names():
             if tag == "sel":
@@ -389,6 +396,49 @@ class ThemeManager:
                     widget.tag_configure(tag, foreground=theme["input_foreground"])
             except tk.TclError:
                 continue
+
+    @classmethod
+    def _configure_text_widget(
+        cls, widget: tk.Text, theme: Dict[str, str], focus_outline: Optional[Dict[str, object]] = None
+    ) -> bool:
+        """Configure base colors for ``tk.Text`` widgets, logging failures."""
+
+        if not isinstance(widget, tk.Text):
+            return False
+        try:
+            options = dict(
+                background=theme["input_background"],
+                foreground=theme["input_foreground"],
+                insertbackground=theme["accent"],
+                selectbackground=theme["select_background"],
+                selectforeground=theme["select_foreground"],
+            )
+            if focus_outline:
+                options.update(focus_outline)
+            widget.configure(**options)
+            cls._reapply_text_tags(widget, theme)
+            return True
+        except tk.TclError as exc:
+            logger.warning("No se pudo configurar el widget Text: %s", exc)
+            return False
+
+    @classmethod
+    def _force_text_children_refresh(
+        cls, widget: tk.Misc, theme: Dict[str, str], focus_outline: Optional[Dict[str, object]] = None
+    ) -> bool:
+        """Find child ``tk.Text`` widgets when ScrolledText lacks ``.text``."""
+
+        try:
+            children = widget.winfo_children()
+        except tk.TclError as exc:
+            logger.warning("No se pudieron obtener hijos para refrescar: %s", exc)
+            return False
+        handled = False
+        for child in children:
+            if isinstance(child, tk.Text):
+                if cls._configure_text_widget(child, theme, focus_outline):
+                    handled = True
+        return handled
 
     @classmethod
     def _apply_widget_tree(cls, root: tk.Misc, theme: Dict[str, str]) -> None:
@@ -420,18 +470,16 @@ class ThemeManager:
             if isinstance(widget, scrolledtext.ScrolledText):
                 try:
                     widget.configure(background=background, **focus_outline)
-                except tk.TclError:
-                    pass
+                except tk.TclError as exc:
+                    logger.warning("No se pudo actualizar el contenedor ScrolledText: %s", exc)
                 text_widget = getattr(widget, "text", None)
+                handled = False
                 if isinstance(text_widget, tk.Text):
-                    text_widget.configure(
-                        background=input_background,
-                        foreground=input_foreground,
-                        insertbackground=theme["accent"],
-                        selectbackground=theme["select_background"],
-                        selectforeground=theme["select_foreground"],
-                        **focus_outline,
-                    )
+                    handled = cls._configure_text_widget(text_widget, theme, focus_outline)
+                if not handled:
+                    handled = cls._force_text_children_refresh(widget, theme, focus_outline)
+                if not handled:
+                    logger.warning("ScrolledText sin hijos Text configurables: %s", widget)
                 for scrollbar in (getattr(widget, "vbar", None), getattr(widget, "hbar", None)):
                     if isinstance(scrollbar, tk.Scrollbar):
                         scrollbar.configure(
@@ -441,14 +489,7 @@ class ThemeManager:
                             elementborderwidth=1,
                         )
             elif isinstance(widget, tk.Text):
-                widget.configure(
-                    background=input_background,
-                    foreground=input_foreground,
-                    insertbackground=theme["accent"],
-                    selectbackground=theme["select_background"],
-                    selectforeground=theme["select_foreground"],
-                    **focus_outline,
-                )
+                cls._configure_text_widget(widget, theme, focus_outline)
             elif isinstance(widget, (tk.Entry, tk.Spinbox)):
                 widget.configure(
                     background=input_background,
