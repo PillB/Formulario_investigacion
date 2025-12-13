@@ -1,6 +1,7 @@
 """Tests for the unified validation badge component."""
 
 from types import SimpleNamespace
+from tkinter import TclError
 
 from validation_badge import (
     NEUTRAL_ICON,
@@ -114,6 +115,27 @@ class DestroyableWidget(StubWidget):
 
     def winfo_exists(self):
         return self._exists
+
+
+class AfterDestroyWidget(DestroyableWidget):
+    def __init__(self, *args, **kwargs):  # noqa: ANN001
+        super().__init__(*args, **kwargs)
+        self._after_callbacks: list = []
+
+    def after(self, _delay, callback):  # noqa: ANN001
+        self._after_callbacks.append(callback)
+        return None
+
+    def _run_after(self) -> None:
+        while self._after_callbacks:
+            callback = self._after_callbacks.pop(0)
+            callback()
+
+    def configure(self, **kwargs):  # noqa: ANN001
+        self._run_after()
+        if not self._exists:
+            raise TclError("widget destroyed")
+        return super().configure(**kwargs)
 
 
 class DummyStyle:
@@ -233,3 +255,16 @@ def test_registry_prunes_destroyed_badges_on_update():
     registry.update_badge("sample", True, None)
 
     assert "sample" not in registry._registry
+
+
+def test_badge_handles_destroy_between_exists_and_configure():
+    ttk_local = SimpleNamespace(Frame=AfterDestroyWidget, Label=AfterDestroyWidget, Style=DummyStyle)
+    parent = AfterDestroyWidget()
+    badge = ValidationBadge(parent, tk_module=TK, ttk_module=ttk_local)
+
+    badge.widget.after(0, badge.widget.destroy)
+
+    badge.set_warning("Pending")
+    badge.set_success("Ready")
+
+    assert getattr(badge, "_is_destroyed", False) is True
