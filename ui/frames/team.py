@@ -442,7 +442,8 @@ class TeamMemberFrame:
             FieldValidator(
                 id_entry,
                 self.badges.wrap_validation(
-                    "team_id", lambda: validate_team_member_id(self.id_var.get())
+                    self._badge_key("team_id"),
+                    lambda: validate_team_member_id(self.id_var.get()),
                 ),
                 self.logs,
                 f"Colaborador {self.idx+1} - ID",
@@ -453,7 +454,7 @@ class TeamMemberFrame:
             FieldValidator(
                 nombres_entry,
                 self.badges.wrap_validation(
-                    "team_nombres",
+                    self._badge_key("team_nombres"),
                     lambda: validate_required_text(
                         self.nombres_var.get(), "los nombres del colaborador"
                     ),
@@ -467,7 +468,7 @@ class TeamMemberFrame:
             FieldValidator(
                 apellidos_entry,
                 self.badges.wrap_validation(
-                    "team_apellidos",
+                    self._badge_key("team_apellidos"),
                     lambda: validate_required_text(
                         self.apellidos_var.get(), "los apellidos del colaborador"
                     ),
@@ -481,7 +482,7 @@ class TeamMemberFrame:
             FieldValidator(
                 flag_cb,
                 self.badges.wrap_validation(
-                    "team_flag",
+                    self._badge_key("team_flag"),
                     lambda: validate_required_text(
                         self.flag_var.get(), "el flag del colaborador"
                     ),
@@ -502,7 +503,8 @@ class TeamMemberFrame:
                 FieldValidator(
                     widget,
                     self.badges.wrap_validation(
-                        badge_key, lambda lvl=level: self._validate_location_field(lvl)
+                        self._badge_key(badge_key),
+                        lambda lvl=level: self._validate_location_field(lvl),
                     ),
                     self.logs,
                     f"Colaborador {self.idx+1} - {label.capitalize()}",
@@ -513,7 +515,8 @@ class TeamMemberFrame:
         nombre_validator = FieldValidator(
             nombre_ag_cb,
             self.badges.wrap_validation(
-                "team_agencia_nombre", lambda: self._validate_agency_fields("nombre")
+                self._badge_key("team_agencia_nombre"),
+                lambda: self._validate_agency_fields("nombre"),
             ),
             self.logs,
             f"Colaborador {self.idx+1} - Nombre agencia",
@@ -522,7 +525,8 @@ class TeamMemberFrame:
         codigo_validator = FieldValidator(
             cod_ag_cb,
             self.badges.wrap_validation(
-                "team_agencia_codigo", lambda: self._validate_agency_fields("codigo")
+                self._badge_key("team_agencia_codigo"),
+                lambda: self._validate_agency_fields("codigo"),
             ),
             self.logs,
             f"Colaborador {self.idx+1} - Código agencia",
@@ -548,7 +552,8 @@ class TeamMemberFrame:
                 FieldValidator(
                     widget,
                     self.badges.wrap_validation(
-                        badge_key, lambda v=var, l=label: self._validate_date_field(v, l)
+                        self._badge_key(badge_key),
+                        lambda v=var, l=label: self._validate_date_field(v, l),
                     ),
                     self.logs,
                     f"Colaborador {self.idx+1} - {label}",
@@ -583,7 +588,7 @@ class TeamMemberFrame:
                 FieldValidator(
                     widget,
                     self.badges.wrap_validation(
-                        badge_key,
+                        self._badge_key(badge_key),
                         lambda v=variable, c=catalog, l=label: self._validate_catalog_selection(v.get(), l, c),
                     ),
                     self.logs,
@@ -596,6 +601,11 @@ class TeamMemberFrame:
         """Garantiza un ancho mínimo para los campos de texto."""
 
         return max(width, self.MIN_TEXT_ENTRY_WIDTH)
+
+    def _badge_key(self, field: str) -> str:
+        """Build a badge key scoped to this collaborator instance."""
+
+        return f"team{self.idx}_{field}"
 
     def _make_badged_field(
         self,
@@ -615,7 +625,7 @@ class TeamMemberFrame:
 
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
-        self.badges.claim(key, container, row=0, column=1)
+        self.badges.claim(self._badge_key(key), container, row=0, column=1)
         container.grid(
             row=row,
             column=column,
