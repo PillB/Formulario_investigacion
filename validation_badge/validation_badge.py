@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 import weakref
 from dataclasses import dataclass
-from tkinter import ttk
+from tkinter import TclError, ttk
 from typing import Any, Callable, Iterable
 
 from theme_manager import ThemeManager
@@ -391,13 +391,8 @@ class ValidationBadge:
     def _apply_render(self) -> None:
         if getattr(self, "_is_destroyed", False):
             return
-        try:
-            exists = bool(self._label.winfo_exists())
-        except Exception:
-            exists = False
-        if not exists:
-            self._is_destroyed = True
-            _unregister_badge(self)
+        if not self._widget_exists():
+            self._mark_destroyed()
             return
         style_name = self._style_name()
         emoji = self.ICON_MAP.get(self._state, NEUTRAL_ICON)
@@ -408,7 +403,15 @@ class ValidationBadge:
         else:
             text = self._message_short or self._message_full or emoji
         self._text_var.set(text)
-        self._label.configure(style=style_name)
+        if getattr(self, "_is_destroyed", False) or not self._widget_exists():
+            self._mark_destroyed()
+            return
+        try:
+            self._label.configure(style=style_name)
+        except TclError:
+            self._mark_destroyed()
+        except Exception:
+            self._mark_destroyed()
 
     def __getattr__(self, item: str):
         return getattr(self._label, item)
@@ -435,6 +438,16 @@ class ValidationBadge:
             if info is not None:
                 self._geometry_manager = manager
                 self._geometry_options = dict(info)
+
+    def _mark_destroyed(self) -> None:
+        self._is_destroyed = True
+        _unregister_badge(self)
+
+    def _widget_exists(self) -> bool:
+        try:
+            return bool(self._label.winfo_exists())
+        except Exception:
+            return False
 
 
 class ValidationBadgeRegistry:
