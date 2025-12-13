@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+import weakref
 from dataclasses import dataclass
 from tkinter import ttk
 from typing import Any, Callable, Iterable
@@ -456,6 +457,7 @@ class ValidationBadgeRegistry:
         self._registry: dict[str, ValidationBadge] = {}
         self._labels: dict[str, tuple[str, str]] = {}
         self._updaters: dict[str, Callable[[], str | None]] = {}
+        _REGISTRIES.add(self)
 
     def claim(
         self,
@@ -508,6 +510,9 @@ class ValidationBadgeRegistry:
         badge = self._registry.get(key)
         if badge is None:
             return
+        if not self._badge_exists(badge):
+            self._purge_badge(badge)
+            return
         pending_label, success_label = self._labels.get(key, (self.pending_text, self.success_text))
         success_label = success_text or success_label
         pending_label = pending_text or pending_label
@@ -544,6 +549,19 @@ class ValidationBadgeRegistry:
         for updater in self._updaters.values():
             updater()
 
+    def _badge_exists(self, badge: ValidationBadge) -> bool:
+        try:
+            return bool(badge.widget.winfo_exists())
+        except Exception:
+            return False
+
+    def _purge_badge(self, badge: ValidationBadge) -> None:
+        stale_keys = [key for key, registered in self._registry.items() if registered is badge]
+        for key in stale_keys:
+            self._registry.pop(key, None)
+            self._labels.pop(key, None)
+            self._updaters.pop(key, None)
+
 
 class ValidationBadgeGroup(ValidationBadgeRegistry):
     """Backward compatible alias for the badge registry."""
@@ -552,6 +570,7 @@ class ValidationBadgeGroup(ValidationBadgeRegistry):
 
 
 _ACTIVE_BADGES: set[ValidationBadge] = set()
+_REGISTRIES: weakref.WeakSet[ValidationBadgeRegistry] = weakref.WeakSet()
 
 
 def _register_badge(badge: ValidationBadge) -> None:
@@ -564,6 +583,11 @@ def _unregister_badge(badge: ValidationBadge) -> None:
         ValidationBadge.instances.discard(badge)
     except Exception:
         pass
+    for registry in list(_REGISTRIES):
+        try:
+            registry._purge_badge(badge)
+        except Exception:
+            continue
 
 
 def iter_active_badges() -> Iterable[ValidationBadge]:
