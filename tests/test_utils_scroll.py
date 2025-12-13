@@ -115,6 +115,23 @@ def test_mousewheel_binds_child_widgets_for_scroll():
     assert canvas.scroll_calls == [(2, "units")]
 
 
+def test_bind_combobox_scroll_forwarding_forwards_without_cycling(monkeypatch):
+    canvas = _CanvasStub()
+    combobox = _ComboboxStub()
+
+    monkeypatch.setattr(utils.ttk, "Combobox", _ComboboxStub)
+
+    utils.bind_combobox_scroll_forwarding(combobox, fallback_canvas=canvas)
+
+    handler = combobox.bound["<MouseWheel>"]
+    previous_value = combobox.get()
+    result = handler(SimpleNamespace(widget=combobox, delta=-120))
+    combobox.apply_default_cycle(result)
+
+    assert canvas.scroll_calls == [(1, "units")]
+    assert combobox.get() == previous_value
+
+
 def test_global_binder_scrolls_parent_canvas_on_boundary():
     root = _CanvasStub()
     binder = utils.GlobalScrollBinding(root)

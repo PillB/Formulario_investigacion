@@ -1029,15 +1029,17 @@ def resize_scrollable_to_content(
     _perform_resize()
 
 
-def _bind_combobox_mousewheel_forwarding(
+def bind_combobox_scroll_forwarding(
     widget: Any, *, fallback_canvas: Any, is_active: dict[str, bool] | None = None
 ) -> bool:
-    """Desplaza el contenedor padre al usar la rueda sobre un ``ttk.Combobox``.
+    """Redirige la rueda del ratón de un ``ttk.Combobox`` al contenedor padre.
 
-    El enlace captura los eventos de rueda del ratón para reenviarlos al canvas
-    desplazable más cercano usando ``_scroll_lineage`` y retorna ``"break"`` para
-    evitar que la caja desplegable cambie la opción seleccionada al girar la
-    rueda.
+    El helper conecta ``<MouseWheel>``, ``<Button-4>`` y ``<Button-5>`` a un
+    manejador que reenvía el desplazamiento al canvas desplazable más cercano
+    mediante ``_scroll_lineage``.  Siempre retorna ``"break"`` para impedir que
+    el combobox avance o retroceda las opciones por defecto al girar la rueda.
+    El enlace se ejecuta una sola vez por widget y es seguro en entornos de
+    prueba donde el tipo de combobox puede estar sustituido.
     """
 
     try:
@@ -1102,7 +1104,7 @@ def _enable_mousewheel_scrolling(canvas: tk.Canvas, target: ttk.Frame) -> None:
         bound_widgets.add(widget_id)
         widget.bind("<Enter>", _activate, add="+")
         widget.bind("<Leave>", _deactivate, add="+")
-        is_combobox = _bind_combobox_mousewheel_forwarding(
+        is_combobox = bind_combobox_scroll_forwarding(
             widget, fallback_canvas=canvas, is_active=is_active
         )
         if not is_combobox:
@@ -1283,7 +1285,7 @@ class GlobalScrollBinding:
             widget.bind(
                 "<Leave>", lambda _e, tid=tab_id: self._clear_hover_tab(tid), add="+"
             )
-            _bind_combobox_mousewheel_forwarding(
+            bind_combobox_scroll_forwarding(
                 widget, fallback_canvas=self._tab_canvases.get(tab_id)
             )
 
