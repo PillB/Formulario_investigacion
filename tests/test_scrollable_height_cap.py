@@ -38,8 +38,10 @@ def test_refresh_scrollable_reuses_height_cap(app_instance, monkeypatch):
 
     recorded = []
 
-    def _capture_refresh(container, *, max_height=None, adjust_height=False, debounce_ms=50):  # noqa: ANN001
-        recorded.append(max_height)
+    def _capture_refresh(
+        container, *, max_height=None, adjust_height=False, debounce_ms=50
+    ):  # noqa: ANN001
+        recorded.append((max_height, adjust_height))
 
     monkeypatch.setattr("app.resize_scrollable_to_content", _capture_refresh)
 
@@ -47,5 +49,6 @@ def test_refresh_scrollable_reuses_height_cap(app_instance, monkeypatch):
     app_instance._refresh_scrollable(scrollable)
 
     assert len(recorded) == 2
-    assert recorded[0] == recorded[1] == 500 * app_instance.SCROLLABLE_HEIGHT_MULTIPLIER
+    expected_height = 500 * app_instance.SCROLLABLE_HEIGHT_MULTIPLIER
+    assert recorded[0] == recorded[1] == (expected_height, True)
 
