@@ -555,6 +555,7 @@ class FraudCaseApp:
     IMAGE_MAX_BYTES = 3 * 1024 * 1024
     IMAGE_MAX_DIMENSION = 2000
     IMAGE_DISPLAY_MAX = 1000
+    SCROLLABLE_HEIGHT_MULTIPLIER = 12
     TEAM_ROW_DETAIL_WEIGHT = 3
     TEAM_ROW_DETAIL_HIDDEN_WEIGHT = 0
     CLIENT_ACTION_BUTTONS: tuple[tuple[str, str], ...] = (("Agregar cliente", "add"),)
@@ -2687,8 +2688,10 @@ class FraudCaseApp:
         if root is not None:
             try:
                 window_height = root.winfo_height() or root.winfo_reqheight()
+                if not window_height:
+                    window_height = getattr(root, "winfo_screenheight", lambda: 0)()  # type: ignore[call-arg]
                 if window_height:
-                    max_height = int(window_height * 3)
+                    max_height = int(window_height * self.SCROLLABLE_HEIGHT_MULTIPLIER)
             except Exception:
                 max_height = None
 
@@ -2705,6 +2708,10 @@ class FraudCaseApp:
     def _refresh_scrollable(self, container, *, max_height: int | None = None):
         if container is None:
             return
+
+        if max_height is None:
+            cached_height = getattr(container, "_scroll_refresh_height", None)
+            max_height = cached_height if cached_height is not None else self._compute_scrollable_max_height(container)
 
         if getattr(container, "_scroll_refresh_pending", False):
             container._scroll_refresh_height = max_height  # type: ignore[attr-defined]
