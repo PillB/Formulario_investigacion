@@ -2692,8 +2692,21 @@ class FraudCaseApp:
         if container is None:
             return
 
+        if getattr(container, "_scroll_refresh_pending", False):
+            container._scroll_refresh_height = max_height  # type: ignore[attr-defined]
+            return
+
+        container._scroll_refresh_pending = True  # type: ignore[attr-defined]
+        container._scroll_refresh_height = max_height  # type: ignore[attr-defined]
+
         def _sync():
-            resize_scrollable_to_content(container, max_height=max_height)
+            try:
+                resize_scrollable_to_content(
+                    container,
+                    max_height=getattr(container, "_scroll_refresh_height", None),
+                )
+            finally:
+                container._scroll_refresh_pending = False  # type: ignore[attr-defined]
 
         try:
             self.root.after_idle(_sync)
