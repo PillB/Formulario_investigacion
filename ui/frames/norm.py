@@ -73,6 +73,7 @@ class NormFrame:
                 self.logs,
             ),
             collapsible_cls=CollapsibleSection,
+            open=False,
         )
         self._sync_section_title()
         self._place_section()
