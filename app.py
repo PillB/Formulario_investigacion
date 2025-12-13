@@ -5434,6 +5434,7 @@ class FraudCaseApp:
                 pady=ROW_PADY,
                 wrap=tk.WORD,
             )
+            self._apply_scrolledtext_theme(text_widget)
             self._configure_rich_text_tags(text_widget, bold_font, header_font, mono_font)
             self._bind_rich_text_paste_support(text_widget)
             text_widget.bind(
@@ -5463,6 +5464,8 @@ class FraudCaseApp:
 
         if self._extended_sections_enabled:
             self._build_extended_analysis_sections(tab_container)
+
+        ThemeManager.apply_to_widget_tree(analysis_group)
 
     def _build_extended_analysis_sections(self, parent):
         if self._extended_analysis_group is not None:
@@ -5632,6 +5635,7 @@ class FraudCaseApp:
             ttk.Label(container, text=label).grid(row=0, column=0, sticky="w", padx=COL_PADX)
             text_widget = scrolledtext.ScrolledText(container, height=6, wrap=tk.WORD)
             text_widget.grid(row=1, column=0, sticky="nsew", padx=COL_PADX, pady=(0, ROW_PADY))
+            self._apply_scrolledtext_theme(text_widget)
             text_widget.insert("1.0", "\n".join(self._recomendaciones_categorias.get(key, [])))
             text_widget.bind("<KeyRelease>", lambda _e, k=key, w=text_widget: self._update_recommendation_category(k, w))
             self._recommendation_widgets[key] = text_widget
@@ -6214,6 +6218,40 @@ class FraudCaseApp:
             "mono": mono_font,
         }
         return bold_font, header_font, mono_font
+
+    def _apply_scrolledtext_theme(self, widget: scrolledtext.ScrolledText) -> None:
+        palette = ThemeManager.current()
+        focus_outline = {
+            "highlightbackground": palette["border"],
+            "highlightcolor": palette["accent"],
+            "highlightthickness": 1,
+            "borderwidth": 1,
+            "relief": tk.SOLID,
+        }
+        try:
+            widget.configure(
+                background=palette["background"],
+                highlightbackground=palette["border"],
+                highlightcolor=palette["accent"],
+                highlightthickness=1,
+                borderwidth=1,
+                relief=tk.SOLID,
+            )
+        except tk.TclError:
+            pass
+
+        text_area = getattr(widget, "text", widget)
+        try:
+            text_area.configure(
+                background=palette["input_background"],
+                foreground=palette["input_foreground"],
+                insertbackground=palette["accent"],
+                selectbackground=palette["select_background"],
+                selectforeground=palette["select_foreground"],
+                **focus_outline,
+            )
+        except tk.TclError:
+            return
 
     def _configure_rich_text_tags(self, widget, bold_font, header_font, mono_font):
         widget.tag_configure("bold", font=bold_font)
