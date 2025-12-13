@@ -259,3 +259,114 @@ def test_scrollable_container_wires_scrollbar_and_mousewheel(monkeypatch):
     wheel(SimpleNamespace(delta=-120, widget=inner))
 
     assert outer._scroll_canvas.scroll_calls == [(1, "units")]  # type: ignore[attr-defined]
+
+
+def test_resize_scrollable_avoids_canvas_height_changes(monkeypatch):
+    class FrameStub(_Bindable):
+        def __init__(self, parent=None):
+            super().__init__()
+            self.master = parent
+            self.grid_calls = []
+            self.column_configure = []
+            self.row_configure = []
+            self._height = 0
+            self._reqheight = 220
+
+        def columnconfigure(self, index, weight):  # noqa: ANN001
+            self.column_configure.append((index, weight))
+
+        def rowconfigure(self, index, weight):  # noqa: ANN001
+            self.row_configure.append((index, weight))
+
+        def grid(self, *args, **kwargs):  # noqa: ANN001
+            self.grid_calls.append((args, kwargs))
+
+        def winfo_parent(self):
+            return ""
+
+        def winfo_manager(self):
+            return "grid"
+
+        def winfo_height(self):
+            return self._height
+
+        def winfo_reqheight(self):
+            return self._reqheight
+
+        def after(self, _delay, func=None):  # noqa: ANN001
+            if callable(func):
+                func()
+            return "job-after"
+
+        def after_cancel(self, _job):  # noqa: ANN001
+            return None
+
+        def after_idle(self, func=None):  # noqa: ANN001
+            if callable(func):
+                func()
+            return "job-idle"
+
+    class CanvasStub(FrameStub):
+        def __init__(self, parent=None, **_kwargs):  # noqa: ANN001
+            super().__init__(parent)
+            self.configure_calls = []
+            self.create_window_calls = []
+            self.item_configure_calls = []
+            self.scroll_calls = []
+            self._bbox_height = 200
+
+        def configure(self, **kwargs):  # noqa: ANN001
+            self.configure_calls.append(kwargs)
+            if "height" in kwargs:
+                self._height = kwargs["height"]
+
+        def create_window(self, coords, window=None, anchor=None):  # noqa: ANN001
+            self.create_window_calls.append((coords, window, anchor))
+            return "win-1"
+
+        def bbox(self, _tag):  # noqa: ANN001
+            return (0, 0, 100, self._bbox_height)
+
+        def itemconfigure(self, item_id, **kwargs):  # noqa: ANN001
+            self.item_configure_calls.append((item_id, kwargs))
+
+        def yview(self, *args, **kwargs):  # noqa: ANN001
+            return (args, kwargs)
+
+        def yview_scroll(self, steps, unit):
+            self.scroll_calls.append((steps, unit))
+
+    class ScrollbarStub:
+        def __init__(self, parent=None, orient=None, command=None):  # noqa: ANN001
+            self.parent = parent
+            self.orient = orient
+            self.command = command
+            self.grid_calls = []
+
+        def grid(self, *args, **kwargs):  # noqa: ANN001
+            self.grid_calls.append((args, kwargs))
+
+        def set(self, *args, **kwargs):  # noqa: ANN001, D401
+            """Stub scroll command setter."""
+            return (args, kwargs)
+
+    monkeypatch.setattr(utils.tk, "Canvas", CanvasStub)
+    monkeypatch.setattr(utils.ttk, "Frame", FrameStub)
+    monkeypatch.setattr(utils.ttk, "Scrollbar", ScrollbarStub)
+
+    outer, inner = utils.create_scrollable_container(parent=FrameStub())
+    canvas = outer._scroll_canvas  # type: ignore[attr-defined]
+
+    inner._reqheight = 260
+    canvas._bbox_height = 260
+    utils.resize_scrollable_to_content(outer)
+
+    inner._reqheight = 320
+    canvas._bbox_height = 320
+    configure_handler = inner.bound["<Configure>"]
+    for _ in range(3):
+        configure_handler(SimpleNamespace(width=480))
+        utils.resize_scrollable_to_content(outer)
+
+    height_configs = [call for call in canvas.configure_calls if "height" in call]
+    assert not height_configs
