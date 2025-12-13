@@ -152,12 +152,12 @@ def test_header_click_toggles_sections(section_builder):
 
         assert section.is_open is False
 
-        section.header.event_generate("<Button-1>")
-
-        assert section.is_open is True
-
-        section.header.event_generate("<Button-1>")
-
-        assert section.is_open is False
+        for widget in (section.header, section.title_label, section.indicator):
+            for sequence in ("<ButtonRelease-1>", "<space>", "<Return>"):
+                initial_state = section.is_open
+                widget.event_generate(sequence)
+                assert section.is_open is not initial_state
+                widget.event_generate(sequence)
+                assert section.is_open is initial_state
     finally:
         root.destroy()

@@ -36,6 +36,11 @@ class DummyWidget:
         self._bindings.append((sequence, callback, add))
         return f"bind_{len(self._bindings)}"
 
+    def event_generate(self, sequence):
+        for bound_sequence, callback, _ in list(self._bindings):
+            if bound_sequence == sequence and callable(callback):
+                callback(None)
+
     def set(self, value):
         if self.textvariable is not None:
             self.textvariable.set(value)
@@ -51,6 +56,9 @@ class DummyWidget:
 
     def configure(self, **kwargs):
         self._config.update(kwargs)
+
+    def winfo_manager(self):
+        return ""
 
     def focus_set(self):
         self._config['focused'] = True
@@ -92,6 +100,28 @@ class RecordingValidator:
 
 @pytest.fixture(autouse=True)
 def patch_tk_components(monkeypatch):
+    class _DummyBadge:
+        def grid(self, *args, **kwargs):
+            return None
+
+    class _DummyBadgeRegistry:
+        def __init__(self):
+            self.claimed_keys = []
+
+        def claim(self, key, *_args, **_kwargs):
+            self.claimed_keys.append(key)
+            return _DummyBadge()
+
+        def wrap_validation(self, key, validate_fn):
+            self.claimed_keys.append(key)
+            return validate_fn
+
+        def refresh(self):
+            return None
+
+        def update_badge(self, *_args, **_kwargs):
+            return None
+
     monkeypatch.setattr(products.tk, "StringVar", DummyVar)
     monkeypatch.setattr(products.ttk, "LabelFrame", DummyWidget)
     monkeypatch.setattr(products.ttk, "Frame", DummyWidget)
@@ -99,6 +129,8 @@ def patch_tk_components(monkeypatch):
     monkeypatch.setattr(products.ttk, "Entry", DummyWidget)
     monkeypatch.setattr(products.ttk, "Combobox", DummyWidget)
     monkeypatch.setattr(products.ttk, "Button", DummyWidget)
+    monkeypatch.setattr(products, "ValidationBadgeRegistry", _DummyBadgeRegistry)
+    monkeypatch.setattr(products, "badge_registry", _DummyBadgeRegistry())
     RecordingValidator.instances.clear()
     monkeypatch.setattr(products, "FieldValidator", RecordingValidator)
     yield
@@ -120,6 +152,16 @@ def _build_product_frame():
     )
 
 
+def _assert_toggle_bindings(section):
+    for widget in (section.header, section.title_label, section.indicator):
+        for sequence in ("<ButtonRelease-1>", "<space>", "<Return>"):
+            initial_state = section.is_open
+            widget.event_generate(sequence)
+            assert section.is_open is not initial_state
+            widget.event_generate(sequence)
+            assert section.is_open is initial_state
+
+
 def test_product_section_starts_collapsed_and_retains_title(monkeypatch):
     class _CollapsibleSection(DummyWidget):
         def __init__(self, parent=None, title="", open=True, on_toggle=None, **_kwargs):
@@ -131,6 +173,9 @@ def test_product_section_starts_collapsed_and_retains_title(monkeypatch):
             self.indicator = DummyWidget()
             self.indicator.configure(text="▼" if open else "▸")
             self.content = DummyWidget()
+            for widget in (self.header, self.title_label, self.indicator):
+                for seq in ("<ButtonRelease-1>", "<space>", "<Return>"):
+                    widget.bind(seq, self.toggle)
 
         def pack_content(self, widget, **_kwargs):
             return widget
@@ -138,12 +183,19 @@ def test_product_section_starts_collapsed_and_retains_title(monkeypatch):
         def set_title(self, title):
             self.title_label.configure(text=title)
 
+        def toggle(self, *_args):
+            self.is_open = not self.is_open
+            if callable(self._on_toggle):
+                self._on_toggle(self)
+
     monkeypatch.setattr(products, "CollapsibleSection", _CollapsibleSection)
     product = _build_product_frame()
 
     assert product.section.is_open is False
     assert product.section.title_label["text"] == "Producto 1"
     assert product.section.indicator["text"] == "▸"
+
+    _assert_toggle_bindings(product.section)
 
 
 class _ClaimRowProductStub:
