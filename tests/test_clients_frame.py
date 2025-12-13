@@ -38,6 +38,11 @@ class DummyWidget:
         self._bindings.append((sequence, callback, add))
         return f"bind_{len(self._bindings)}"
 
+    def event_generate(self, sequence):
+        for bound_sequence, callback, _ in list(self._bindings):
+            if bound_sequence == sequence and callable(callback):
+                callback(None)
+
     def set(self, value):
         if self.textvariable is not None:
             self.textvariable.set(value)
@@ -53,6 +58,9 @@ class DummyWidget:
 
     def configure(self, **kwargs):
         self._config.update(kwargs)
+
+    def winfo_manager(self):
+        return ""
 
     def __setitem__(self, key, value):
         self._config[key] = value
@@ -129,7 +137,12 @@ def patch_client_widgets(monkeypatch):
             self._is_open = open
             self._on_toggle = on_toggle
             self.header = DummyWidget()
+            self.title_label = DummyWidget()
+            self.indicator = DummyWidget()
             self.content = DummyWidget()
+            for widget in (self.header, self.title_label, self.indicator):
+                for seq in ("<ButtonRelease-1>", "<space>", "<Return>"):
+                    widget.bind(seq, self.toggle)
 
         def pack_content(self, widget, **_kwargs):
             return widget
@@ -171,6 +184,25 @@ def _find_validator(label):
         if label in validator.field_name:
             return validator
     return None
+
+
+def _assert_toggles_on_events(section, widget):
+    for sequence in ("<ButtonRelease-1>", "<space>", "<Return>"):
+        initial_state = section.is_open
+        widget.event_generate(sequence)
+        assert section.is_open is not initial_state
+        widget.event_generate(sequence)
+        assert section.is_open is initial_state
+
+
+def test_client_section_handles_multiple_toggle_events():
+    frame = _build_client_frame()
+    section = frame.section
+
+    assert section.is_open is False
+
+    for widget in (section.header, section.title_label, section.indicator):
+        _assert_toggles_on_events(section, widget)
 
 
 def test_client_contact_fields_require_inline_data():

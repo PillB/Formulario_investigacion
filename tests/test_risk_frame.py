@@ -93,7 +93,11 @@ def patch_risk_widgets(monkeypatch):
             self._on_toggle = on_toggle
             self.header = DummyWidget()
             self.title_label = DummyWidget()
+            self.indicator = DummyWidget()
             self.content = DummyWidget()
+            for widget in (self.header, self.title_label, self.indicator):
+                for seq in ("<ButtonRelease-1>", "<space>", "<Return>"):
+                    widget.bind(seq, self.toggle)
 
         def pack_content(self, widget, **_kwargs):
             return widget
@@ -137,16 +141,22 @@ def _find_validator(label):
     return None
 
 
+def _assert_toggle_bindings(section):
+    for widget in (section.header, section.title_label, section.indicator):
+        for sequence in ("<ButtonRelease-1>", "<space>", "<Return>"):
+            initial_state = section.is_open
+            widget.event_generate(sequence)
+            assert section.is_open is not initial_state
+            widget.event_generate(sequence)
+            assert section.is_open is initial_state
+
+
 def test_risk_frame_section_starts_collapsed_and_toggles():
     frame = _build_risk_frame()
 
     assert frame.section.is_open is False
 
-    frame.section.toggle()
-    assert frame.section.is_open is True
-
-    frame.section.toggle()
-    assert frame.section.is_open is False
+    _assert_toggle_bindings(frame.section)
 
 
 def test_risk_frame_starts_with_empty_id():
