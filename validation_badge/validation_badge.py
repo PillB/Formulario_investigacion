@@ -388,6 +388,16 @@ class ValidationBadge:
         return base_name
 
     def _apply_render(self) -> None:
+        if getattr(self, "_is_destroyed", False):
+            return
+        try:
+            exists = bool(self._label.winfo_exists())
+        except Exception:
+            exists = False
+        if not exists:
+            self._is_destroyed = True
+            _unregister_badge(self)
+            return
         style_name = self._style_name()
         emoji = self.ICON_MAP.get(self._state, NEUTRAL_ICON)
         if self._display_mode == "emoji":

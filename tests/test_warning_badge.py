@@ -182,3 +182,37 @@ def test_validation_badge_restores_geometry_options():
 
     for key in ("row", "column", "padx", "pady", "sticky"):
         assert restored.get(key) == initial.get(key)
+
+
+def test_validation_badge_no_exception_when_parent_destroyed():
+    class DestroyableWidget(StubWidget):
+        def __init__(self, *args, **kwargs):  # noqa: ANN001
+            self._children = []
+            self._exists = True
+            super().__init__(*args, **kwargs)
+            if args and isinstance(args[0], DestroyableWidget):
+                args[0]._children.append(self)
+
+        def destroy(self):  # noqa: D401
+            """Mark the widget (and its children) as destroyed."""
+            self._exists = False
+            for child in list(self._children):
+                child.destroy()
+            return None
+
+        def winfo_children(self):
+            return list(self._children)
+
+        def winfo_exists(self):
+            return self._exists
+
+    ttk_local = SimpleNamespace(Frame=DestroyableWidget, Label=DestroyableWidget, Style=DummyStyle)
+    parent = DestroyableWidget()
+    badge = ValidationBadge(parent, tk_module=TK, ttk_module=ttk_local)
+
+    parent.destroy()
+
+    badge.set_success("Ready")
+    badge.set_warning("Pending")
+
+    assert getattr(badge, "_is_destroyed", False) is True
