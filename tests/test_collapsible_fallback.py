@@ -85,3 +85,24 @@ def test_fallback_toggle_informs_callback(monkeypatch):
 
     assert card.is_open is True
     assert toggled == [True]
+
+
+def test_fallback_indicator_click_toggles(monkeypatch):
+    _patch_style(monkeypatch)
+
+    class CrashingSection:
+        def __init__(self, *_args, **_kwargs):
+            raise RuntimeError("boom")
+
+    card = utils.create_collapsible_card(
+        parent=DummyWidget(),
+        title="Equipo 1",
+        open=False,
+        collapsible_cls=CrashingSection,
+    )
+
+    assert card.is_open is False
+
+    card.indicator._trigger("<Button-1>")
+
+    assert card.is_open is True

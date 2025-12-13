@@ -630,6 +630,7 @@ class TeamMemberFrame:
         return create_collapsible_card(
             parent,
             title="",
+            open=False,
             on_toggle=lambda _section=None: self._sync_section_title(),
             log_error=lambda exc: log_event(
                 "validacion",
