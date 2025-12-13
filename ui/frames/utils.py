@@ -1301,12 +1301,6 @@ class GlobalScrollBinding:
         if not children:
             return newly_bound
 
-        should_traverse = has_new_children or any(
-            id(child) not in self._bound_targets for child in children
-        )
-        if not should_traverse:
-            return newly_bound
-
         for child in children:
             if self._bind_hover_targets(child, tab_id):
                 newly_bound = True
