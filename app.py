@@ -702,6 +702,7 @@ class FraudCaseApp:
 
     def __init__(self, root):
         self.root = root
+        self._pending_idle_update = False
         # FIX: Initialize autosave timestamp tracker
         self._last_temp_saved_at = None
         # Lista para logs de navegación y validación
@@ -2648,10 +2649,29 @@ class FraudCaseApp:
     def _safe_update_idletasks(self):
         """Intenta refrescar la UI sin propagar errores cuando la ventana no existe."""
 
+        root = getattr(self, "root", None)
+        if root is None:
+            return
+        if getattr(self, "_pending_idle_update", False):
+            return
+
+        def _flush_pending_update():
+            try:
+                root.update_idletasks()
+            except tk.TclError:
+                pass
+            finally:
+                self._pending_idle_update = False
+
         try:
-            self.root.update_idletasks()
+            self._pending_idle_update = True
+            root.after_idle(_flush_pending_update)
         except tk.TclError:
-            pass
+            self._pending_idle_update = False
+            try:
+                root.update_idletasks()
+            except tk.TclError:
+                pass
 
     def _register_scrollable(self, container):
         if container is None:
@@ -2662,16 +2682,10 @@ class FraudCaseApp:
         if scrollable is None:
             return None
 
-        try:
-            scrollable.update_idletasks()
-        except Exception:
-            pass
-
         max_height = None
         root = getattr(self, "root", None)
         if root is not None:
             try:
-                root.update_idletasks()
                 window_height = root.winfo_height() or root.winfo_reqheight()
                 if window_height:
                     max_height = int(window_height * 3)
@@ -2682,7 +2696,7 @@ class FraudCaseApp:
             inner = getattr(scrollable, "_scroll_inner", None)
             if inner is not None:
                 try:
-                    max_height = inner.winfo_reqheight()
+                    max_height = inner.winfo_height() or inner.winfo_reqheight()
                 except Exception:
                     max_height = None
 
