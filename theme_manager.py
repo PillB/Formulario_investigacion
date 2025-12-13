@@ -13,6 +13,7 @@ asignaciones utilizadas en la aplicación sin depender de activos externos.
 from __future__ import annotations
 
 import logging
+import weakref
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Set
 
@@ -73,6 +74,7 @@ class ThemeManager:
     _tracked_menus: Set[tk.Menu] = set()
     _use_azure_fallback: bool = False
     _azure_theme_loaded: bool = False
+    _missing_text_child_warned: "weakref.WeakSet[scrolledtext.ScrolledText]" = weakref.WeakSet()
 
     THEMES: Dict[str, Dict[str, str]] = {
         LIGHT_THEME["name"]: LIGHT_THEME,
@@ -428,25 +430,48 @@ class ThemeManager:
     ) -> bool:
         """Find child ``tk.Text`` widgets when ScrolledText lacks ``.text``."""
 
+        if not cls._widget_exists(widget):
+            return False
         try:
             children = widget.winfo_children()
-        except tk.TclError as exc:
-            logger.warning("No se pudieron obtener hijos para refrescar: %s", exc)
+        except tk.TclError:
             return False
         handled = False
         for child in children:
-            if isinstance(child, tk.Text):
+            if isinstance(child, tk.Text) and cls._widget_exists(child):
                 if cls._configure_text_widget(child, theme, focus_outline):
                     handled = True
         return handled
+
+    @classmethod
+    def _widget_exists(cls, widget: Optional[tk.Misc]) -> bool:
+        if widget is None:
+            return False
+        try:
+            return bool(widget.winfo_exists())
+        except tk.TclError:
+            return False
+
+    @classmethod
+    def _log_missing_text_child(cls, widget: scrolledtext.ScrolledText) -> None:
+        if widget in cls._missing_text_child_warned:
+            return
+        cls._missing_text_child_warned.add(widget)
+        logger.warning("ScrolledText sin hijos Text configurables: %s", widget)
 
     @classmethod
     def _apply_widget_tree(cls, root: tk.Misc, theme: Dict[str, str]) -> None:
         """Recursively apply ttk style names and tk attributes to a widget tree."""
 
         def _update(widget: tk.Misc) -> None:
+            if not cls._widget_exists(widget):
+                return
             cls._apply_widget_attributes(widget, theme)
-            for child in widget.winfo_children():
+            try:
+                children = widget.winfo_children()
+            except tk.TclError:
+                return
+            for child in children:
                 _update(child)
 
         _update(root)
@@ -458,6 +483,9 @@ class ThemeManager:
         heading_background = theme["heading_background"]
         input_background = theme["input_background"]
         input_foreground = theme["input_foreground"]
+
+        if not cls._widget_exists(widget):
+            return
 
         try:
             focus_outline = {
@@ -472,16 +500,19 @@ class ThemeManager:
                     widget.configure(background=background, **focus_outline)
                 except tk.TclError as exc:
                     logger.warning("No se pudo actualizar el contenedor ScrolledText: %s", exc)
+                if not cls._widget_exists(widget):
+                    return
                 text_widget = getattr(widget, "text", None)
                 handled = False
-                if isinstance(text_widget, tk.Text):
+                if isinstance(text_widget, tk.Text) and cls._widget_exists(text_widget):
                     handled = cls._configure_text_widget(text_widget, theme, focus_outline)
                 if not handled:
                     handled = cls._force_text_children_refresh(widget, theme, focus_outline)
                 if not handled:
-                    logger.warning("ScrolledText sin hijos Text configurables: %s", widget)
+                    cls._log_missing_text_child(widget)
+                    return
                 for scrollbar in (getattr(widget, "vbar", None), getattr(widget, "hbar", None)):
-                    if isinstance(scrollbar, tk.Scrollbar):
+                    if isinstance(scrollbar, tk.Scrollbar) and cls._widget_exists(scrollbar):
                         scrollbar.configure(
                             background=theme["accent"],
                             troughcolor=input_background,
