@@ -881,6 +881,17 @@ def create_scrollable_container(
 
     canvas.grid(row=0, column=0, sticky="nsew")
     scrollbar.grid(row=0, column=1, sticky="ns")
+    scrollbar_grid_raw = getattr(scrollbar, "grid_info", lambda: {})()
+    scrollbar_grid = dict(scrollbar_grid_raw)
+    for key in ("row", "column"):
+        try:
+            scrollbar_grid[key] = int(scrollbar_grid[key])
+        except Exception:
+            pass
+    try:
+        scrollbar.grid_remove()
+    except Exception:
+        pass
 
     inner = ttk.Frame(canvas)
     window_id = canvas.create_window((0, 0), window=inner, anchor="nw")
@@ -907,6 +918,8 @@ def create_scrollable_container(
 
     outer._scroll_canvas = canvas  # type: ignore[attr-defined]
     outer._scroll_inner = inner  # type: ignore[attr-defined]
+    outer._scrollbar = scrollbar  # type: ignore[attr-defined]
+    outer._scrollbar_grid = scrollbar_grid  # type: ignore[attr-defined]
 
     if scroll_binder is not None:
         scroll_binder.register_tab_canvas(tab_id or parent, canvas, inner)
@@ -934,6 +947,8 @@ def resize_scrollable_to_content(
 
         canvas = getattr(container, "_scroll_canvas", None)
         inner = getattr(container, "_scroll_inner", None)
+        scrollbar = getattr(container, "_scrollbar", None)
+        scrollbar_grid = getattr(container, "_scrollbar_grid", None)
         if canvas is None or inner is None:
             return
 
@@ -967,36 +982,51 @@ def resize_scrollable_to_content(
         if not adjust_height or required_height is None:
             return
 
-        try:
-            available_height = max_height if max_height is not None else container.winfo_height()
-        except Exception:
-            available_height = 0
-
-        if not available_height:
+        def _resolve_cap() -> int | None:
+            if max_height is not None:
+                return max_height
             try:
-                available_height = container.winfo_reqheight()
+                height = container.winfo_height() or container.winfo_reqheight()
+                if height:
+                    return height
             except Exception:
-                available_height = 0
-
-        if not available_height:
+                pass
             parent = getattr(container, "master", None)
             try:
-                available_height = (parent.winfo_height() or parent.winfo_reqheight()) if parent else 0
+                if parent:
+                    height = parent.winfo_height() or parent.winfo_reqheight()
+                    if height:
+                        return height
             except Exception:
-                available_height = 0
+                pass
+            return None
 
-        target_height = required_height if not available_height else min(required_height, available_height)
+        height_cap = _resolve_cap()
+        target_height = required_height if height_cap is None else min(required_height, height_cap)
 
         last_height = getattr(container, "_last_scroll_required_height", None)
         setattr(container, "_last_scroll_required_height", required_height)
 
         height_delta = None if last_height is None else abs(required_height - last_height)
-        significant_height_change = height_delta is None or height_delta >= 8
+        significant_height_change = height_delta is None or height_delta >= 4
         if significant_height_change:
             try:
                 canvas.configure(height=target_height)
             except Exception:
                 return
+
+        if scrollbar is not None:
+            try:
+                requires_scroll = required_height > target_height
+                if requires_scroll:
+                    if scrollbar_grid:
+                        scrollbar.grid(**scrollbar_grid)
+                    else:
+                        scrollbar.grid()
+                else:
+                    scrollbar.grid_remove()
+            except Exception:
+                pass
 
     pending_job = getattr(container, "_resize_scroll_job", None)
     canceller = getattr(container, "after_cancel", None)

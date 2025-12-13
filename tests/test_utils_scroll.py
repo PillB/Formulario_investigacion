@@ -247,6 +247,9 @@ def test_scrollable_container_wires_scrollbar_and_mousewheel(monkeypatch):
         def yview_scroll(self, steps, unit):
             self.scroll_calls.append((steps, unit))
 
+        def yview_moveto(self, fraction):  # noqa: ANN001
+            self.scroll_calls.append(("moveto", fraction))
+
     created_scrollbars = []
 
     class ScrollbarStub:
@@ -255,10 +258,15 @@ def test_scrollable_container_wires_scrollbar_and_mousewheel(monkeypatch):
             self.orient = orient
             self.command = command
             self.grid_calls = []
+            self.grid_remove_calls = []
             created_scrollbars.append(self)
 
         def grid(self, *args, **kwargs):  # noqa: ANN001
             self.grid_calls.append((args, kwargs))
+
+        def grid_remove(self):  # noqa: D401
+            """Capture removal calls."""
+            self.grid_remove_calls.append(True)
 
         def set(self, *args, **kwargs):  # noqa: ANN001, D401
             """Stub scroll command setter."""
@@ -279,6 +287,7 @@ def test_scrollable_container_wires_scrollbar_and_mousewheel(monkeypatch):
     assert created_scrollbars
     assert created_scrollbars[-1].grid_calls
     assert created_scrollbars[-1].orient == "vertical"
+    assert created_scrollbars[-1].grid_remove_calls
 
     enter = inner.bound["<Enter>"]
     wheel = inner.bound["<MouseWheel>"]
@@ -288,7 +297,7 @@ def test_scrollable_container_wires_scrollbar_and_mousewheel(monkeypatch):
     assert outer._scroll_canvas.scroll_calls == [(1, "units")]  # type: ignore[attr-defined]
 
 
-def test_resize_scrollable_avoids_canvas_height_changes(monkeypatch):
+def test_resize_scrollable_adjusts_height_and_toggles_scroll(monkeypatch):
     class FrameStub(_Bindable):
         def __init__(self, parent=None):
             super().__init__()
@@ -363,15 +372,22 @@ def test_resize_scrollable_avoids_canvas_height_changes(monkeypatch):
         def yview_scroll(self, steps, unit):
             self.scroll_calls.append((steps, unit))
 
+        def yview_moveto(self, fraction):  # noqa: ANN001
+            self.scroll_calls.append(("moveto", fraction))
+
     class ScrollbarStub:
         def __init__(self, parent=None, orient=None, command=None):  # noqa: ANN001
             self.parent = parent
             self.orient = orient
             self.command = command
             self.grid_calls = []
+            self.grid_remove_calls = []
 
         def grid(self, *args, **kwargs):  # noqa: ANN001
             self.grid_calls.append((args, kwargs))
+
+        def grid_remove(self):
+            self.grid_remove_calls.append(True)
 
         def set(self, *args, **kwargs):  # noqa: ANN001, D401
             """Stub scroll command setter."""
@@ -383,17 +399,22 @@ def test_resize_scrollable_avoids_canvas_height_changes(monkeypatch):
 
     outer, inner = utils.create_scrollable_container(parent=FrameStub())
     canvas = outer._scroll_canvas  # type: ignore[attr-defined]
+    scrollbar = outer._scrollbar  # type: ignore[attr-defined]
 
     inner._reqheight = 260
     canvas._bbox_height = 260
-    utils.resize_scrollable_to_content(outer)
+    utils.resize_scrollable_to_content(outer, max_height=300, adjust_height=True)
 
-    inner._reqheight = 320
-    canvas._bbox_height = 320
+    inner._reqheight = 360
+    canvas._bbox_height = 360
     configure_handler = inner.bound["<Configure>"]
     for _ in range(3):
         configure_handler(SimpleNamespace(width=480))
-        utils.resize_scrollable_to_content(outer)
+        utils.resize_scrollable_to_content(outer, max_height=300, adjust_height=True)
 
     height_configs = [call for call in canvas.configure_calls if "height" in call]
-    assert not height_configs
+    assert height_configs
+    assert height_configs[0]["height"] == 260
+    assert height_configs[-1]["height"] == 300
+    assert scrollbar.grid_remove_calls
+    assert scrollbar.grid_calls
