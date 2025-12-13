@@ -93,6 +93,29 @@ class StubWidget:
         return True
 
 
+class DestroyableWidget(StubWidget):
+    def __init__(self, *args, **kwargs):  # noqa: ANN001
+        self._children = []
+        self._exists = True
+        super().__init__(*args, **kwargs)
+        if args and isinstance(args[0], DestroyableWidget):
+            args[0]._children.append(self)
+
+    def destroy(self):  # noqa: D401
+        """Mark the widget (and its children) as destroyed."""
+
+        self._exists = False
+        for child in list(self._children):
+            child.destroy()
+        return None
+
+    def winfo_children(self):
+        return list(self._children)
+
+    def winfo_exists(self):
+        return self._exists
+
+
 class DummyStyle:
     def __init__(self, *args, **kwargs):
         self._config = {}
@@ -185,27 +208,6 @@ def test_validation_badge_restores_geometry_options():
 
 
 def test_validation_badge_no_exception_when_parent_destroyed():
-    class DestroyableWidget(StubWidget):
-        def __init__(self, *args, **kwargs):  # noqa: ANN001
-            self._children = []
-            self._exists = True
-            super().__init__(*args, **kwargs)
-            if args and isinstance(args[0], DestroyableWidget):
-                args[0]._children.append(self)
-
-        def destroy(self):  # noqa: D401
-            """Mark the widget (and its children) as destroyed."""
-            self._exists = False
-            for child in list(self._children):
-                child.destroy()
-            return None
-
-        def winfo_children(self):
-            return list(self._children)
-
-        def winfo_exists(self):
-            return self._exists
-
     ttk_local = SimpleNamespace(Frame=DestroyableWidget, Label=DestroyableWidget, Style=DummyStyle)
     parent = DestroyableWidget()
     badge = ValidationBadge(parent, tk_module=TK, ttk_module=ttk_local)
@@ -216,3 +218,18 @@ def test_validation_badge_no_exception_when_parent_destroyed():
     badge.set_warning("Pending")
 
     assert getattr(badge, "_is_destroyed", False) is True
+
+
+def test_registry_prunes_destroyed_badges_on_update():
+    ttk_local = SimpleNamespace(Frame=DestroyableWidget, Label=DestroyableWidget, Style=DummyStyle)
+    parent = DestroyableWidget()
+    registry = ValidationBadgeGroup(pending_text=NEUTRAL_ICON, success_text=SUCCESS_ICON, tk_module=TK, ttk_module=ttk_local)
+
+    badge = registry.claim("sample", parent, row=0, column=0)
+    assert registry._registry.get("sample") is badge
+
+    parent.destroy()
+
+    registry.update_badge("sample", True, None)
+
+    assert "sample" not in registry._registry
