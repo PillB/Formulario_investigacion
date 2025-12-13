@@ -120,6 +120,32 @@ def _build_product_frame():
     )
 
 
+def test_product_section_starts_collapsed_and_retains_title(monkeypatch):
+    class _CollapsibleSection(DummyWidget):
+        def __init__(self, parent=None, title="", open=True, on_toggle=None, **_kwargs):
+            super().__init__(parent=parent)
+            self.is_open = open
+            self._on_toggle = on_toggle
+            self.header = DummyWidget()
+            self.title_label = DummyWidget()
+            self.indicator = DummyWidget()
+            self.indicator.configure(text="▼" if open else "▸")
+            self.content = DummyWidget()
+
+        def pack_content(self, widget, **_kwargs):
+            return widget
+
+        def set_title(self, title):
+            self.title_label.configure(text=title)
+
+    monkeypatch.setattr(products, "CollapsibleSection", _CollapsibleSection)
+    product = _build_product_frame()
+
+    assert product.section.is_open is False
+    assert product.section.title_label["text"] == "Producto 1"
+    assert product.section.indicator["text"] == "▸"
+
+
 class _ClaimRowProductStub:
     def __init__(self):
         self.idx = 0
