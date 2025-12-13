@@ -312,10 +312,14 @@ class ThemeManager:
                     cls._reapply_treeview_tags(widget, theme)
                 elif isinstance(widget, scrolledtext.ScrolledText):
                     text_area = getattr(widget, "text", None)
+                    handled = False
                     if isinstance(text_area, tk.Text):
                         cls._reapply_text_tags(text_area, theme)
-                    else:
-                        cls._force_text_children_refresh(widget, theme)
+                        handled = True
+                    if not handled:
+                        handled = cls._force_text_children_refresh(widget, theme)
+                    if not handled:
+                        cls._reapply_text_tags(widget, theme)
                 elif isinstance(widget, tk.Text):
                     cls._reapply_text_tags(widget, theme)
 
