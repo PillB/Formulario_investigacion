@@ -9,11 +9,13 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import RGBColor, Pt
 except ImportError:  # pragma: no cover - se usa el respaldo integrado
     DocxDocument = None
     RGBColor = None
     Pt = None
+    WD_ALIGN_PARAGRAPH = None
 
 DOCX_AVAILABLE = DocxDocument is not None
 DOCX_MISSING_MESSAGE = (
@@ -23,7 +25,7 @@ DOCX_MISSING_MESSAGE = (
 
 from settings import RICH_TEXT_MAX_CHARS
 from validators import parse_decimal_amount, sanitize_rich_text
-from report.styling_enhancer import apply_cell_shading, style_section_heading, style_table, style_title
+from report.styling_enhancer import apply_cell_shading, apply_header_band, style_section_heading, style_table, style_title
 
 
 PLACEHOLDER = "No aplica / Sin información registrada."
@@ -1188,7 +1190,6 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     style_section_heading(document.add_heading("Encabezado Institucional", level=2))
     header_values = dict(zip(context["header_headers"], context["header_row"]))
     header_table = document.add_table(rows=11, cols=4)
-    header_table.style = "Table Grid"
 
     def _set_cells(row_idx: int, col_idx: int, label: str, value: Any) -> None:
         header_table.rows[row_idx].cells[col_idx].text = label
@@ -1236,7 +1237,21 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
 
     _set_cells(10, 0, "N° de Reclamos", header_values.get("N° de Reclamos", PLACEHOLDER))
     _merge_value(10, 1, 3)
-    style_table(header_table)
+    apply_header_band(header_table.rows[:3], alignment=WD_ALIGN_PARAGRAPH.LEFT)
+    for paragraph in header_table.rows[2].cells[3].paragraphs:
+        paragraph.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    monetary_rows = [
+        (4, 1),
+        (4, 3),
+        (5, 1),
+        (5, 3),
+        (6, 1),
+        (6, 3),
+        (7, 1),
+    ]
+    for row_idx, col_idx in monetary_rows:
+        for run in header_table.rows[row_idx].cells[col_idx].paragraphs[0].runs:
+            run.font.bold = True
     style_section_heading(document.add_heading("Antecedentes", level=2))
     _add_rich_text_paragraphs(document, raw_analysis.get("antecedentes"))
     style_section_heading(document.add_heading("Detalle de los Colaboradores Involucrados", level=2))
