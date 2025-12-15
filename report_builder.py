@@ -1142,9 +1142,11 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     def _is_nuevo_riesgo_row(row: List[Any]) -> bool:
         return any(str(value).strip().lower() == "nuevo riesgo" for value in row)
 
-    def add_paragraphs(lines: List[str]) -> None:
+    def add_paragraphs(lines: List[str]) -> List[Any]:
+        paragraphs: List[Any] = []
         for line in lines:
-            document.add_paragraph(line)
+            paragraphs.append(document.add_paragraph(line))
+        return paragraphs
 
     def append_table(
         headers: List[str],
@@ -1184,9 +1186,11 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         f"{_safe_text(case.get('lugar'))}, {_safe_text(case.get('fecha_informe'))}",
     ]
 
-    title_paragraph = document.add_paragraph(header_lines[0])
-    style_title(title_paragraph)
-    add_paragraphs(header_lines[1:])
+    header_paragraphs = [document.add_paragraph(header_lines[0])] + add_paragraphs(
+        header_lines[1:]
+    )
+    for paragraph in header_paragraphs:
+        style_title(paragraph)
     style_section_heading(document.add_heading("Encabezado Institucional", level=2))
     header_values = dict(zip(context["header_headers"], context["header_row"]))
     header_table = document.add_table(rows=11, cols=4)
