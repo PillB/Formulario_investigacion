@@ -281,3 +281,32 @@ def test_afectacion_interna_toggle_autofills_and_notifies():
     assert frame.id_var.get() == ""
     assert callback_states[-1] is False
     assert all(v.suspend_count == 0 for v in other_validators)
+
+
+def test_afectacion_interna_toggle_does_not_trigger_duplicate_resets():
+    shared_flag = DummyVar(False)
+    registry = {}
+
+    def track_duplicates(frame, previous_id, new_id):
+        normalized = new_id.strip()
+        if normalized and normalized in registry and registry[normalized] is not frame:
+            frame.id_var.set(previous_id or "")
+        elif normalized:
+            registry[normalized] = frame
+
+    frame_one = _build_client_frame(
+        idx=0,
+        afectacion_interna_var=shared_flag,
+        id_change_callback=track_duplicates,
+    )
+    frame_two = _build_client_frame(
+        idx=1,
+        afectacion_interna_var=shared_flag,
+        id_change_callback=track_duplicates,
+    )
+
+    shared_flag.set(True)
+
+    assert frame_one.id_var.get() == "20100047218"
+    assert frame_two.id_var.get() == "20100047218"
+    assert registry == {}

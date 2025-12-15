@@ -617,7 +617,7 @@ class ClientFrame:
             self._resume_non_identifier_validators()
             self._set_badges_neutral()
         self._afectacion_state = enabled
-        self.on_id_change(preserve_existing=True, silent=True)
+        self.on_id_change(preserve_existing=True, silent=True, broadcast=False)
         if notify and enabled != previous:
             self._log_change(
                 f"Cliente {self.idx+1}: {'activó' if enabled else 'desactivó'} afectación interna"
@@ -698,10 +698,11 @@ class ClientFrame:
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
-    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
+    def on_id_change(self, from_focus=False, preserve_existing=False, silent=False, broadcast=True):
         if not silent:
             self._log_change(f"Cliente {self.idx+1}: cambió ID a {self.id_var.get()}")
-        self._notify_id_change()
+        if broadcast:
+            self._notify_id_change()
         self.update_client_options()
         cid = self.id_var.get().strip()
         if not cid:
