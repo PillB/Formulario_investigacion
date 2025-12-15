@@ -10,16 +10,18 @@ from __future__ import annotations
 from typing import Iterable, Optional, Set
 
 try:  # ``python-docx`` es opcional
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.oxml import parse_xml
     from docx.oxml.ns import nsdecls
     from docx.shared import RGBColor, Pt
 except ImportError:  # pragma: no cover - la comprobación se valida en pruebas
+    WD_ALIGN_PARAGRAPH = None
     parse_xml = None
     nsdecls = None
     RGBColor = None
     Pt = None
 
-DOCX_STYLING_AVAILABLE = all([parse_xml, nsdecls, RGBColor, Pt])
+DOCX_STYLING_AVAILABLE = all([parse_xml, nsdecls, RGBColor, Pt, WD_ALIGN_PARAGRAPH])
 
 # Paleta corporativa utilizada en los reportes
 BCP_DARK_BLUE = RGBColor(0, 48, 135) if DOCX_STYLING_AVAILABLE else None
@@ -85,6 +87,27 @@ def apply_header_style(table, *, fill: str = "003087") -> None:
         for paragraph in cell.paragraphs:
             for run in paragraph.runs:
                 _set_run_style(run, font_name="Segoe UI Semibold", font_size=Pt(11), color=WHITE, bold=True)
+
+
+def apply_header_band(rows: Iterable, *, alignment: WD_ALIGN_PARAGRAPH | None = None) -> None:
+    """Colorea filas con la banda azul corporativa y texto claro alineado."""
+
+    _require_docx()
+    effective_alignment = alignment or WD_ALIGN_PARAGRAPH.LEFT
+    for row in rows:
+        cells = getattr(row, "cells", row)
+        for cell in cells:
+            apply_cell_shading(cell, "003087")
+            for paragraph in cell.paragraphs:
+                paragraph.paragraph_format.alignment = effective_alignment
+                for run in paragraph.runs:
+                    _set_run_style(
+                        run,
+                        font_name="Segoe UI Semibold",
+                        font_size=Pt(11),
+                        color=WHITE,
+                        bold=True,
+                    )
 
 
 def apply_zebra_striping(table, *, skip_rows: Optional[Set[int]] = None, fill: str = LIGHT_GRAY) -> None:
