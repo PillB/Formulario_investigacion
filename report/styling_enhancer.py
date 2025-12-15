@@ -51,7 +51,9 @@ def style_title(paragraph) -> None:
 
     _require_docx()
     for run in paragraph.runs:
-        _set_run_style(run, font_name="Segoe UI", font_size=Pt(20), color=BCP_DARK_BLUE)
+        _set_run_style(
+            run, font_name="Segoe UI Semibold", font_size=Pt(15), color=BCP_DARK_BLUE
+        )
 
 
 def style_section_heading(paragraph) -> None:
