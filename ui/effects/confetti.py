@@ -7,12 +7,24 @@ import random
 import weakref
 from contextlib import suppress
 
+from settings import CONFETTI_ENABLED
+
 import tkinter as tk
 
 _PARTICLE_SESSION_CAP = 30
 _MAX_BURST_DURATION_MS = 1300
 _remaining_particle_budget = _PARTICLE_SESSION_CAP
 _scheduled_confetti_jobs: list[tuple[weakref.ReferenceType[tk.Misc], str]] = []
+
+
+def _confetti_is_enabled(enabled: bool | None = None) -> bool:
+    """Return ``True`` only when confetti is explicitly enabled.
+
+    The global ``CONFETTI_ENABLED`` flag acts as the default; callers may still
+    override it by passing an explicit boolean value.
+    """
+
+    return CONFETTI_ENABLED if enabled is None else bool(enabled)
 
 
 def _register_confetti_job(root: tk.Misc, delay_ms: int, callback) -> str | None:
@@ -52,7 +64,7 @@ def start_confetti_burst(
     screen_x: int,
     screen_y: int,
     *,
-    enabled: bool = True,
+    enabled: bool | None = None,
     particles_per_frame: int = 6,
     frame_delay_ms: int = 16,
     max_frames: int = 60,
@@ -66,7 +78,7 @@ def start_confetti_burst(
 
     global _remaining_particle_budget
 
-    if not enabled or _remaining_particle_budget <= 0:
+    if not _confetti_is_enabled(enabled) or _remaining_particle_budget <= 0:
         return
 
     if root is None or not root.winfo_exists():
@@ -184,9 +196,9 @@ def start_confetti_burst(
 ConfettiBurst = start_confetti_burst
 
 
-def maybe_start_confetti(*args, enabled: bool = True, **kwargs) -> None:
+def maybe_start_confetti(*args, enabled: bool | None = None, **kwargs) -> None:
     """Ejecuta ``start_confetti_burst`` sólo si está habilitado."""
 
-    if not enabled:
+    if not _confetti_is_enabled(enabled):
         return
     start_confetti_burst(*args, enabled=enabled, **kwargs)
