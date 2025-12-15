@@ -825,6 +825,8 @@ class FraudCaseApp:
         self.sound_enabled_var = tk.BooleanVar(
             value=bool(self._user_settings.get("sound_enabled", True))
         )
+        self.afectacion_interna_var = tk.BooleanVar(value=False)
+        self._last_afectacion_interna_state = False
 
         def register_tooltip(widget, text):
             if widget is None or not text:
@@ -858,6 +860,7 @@ class FraudCaseApp:
         self._summary_pending_dataset = None
         self._autosave_job_id = None
         self._autosave_dirty = False
+        self.afectacion_interna_var.trace_add("write", self._propagate_afectacion_interna)
         self._duplicate_checks_armed = False
         self._duplicate_warning_signature: Optional[str] = None
         self._duplicate_warning_cooldown_until: Optional[datetime] = None
@@ -4351,6 +4354,8 @@ class FraudCaseApp:
             summary_refresh_callback=self._schedule_summary_refresh,
             change_notifier=self._log_navigation_change,
             id_change_callback=self._handle_client_id_change,
+            afectacion_interna_var=self.afectacion_interna_var,
+            afectacion_change_callback=self._propagate_afectacion_interna,
         )
         if getattr(self, "_client_anchor_widget", None) is None:
             anchor = getattr(client, "section", None)
@@ -5009,6 +5014,8 @@ class FraudCaseApp:
             owner=self,
             summary_parent=summary_parent or getattr(self, "products_summary_section", None),
         )
+        if hasattr(prod, "set_afectacion_interna"):
+            prod.set_afectacion_interna(bool(self.afectacion_interna_var.get()))
         if getattr(self, "_product_anchor_widget", None) is None:
             anchor = getattr(prod, "section", None)
             header = getattr(anchor, "header", None)
@@ -9715,6 +9722,15 @@ class FraudCaseApp:
     def _handle_product_id_change(self, frame, previous_id, new_id):
         self._ensure_frame_id_maps()
         self._update_frame_id_index(self._product_frames_by_id, frame, previous_id, new_id)
+
+    def _propagate_afectacion_interna(self, *_args):
+        enabled = bool(self.afectacion_interna_var.get())
+        if enabled == self._last_afectacion_interna_state:
+            return
+        self._last_afectacion_interna_state = enabled
+        for product in getattr(self, "product_frames", []):
+            if hasattr(product, "set_afectacion_interna"):
+                product.set_afectacion_interna(enabled)
 
     def _rebuild_frame_id_indexes(self):
         self._ensure_frame_id_maps()

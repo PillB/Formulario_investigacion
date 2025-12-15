@@ -54,6 +54,8 @@ class ClientFrame:
         summary_refresh_callback=None,
         change_notifier=None,
         id_change_callback=None,
+        afectacion_interna_var=None,
+        afectacion_change_callback=None,
     ):
         self.parent = parent
         self.owner = owner
@@ -72,6 +74,13 @@ class ClientFrame:
         self._tree_sort_state: dict[str, bool] = {}
         self.summary_tree = None
         self.badges = badge_registry
+        self.afectacion_change_callback = afectacion_change_callback
+
+        self.afectacion_interna_var = afectacion_interna_var or tk.BooleanVar(value=False)
+        self._afectacion_state = False
+        self._afectacion_ready = False
+        self._handling_afectacion = False
+        self._non_identifier_suspended = False
 
         self.tipo_id_var = tk.StringVar()
         self.id_var = tk.StringVar()
@@ -125,6 +134,20 @@ class ClientFrame:
             sticky="nsew",
         )
 
+        afectacion_label = ttk.Label(self.frame, text="Afectación interna:")
+        self.afectacion_check = ttk.Checkbutton(
+            self.frame,
+            text="Afectación interna",
+            variable=self.afectacion_interna_var,
+            command=self._on_afectacion_toggle,
+        )
+        grid_labeled_widget(
+            self.frame,
+            row=0,
+            label_widget=afectacion_label,
+            field_widget=self.afectacion_check,
+        )
+
         tipo_id_label = build_required_label(
             self.frame,
             "Tipo de ID:",
@@ -144,7 +167,7 @@ class ClientFrame:
         )
         grid_labeled_widget(
             self.frame,
-            row=0,
+            row=1,
             label_widget=tipo_id_label,
             field_widget=tipo_container,
         )
@@ -163,7 +186,7 @@ class ClientFrame:
         )
         grid_labeled_widget(
             self.frame,
-            row=1,
+            row=2,
             label_widget=client_id_label,
             field_widget=id_container,
         )
@@ -184,7 +207,7 @@ class ClientFrame:
         )
         grid_labeled_widget(
             self.frame,
-            row=2,
+            row=3,
             label_widget=nombres_label,
             field_widget=nombres_container,
         )
@@ -207,7 +230,7 @@ class ClientFrame:
         )
         grid_labeled_widget(
             self.frame,
-            row=3,
+            row=4,
             label_widget=apellidos_label,
             field_widget=apellidos_container,
         )
@@ -235,7 +258,7 @@ class ClientFrame:
         )
         grid_labeled_widget(
             self.frame,
-            row=4,
+            row=5,
             label_widget=flag_label,
             field_widget=flag_container,
         )
@@ -286,7 +309,7 @@ class ClientFrame:
         self.badges.claim("cliente_accionado", accionado_list_container, row=0, column=2)
         grid_labeled_widget(
             self.frame,
-            row=5,
+            row=6,
             label_widget=accionado_label,
             field_widget=accionado_list_container,
             field_sticky="nsew",
@@ -304,7 +327,7 @@ class ClientFrame:
         )
         grid_labeled_widget(
             self.frame,
-            row=6,
+            row=7,
             label_widget=tel_label,
             field_widget=tel_container,
         )
@@ -326,7 +349,7 @@ class ClientFrame:
         )
         grid_labeled_widget(
             self.frame,
-            row=7,
+            row=8,
             label_widget=correo_label,
             field_widget=cor_container,
         )
@@ -342,7 +365,7 @@ class ClientFrame:
         )
         grid_labeled_widget(
             self.frame,
-            row=8,
+            row=9,
             label_widget=dir_label,
             field_widget=dir_entry,
         )
@@ -358,39 +381,37 @@ class ClientFrame:
         remove_btn.grid(row=0, column=1, sticky="e")
         grid_labeled_widget(
             self.frame,
-            row=9,
+            row=10,
             label_widget=ttk.Frame(self.frame),
             field_widget=action_row,
             label_sticky="nsew",
         )
         self.tooltip_register(remove_btn, "Quita al cliente y sus datos del caso.")
 
-        self.validators.append(
-            FieldValidator(
-                id_entry,
-                self.badges.wrap_validation(
-                    "cliente_id",
-                    lambda: validate_client_id(self.tipo_id_var.get(), self.id_var.get()),
-                ),
-                self.logs,
-                f"Cliente {self.idx+1} - ID",
-                variables=[self.id_var, self.tipo_id_var],
-            )
+        self.id_validator = FieldValidator(
+            id_entry,
+            self.badges.wrap_validation(
+                "cliente_id",
+                lambda: validate_client_id(self.tipo_id_var.get(), self.id_var.get()),
+            ),
+            self.logs,
+            f"Cliente {self.idx+1} - ID",
+            variables=[self.id_var, self.tipo_id_var],
         )
-        self.validators.append(
-            FieldValidator(
-                tipo_id_cb,
-                self.badges.wrap_validation(
-                    "cliente_tipo_id",
-                    lambda: validate_required_text(
-                        self.tipo_id_var.get(), "el tipo de ID del cliente"
-                    ),
+        self.validators.append(self.id_validator)
+        self.tipo_id_validator = FieldValidator(
+            tipo_id_cb,
+            self.badges.wrap_validation(
+                "cliente_tipo_id",
+                lambda: validate_required_text(
+                    self.tipo_id_var.get(), "el tipo de ID del cliente"
                 ),
-                self.logs,
-                f"Cliente {self.idx+1} - Tipo de ID",
-                variables=[self.tipo_id_var],
-            )
+            ),
+            self.logs,
+            f"Cliente {self.idx+1} - Tipo de ID",
+            variables=[self.tipo_id_var],
         )
+        self.validators.append(self.tipo_id_validator)
         self.validators.append(
             FieldValidator(
                 nombres_entry,
@@ -499,6 +520,10 @@ class ClientFrame:
                 variables=[self.accionado_var],
             )
         )
+        self._afectacion_state = bool(self.afectacion_interna_var.get())
+        self.afectacion_interna_var.trace_add("write", self._handle_afectacion_change)
+        self._apply_afectacion_state(self._afectacion_state, notify=False)
+        self._afectacion_ready = True
         self._sync_section_title()
 
     def set_lookup(self, lookup):
@@ -564,6 +589,107 @@ class ClientFrame:
 
     def _on_identity_field_change(self, *_args):
         self._sync_section_title()
+
+    def _on_afectacion_toggle(self):
+        if self._handling_afectacion:
+            return
+        self._handle_afectacion_change()
+
+    def _handle_afectacion_change(self, *_args):
+        if self._handling_afectacion:
+            return
+        self._handling_afectacion = True
+        try:
+            enabled = bool(self.afectacion_interna_var.get())
+            self._apply_afectacion_state(enabled, notify=self._afectacion_ready)
+        finally:
+            self._handling_afectacion = False
+
+    def _apply_afectacion_state(self, enabled: bool, *, notify: bool):
+        previous = self._afectacion_state
+        if enabled == previous and notify:
+            return
+        self._with_all_validators_suspended(lambda: self._set_identifier_defaults(enabled))
+        if enabled:
+            self._suspend_non_identifier_validators()
+            self._set_badges_neutral(excluded={"cliente_tipo_id", "cliente_id"})
+        else:
+            self._resume_non_identifier_validators()
+            self._set_badges_neutral()
+        self._afectacion_state = enabled
+        self.on_id_change(preserve_existing=True, silent=True)
+        if notify and enabled != previous:
+            self._log_change(
+                f"Cliente {self.idx+1}: {'activó' if enabled else 'desactivó'} afectación interna"
+            )
+            if callable(self.afectacion_change_callback):
+                try:
+                    self.afectacion_change_callback(enabled)
+                except Exception:
+                    pass
+
+    def _set_identifier_defaults(self, enabled: bool) -> None:
+        if enabled:
+            if self.tipo_id_var.get() != "RUC":
+                self.tipo_id_var.set("RUC")
+            if self.id_var.get() != "20100047218":
+                self.id_var.set("20100047218")
+            return
+        if self.tipo_id_var.get() == "RUC":
+            self.tipo_id_var.set("")
+        if self.id_var.get() == "20100047218":
+            self.id_var.set("")
+
+    def _with_all_validators_suspended(self, callback):
+        suspended: list[FieldValidator] = []
+        for validator in self.validators:
+            validator.suspend()
+            suspended.append(validator)
+        try:
+            callback()
+        finally:
+            for validator in suspended:
+                validator.resume()
+
+    def _suspend_non_identifier_validators(self):
+        if self._non_identifier_suspended:
+            return
+        for validator in self.validators:
+            if validator in (self.id_validator, self.tipo_id_validator):
+                continue
+            validator.suspend()
+        self._non_identifier_suspended = True
+
+    def _resume_non_identifier_validators(self):
+        if not self._non_identifier_suspended:
+            return
+        for validator in self.validators:
+            if validator in (self.id_validator, self.tipo_id_validator):
+                continue
+            validator.resume()
+        self._non_identifier_suspended = False
+
+    def _set_badges_neutral(self, *, excluded: set[str] | None = None):
+        excluded = excluded or set()
+        if not self.badges:
+            return
+        badge_keys = {
+            "cliente_tipo_id",
+            "cliente_id",
+            "cliente_nombres",
+            "cliente_apellidos",
+            "cliente_flag",
+            "cliente_tel",
+            "cliente_correo",
+            "cliente_accionado",
+        }
+        for key in badge_keys:
+            if key in excluded:
+                continue
+            try:
+                self.badges.update_badge(key, False, None)
+            except Exception:
+                continue
 
     def _bind_identifier_triggers(self, widget) -> None:
         widget.bind("<FocusOut>", lambda _e: self.on_id_change(from_focus=True), add="+")
