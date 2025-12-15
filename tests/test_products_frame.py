@@ -139,6 +139,7 @@ def patch_tk_components(monkeypatch):
     monkeypatch.setattr(products.ttk, "Button", DummyWidget)
     monkeypatch.setattr(products, "ValidationBadgeRegistry", _DummyBadgeRegistry)
     monkeypatch.setattr(products, "badge_registry", _DummyBadgeRegistry())
+    monkeypatch.setattr(products.tk, "BooleanVar", DummyVar)
     RecordingValidator.instances.clear()
     monkeypatch.setattr(products, "FieldValidator", RecordingValidator)
     yield
@@ -496,3 +497,28 @@ def test_infidencia_modalities_bypass_product_validations():
     assert product._infidencia_active is False
     assert product.id_validator.validate_callback() is not None
     assert monto_validator.validate_callback() is not None
+
+
+def test_afectacion_interna_bypasses_core_product_validations():
+    product = _build_product_frame()
+    internal_flag = products.tk.BooleanVar(value=False)
+
+    product.id_var.set("")
+    product.tipo_prod_var.set("")
+    product.monto_inv_var.set("abc")
+
+    assert product.id_validator.validate_callback() is not None
+    assert product.monto_inv_validator.validate_callback() is not None
+
+    product.set_afectacion_interna(internal_flag)
+    internal_flag.set(True)
+
+    assert product._is_internal_mode_active() is True
+    assert product.id_validator.validate_callback() is None
+    assert product.monto_inv_validator.validate_callback() is None
+
+    internal_flag.set(False)
+    product.client_var.set(product.INTERNAL_CLIENT_ID)
+
+    assert product._is_internal_mode_active() is True
+    assert product.client_validator.validate_callback() is None

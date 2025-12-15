@@ -5015,7 +5015,7 @@ class FraudCaseApp:
             summary_parent=summary_parent or getattr(self, "products_summary_section", None),
         )
         if hasattr(prod, "set_afectacion_interna"):
-            prod.set_afectacion_interna(bool(self.afectacion_interna_var.get()))
+            prod.set_afectacion_interna(self.afectacion_interna_var)
         if getattr(self, "_product_anchor_widget", None) is None:
             anchor = getattr(prod, "section", None)
             header = getattr(anchor, "header", None)
@@ -9730,7 +9730,7 @@ class FraudCaseApp:
         self._last_afectacion_interna_state = enabled
         for product in getattr(self, "product_frames", []):
             if hasattr(product, "set_afectacion_interna"):
-                product.set_afectacion_interna(enabled)
+                product.set_afectacion_interna(self.afectacion_interna_var)
 
     def _rebuild_frame_id_indexes(self):
         self._ensure_frame_id_maps()
