@@ -1002,6 +1002,7 @@ class ProductFrame:
     """Representa un producto y su interfaz en la sección de productos."""
 
     ENTITY_LABEL = "producto"
+    INTERNAL_CLIENT_ID = "20100047218"
 
     def __init__(
         self,
@@ -1063,6 +1064,9 @@ class ProductFrame:
         self.duplicate_status_label = None
         self.header_tree = None
         self.afectacion_interna = False
+        self._afectacion_interna_var = None
+        self._afectacion_trace_token = None
+        self._internal_state_ready = False
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -1132,6 +1136,7 @@ class ProductFrame:
         )
         self.client_cb.grid(row=1, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.client_cb.set('')
+        self.client_var.trace_add("write", self._handle_internal_state_change)
         self.client_cb.bind(
             "<FocusOut>",
             lambda e: self._handle_client_focus_out(),
@@ -1429,7 +1434,7 @@ class ProductFrame:
 
         self.id_validator = FieldValidator(
             id_entry,
-            self.badges.wrap_validation("producto_id", self._validate_product_identifier),
+            self._wrap_badge_validation("producto_id", self._validate_product_identifier),
             self.logs,
             f"Producto {self.idx+1} - ID",
             variables=[self.id_var, self.tipo_prod_var],
@@ -1437,9 +1442,9 @@ class ProductFrame:
         self.validators.append(self.id_validator)
         self.client_validator = FieldValidator(
             self.client_cb,
-            self.badges.wrap_validation(
+            self._wrap_badge_validation(
                 "producto_cliente",
-                lambda: validate_required_text(self.client_var.get(), "el cliente del producto"),
+                self._validate_client_selection,
             ),
             self.logs,
             f"Producto {self.idx+1} - Cliente",
@@ -1499,10 +1504,7 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     tipo_prod_cb,
-                    self.badges.wrap_validation(
-                        "producto_tipo",
-                        lambda: validate_required_text(self.tipo_prod_var.get(), "el tipo de producto"),
-                    ),
+                    self._wrap_badge_validation("producto_tipo", self._validate_tipo_producto),
                     self.logs,
                     f"Producto {self.idx+1} - Tipo de producto",
                     variables=[self.tipo_prod_var],
@@ -1511,7 +1513,7 @@ class ProductFrame:
                 self.fecha_desc_validator,
                 FieldValidator(
                     inv_entry,
-                    self.badges.wrap_validation(
+                    self._wrap_badge_validation(
                         "monto_inv",
                         lambda: self._validate_amount_input(
                             "monto_inv", self.monto_inv_var, "el monto investigado", False
@@ -1523,7 +1525,7 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     perdida_entry,
-                    self.badges.wrap_validation(
+                    self._wrap_badge_validation(
                         "monto_perdida",
                         lambda: self._validate_amount_input(
                             "monto_perdida", self.monto_perdida_var, "el monto pérdida de fraude", True
@@ -1535,7 +1537,7 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     falla_entry,
-                    self.badges.wrap_validation(
+                    self._wrap_badge_validation(
                         "monto_falla",
                         lambda: self._validate_amount_input(
                             "monto_falla", self.monto_falla_var, "el monto falla de procesos", True
@@ -1547,7 +1549,7 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     cont_entry,
-                    self.badges.wrap_validation(
+                    self._wrap_badge_validation(
                         "monto_contingencia",
                         lambda: self._validate_amount_input(
                             "monto_contingencia", self.monto_cont_var, "el monto contingencia", True
@@ -1559,7 +1561,7 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     rec_entry,
-                    self.badges.wrap_validation(
+                    self._wrap_badge_validation(
                         "monto_recuperado",
                         lambda: self._validate_amount_input(
                             "monto_recuperado", self.monto_rec_var, "el monto recuperado", True
@@ -1571,7 +1573,7 @@ class ProductFrame:
                 ),
                 FieldValidator(
                     pago_entry,
-                    self.badges.wrap_validation(
+                    self._wrap_badge_validation(
                         "monto_pago",
                         lambda: self._validate_amount_input(
                             "monto_pago", self.monto_pago_var, "el monto pago de deuda", True
@@ -1628,6 +1630,7 @@ class ProductFrame:
             self.add_involvement()
 
         self._populate_header_tree()
+        self._internal_state_ready = True
 
     def _calculate_combobox_width(self, options, *, min_width: int = 10, padding: int = 2) -> int:
         try:
@@ -1742,6 +1745,58 @@ class ProductFrame:
     def _normalize_infidence_text(self, text: str) -> str:
         normalized = normalize_without_accents((text or "").lower())
         return re.sub(r"[^a-z0-9]", "", normalized)
+
+    def _is_internal_client_selected(self) -> bool:
+        return (self.client_var.get() or "").strip() == self.INTERNAL_CLIENT_ID
+
+    def _compute_afectacion_interna_state(self) -> bool:
+        if self._afectacion_interna_var is not None:
+            try:
+                return bool(self._afectacion_interna_var.get())
+            except Exception:
+                return bool(self.afectacion_interna)
+        return bool(self.afectacion_interna)
+
+    def _is_internal_mode_active(self) -> bool:
+        return self._compute_afectacion_interna_state() or self._is_internal_client_selected()
+
+    def _apply_internal_neutral_state(self, *, keys: set[str] | None = None):
+        badge_manager = getattr(self, "badges", None)
+        neutral_keys = keys or {
+            "producto_id",
+            "producto_tipo",
+            "producto_cliente",
+            "monto_inv",
+            *AMOUNT_BADGE_KEYS.values(),
+        }
+        if badge_manager:
+            for key in neutral_keys:
+                badge_manager.update_badge(key, False, None)
+        if not hasattr(self, "_field_errors"):
+            self._field_errors = {}
+        for key in AMOUNT_BADGE_KEYS.values():
+            self._field_errors[key] = None
+        self._amount_validation_ready = False
+
+    def _refresh_internal_validations(self):
+        targets = (
+            getattr(self, "id_validator", None),
+            getattr(self, "tipo_prod_validator", None),
+            getattr(self, "client_validator", None),
+            *self._iter_amount_validators(),
+        )
+        if not self._is_internal_mode_active():
+            self._enable_amount_validation(force_refresh=True)
+        for validator in targets:
+            self._trigger_validator_refresh(validator)
+
+    def _handle_internal_state_change(self, *_args):
+        if not getattr(self, "_internal_state_ready", False):
+            return
+        self.afectacion_interna = self._compute_afectacion_interna_state()
+        if self._is_internal_mode_active():
+            self._apply_internal_neutral_state()
+        self._refresh_internal_validations()
 
     def _is_infidencia_case(self) -> bool:
         cat2_token = self._normalize_infidence_text(self.cat2_var.get())
@@ -1881,6 +1936,45 @@ class ProductFrame:
             return base_font.measure(f"{WARNING_ICON}{WARNING_ICON}") + COL_PADX
         except Exception:
             return 40
+
+    def _wrap_badge_validation(
+        self,
+        badge_key: str,
+        validate_fn,
+        *,
+        success_text: str | None = None,
+        pending_text: str | None = None,
+    ):
+        def _execute():
+            badge_manager = getattr(self, "badges", None)
+            if self._is_internal_mode_active():
+                self._apply_internal_neutral_state(keys={badge_key})
+                if badge_manager:
+                    badge_manager.update_badge(
+                        badge_key,
+                        False,
+                        None,
+                        success_text=success_text,
+                        pending_text=pending_text,
+                    )
+                return None
+            message = validate_fn()
+            if badge_manager:
+                badge_manager.update_badge(
+                    badge_key,
+                    message is None,
+                    message,
+                    success_text=success_text,
+                    pending_text=pending_text,
+                )
+            return message
+
+        if getattr(self, "badges", None):
+            try:
+                self.badges._updaters[badge_key] = _execute
+            except Exception:
+                pass
+        return _execute
 
     def _build_tipo_producto_validator(self, tipo_prod_cb):
         validator = FieldValidator(
@@ -3034,16 +3128,28 @@ class ProductFrame:
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
     def _validate_product_identifier(self):
+        if self._is_internal_mode_active():
+            self._apply_internal_neutral_state(keys={"producto_id"})
+            return None
         if self._is_infidencia_case():
             self._apply_infidencia_neutral_state()
             return None
         return validate_product_id(self.tipo_prod_var.get(), self.id_var.get())
 
     def _validate_tipo_producto(self):
+        if self._is_internal_mode_active():
+            self._apply_internal_neutral_state(keys={"producto_tipo"})
+            return None
         if self._is_infidencia_case():
             self._apply_infidencia_neutral_state()
             return None
         return validate_required_text(self.tipo_prod_var.get(), "el tipo de producto")
+
+    def _validate_client_selection(self):
+        if self._is_internal_mode_active():
+            self._apply_internal_neutral_state(keys={"producto_cliente"})
+            return None
+        return validate_required_text(self.client_var.get(), "el cliente del producto")
 
     def _validate_product_date_pair(self):
         fecha_oc = (self.fecha_oc_var.get() or "").strip()
@@ -3104,6 +3210,10 @@ class ProductFrame:
         return message, decimal_value
 
     def _validate_amount_input(self, badge_key, var, label, allow_blank):
+        if self._is_internal_mode_active():
+            self._field_errors[badge_key] = None
+            self._apply_internal_neutral_state()
+            return None
         if self._is_infidencia_case():
             self._field_errors[badge_key] = None
             self._apply_infidencia_neutral_state()
@@ -3132,6 +3242,9 @@ class ProductFrame:
         return values
 
     def _validate_montos_consistentes(self, target_key: str | None = None):
+        if self._is_internal_mode_active():
+            self._apply_internal_neutral_state()
+            return (None, True)
         if self._is_infidencia_case():
             self._apply_infidencia_neutral_state()
             return (None, True)
@@ -3330,7 +3443,28 @@ class ProductFrame:
             self.remove_callback(self)
 
     def set_afectacion_interna(self, enabled: bool):
-        self.afectacion_interna = bool(enabled)
+        if hasattr(enabled, "trace_add"):
+            variable = enabled
+            if variable is not self._afectacion_interna_var:
+                if self._afectacion_trace_token and self._afectacion_interna_var is not None:
+                    try:
+                        self._afectacion_interna_var.trace_remove("write", self._afectacion_trace_token)
+                    except Exception:
+                        pass
+                self._afectacion_interna_var = variable
+                try:
+                    self._afectacion_trace_token = variable.trace_add(
+                        "write", self._handle_internal_state_change
+                    )
+                except Exception:
+                    self._afectacion_trace_token = None
+            try:
+                self.afectacion_interna = bool(variable.get())
+            except Exception:
+                self.afectacion_interna = False
+        else:
+            self.afectacion_interna = bool(enabled)
+        self._handle_internal_state_change()
 
     def log_change(self, message: str):
         if self._suppress_change_notifications:
