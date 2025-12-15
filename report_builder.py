@@ -971,6 +971,72 @@ def _build_sections_summary(context: Mapping[str, Any], analysis: Mapping[str, A
     ]
 
 
+def _build_header_markdown_table(header_values: Mapping[str, Any]) -> List[str]:
+    """Genera una tabla HTML que replica la estructura del encabezado DOCX."""
+
+    def _value(key: str, *, emphasize: bool = False) -> str:
+        text = _safe_text(header_values.get(key, PLACEHOLDER))
+        return f"<strong>{text}</strong>" if emphasize else text
+
+    def _cell(tag: str, content: str, *, colspan: int = 1) -> str:
+        span_attr = f' colspan="{colspan}"' if colspan > 1 else ""
+        return f"<{tag}{span_attr}>{content}</{tag}>"
+
+    def _row(*cells: str) -> str:
+        return "<tr>" + "".join(cells) + "</tr>"
+
+    rows = [
+        _row(_cell("th", "Dirigido a"), _cell("td", _value("Dirigido a"), colspan=3)),
+        _row(_cell("th", "Referencia"), _cell("td", _value("Referencia"), colspan=3)),
+        _row(
+            _cell("th", "Área de Reporte"),
+            _cell("td", _value("Área de Reporte")),
+            _cell("th", "Fecha de reporte"),
+            _cell("td", _value("Fecha de reporte")),
+        ),
+        _row(
+            _cell("th", "Categoría del evento"),
+            _cell("td", _value("Categoría del evento")),
+            _cell("th", "Tipología de evento"),
+            _cell("td", _value("Tipología de evento")),
+        ),
+        _row(
+            _cell("th", "Importe investigado"),
+            _cell("td", _value("Importe investigado", emphasize=True)),
+            _cell("th", "Contingencia"),
+            _cell("td", _value("Contingencia", emphasize=True)),
+        ),
+        _row(
+            _cell("th", "Pérdida total"),
+            _cell("td", _value("Pérdida total", emphasize=True)),
+            _cell("th", "Normal"),
+            _cell("td", _value("Normal", emphasize=True)),
+        ),
+        _row(
+            _cell("th", "Vencido"),
+            _cell("td", _value("Vencido", emphasize=True)),
+            _cell("th", "Judicial"),
+            _cell("td", _value("Judicial", emphasize=True)),
+        ),
+        _row(_cell("th", "Castigo"), _cell("td", _value("Castigo", emphasize=True), colspan=3)),
+        _row(
+            _cell("th", "Analítica Contable"),
+            _cell("td", _value("Analítica Contable")),
+            _cell("th", "Centro de Costos"),
+            _cell("td", _value("Centro de Costos")),
+        ),
+        _row(
+            _cell("th", "Producto"),
+            _cell("td", _value("Producto")),
+            _cell("th", "Procesos impactados"),
+            _cell("td", _value("Procesos impactados")),
+        ),
+        _row(_cell("th", "N° de Reclamos"), _cell("td", _value("N° de Reclamos"), colspan=3)),
+    ]
+
+    return ["<table>", "  <tbody>", *[f"    {row}" for row in rows], "  </tbody>", "</table>", ""]
+
+
 def build_md(case_data: CaseData) -> str:
     context = _build_report_context(case_data)
     case = context["case"]
@@ -995,34 +1061,13 @@ def build_md(case_data: CaseData) -> str:
         f"{_safe_text(case.get('lugar'))}, {_safe_text(case.get('fecha_informe'))}",
         "",
         "## Encabezado Institucional",
+        "<em>Resumen estructurado del informe con énfasis en los montos críticos.</em>",
     ]
 
     header_values = dict(zip(context["header_headers"], context["header_row"]))
 
-    md_header_rows = [
-        ["Campo", "Valor"],
-        ["Dirigido a", header_values.get("Dirigido a", PLACEHOLDER)],
-        ["Referencia", header_values.get("Referencia", PLACEHOLDER)],
-        ["Área de Reporte", header_values.get("Área de Reporte", PLACEHOLDER)],
-        ["Fecha de reporte", header_values.get("Fecha de reporte", PLACEHOLDER)],
-        ["Categoría del evento", header_values.get("Categoría del evento", PLACEHOLDER)],
-        ["Tipología de evento", header_values.get("Tipología de evento", PLACEHOLDER)],
-        ["Importe investigado", header_values.get("Importe investigado", PLACEHOLDER)],
-        ["Contingencia", header_values.get("Contingencia", PLACEHOLDER)],
-        ["Pérdida total", header_values.get("Pérdida total", PLACEHOLDER)],
-        ["Normal", header_values.get("Normal", PLACEHOLDER)],
-        ["Vencido", header_values.get("Vencido", PLACEHOLDER)],
-        ["Judicial", header_values.get("Judicial", PLACEHOLDER)],
-        ["Castigo", header_values.get("Castigo", PLACEHOLDER)],
-        ["Analítica Contable", header_values.get("Analítica Contable", PLACEHOLDER)],
-        ["Centro de Costos", header_values.get("Centro de Costos", PLACEHOLDER)],
-        ["Producto", header_values.get("Producto", PLACEHOLDER)],
-        ["Procesos impactados", header_values.get("Procesos impactados", PLACEHOLDER)],
-        ["N° de Reclamos", header_values.get("N° de Reclamos", PLACEHOLDER)],
-    ]
-
     lines = list(header_lines)
-    lines.extend(_md_table(md_header_rows[0], md_header_rows[1:]))
+    lines.extend(_build_header_markdown_table(header_values))
     lines.extend(
         [
             "",
