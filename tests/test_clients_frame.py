@@ -8,15 +8,24 @@ from ui.frames import clients
 class DummyVar:
     def __init__(self, value=""):
         self._value = value
+        self._traces = []
 
     def get(self):
         return self._value
 
     def set(self, value):
         self._value = value
+        for callback in list(self._traces):
+            callback()
 
     def trace_add(self, *_args, **_kwargs):
-        return "trace"
+        if not _args:
+            return "trace"
+        callback = _args[1] if len(_args) > 1 else _kwargs.get("callback")
+        if callback is None:
+            return "trace"
+        self._traces.append(callback)
+        return f"trace_{len(self._traces)}"
 
     def trace_remove(self, *_args, **_kwargs):
         return None
@@ -117,6 +126,7 @@ class RecordingValidator:
 def patch_client_widgets(monkeypatch):
     class _TkStub:
         StringVar = DummyVar
+        BooleanVar = DummyVar
         END = "end"
 
         class Listbox(DummyListbox):
@@ -129,6 +139,7 @@ def patch_client_widgets(monkeypatch):
         Entry = DummyWidget
         Combobox = DummyWidget
         Button = DummyWidget
+        Checkbutton = DummyWidget
 
     class _CollapsibleSection(DummyWidget):
         def __init__(self, parent=None, title="", open=True, on_toggle=None, **_kwargs):
@@ -168,8 +179,8 @@ def patch_client_widgets(monkeypatch):
     RecordingValidator.instances.clear()
 
 
-def _build_client_frame():
-    return clients.ClientFrame(
+def _build_client_frame(**kwargs):
+    params = dict(
         parent=DummyWidget(),
         idx=0,
         remove_callback=lambda _frame: None,
@@ -177,6 +188,8 @@ def _build_client_frame():
         logs=[],
         tooltip_register=lambda *_args, **_kwargs: None,
     )
+    params.update(kwargs)
+    return clients.ClientFrame(**params)
 
 
 def _find_validator(label):
@@ -229,3 +242,42 @@ def test_client_contact_fields_require_inline_data():
 
     assert phone_validator.validate_callback() is None
     assert email_validator.validate_callback() is None
+
+
+def test_afectacion_interna_toggle_autofills_and_notifies():
+    shared_flag = DummyVar(False)
+    notifications = []
+    callback_states = []
+
+    frame = _build_client_frame(
+        afectacion_interna_var=shared_flag,
+        change_notifier=lambda message: notifications.append(message),
+        afectacion_change_callback=lambda enabled: callback_states.append(enabled),
+    )
+
+    assert notifications == []
+    assert callback_states == []
+    assert frame.id_var.get() == ""
+    assert frame.tipo_id_var.get() == ""
+
+    shared_flag.set(True)
+
+    assert frame.tipo_id_var.get() == "RUC"
+    assert frame.id_var.get() == "20100047218"
+    id_validator = _find_validator("ID")
+    tipo_validator = _find_validator("Tipo de ID")
+    assert id_validator is not None and id_validator.suspend_count == 0
+    assert tipo_validator is not None and tipo_validator.suspend_count == 0
+    other_validators = [
+        v for v in RecordingValidator.instances if v not in (id_validator, tipo_validator)
+    ]
+    assert other_validators and all(v.suspend_count == 1 for v in other_validators)
+    assert callback_states == [True]
+    assert any("afectación interna" in msg.lower() for msg in notifications)
+
+    shared_flag.set(False)
+
+    assert frame.tipo_id_var.get() == ""
+    assert frame.id_var.get() == ""
+    assert callback_states[-1] is False
+    assert all(v.suspend_count == 0 for v in other_validators)

@@ -1062,6 +1062,7 @@ class ProductFrame:
         self._duplicate_status_style = None
         self.duplicate_status_label = None
         self.header_tree = None
+        self.afectacion_interna = False
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -2481,7 +2482,7 @@ class ProductFrame:
                     f"Producto {self.idx+1}: aviso inline de reclamo requerido",
                     self.logs,
                 )
-            if (self._claim_nudge_shown or required_changed) and not has_complete:
+            if not has_complete:
                 self._show_claim_requirement_error()
             self._claim_nudge_shown = True
         elif not required:
@@ -3327,6 +3328,9 @@ class ProductFrame:
             self.log_change(f"Se eliminó producto {self.idx+1}")
             self.frame.destroy()
             self.remove_callback(self)
+
+    def set_afectacion_interna(self, enabled: bool):
+        self.afectacion_interna = bool(enabled)
 
     def log_change(self, message: str):
         if self._suppress_change_notifications:
