@@ -28,7 +28,7 @@ from validators import parse_decimal_amount, sanitize_rich_text
 from report.styling_enhancer import apply_cell_shading, apply_header_band, style_section_heading, style_table, style_title
 
 
-PLACEHOLDER = "No aplica / Sin información registrada."
+PLACEHOLDER = "-"
 
 
 def _group_relations_by_product(items: Iterable[Any]) -> dict[str, list[Mapping[str, Any]]]:
@@ -468,7 +468,7 @@ def normalize_analysis_texts(analysis: Mapping[str, Any] | None) -> Dict[str, st
 
 
 def _safe_text(value: Any, *, placeholder: str = PLACEHOLDER) -> str:
-    text = str(value or "").strip()
+    text = "" if value is None else str(value).strip()
     return text or placeholder
 
 
@@ -897,8 +897,11 @@ def _build_report_context(case_data: CaseData):
 def _md_table(headers: Iterable[str], rows: List[List[Any]], *, placeholder: str = PLACEHOLDER) -> List[str]:
     if not rows:
         return [placeholder]
-    safe = lambda cell: str(cell or '').replace('|', '\\|')
-    lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(['---'] * len(headers)) + " |"]
+
+    def safe(cell: Any) -> str:
+        return _safe_text(cell, placeholder=placeholder).replace("|", "\\|")
+
+    lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(["---"] * len(headers)) + " |"]
     for row in rows:
         lines.append("| " + " | ".join(safe(col) for col in row) + " |")
     return lines
@@ -1199,7 +1202,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
 
     def _set_cells(row_idx: int, col_idx: int, label: str, value: Any) -> None:
         header_table.rows[row_idx].cells[col_idx].text = label
-        header_table.rows[row_idx].cells[col_idx + 1].text = str(value or "")
+        header_table.rows[row_idx].cells[col_idx + 1].text = _safe_text(value)
 
     def _merge_value(row_idx: int, start_col: int, end_col: int) -> None:
         if start_col < end_col:
@@ -1212,34 +1215,34 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
 
     _set_cells(2, 0, "Área de Reporte", header_values.get("Área de Reporte", PLACEHOLDER))
     header_table.rows[2].cells[2].text = "Fecha de reporte"
-    header_table.rows[2].cells[3].text = str(header_values.get("Fecha de reporte", PLACEHOLDER) or "")
+    header_table.rows[2].cells[3].text = _safe_text(header_values.get("Fecha de reporte", PLACEHOLDER))
 
     _set_cells(3, 0, "Categoría del evento", header_values.get("Categoría del evento", PLACEHOLDER))
     header_table.rows[3].cells[2].text = "Tipología de evento"
-    header_table.rows[3].cells[3].text = str(header_values.get("Tipología de evento", PLACEHOLDER) or "")
+    header_table.rows[3].cells[3].text = _safe_text(header_values.get("Tipología de evento", PLACEHOLDER))
 
     _set_cells(4, 0, "Importe investigado", header_values.get("Importe investigado", PLACEHOLDER))
     header_table.rows[4].cells[2].text = "Contingencia"
-    header_table.rows[4].cells[3].text = str(header_values.get("Contingencia", PLACEHOLDER) or "")
+    header_table.rows[4].cells[3].text = _safe_text(header_values.get("Contingencia", PLACEHOLDER))
 
     _set_cells(5, 0, "Pérdida total", header_values.get("Pérdida total", PLACEHOLDER))
     header_table.rows[5].cells[2].text = "Normal"
-    header_table.rows[5].cells[3].text = str(header_values.get("Normal", PLACEHOLDER) or "")
+    header_table.rows[5].cells[3].text = _safe_text(header_values.get("Normal", PLACEHOLDER))
 
     _set_cells(6, 0, "Vencido", header_values.get("Vencido", PLACEHOLDER))
     header_table.rows[6].cells[2].text = "Judicial"
-    header_table.rows[6].cells[3].text = str(header_values.get("Judicial", PLACEHOLDER) or "")
+    header_table.rows[6].cells[3].text = _safe_text(header_values.get("Judicial", PLACEHOLDER))
 
     _set_cells(7, 0, "Castigo", header_values.get("Castigo", PLACEHOLDER))
     _merge_value(7, 1, 3)
 
     _set_cells(8, 0, "Analítica Contable", header_values.get("Analítica Contable", PLACEHOLDER))
     header_table.rows[8].cells[2].text = "Centro de Costos"
-    header_table.rows[8].cells[3].text = str(header_values.get("Centro de Costos", PLACEHOLDER) or "")
+    header_table.rows[8].cells[3].text = _safe_text(header_values.get("Centro de Costos", PLACEHOLDER))
 
     _set_cells(9, 0, "Producto", header_values.get("Producto", PLACEHOLDER))
     header_table.rows[9].cells[2].text = "Procesos impactados"
-    header_table.rows[9].cells[3].text = str(header_values.get("Procesos impactados", PLACEHOLDER) or "")
+    header_table.rows[9].cells[3].text = _safe_text(header_values.get("Procesos impactados", PLACEHOLDER))
 
     _set_cells(10, 0, "N° de Reclamos", header_values.get("N° de Reclamos", PLACEHOLDER))
     _merge_value(10, 1, 3)

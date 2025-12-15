@@ -162,7 +162,8 @@ def test_md_empty_tables_and_summary():
     md = report_builder.build_md(empty_case)
     lines = md.splitlines()
 
-    assert md.count(report_builder.PLACEHOLDER) >= 3
+    placeholder_lines = sum(1 for line in lines if line.strip() == report_builder.PLACEHOLDER)
+    assert placeholder_lines >= 3
 
 
 def test_hallazgos_table_uses_placeholders_with_products(sample_case_data):
@@ -170,7 +171,7 @@ def test_hallazgos_table_uses_placeholders_with_products(sample_case_data):
 
     assert "Cliente Uno" not in md
     assert "Totales" not in md
-    assert "| 1 | No aplica / Sin información registrada. |" in md
+    assert "| 1 | - |" in md
 
 
 def test_md_handles_rich_text_analysis_payload(sample_case_data):
