@@ -972,69 +972,26 @@ def _build_sections_summary(context: Mapping[str, Any], analysis: Mapping[str, A
 
 
 def _build_header_markdown_table(header_values: Mapping[str, Any]) -> List[str]:
-    """Genera una tabla HTML que replica la estructura del encabezado DOCX."""
+    """Genera una tabla markdown respetando el contrato existente."""
 
-    def _value(key: str, *, emphasize: bool = False) -> str:
-        text = _safe_text(header_values.get(key, PLACEHOLDER))
-        return f"<strong>{text}</strong>" if emphasize else text
+    emphasize_keys = {
+        "Importe investigado",
+        "Contingencia",
+        "Pérdida total",
+        "Normal",
+        "Vencido",
+        "Judicial",
+        "Castigo",
+    }
 
-    def _cell(tag: str, content: str, *, colspan: int = 1) -> str:
-        span_attr = f' colspan="{colspan}"' if colspan > 1 else ""
-        return f"<{tag}{span_attr}>{content}</{tag}>"
+    rows: List[List[str]] = []
+    for key, value in header_values.items():
+        text = _safe_text(value)
+        if key in emphasize_keys and text != PLACEHOLDER:
+            text = f"**{text}**"
+        rows.append([key, text])
 
-    def _row(*cells: str) -> str:
-        return "<tr>" + "".join(cells) + "</tr>"
-
-    rows = [
-        _row(_cell("th", "Dirigido a"), _cell("td", _value("Dirigido a"), colspan=3)),
-        _row(_cell("th", "Referencia"), _cell("td", _value("Referencia"), colspan=3)),
-        _row(
-            _cell("th", "Área de Reporte"),
-            _cell("td", _value("Área de Reporte")),
-            _cell("th", "Fecha de reporte"),
-            _cell("td", _value("Fecha de reporte")),
-        ),
-        _row(
-            _cell("th", "Categoría del evento"),
-            _cell("td", _value("Categoría del evento")),
-            _cell("th", "Tipología de evento"),
-            _cell("td", _value("Tipología de evento")),
-        ),
-        _row(
-            _cell("th", "Importe investigado"),
-            _cell("td", _value("Importe investigado", emphasize=True)),
-            _cell("th", "Contingencia"),
-            _cell("td", _value("Contingencia", emphasize=True)),
-        ),
-        _row(
-            _cell("th", "Pérdida total"),
-            _cell("td", _value("Pérdida total", emphasize=True)),
-            _cell("th", "Normal"),
-            _cell("td", _value("Normal", emphasize=True)),
-        ),
-        _row(
-            _cell("th", "Vencido"),
-            _cell("td", _value("Vencido", emphasize=True)),
-            _cell("th", "Judicial"),
-            _cell("td", _value("Judicial", emphasize=True)),
-        ),
-        _row(_cell("th", "Castigo"), _cell("td", _value("Castigo", emphasize=True), colspan=3)),
-        _row(
-            _cell("th", "Analítica Contable"),
-            _cell("td", _value("Analítica Contable")),
-            _cell("th", "Centro de Costos"),
-            _cell("td", _value("Centro de Costos")),
-        ),
-        _row(
-            _cell("th", "Producto"),
-            _cell("td", _value("Producto")),
-            _cell("th", "Procesos impactados"),
-            _cell("td", _value("Procesos impactados")),
-        ),
-        _row(_cell("th", "N° de Reclamos"), _cell("td", _value("N° de Reclamos"), colspan=3)),
-    ]
-
-    return ["<table>", "  <tbody>", *[f"    {row}" for row in rows], "  </tbody>", "</table>", ""]
+    return _md_table(["Campo", "Valor"], rows)
 
 
 def build_md(case_data: CaseData) -> str:
