@@ -102,10 +102,51 @@ class CollapsibleSection(ttk.Frame):
     def _show_content(self) -> None:
         self.content.pack(fill="both", expand=True)
         self._is_open = True
+        self._refresh_scrollable_async()
 
     def _hide_content(self) -> None:
         self.content.pack_forget()
         self._is_open = False
+        self._refresh_scrollable_async()
+
+    def _refresh_scrollable_async(self) -> None:
+        """Resize any enclosing scrollable container after a state change.
+
+        Uses a lazy import to avoid circular dependencies and schedules the
+        refresh with ``after_idle`` so the geometry manager can settle before
+        recalculating the scrollregion.
+        """
+
+        refresh = self._resolve_scrollable_refresh()
+        if refresh is None:
+            return
+
+        def _trigger_refresh() -> None:
+            try:
+                refresh(self)
+            except Exception:
+                # Si el contenedor no soporta redimensionamiento, continuamos
+                # sin interrumpir la interacción del acordeón.
+                return
+
+        scheduler = getattr(self, "after_idle", None)
+        if callable(scheduler):
+            try:
+                scheduler(_trigger_refresh)
+                return
+            except Exception:
+                pass
+
+        _trigger_refresh()
+
+    @staticmethod
+    def _resolve_scrollable_refresh():
+        try:
+            from ui.frames.utils import _refresh_enclosing_scrollable
+        except Exception:
+            return None
+
+        return _refresh_enclosing_scrollable
 
     def _set_header_style(self, state: str) -> None:
         frame_style = {
