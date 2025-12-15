@@ -157,6 +157,15 @@ def test_md_headings_and_tables(sample_case_data):
     assert report_builder.PLACEHOLDER in md
 
 
+def test_md_header_uses_subheading_level(sample_case_data):
+    md = report_builder.build_md(sample_case_data)
+    lines = [line for line in md.splitlines() if line]
+
+    assert lines[0].startswith("### ")
+    assert not lines[0].startswith("## ")
+    assert "**BANCO DE CRÉDITO" not in lines[0]
+
+
 def test_md_empty_tables_and_summary():
     empty_case = CaseData.from_mapping({"caso": {}, "clientes": [], "colaboradores": [], "productos": [], "reclamos": [], "involucramientos": [], "riesgos": [], "normas": [], "analisis": {}, "encabezado": {}, "operaciones": [], "anexos": [], "firmas": [], "recomendaciones_categorias": {}})
     md = report_builder.build_md(empty_case)
@@ -258,6 +267,22 @@ def test_docx_missing_dependency(monkeypatch, sample_case_data):
     with pytest.raises(RuntimeError) as excinfo:
         report_builder.build_docx(sample_case_data, Path("dummy.docx"))
     assert report_builder.DOCX_MISSING_MESSAGE in str(excinfo.value)
+
+
+def test_docx_title_uses_reduced_font(tmp_path, sample_case_data):
+    docx = pytest.importorskip("docx")
+    from docx.shared import Pt  # type: ignore
+
+    output = tmp_path / "titulo.docx"
+    report_builder.build_docx(sample_case_data, output)
+
+    document = docx.Document(output)
+    title_paragraph = document.paragraphs[0]
+    assert title_paragraph.runs, "El título debe contener texto estilizado"
+
+    first_run = title_paragraph.runs[0]
+    assert first_run.font.size == Pt(15)
+    assert first_run.font.name == "Segoe UI Semibold"
 
 
 def test_docx_missing_docx_document(monkeypatch, sample_case_data):

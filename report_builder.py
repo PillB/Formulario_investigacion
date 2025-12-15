@@ -1014,10 +1014,10 @@ def build_md(case_data: CaseData) -> str:
     }
 
     header_lines = [
-        "**BANCO DE CRÉDITO – BCP**",
-        "**SEGURIDAD CORPORATIVA, INTELIGENCIA & CRIMEN CIBERNÉTICO**",
-        "**INVESTIGACIONES & CIBERCRIMINOLOGÍA**",
-        f"**Informe de Gerencia** {case.get('tipo_informe', '')} N° {case.get('id_caso', '')}",
+        "### BANCO DE CRÉDITO – BCP",
+        "Seguridad Corporativa, Inteligencia & Crimen Cibernético",
+        "Investigaciones & Cibercriminología",
+        f"Informe de Gerencia {case.get('tipo_informe', '')} N° {case.get('id_caso', '')}",
         f"{_safe_text(case.get('lugar'))}, {_safe_text(case.get('fecha_informe'))}",
         "",
         "## Encabezado Institucional",
