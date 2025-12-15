@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 from tkinter import font as tkfont
@@ -988,6 +989,14 @@ AMOUNT_BADGE_KEYS = {
     "pago": "monto_pago",
 }
 
+INFIDENCIA_MODALITIES = (
+    "Fuga de Información",
+    "Infidencia",
+    "Infidencias",
+    "Secreto Bancario",
+    "Violación de Secreto Bancario",
+)
+
 
 class ProductFrame:
     """Representa un producto y su interfaz en la sección de productos."""
@@ -1037,6 +1046,8 @@ class ProductFrame:
         self._last_pair_error: str | None = None
         self.fecha_oc_validator: FieldValidator | None = None
         self.fecha_desc_validator: FieldValidator | None = None
+        self.id_validator: FieldValidator | None = None
+        self.tipo_prod_validator: FieldValidator | None = None
         self.schedule_summary_refresh = summary_refresh_callback or (lambda _sections=None: None)
         self.change_notifier = change_notifier
         self.id_change_callback = id_change_callback
@@ -1080,6 +1091,7 @@ class ProductFrame:
         self.claim_hint_var = tk.StringVar(value="")
         self.claim_hint_frame = None
         self.claim_template_btn = None
+        self._infidencia_active = False
 
         self.section = self._create_section(parent)
         self._sync_section_title()
@@ -1087,6 +1099,7 @@ class ProductFrame:
         self._tree_sort_state: dict[str, bool] = {}
         self._initialize_header_table(summary_parent)
         self._register_title_traces()
+        self._register_infidencia_traces()
         self._sync_section_title()
 
         self.frame = ttk.Frame(self.section.content)
@@ -1173,6 +1186,8 @@ class ProductFrame:
         )
         self.mod_cb.grid(row=3, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         self.mod_cb.set('')
+        self.mod_cb.bind("<FocusOut>", lambda _e: self._handle_infidencia_state_change(), add="+")
+        self.mod_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_infidencia_state_change(), add="+")
         self.tooltip_register(self.mod_cb, "Indica la modalidad concreta del fraude.")
         self.badges.claim("producto_modalidad", self.frame, row=3, column=4)
 
@@ -1411,18 +1426,14 @@ class ProductFrame:
         remove_btn.grid(row=0, column=1, sticky="e")
         self.tooltip_register(remove_btn, "Quita el producto y todas sus capturas del caso.")
 
-        self.validators.append(
-            FieldValidator(
-                id_entry,
-                self.badges.wrap_validation(
-                    "producto_id",
-                    lambda: validate_product_id(self.tipo_prod_var.get(), self.id_var.get()),
-                ),
-                self.logs,
-                f"Producto {self.idx+1} - ID",
-                variables=[self.id_var, self.tipo_prod_var],
-            )
+        self.id_validator = FieldValidator(
+            id_entry,
+            self.badges.wrap_validation("producto_id", self._validate_product_identifier),
+            self.logs,
+            f"Producto {self.idx+1} - ID",
+            variables=[self.id_var, self.tipo_prod_var],
         )
+        self.validators.append(self.id_validator)
         self.client_validator = FieldValidator(
             self.client_cb,
             self.badges.wrap_validation(
@@ -1675,6 +1686,9 @@ class ProductFrame:
             _execute()
 
     def _sync_amount_validation_state(self, *_args) -> bool:
+        if self._is_infidencia_case():
+            self._amount_validation_ready = False
+            return False
         if getattr(self, "_amount_validation_ready", False):
             return False
         if any((var.get() or "").strip() for var in self._iter_amount_vars()):
@@ -1684,6 +1698,9 @@ class ProductFrame:
         return False
 
     def _enable_amount_validation(self, *_args, force_refresh: bool = False):
+        if self._is_infidencia_case():
+            self._apply_infidencia_neutral_state()
+            return
         previously_blocked = not getattr(self, "_amount_validation_ready", False)
         gate_just_opened = getattr(self, "_amount_validation_gate_just_opened", False)
         self._amount_validation_ready = True
@@ -1719,6 +1736,48 @@ class ProductFrame:
         )
         for validator in validators:
             if validator is not None:
+                self._trigger_validator_refresh(validator)
+
+    def _normalize_infidence_text(self, text: str) -> str:
+        normalized = normalize_without_accents((text or "").lower())
+        return re.sub(r"[^a-z0-9]", "", normalized)
+
+    def _is_infidencia_case(self) -> bool:
+        cat2_token = self._normalize_infidence_text(self.cat2_var.get())
+        if cat2_token != self._normalize_infidence_text("Fraude Interno"):
+            return False
+        modality_token = self._normalize_infidence_text(self.mod_var.get())
+        return any(
+            modality_token == self._normalize_infidence_text(option)
+            for option in INFIDENCIA_MODALITIES
+        )
+
+    def _apply_infidencia_neutral_state(self):
+        badge_manager = getattr(self, "badges", None)
+        if badge_manager:
+            neutral_keys = {"producto_id", "producto_tipo", "monto_inv", *AMOUNT_BADGE_KEYS.values()}
+            for key in neutral_keys:
+                badge_manager.update_badge(key, False, None)
+        if not hasattr(self, "_field_errors"):
+            self._field_errors = {}
+        for key in AMOUNT_BADGE_KEYS.values():
+            self._field_errors[key] = None
+        self._amount_validation_ready = False
+
+    def _handle_infidencia_state_change(self, *_args):
+        active = self._is_infidencia_case()
+        previously_active = getattr(self, "_infidencia_active", False)
+        self._infidencia_active = active
+        if active:
+            self._apply_infidencia_neutral_state()
+            return
+        if previously_active and not active:
+            self._enable_amount_validation(force_refresh=True)
+            for validator in (
+                getattr(self, "id_validator", None),
+                getattr(self, "tipo_prod_validator", None),
+                *self._iter_amount_validators(),
+            ):
                 self._trigger_validator_refresh(validator)
 
     def _attach_amount_listeners(self, amount_vars, amount_widgets):
@@ -1772,6 +1831,12 @@ class ProductFrame:
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
 
+    def _register_infidencia_traces(self):
+        for var in (self.cat2_var, self.mod_var):
+            trace_add = getattr(var, "trace_add", None)
+            if callable(trace_add):
+                trace_add("write", lambda *_: self._handle_infidencia_state_change())
+
     def _configure_grid_columns(self):
         columnconfigure = getattr(self.frame, "columnconfigure", None)
         if not callable(columnconfigure):
@@ -1815,6 +1880,17 @@ class ProductFrame:
             return base_font.measure(f"{WARNING_ICON}{WARNING_ICON}") + COL_PADX
         except Exception:
             return 40
+
+    def _build_tipo_producto_validator(self, tipo_prod_cb):
+        validator = FieldValidator(
+            tipo_prod_cb,
+            self.badges.wrap_validation("producto_tipo", self._validate_tipo_producto),
+            self.logs,
+            f"Producto {self.idx+1} - Tipo de producto",
+            variables=[self.tipo_prod_var],
+        )
+        self.tipo_prod_validator = validator
+        return validator
 
     def _build_section_title(self) -> str:
         base_title = f"Producto {self.idx+1}"
@@ -2081,6 +2157,7 @@ class ProductFrame:
         self.mod_var.set('')
         self.mod_cb.set('')
         self.log_change(f"Producto {self.idx+1}: cambió categoría 2")
+        self._handle_infidencia_state_change()
 
     def _build_claim_row(self, idx: int):
         row = ClaimRow(self.claims_frame, self, idx, self.remove_claim, self.logs, self.tooltip_register)
@@ -2955,6 +3032,18 @@ class ProductFrame:
         widget.bind("<<Paste>>", lambda _e: self.on_id_change(), add="+")
         widget.bind("<<ComboboxSelected>>", lambda _e: self.on_id_change(from_focus=True), add="+")
 
+    def _validate_product_identifier(self):
+        if self._is_infidencia_case():
+            self._apply_infidencia_neutral_state()
+            return None
+        return validate_product_id(self.tipo_prod_var.get(), self.id_var.get())
+
+    def _validate_tipo_producto(self):
+        if self._is_infidencia_case():
+            self._apply_infidencia_neutral_state()
+            return None
+        return validate_required_text(self.tipo_prod_var.get(), "el tipo de producto")
+
     def _validate_product_date_pair(self):
         fecha_oc = (self.fecha_oc_var.get() or "").strip()
         fecha_desc = (self.fecha_desc_var.get() or "").strip()
@@ -3014,6 +3103,10 @@ class ProductFrame:
         return message, decimal_value
 
     def _validate_amount_input(self, badge_key, var, label, allow_blank):
+        if self._is_infidencia_case():
+            self._field_errors[badge_key] = None
+            self._apply_infidencia_neutral_state()
+            return None
         message, _ = self._validate_amount_field(var, label, allow_blank)
         self._field_errors[badge_key] = message
         target_key = next((key for key, value in AMOUNT_BADGE_KEYS.items() if value == badge_key), None)
@@ -3038,6 +3131,9 @@ class ProductFrame:
         return values
 
     def _validate_montos_consistentes(self, target_key: str | None = None):
+        if self._is_infidencia_case():
+            self._apply_infidencia_neutral_state()
+            return (None, True)
         self._sync_amount_validation_state()
         if not self._amount_validation_ready:
             self._reset_amount_badges()

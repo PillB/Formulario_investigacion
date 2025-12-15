@@ -11,12 +11,20 @@ from models.analitica_catalog import get_analitica_codes, get_analitica_names
 class DummyVar:
     def __init__(self, value=""):
         self._value = value
+        self._traces = []
 
     def get(self):
         return self._value
 
     def set(self, value):
         self._value = value
+        for callback in list(self._traces):
+            if callable(callback):
+                callback(None, None, None)
+
+    def trace_add(self, _mode, callback):
+        self._traces.append(callback)
+        return f"trace_{len(self._traces)}"
 
 
 class DummyWidget:
@@ -457,3 +465,34 @@ def test_payload_loaded_claim_requirement_enforced_with_partial_claim():
 
     assert any("C00001234" in err for err in errors)
     assert any("al menos un reclamo completo" in err for err in errors)
+
+
+def test_infidencia_modalities_bypass_product_validations():
+    product = _build_product_frame()
+    monto_validator = _find_validator("Monto investigado")
+
+    assert product.cat2_var._traces
+    assert product.mod_var._traces
+
+    product.id_var.set("")
+    product.tipo_prod_var.set("")
+    product.monto_inv_var.set("abc")
+
+    assert product.id_validator.validate_callback() is not None
+    assert monto_validator.validate_callback() is not None
+
+    product.cat2_var.set("Fraude Interno")
+    product.mod_var.set("violación de secreto bancario")
+    product._handle_infidencia_state_change()
+
+    assert product._infidencia_active is True
+    assert product.id_validator.validate_callback() is None
+    assert monto_validator.validate_callback() is None
+    message, is_valid = product._validate_montos_consistentes()
+    assert message is None
+    assert is_valid is True
+
+    product.mod_var.set("Otra modalidad")
+    assert product._infidencia_active is False
+    assert product.id_validator.validate_callback() is not None
+    assert monto_validator.validate_callback() is not None
