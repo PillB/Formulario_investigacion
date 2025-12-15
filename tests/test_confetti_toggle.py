@@ -4,6 +4,7 @@ import types
 import tkinter as tk
 
 import app as app_module
+import ui.effects.confetti as confetti
 
 
 def build_confetti_app(monkeypatch):
@@ -71,3 +72,11 @@ def test_confetti_errors_swallowed(monkeypatch):
     monkeypatch.setattr(app_module, "start_confetti_burst", boom)
 
     app._handle_save_success(_minimal_result())
+
+
+def test_confetti_default_uses_settings_flag(monkeypatch):
+    monkeypatch.setattr(confetti, "CONFETTI_ENABLED", False)
+    assert confetti._confetti_is_enabled(None) is False
+
+    monkeypatch.setattr(confetti, "CONFETTI_ENABLED", True)
+    assert confetti._confetti_is_enabled(None) is True
