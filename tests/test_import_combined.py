@@ -388,6 +388,8 @@ def test_import_risks_and_norms_hydrate_from_catalogs(monkeypatch, messagebox_sp
                     'id_norma': 'NOR-01',
                     'descripcion': 'Regla catálogo',
                     'fecha_vigencia': '2023-01-01',
+                    'acapite_inciso': 'Art. 1',
+                    'detalle_norma': 'Detalle desde catálogo',
                 }
             },
         }
@@ -430,6 +432,8 @@ def test_import_risks_and_norms_hydrate_from_catalogs(monkeypatch, messagebox_sp
     norm_frame = app.norm_frames[0]
     assert norm_frame.descripcion_var.get() == 'Regla catálogo'
     assert norm_frame.fecha_var.get() == '2023-01-01'
+    assert norm_frame.acapite_var.get() == 'Art. 1'
+    assert norm_frame._get_detalle_text() == 'Detalle desde catálogo'
 
 
 def test_import_claims_uses_catalogs_and_reports_missing_products(monkeypatch, messagebox_spy):

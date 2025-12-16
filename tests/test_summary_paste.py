@@ -113,11 +113,13 @@ def test_ingest_summary_rows_create_frames_with_normalized_values(monkeypatch, m
     assert app.risk_frames[0].criticidad_var.get() == CRITICIDAD_LIST[1]
     assert app.risk_frames[0].exposicion_var.get() == "100.00"
 
-    norm_row = ["2024.001.01.01", "Nueva norma", "2024-01-01"]
+    norm_row = ["2024.001.01.01", "Nueva norma", "2024-01-01", "Art. 2", "Detalle"]
     norm_rows = app._transform_clipboard_normas([norm_row])
     assert app.ingest_summary_rows("normas", norm_rows) == 1
     assert [frame.id_var.get() for frame in app.norm_frames] == ["2024.001.01.01"]
     assert app.norm_frames[0].descripcion_var.get() == "Nueva norma"
+    assert app.norm_frames[0].acapite_var.get() == "Art. 2"
+    assert app.norm_frames[0]._get_detalle_text() == "Detalle"
 
 
 @pytest.mark.parametrize(
@@ -156,7 +158,7 @@ def test_transform_clipboard_rows_invalid_inputs(monkeypatch, messagebox_spy, tr
         (
             "normas",
             "norm_frames",
-            ["2024.001.02.01", "Descripción", "2024-01-01"],
+            ["2024.001.02.01", "Descripción", "2024-01-01", "Art. 1", "Detalle"],
             "Normas duplicadas",
             "Norma duplicada 2024.001.02.01",
         ),

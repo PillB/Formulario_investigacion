@@ -140,9 +140,9 @@ SUMMARY_CASES = [
     ),
     SummaryPasteCase(
         key="normas",
-        columns=build_columns(3),
-        valid_row=["2024.001.01.01", "Descripción", "2024-01-01"],
-        invalid_row=["2024.001.01.01", "Descripción", "2024/01/01"],
+        columns=build_columns(5),
+        valid_row=["2024.001.01.01", "Descripción", "2024-01-01", "Art. 1", "Detalle"],
+        invalid_row=["2024.001.01.01", "Descripción", "2024/01/01", "Art. 1", "Detalle"],
         state_getter=lambda app: collect_ids(app.norm_frames),
         expected_state=["2024.001.01.01"],
         error_fragment="fecha",

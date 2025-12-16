@@ -1,5 +1,5 @@
-id_norma,id_caso,descripcion,fecha_vigencia
-1234.567.89.01,2025-0001,Descripción de la norma 1,2023-01-01
-2345.678.90.12,2025-0001,Descripción de la norma 2,2024-06-30
-3456.789.01.23,2025-0002,Descripción de la norma 3,2022-12-15
-4567.890.12.34,2025-0003,Descripción de la norma 4,2024-11-05
+id_norma,id_caso,descripcion,fecha_vigencia,acapite_inciso,detalle_norma
+1234.567.89.01,2025-0001,Descripción de la norma 1,2023-01-01,Art. 10,"Incumplimiento de directiva general en el artículo 10."
+2345.678.90.12,2025-0001,Descripción de la norma 2,2024-06-30,Sec. 5,"Omisión de controles documentales establecidos en la sección 5."
+3456.789.01.23,2025-0002,Descripción de la norma 3,2022-12-15,Inc. B,"Desviación de flujo operativo descrito en el inciso B."
+4567.890.12.34,2025-0003,Descripción de la norma 4,2024-11-05,Apdo. 3,"Incumplimiento parcial del apartado 3 sobre resguardo de información."

@@ -21,6 +21,7 @@ from validators import (
     validate_money_bounds,
     validate_norm_id,
     validate_product_dates,
+    validate_required_text,
     validate_reclamo_id,
     validate_risk_id,
     validate_phone_list,
@@ -55,7 +56,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
             16,
             {"id_producto", "id_cliente", "monto_investigado"},
         ),
-        ("normas_masivas.csv", 4, {"id_norma", "descripcion", "fecha_vigencia"}),
+        (
+            "normas_masivas.csv",
+            4,
+            {"id_norma", "descripcion", "fecha_vigencia", "acapite_inciso", "detalle_norma"},
+        ),
         ("riesgos_masivos.csv", 4, {"id_riesgo", "descripcion", "criticidad"}),
     ],
 )
@@ -265,6 +270,8 @@ def test_combined_massive_dataset_matches_expected_entities_and_validations():
                 and validate_case_id(row.get("id_caso", "")) is None
                 and validate_date_text(row.get("fecha_vigencia", ""), "Fecha de vigencia", allow_blank=False)
                 is None
+                and validate_required_text(row.get("acapite_inciso", ""), "acápite/inciso") is None
+                and validate_required_text(row.get("detalle_norma", ""), "detalle de norma") is None
             ),
         ),
         (

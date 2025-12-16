@@ -840,13 +840,27 @@ def _build_report_context(case_data: CaseData):
         for risk in riesgos
     ]
 
-    norm_rows = [
-        [
-            _safe_text(norm.get("id_norma") or norm.get("norma"), placeholder="-"),
-            _safe_text(norm.get("descripcion") or norm.get("detalle"), placeholder="-"),
-        ]
-        for norm in normas
-    ]
+    norm_rows = []
+    for norm in normas:
+        if not isinstance(norm, Mapping):
+            norm = {}
+        norm_rows.append(
+            [
+                _safe_text(norm.get("id_norma") or norm.get("norma"), placeholder="-"),
+                _safe_text(
+                    norm.get("acapite_inciso") or norm.get("acapite") or norm.get("inciso"),
+                    placeholder="-",
+                ),
+                _safe_text(norm.get("fecha_vigencia") or norm.get("vigencia"), placeholder="-"),
+                _safe_text(norm.get("descripcion") or norm.get("detalle"), placeholder="-"),
+                _safe_text(
+                    norm.get("detalle_norma")
+                    or norm.get("detalle")
+                    or norm.get("descripcion"),
+                    placeholder="-",
+                ),
+            ]
+        )
 
     def _normalize_recommendation_list(value: Any) -> List[str]:
         if isinstance(value, str):
@@ -1147,7 +1161,18 @@ def build_md(case_data: CaseData) -> str:
             "## Normas transgredidas",
         ]
     )
-    lines.extend(_md_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"]))
+    lines.extend(
+        _md_table(
+            [
+                "Norma/Política",
+                "Acápite/Inciso",
+                "Fecha de vigencia",
+                "Descripción",
+                "Detalle de la norma",
+            ],
+            context["norm_rows"],
+        )
+    )
     lines.extend(
         [
             "",
@@ -1351,7 +1376,16 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         highlight_predicate=_is_nuevo_riesgo_row,
     )
     style_section_heading(document.add_heading("Normas transgredidas", level=2))
-    append_table(["Norma/Política", "Descripción de la transgresión"], context["norm_rows"])
+    append_table(
+        [
+            "Norma/Política",
+            "Acápite/Inciso",
+            "Fecha de vigencia",
+            "Descripción",
+            "Detalle de la norma",
+        ],
+        context["norm_rows"],
+    )
     style_section_heading(document.add_heading("Conclusiones", level=2))
     _add_rich_text_paragraphs(document, raw_analysis.get("conclusiones"))
     style_section_heading(document.add_heading("Recomendaciones y Mejoras de Procesos", level=2))
