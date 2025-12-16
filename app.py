@@ -5108,6 +5108,32 @@ class FraudCaseApp:
         self._log_navigation_change("Agregó riesgo")
         self.add_risk(user_initiated=True)
 
+    def _build_risk_context(self) -> dict:
+        def _get(var):
+            getter = getattr(var, "get", None)
+            return getter() if callable(getter) else ""
+
+        context = {"id_proceso": _get(getattr(self, "id_proceso_var", None))}
+
+        for frame in self.product_frames:
+            cat1 = _get(getattr(frame, "cat1_var", None))
+            cat2 = _get(getattr(frame, "cat2_var", None))
+            mod = _get(getattr(frame, "mod_var", None))
+            proceso = _get(getattr(frame, "proceso_var", None))
+            canal = _get(getattr(frame, "canal_var", None))
+            if any((cat1, cat2, mod, proceso, canal)):
+                context.update(
+                    {
+                        "categoria1": cat1,
+                        "categoria2": cat2,
+                        "modalidad": mod,
+                        "proceso": proceso,
+                        "canal": canal,
+                    }
+                )
+                break
+        return context
+
     def add_risk(self, user_initiated: bool = False, default_risk_id: str | None = None):
         idx = len(self.risk_frames)
         risk = RiskFrame(
@@ -5119,17 +5145,23 @@ class FraudCaseApp:
             change_notifier=self._log_navigation_change,
             default_risk_id=default_risk_id,
             header_tree=self.risk_header_tree,
+            context_provider=self._build_risk_context,
+            existing_ids_provider=lambda _rf=None: self._collect_existing_ids(self.risk_frames),
+            modal_factory=getattr(self, "risk_modal_factory", None),
         )
         risk.set_refresh_callbacks(
             shared_tree_refresher=self._refresh_shared_risk_tree,
             summary_refresher=lambda: self._schedule_summary_refresh('riesgos'),
         )
+        risk.set_lookup(getattr(self, "risk_lookup", {}))
         self.risk_frames.append(risk)
         self._renumber_risks()
         self._maybe_show_milestone_badge(len(self.risk_frames), "Riesgos", user_initiated=user_initiated)
         self._refresh_risk_auto_ids()
         self._refresh_shared_risk_tree()
         self._refresh_scrollable(getattr(self, "risks_scrollable", None))
+        if user_initiated:
+            risk.offer_catalog_modal(trigger="add_risk")
 
     def remove_risk(self, risk_frame):
         self.risk_frames.remove(risk_frame)

@@ -27,6 +27,200 @@ from ui.layout import CollapsibleSection
 from validation_badge import badge_registry
 
 
+def _normalize_token(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _extract_categories(source: dict) -> set[str]:
+    categories: set[str] = set()
+    for key in ("categoria1", "categoria2", "categorias", "categoria"):
+        raw_value = source.get(key)
+        if raw_value is None:
+            continue
+        if isinstance(raw_value, (list, tuple, set)):
+            values = raw_value
+        else:
+            values = str(raw_value).replace("/", ",").split(",")
+        for chunk in values:
+            token = _normalize_token(chunk)
+            if token:
+                categories.add(token)
+    return categories
+
+
+def build_risk_suggestions(risk_lookup, *, context=None, excluded_ids=None):
+    """Ordena los riesgos del catálogo según el contexto del caso."""
+
+    context = context or {}
+    excluded = {_normalize_token(rid) for rid in (excluded_ids or set()) if rid}
+    normalized_context = {k: _normalize_token(v) for k, v in (context or {}).items()}
+    context_categories = _extract_categories(normalized_context)
+    suggestions = []
+
+    for risk_id, payload in (risk_lookup or {}).items():
+        if not risk_id:
+            continue
+        normalized_id = _normalize_token(risk_id)
+        if normalized_id in excluded:
+            continue
+
+        data = payload or {}
+        normalized_payload = {k: _normalize_token(v) for k, v in data.items() if k}
+        score = 0
+
+        for key in ("id_proceso", "proceso", "canal", "modalidad"):
+            ctx = normalized_context.get(key)
+            if not ctx:
+                continue
+            value = normalized_payload.get(key)
+            if not value:
+                continue
+            if ctx == value:
+                score += 3
+            elif ctx in value:
+                score += 1
+
+        record_categories = _extract_categories(normalized_payload)
+        if context_categories:
+            shared = context_categories & record_categories
+            if shared:
+                score += 2 * len(shared)
+
+        descripcion = normalized_payload.get("descripcion", "")
+        for token in (
+            normalized_context.get("proceso"),
+            normalized_context.get("canal"),
+            normalized_context.get("modalidad"),
+        ):
+            if token and token in descripcion:
+                score += 1
+
+        suggestions.append({"id_riesgo": risk_id, "data": data, "_score": score})
+
+    suggestions.sort(key=lambda item: (-item["_score"], item["id_riesgo"]))
+    return suggestions
+
+
+class RiskCatalogModal:
+    """Modal sencillo para seleccionar riesgos del catálogo."""
+
+    COLUMNS = (
+        ("id_riesgo", "ID"),
+        ("descripcion", "Descripción"),
+        ("criticidad", "Criticidad"),
+        ("lider", "Líder"),
+        ("exposicion_residual", "Exposición"),
+    )
+
+    def __init__(self, parent, suggestions, *, on_select, trigger=""):
+        self.parent = parent
+        self.on_select = on_select
+        self.suggestions = list(suggestions or [])
+        self.trigger = trigger
+        self.search_var = tk.StringVar()
+
+        self.window = tk.Toplevel(parent)
+        try:
+            self.window.transient(parent)
+            self.window.grab_set()
+        except Exception:
+            pass
+        try:
+            self.window.title("Sugerencias de riesgos")
+        except Exception:
+            pass
+        container = ttk.Frame(self.window)
+        container.pack(fill="both", expand=True, padx=COL_PADX, pady=ROW_PADY)
+
+        search_row = ttk.Frame(container)
+        search_row.pack(fill="x", expand=False, pady=(0, ROW_PADY))
+        search_label = ttk.Label(search_row, text="Filtrar:")
+        search_label.pack(side="left")
+        search_entry = ttk.Entry(search_row, textvariable=self.search_var, width=40)
+        search_entry.pack(side="left", padx=(COL_PADX // 2, 0), fill="x", expand=True)
+        try:
+            search_entry.focus_set()
+        except Exception:
+            pass
+        search_entry.bind("<KeyRelease>", lambda _e: self._refresh_rows())
+
+        self.tree = ttk.Treeview(
+            container,
+            columns=[c[0] for c in self.COLUMNS],
+            show="headings",
+            height=8,
+        )
+        for col_id, label in self.COLUMNS:
+            self.tree.heading(col_id, text=label)
+            self.tree.column(col_id, anchor="w", stretch=True)
+        self.tree.pack(fill="both", expand=True)
+        self.tree.bind("<Double-1>", lambda _e: self._commit_selection())
+
+        buttons = ttk.Frame(container)
+        buttons.pack(fill="x", expand=False, pady=(ROW_PADY // 2, 0))
+        select_btn = ttk.Button(buttons, text="Usar riesgo", command=self._commit_selection)
+        select_btn.pack(side="right")
+        close_btn = ttk.Button(buttons, text="Cerrar", command=self.window.destroy)
+        close_btn.pack(side="right", padx=(0, COL_PADX // 2))
+
+        self._refresh_rows()
+
+    def _filtered(self):
+        needle = _normalize_token(self.search_var.get())
+        if not needle:
+            return self.suggestions
+        filtered = []
+        for suggestion in self.suggestions:
+            data = suggestion.get("data", {})
+            haystack = " ".join(
+                _normalize_token(value)
+                for value in (
+                    suggestion.get("id_riesgo"),
+                    data.get("descripcion", ""),
+                    data.get("lider", ""),
+                    data.get("criticidad", ""),
+                )
+            )
+            if needle in haystack:
+                filtered.append(suggestion)
+        return filtered
+
+    def _refresh_rows(self):
+        try:
+            self.tree.delete(*self.tree.get_children(""))
+        except Exception:
+            return
+        for idx, suggestion in enumerate(self._filtered()):
+            data = suggestion.get("data", {})
+            values = [
+                suggestion.get("id_riesgo", ""),
+                data.get("descripcion", ""),
+                data.get("criticidad", ""),
+                data.get("lider", ""),
+                data.get("exposicion_residual", ""),
+            ]
+            tags = ("even" if idx % 2 == 0 else "odd",)
+            try:
+                self.tree.insert("", "end", values=values, tags=tags)
+            except Exception:
+                continue
+
+    def _commit_selection(self):
+        selection = None
+        try:
+            selected_item = self.tree.selection()
+            if selected_item:
+                values = self.tree.item(selected_item[0], "values")
+                selection = values[0] if values else None
+        except Exception:
+            selection = None
+        try:
+            self.window.destroy()
+        except Exception:
+            pass
+        if callable(self.on_select):
+            self.on_select(selection)
+
 class RiskFrame:
     """Representa un riesgo identificado en la sección de riesgos."""
 
@@ -48,6 +242,9 @@ class RiskFrame:
         change_notifier=None,
         default_risk_id: str | None = None,
         header_tree=None,
+        context_provider=None,
+        existing_ids_provider=None,
+        modal_factory=None,
     ):
         self.parent = parent
         self.idx = idx
@@ -65,6 +262,9 @@ class RiskFrame:
         self._last_missing_lookup_id = None
         self.change_notifier = change_notifier
         self.header_tree = None
+        self.context_provider = context_provider
+        self.existing_ids_provider = existing_ids_provider
+        self.modal_factory = modal_factory
 
         self.id_var = tk.StringVar()
         self.new_risk_var = tk.BooleanVar(value=False)
@@ -676,6 +876,57 @@ class RiskFrame:
         self.id_validator.validate_callback()
         self.desc_validator.validate_callback()
 
+    # ------------------------------------------------------------------
+    # Catálogo y sugerencias
+
+    def _get_case_context(self) -> dict:
+        if callable(self.context_provider):
+            try:
+                return self.context_provider() or {}
+            except Exception:
+                return {}
+        return {}
+
+    def _get_existing_ids(self) -> set[str]:
+        if callable(self.existing_ids_provider):
+            try:
+                return set(self.existing_ids_provider(self) or set())
+            except Exception:
+                return set()
+        return set()
+
+    def offer_catalog_modal(self, trigger: str = ""):
+        """Lanza un modal de catálogo cuando hay sugerencias disponibles."""
+
+        if not self.is_catalog_mode():
+            return None
+
+        suggestions = build_risk_suggestions(
+            self.risk_lookup,
+            context=self._get_case_context(),
+            excluded_ids=self._get_existing_ids(),
+        )
+        if not suggestions:
+            return None
+
+        def _on_select(risk_id: str | None):
+            if not risk_id:
+                return
+            self.id_var.set(risk_id)
+            self._set_catalog_mode(True)
+            self.on_id_change(from_focus=True, explicit_lookup=True, preserve_existing=False)
+
+        factory = self.modal_factory or RiskCatalogModal
+        try:
+            parent = self.frame.winfo_toplevel()
+        except Exception:
+            parent = getattr(self, "frame", None)
+
+        try:
+            return factory(parent, suggestions, on_select=_on_select, trigger=trigger)
+        finally:
+            self._schedule_refresh()
+
     def _validate_criticidad(self):
         value = (self.criticidad_var.get() or "").strip()
         if not value:
@@ -738,6 +989,7 @@ class RiskFrame:
     def _on_mode_toggle(self):
         if self.is_catalog_mode():
             self.on_id_change(preserve_existing=True, silent=True)
+            self.offer_catalog_modal(trigger="mode_toggle")
         else:
             self._last_missing_lookup_id = None
             self._schedule_refresh()
@@ -825,4 +1077,4 @@ class RiskFrame:
             summary_refresher()
 
 
-__all__ = ["RiskFrame"]
+__all__ = ["RiskFrame", "RiskCatalogModal", "build_risk_suggestions"]
