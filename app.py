@@ -8351,9 +8351,9 @@ class FraudCaseApp:
             padded = list(values) + [""] * max(0, 5 - len(values))
             norm = {
                 "id_norma": padded[0].strip(),
-                "descripcion": padded[1].strip(),
+                "acapite_inciso": padded[1].strip(),
                 "vigencia": padded[2].strip(),
-                "acapite_inciso": padded[3].strip(),
+                "descripcion": padded[3].strip(),
                 "detalle_norma": padded[4].strip(),
             }
             message = validate_norm_id(norm["id_norma"])
@@ -8378,9 +8378,9 @@ class FraudCaseApp:
             sanitized.append(
                 (
                     norm["id_norma"],
-                    norm["descripcion"],
-                    norm["vigencia"],
                     norm["acapite_inciso"],
+                    norm["vigencia"],
+                    norm["descripcion"],
                     norm["detalle_norma"],
                 )
             )
@@ -8732,9 +8732,9 @@ class FraudCaseApp:
                 self.add_norm()
                 frame = self.norm_frames[-1]
                 frame.id_var.set(norm_id)
-                frame.descripcion_var.set((values[1] if len(values) > 1 else "").strip())
+                frame.acapite_var.set((values[1] if len(values) > 1 else "").strip())
                 frame.fecha_var.set((values[2] if len(values) > 2 else "").strip())
-                frame.acapite_var.set((values[3] if len(values) > 3 else "").strip())
+                frame.descripcion_var.set((values[3] if len(values) > 3 else "").strip())
                 frame._set_detalle_text((values[4] if len(values) > 4 else "").strip())
                 processed += 1
             if duplicate_ids:
