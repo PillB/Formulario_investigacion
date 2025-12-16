@@ -112,6 +112,13 @@ class NormFrameStub:
     def _get_detalle_text(self):
         return self._detalle_text
 
+    @staticmethod
+    def _shorten_preview(text: str, max_length: int = 60) -> str:
+        clean = " ".join(str(text or "").split())
+        if len(clean) <= max_length:
+            return clean
+        return clean[: max_length - 1].rstrip() + "…"
+
 
 class ClaimStub:
     def __init__(self):
@@ -188,4 +195,3 @@ def build_populate_method(id_field):
         frame.populated_rows.append(dict(row))
 
     return _populate
-

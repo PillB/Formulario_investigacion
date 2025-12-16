@@ -852,7 +852,10 @@ def _build_report_context(case_data: CaseData):
                     placeholder="-",
                 ),
                 _safe_text(norm.get("fecha_vigencia") or norm.get("vigencia"), placeholder="-"),
-                _safe_text(norm.get("descripcion") or norm.get("detalle"), placeholder="-"),
+                _safe_text(
+                    norm.get("descripcion") or norm.get("detalle_norma") or norm.get("detalle"),
+                    placeholder="-",
+                ),
                 _safe_text(
                     norm.get("detalle_norma")
                     or norm.get("detalle")
@@ -1168,7 +1171,7 @@ def build_md(case_data: CaseData) -> str:
                 "Acápite/Inciso",
                 "Fecha de vigencia",
                 "Descripción",
-                "Detalle de la norma",
+                "Detalle de Norma",
             ],
             context["norm_rows"],
         )
@@ -1382,7 +1385,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             "Acápite/Inciso",
             "Fecha de vigencia",
             "Descripción",
-            "Detalle de la norma",
+            "Detalle de Norma",
         ],
         context["norm_rows"],
     )

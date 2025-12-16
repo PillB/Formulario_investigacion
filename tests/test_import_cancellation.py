@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 
 import app as app_module
 from tests.app_factory import build_import_app
@@ -66,7 +67,7 @@ def test_import_cancelled_from_dialog(monkeypatch, messagebox_spy, method_name, 
             "import_norms",
             [
                 {
-                    "id_norma": "N-1",
+                    "id_norma": "1234.567.89.01",
                     "descripcion": "desc",
                     "fecha_vigencia": "2024-01-01",
                     "acapite_inciso": "Art. 1",
@@ -135,3 +136,32 @@ def test_import_success_paths(monkeypatch, messagebox_spy, method_name, rows, ex
     assert any(expected_log_fragment in log["mensaje"] for log in app.logs)
     if expected_sync:
         assert expected_sync in app.sync_calls
+
+
+def test_apply_norm_import_payload_validates_required_fields(monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+    run_calls = []
+
+    def fake_run_import(file_path, import_type, **kwargs):
+        run_calls.append(kwargs)
+        return SimpleNamespace(has_changes=False, summary_text="stub")
+
+    app.mass_import_manager.run_import = fake_run_import
+    app._refresh_shared_norm_tree = lambda: None
+
+    app._apply_norm_import_payload(
+        [
+            {
+                "id_norma": "N-1",
+                "descripcion": "",
+                "fecha_vigencia": "",
+                "acapite_inciso": "",
+                "detalle_norma": "",
+            }
+        ],
+        file_path="normas.csv",
+    )
+
+    assert len(app.norm_frames) == 0
+    assert run_calls and run_calls[0]["errors"] == 1
+    assert messagebox_spy.warnings  # se notifica el resumen aunque no haya cambios

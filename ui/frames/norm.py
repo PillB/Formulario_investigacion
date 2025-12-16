@@ -31,8 +31,10 @@ class NormFrame:
 
     HEADER_COLUMNS = (
         ("id_norma", "ID"),
+        ("acapite_inciso", "Acápite/Inciso"),
         ("fecha_vigencia", "Fecha"),
         ("descripcion", "Descripción"),
+        ("detalle_norma", "Detalle de Norma"),
     )
 
     def __init__(
@@ -203,7 +205,7 @@ class NormFrame:
             detalle_container.rowconfigure(0, weight=1)
         detalle_text = scrolledtext.ScrolledText(detalle_container, height=4, wrap=tk.WORD)
         detalle_text.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="nsew")
-        self.badges.claim("norm_detalle", detalle_container, row=0, column=1, sticky="n")
+        self.badges.claim("norm_detalle", detalle_container, row=0, column=1)
         grid_labeled_widget(
             self.frame,
             row=5,
@@ -337,8 +339,10 @@ class NormFrame:
 
         column_widths = {
             "id_norma": 200,
+            "acapite_inciso": 200,
             "fecha_vigencia": 160,
-            "descripcion": 380,
+            "descripcion": 320,
+            "detalle_norma": 360,
         }
 
         for col_id, text in NormFrame.HEADER_COLUMNS:
