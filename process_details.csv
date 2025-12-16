@@ -1,0 +1,5 @@
+id_proceso,proceso,canal,descripcion
+BPID-000001,Activación de Tarjeta de crédito,Banca Móvil,Activación de tarjetas a través de canal digital.
+BPID-RNF-000002,Venta en Homebanking,Homebanking,Procesos de venta remota a través de Homebanking.
+BPID-000003,Bloqueo de cuentas,Centro de contacto,Bloqueo por solicitudes recibidas en el call center.
+BPID-000004,Venta de crédito comercial,Agencias,Venta presencial y soporte de créditos comerciales.

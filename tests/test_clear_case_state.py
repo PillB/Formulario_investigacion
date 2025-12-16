@@ -86,6 +86,7 @@ def resettable_app(monkeypatch):
     app._compact_views_present = lambda sections=None: False
     app._ensure_case_vars = lambda: None
     app.id_caso_var = SimpleVar()
+    app.id_proceso_var = SimpleVar()
     app.tipo_informe_var = SimpleVar(TIPO_INFORME_LIST[0])
     app.cat_caso1_var = SimpleVar(list(TAXONOMIA.keys())[0])
     app.canal_caso_var = SimpleVar(CANAL_LIST[0])

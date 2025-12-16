@@ -2,6 +2,7 @@
   "dataset": {
     "caso": {
       "id_caso": "2024-0001",
+      "id_proceso": "BPID-000004",
       "tipo_informe": "Gerencia",
       "categoria1": "Riesgo de Fraude",
       "categoria2": "Fraude Interno",
@@ -254,6 +255,7 @@
   "form_state": {
     "tk_variables": {
       "id_caso_var": "2024-0001",
+      "id_proceso_var": "BPID-000004",
       "tipo_informe_var": "Gerencia",
       "cat_caso1_var": "Riesgo de Fraude",
       "cat_caso2_var": "Fraude Interno",
