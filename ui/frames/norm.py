@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, scrolledtext, ttk
 
 from validators import (
     FieldValidator,
@@ -60,6 +60,8 @@ class NormFrame:
         self.id_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
         self.fecha_var = tk.StringVar()
+        self.acapite_var = tk.StringVar()
+        self.detalle_var = tk.StringVar()
         self.norm_lookup = {}
         self._last_missing_lookup_id = None
 
@@ -79,11 +81,16 @@ class NormFrame:
         self._place_section()
 
         content_frame = ttk.Frame(self.section.content)
-        self.section.pack_content(content_frame, fill="x", expand=True)
+        self.section.pack_content(content_frame, fill="both", expand=True)
         ensure_grid_support(content_frame)
         if hasattr(content_frame, "columnconfigure"):
             try:
                 content_frame.columnconfigure(0, weight=1)
+            except Exception:
+                pass
+        if hasattr(content_frame, "rowconfigure"):
+            try:
+                content_frame.rowconfigure(0, weight=1)
             except Exception:
                 pass
 
@@ -96,6 +103,10 @@ class NormFrame:
             sticky="nsew",
         )
         self.badges = badge_registry
+        try:
+            self.frame.rowconfigure(5, weight=1)
+        except Exception:
+            pass
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
@@ -166,6 +177,44 @@ class NormFrame:
         )
         self.tooltip_register(desc_entry, "Detalla el artículo o sección vulnerada.")
 
+        acapite_label = ttk.Label(self.frame, text="Acápite/Inciso:")
+        acapite_container, acapite_entry = self._make_badged_field(
+            self.frame,
+            "norm_acapite",
+            lambda parent: ttk.Entry(parent, textvariable=self.acapite_var, width=30),
+            row=4,
+            column=1,
+            autogrid=False,
+        )
+        grid_labeled_widget(
+            self.frame,
+            row=4,
+            label_widget=acapite_label,
+            field_widget=acapite_container,
+        )
+        self.tooltip_register(acapite_entry, "Referencia del acápite o inciso aplicable.")
+
+        detalle_label = ttk.Label(self.frame, text="Detalle de Norma:")
+        detalle_container = ttk.Frame(self.frame)
+        ensure_grid_support(detalle_container)
+        if hasattr(detalle_container, "columnconfigure"):
+            detalle_container.columnconfigure(0, weight=1)
+        if hasattr(detalle_container, "rowconfigure"):
+            detalle_container.rowconfigure(0, weight=1)
+        detalle_text = scrolledtext.ScrolledText(detalle_container, height=4, wrap=tk.WORD)
+        detalle_text.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="nsew")
+        self.badges.claim("norm_detalle", detalle_container, row=0, column=1, sticky="n")
+        grid_labeled_widget(
+            self.frame,
+            row=5,
+            label_widget=detalle_label,
+            field_widget=detalle_container,
+            label_sticky="ne",
+            field_sticky="nsew",
+        )
+        self.detalle_text = detalle_text
+        self.tooltip_register(detalle_text, "Amplía la explicación de la transgresión.")
+
         self.validators.append(
             FieldValidator(
                 id_entry,
@@ -208,11 +257,41 @@ class NormFrame:
                 variables=[self.descripcion_var],
             )
         )
+        self.validators.append(
+            FieldValidator(
+                acapite_entry,
+                self.badges.wrap_validation(
+                    "norm_acapite",
+                    lambda: validate_required_text(
+                        self.acapite_var.get(), "el acápite o inciso de la norma"
+                    ),
+                ),
+                self.logs,
+                f"Norma {self.idx+1} - Acápite/Inciso",
+                variables=[self.acapite_var],
+            )
+        )
+        detalle_validator = FieldValidator(
+            detalle_text,
+            self.badges.wrap_validation(
+                "norm_detalle",
+                lambda: validate_required_text(
+                    self.detalle_var.get() or self._get_detalle_text(),
+                    "el detalle de la norma",
+                ),
+            ),
+            self.logs,
+            f"Norma {self.idx+1} - Detalle",
+            variables=[self.detalle_var],
+        )
+        detalle_validator.add_widget(detalle_text)
+        self.validators.append(detalle_validator)
 
         self._register_title_traces()
         self._sync_section_title()
         self.attach_header_tree(header_tree)
-        self._register_header_tree_focus(id_entry, fecha_entry, desc_entry)
+        self._register_header_tree_focus(id_entry, fecha_entry, desc_entry, acapite_entry, detalle_text)
+        self._bind_detalle_text_events(detalle_text)
         self._register_refresh_traces()
 
     def _place_section(self):
@@ -326,7 +405,7 @@ class NormFrame:
         return container, widget
 
     def _register_title_traces(self):
-        for var in (self.id_var, self.descripcion_var):
+        for var in (self.id_var, self.descripcion_var, self.acapite_var, self.detalle_var):
             trace_add = getattr(var, "trace_add", None)
             if callable(trace_add):
                 trace_add("write", self._sync_section_title)
@@ -347,10 +426,21 @@ class NormFrame:
         if getattr(self, "section", None) and not self.section.is_open:
             norm_id = self.id_var.get().strip()
             descripcion = self.descripcion_var.get().strip()
-            details = [value for value in (norm_id, descripcion) if value]
+            acapite = self.acapite_var.get().strip()
+            detalle = self._shorten_preview(self._get_detalle_text())
+            details = [value for value in (norm_id, acapite, descripcion, detalle) if value]
             if details:
                 base_title = f"{base_title} – {' | '.join(details)}"
         return base_title
+
+    @staticmethod
+    def _shorten_preview(text: str, max_length: int = 60) -> str:
+        if not text:
+            return ""
+        clean = " ".join(text.split())
+        if len(clean) <= max_length:
+            return clean
+        return clean[: max_length - 1].rstrip() + "…"
 
     def _sync_section_title(self, *_args):
         if not getattr(self, "section", None):
@@ -359,16 +449,69 @@ class NormFrame:
         if callable(set_title):
             self.section.set_title(self._build_section_title())
 
+    def _get_detalle_text(self) -> str:
+        widget = getattr(self, "detalle_text", None)
+        if widget is not None:
+            try:
+                return widget.get("1.0", "end-1c").strip()
+            except Exception:
+                pass
+        try:
+            return self.detalle_var.get().strip()
+        except Exception:
+            return ""
+
+    def _set_detalle_text(self, value: str) -> None:
+        text = (value or "").strip()
+        self.detalle_var.set(text)
+        widget = getattr(self, "detalle_text", None)
+        if widget is None:
+            return
+        try:
+            widget.delete("1.0", "end")
+            if text:
+                widget.insert("1.0", text)
+            widget.edit_modified(False)
+        except Exception:
+            return
+
+    def _bind_detalle_text_events(self, widget) -> None:
+        if widget is None:
+            return
+
+        def _sync_from_text(_event=None):
+            self.detalle_var.set(self._get_detalle_text())
+            self._sync_section_title()
+            self._schedule_refresh()
+            try:
+                widget.edit_modified(False)
+            except Exception:
+                pass
+
+        for sequence in ("<<Modified>>", "<KeyRelease>", "<<Paste>>", "<<Cut>>", "<FocusOut>"):
+            try:
+                widget.bind(sequence, _sync_from_text, add="+")
+            except Exception:
+                continue
+        try:
+            widget.edit_modified(False)
+        except Exception:
+            pass
+
     def get_data(self):
         norm_id = self.id_var.get().strip()
         descripcion = self.descripcion_var.get().strip()
         fecha = self.fecha_var.get().strip()
-        if not (norm_id or descripcion or fecha):
+        acapite = self.acapite_var.get().strip()
+        detalle = self._get_detalle_text()
+        if not (norm_id or descripcion or fecha or acapite or detalle):
             return None
         return {
             "id_norma": norm_id,
             "descripcion": descripcion,
             "fecha_vigencia": fecha,
+            "acapite_inciso": acapite,
+            "detalle_norma": detalle,
         }
 
     def set_lookup(self, lookup):
@@ -414,6 +557,12 @@ class NormFrame:
 
         set_if_present(self.descripcion_var, "descripcion")
         set_if_present(self.fecha_var, "fecha_vigencia")
+        set_if_present(self.acapite_var, "acapite_inciso")
+        detalle_valor = data.get("detalle_norma") or data.get("detalle")
+        if detalle_valor:
+            text_value = str(detalle_valor).strip()
+            if text_value and should_autofill_field(self._get_detalle_text(), preserve_existing):
+                self._set_detalle_text(text_value)
         self._last_missing_lookup_id = None
         if not silent:
             self._log_change(f"Norma {self.idx+1}: autopoblada desde catálogo")
@@ -464,17 +613,29 @@ class NormFrame:
         """Vacía los datos manteniendo visibles las entradas."""
 
         def _reset():
-            for var in (self.id_var, self.fecha_var, self.descripcion_var):
+            for var in (
+                self.id_var,
+                self.fecha_var,
+                self.descripcion_var,
+                self.acapite_var,
+                self.detalle_var,
+            ):
                 var.set("")
+            self._set_detalle_text("")
 
-        managed = False
-        for validator in self.validators:
-            suppress = getattr(validator, "suppress_during", None)
-            if callable(suppress):
-                suppress(_reset)
-                managed = True
-                break
-        if not managed:
+        if self.validators:
+            for validator in self.validators:
+                suspend = getattr(validator, "suspend", None)
+                if callable(suspend):
+                    suspend()
+            try:
+                _reset()
+            finally:
+                for validator in self.validators:
+                    resume = getattr(validator, "resume", None)
+                    if callable(resume):
+                        resume()
+        else:
             _reset()
 
     def remove(self):
@@ -511,7 +672,7 @@ class NormFrame:
             pass
 
     def _register_refresh_traces(self):
-        for var in (self.id_var, self.descripcion_var, self.fecha_var):
+        for var in (self.id_var, self.descripcion_var, self.fecha_var, self.acapite_var, self.detalle_var):
             var.trace_add("write", lambda *_args: self._schedule_refresh())
 
     def _schedule_refresh(self):

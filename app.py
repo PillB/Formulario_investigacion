@@ -7796,8 +7796,10 @@ class FraudCaseApp:
                 "Normas transgredidas",
                 [
                     ("id", "ID Norma"),
-                    ("descripcion", "Descripción"),
+                    ("acapite", "Acápite/Inciso"),
                     ("vigencia", "Vigencia"),
+                    ("descripcion", "Descripción"),
+                    ("detalle", "Detalle de norma"),
                 ],
             ),
         ]
@@ -7813,6 +7815,8 @@ class FraudCaseApp:
                 self.summary_first_section = section
             section.columnconfigure(0, weight=1)
             column_width = 130 if key == "colaboradores" else 150
+            if key == "normas":
+                column_width = 180
             tree, frame = self._build_compact_table(
                 section, columns, height=5, column_width=column_width
             )
@@ -8344,10 +8348,13 @@ class FraudCaseApp:
     def _transform_clipboard_normas(self, rows):
         sanitized = []
         for idx, values in enumerate(rows, start=1):
+            padded = list(values) + [""] * max(0, 5 - len(values))
             norm = {
-                "id_norma": values[0].strip(),
-                "descripcion": values[1].strip(),
-                "vigencia": values[2].strip(),
+                "id_norma": padded[0].strip(),
+                "descripcion": padded[1].strip(),
+                "vigencia": padded[2].strip(),
+                "acapite_inciso": padded[3].strip(),
+                "detalle_norma": padded[4].strip(),
             }
             message = validate_norm_id(norm["id_norma"])
             if message:
@@ -8358,11 +8365,23 @@ class FraudCaseApp:
             date_message = validate_date_text(norm["vigencia"], "la fecha de vigencia")
             if date_message:
                 raise ValueError(f"Norma fila {idx}: {date_message}")
+            acapite_message = validate_required_text(
+                norm["acapite_inciso"], "el acápite o inciso de la norma"
+            )
+            if acapite_message:
+                raise ValueError(f"Norma fila {idx}: {acapite_message}")
+            detalle_message = validate_required_text(
+                norm["detalle_norma"], "el detalle de la norma"
+            )
+            if detalle_message:
+                raise ValueError(f"Norma fila {idx}: {detalle_message}")
             sanitized.append(
                 (
                     norm["id_norma"],
                     norm["descripcion"],
                     norm["vigencia"],
+                    norm["acapite_inciso"],
+                    norm["detalle_norma"],
                 )
             )
         return sanitized
@@ -8713,8 +8732,10 @@ class FraudCaseApp:
                 self.add_norm()
                 frame = self.norm_frames[-1]
                 frame.id_var.set(norm_id)
-                frame.descripcion_var.set((values[1] or "").strip())
-                frame.fecha_var.set((values[2] or "").strip())
+                frame.descripcion_var.set((values[1] if len(values) > 1 else "").strip())
+                frame.fecha_var.set((values[2] if len(values) > 2 else "").strip())
+                frame.acapite_var.set((values[3] if len(values) > 3 else "").strip())
+                frame._set_detalle_text((values[4] if len(values) > 4 else "").strip())
                 processed += 1
             if duplicate_ids:
                 messagebox.showwarning(
@@ -8975,8 +8996,10 @@ class FraudCaseApp:
             return [
                 (
                     norm.get("id_norma", ""),
-                    norm.get("descripcion", ""),
+                    norm.get("acapite_inciso", ""),
                     norm.get("fecha_vigencia", ""),
+                    norm.get("descripcion", ""),
+                    norm.get("detalle_norma", "") or norm.get("detalle", ""),
                 )
                 for norm in dataset.get("normas", [])
             ]
@@ -10671,6 +10694,8 @@ class FraudCaseApp:
             nf.id_var.set(nid)
             nf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
             nf.fecha_var.set((hydrated.get('fecha_vigencia') or '').strip())
+            nf.acapite_var.set((hydrated.get('acapite_inciso') or '').strip())
+            nf._set_detalle_text((hydrated.get('detalle_norma') or '').strip())
             nuevos += 1
         self._refresh_shared_norm_tree()
         self._notify_dataset_changed(summary_sections="normas")
@@ -12334,6 +12359,8 @@ class FraudCaseApp:
                 nf.id_var.set(norm.get('id_norma', ''))
                 nf.descripcion_var.set(norm.get('descripcion', ''))
                 nf.fecha_var.set(norm.get('fecha_vigencia', ''))
+                nf.acapite_var.set(norm.get('acapite_inciso', '') or norm.get('acapite', '') or norm.get('inciso', ''))
+                nf._set_detalle_text(norm.get('detalle_norma', '') or norm.get('detalle', ''))
                 if hasattr(nf, "on_id_change"):
                     nf.on_id_change(preserve_existing=True, silent=True)
             self._refresh_shared_norm_tree()
@@ -13042,6 +13069,12 @@ class FraudCaseApp:
                 norm_ids.add(nid)
             if not descripcion:
                 errors.append(f"Norma {idx}: Debe ingresar la descripción de la norma.")
+            acapite = (nd.get('acapite_inciso') or '').strip()
+            if not acapite:
+                errors.append(f"Norma {idx}: Debe ingresar el acápite o inciso.")
+            detalle_norma = (nd.get('detalle_norma') or '').strip()
+            if not detalle_norma:
+                errors.append(f"Norma {idx}: Debe ingresar el detalle de la norma.")
             # Fecha vigencia
             fvig = (nd.get('fecha_vigencia') or '').strip()
             fvig_message = validate_date_text(fvig, "la fecha de vigencia", allow_blank=False)
@@ -13223,7 +13256,11 @@ class FraudCaseApp:
         write_csv('producto_reclamo.csv', data['reclamos'], ['id_reclamo', 'id_caso', 'id_producto', 'nombre_analitica', 'codigo_analitica'])
         write_csv('involucramiento.csv', data['involucramientos'], ['id_producto', 'id_caso', 'id_colaborador', 'monto_asignado'])
         write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'])
-        write_csv('detalles_norma.csv', data['normas'], ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia'])
+        write_csv(
+            'detalles_norma.csv',
+            data['normas'],
+            ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia', 'acapite_inciso', 'detalle_norma'],
+        )
         analysis_texts = self._normalize_analysis_texts(data['analisis'])
         analysis_row = {
             "id_caso": data['caso']['id_caso'],

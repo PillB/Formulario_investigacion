@@ -193,7 +193,9 @@
       {
         "id_norma": "2024.001.01.01",
         "descripcion": "Manual de prevención de fraude interno",
-        "fecha_vigencia": "2023-12-01"
+        "fecha_vigencia": "2023-12-01",
+        "acapite_inciso": "Art. 1",
+        "detalle_norma": "Detalle del manual de prevención aplicado al caso."
       }
     ],
     "analisis": {

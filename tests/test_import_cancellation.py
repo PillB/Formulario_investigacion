@@ -64,7 +64,15 @@ def test_import_cancelled_from_dialog(monkeypatch, messagebox_spy, method_name, 
         ),
         (
             "import_norms",
-            [{"id_norma": "N-1", "descripcion": "desc"}],
+            [
+                {
+                    "id_norma": "N-1",
+                    "descripcion": "desc",
+                    "fecha_vigencia": "2024-01-01",
+                    "acapite_inciso": "Art. 1",
+                    "detalle_norma": "Detalle de prueba",
+                }
+            ],
             "Importación completada de normas:",
             "Normas importadas desde CSV",
             None,

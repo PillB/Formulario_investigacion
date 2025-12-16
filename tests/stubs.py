@@ -101,6 +101,16 @@ class NormFrameStub:
         self.id_var = DummyVar("")
         self.descripcion_var = DummyVar("")
         self.fecha_var = DummyVar("")
+        self.acapite_var = DummyVar("")
+        self.detalle_var = DummyVar("")
+        self._detalle_text = ""
+
+    def _set_detalle_text(self, value: str):
+        self._detalle_text = value or ""
+        self.detalle_var.set(self._detalle_text)
+
+    def _get_detalle_text(self):
+        return self._detalle_text
 
 
 class ClaimStub:
@@ -178,5 +188,4 @@ def build_populate_method(id_field):
         frame.populated_rows.append(dict(row))
 
     return _populate
-
 
