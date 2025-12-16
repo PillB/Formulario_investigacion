@@ -13402,6 +13402,7 @@ class FraudCaseApp:
             [data['caso']],
             [
                 'id_caso',
+                'id_proceso',
                 'tipo_informe',
                 'categoria1',
                 'categoria2',
