@@ -322,6 +322,19 @@ def _build_app() -> FraudCaseApp:
     return FraudCaseApp(root)
 
 
+def _ensure_root_visible(app: FraudCaseApp) -> None:
+    try:
+        app.root.deiconify()
+    except Exception:
+        return
+    app.root.update_idletasks()
+    try:
+        app.root.lift()
+        app.root.update()
+    except Exception:
+        pass
+
+
 def _collect_tab_records(app: FraudCaseApp) -> dict[str, list[WidgetRecord]]:
     records: dict[str, list[WidgetRecord]] = {}
     for tab_id in app.notebook.tabs():
@@ -341,6 +354,7 @@ def _collect_tab_records(app: FraudCaseApp) -> dict[str, list[WidgetRecord]]:
 def export_wireframes(output_path: Path) -> Path:
     app = _build_app()
     try:
+        _ensure_root_visible(app)
         app.root.update_idletasks()
         tab_records = _collect_tab_records(app)
     finally:
