@@ -9,6 +9,7 @@ def patch_risk_widgets(monkeypatch):
     class _TkStub:
         StringVar = DummyVar
         BooleanVar = DummyVar
+        Toplevel = DummyWidget
 
     class _TtkStub:
         LabelFrame = DummyWidget
@@ -372,3 +373,51 @@ def test_update_risk_validation_state_toggles_catalog_validators(monkeypatch):
     frame.update_risk_validation_state()
 
     assert all(v.suspend_count == 0 for v in suspended)
+
+
+def test_build_risk_suggestions_excludes_used_and_ranks():
+    lookup = {
+        "RSK-1": {"descripcion": "Fraude digital", "proceso": "Fraude", "modalidad": "Tarjeta"},
+        "RSK-2": {"descripcion": "Operación manual", "proceso": "Operación"},
+        "RSK-3": {"descripcion": "Fraude en canales físicos", "proceso": "Fraude", "canal": "Agencia"},
+    }
+
+    suggestions = risk.build_risk_suggestions(
+        lookup,
+        context={"proceso": "Fraude", "modalidad": "Tarjeta", "canal": "Digital"},
+        excluded_ids={"RSK-2"},
+    )
+
+    ids = [s["id_riesgo"] for s in suggestions]
+    assert "RSK-2" not in ids
+    assert ids[0] == "RSK-1"
+
+
+def test_offer_catalog_modal_uses_factory_and_backfills(monkeypatch):
+    frame = _build_risk_frame()
+    frame.risk_lookup = {"RSK-000777": {"descripcion": "Catálogo", "lider": "Lead"}}
+    captured = {}
+
+    def fake_factory(parent, suggestions, on_select, trigger=""):
+        captured["suggestions"] = suggestions
+        captured["trigger"] = trigger
+        on_select("RSK-000777")
+        return "modal"
+
+    frame.modal_factory = fake_factory
+    frame.offer_catalog_modal(trigger="add_risk")
+
+    assert captured["trigger"] == "add_risk"
+    assert captured["suggestions"][0]["id_riesgo"] == "RSK-000777"
+    assert frame.id_var.get() == "RSK-000777"
+    assert frame.descripcion_var.get() == "Catálogo"
+
+
+def test_mode_toggle_invokes_modal_in_catalog_mode():
+    frame = _build_risk_frame()
+    calls = []
+    frame.offer_catalog_modal = lambda trigger="": calls.append(trigger)
+
+    frame._on_mode_toggle()
+
+    assert calls == ["mode_toggle"]
