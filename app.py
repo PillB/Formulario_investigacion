@@ -648,6 +648,8 @@ class FraudCaseApp:
                 "id_caso",
                 "descripcion",
                 "fecha_vigencia",
+                "acapite_inciso",
+                "detalle_norma",
             ),
             "expected_keyword": "norma",
         },
@@ -5282,8 +5284,10 @@ class FraudCaseApp:
                 continue
             values = (
                 data.get("id_norma", ""),
+                data.get("acapite_inciso", ""),
                 data.get("fecha_vigencia", ""),
-                data.get("descripcion", ""),
+                norm_frame._shorten_preview(data.get("descripcion", "")),
+                norm_frame._shorten_preview(data.get("detalle_norma", "")),
             )
             tag = "even" if row_index % 2 == 0 else "odd"
             self.norm_header_tree.insert("", "end", values=values, tags=(tag,))
@@ -10684,6 +10688,26 @@ class FraudCaseApp:
             if not nid:
                 errores += 1
                 continue
+            descripcion = (hydrated.get('descripcion') or '').strip()
+            fecha_vigencia = (hydrated.get('fecha_vigencia') or '').strip()
+            acapite_inciso = (hydrated.get('acapite_inciso') or '').strip()
+            detalle_norma = (hydrated.get('detalle_norma') or hydrated.get('detalle') or '').strip()
+            validation_errors = [
+                validate_norm_id(nid),
+                validate_required_text(descripcion, "la descripción de la norma"),
+                validate_required_text(acapite_inciso, "el acápite o inciso de la norma"),
+                validate_required_text(detalle_norma, "el detalle de la norma"),
+                validate_date_text(fecha_vigencia, "la fecha de vigencia", allow_blank=False),
+            ]
+            validation_errors = [msg for msg in validation_errors if msg]
+            if validation_errors:
+                errores += 1
+                log_event(
+                    "validacion",
+                    f"Norma {nid or '[sin ID]'} rechazada por: {'; '.join(validation_errors)}",
+                    self.logs,
+                )
+                continue
             if nid in seen_ids or nid in existing_ids:
                 duplicados += 1
                 continue
@@ -10692,10 +10716,10 @@ class FraudCaseApp:
             self.add_norm()
             nf = self.norm_frames[-1]
             nf.id_var.set(nid)
-            nf.descripcion_var.set((hydrated.get('descripcion') or '').strip())
-            nf.fecha_var.set((hydrated.get('fecha_vigencia') or '').strip())
-            nf.acapite_var.set((hydrated.get('acapite_inciso') or '').strip())
-            nf._set_detalle_text((hydrated.get('detalle_norma') or '').strip())
+            nf.descripcion_var.set(descripcion)
+            nf.fecha_var.set(fecha_vigencia)
+            nf.acapite_var.set(acapite_inciso)
+            nf._set_detalle_text(detalle_norma)
             nuevos += 1
         self._refresh_shared_norm_tree()
         self._notify_dataset_changed(summary_sections="normas")

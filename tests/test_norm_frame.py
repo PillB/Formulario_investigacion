@@ -9,6 +9,7 @@ from ui.frames import norm
 def patch_norm_widgets(monkeypatch):
     class _TkStub:
         StringVar = DummyVar
+        WORD = "word"
 
     class _TtkStub:
         LabelFrame = DummyWidget
@@ -107,8 +108,29 @@ def patch_norm_widgets(monkeypatch):
             if callable(self._on_toggle):
                 self._on_toggle(self)
 
+    class _ScrolledTextStub(DummyWidget):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._text = ""
+
+        def get(self, *_args, **_kwargs):
+            return self._text
+
+        def delete(self, *_args, **_kwargs):
+            self._text = ""
+
+        def insert(self, *_args, **_kwargs):
+            if _args:
+                # ignore index
+                pass
+            self._text += _kwargs.get("chars", "") if "chars" in _kwargs else _args[-1] if _args else ""
+
+        def edit_modified(self, *_args, **_kwargs):
+            return False
+
     monkeypatch.setattr(norm, "tk", _TkStub())
     monkeypatch.setattr(norm, "ttk", _TtkStub())
+    monkeypatch.setattr(norm.scrolledtext, "ScrolledText", _ScrolledTextStub)
     monkeypatch.setattr(norm, "CollapsibleSection", _CollapsibleSection)
     RecordingValidator.instances.clear()
     monkeypatch.setattr(norm, "FieldValidator", RecordingValidator)
@@ -142,6 +164,23 @@ def _assert_toggle_bindings(section):
             assert section.is_open is not initial_state
             widget.event_generate(sequence)
             assert section.is_open is initial_state
+
+
+def test_get_data_includes_new_fields():
+    frame = _build_norm_frame()
+    frame.detalle_text = None
+
+    frame.id_var.set("N-1")
+    frame.descripcion_var.set("Desc")
+    frame.fecha_var.set("2024-02-01")
+    frame.acapite_var.set("Art. 2")
+    frame._set_detalle_text("Detalle extenso")
+
+    data = frame.get_data()
+
+    assert data["id_norma"] == "N-1"
+    assert data["acapite_inciso"] == "Art. 2"
+    assert data["detalle_norma"] == "Detalle extenso"
 
 
 def test_norm_frame_section_starts_collapsed_and_toggles():
