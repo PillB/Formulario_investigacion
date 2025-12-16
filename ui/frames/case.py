@@ -15,7 +15,12 @@ from ui.frames.utils import (
 )
 from validation_badge import badge_registry
 from theme_manager import ThemeManager
-from validators import FieldValidator, validate_case_id, validate_required_text
+from validators import (
+    FieldValidator,
+    validate_case_id,
+    validate_process_id,
+    validate_required_text,
+)
 
 
 ENTRY_STYLE = ThemeManager.ENTRY_STYLE
@@ -59,7 +64,7 @@ class CaseFrame:
     def _build_case_fields(self, frame) -> None:
         owner = self.owner
 
-        for column in range(3):
+        for column in range(4):
             frame.grid_columnconfigure(column, weight=1)
 
         def place(label_widget: ttk.Widget, field_widget: ttk.Widget, *, row: int, column: int):
@@ -217,6 +222,36 @@ class CaseFrame:
         canal_cb.set('')
         place(canal_label, canal_container, row=2, column=0)
 
+        proc_id_label = build_required_label(
+            frame,
+            "ID Proceso:",
+            tooltip_register=owner.register_tooltip,
+        )
+        proc_id_container, proc_id_entry, _ = self._make_badged_field(
+            frame,
+            "case_process_id",
+            lambda parent: ttk.Entry(
+                parent, textvariable=owner.id_proceso_var, width=20, style=ENTRY_STYLE
+            ),
+        )
+        proc_id_container.columnconfigure(0, weight=1)
+        proc_id_button = ttk.Button(
+            proc_id_container,
+            text="Seleccionar",
+            command=owner.open_process_selector,
+            width=12,
+        )
+        proc_id_button.grid(row=0, column=2, padx=(COL_PADX // 2, 0))
+        owner.register_tooltip(
+            proc_id_entry,
+            "Formato BPID-XXXXXX o BPID-RNF-XXXXXX. Autocompleta canal y proceso.",
+        )
+        owner.register_tooltip(
+            proc_id_button,
+            "Abrir el catálogo de procesos para completar el ID y el contexto.",
+        )
+        place(proc_id_label, proc_id_container, row=2, column=1)
+
         proc_label = build_required_label(
             frame,
             "Proceso impactado:",
@@ -236,7 +271,7 @@ class CaseFrame:
         )
         owner.register_tooltip(proc_cb, "Proceso que sufrió la desviación.")
         proc_cb.set('')
-        place(proc_label, proc_container, row=2, column=1)
+        place(proc_label, proc_container, row=2, column=2)
 
         cost_center_label = ttk.Label(
             frame, text="Centro de costos del caso (; separados):"
@@ -255,7 +290,7 @@ class CaseFrame:
             centro_costo_entry,
             "Ingresa centros de costos separados por punto y coma. Deben ser numéricos y de al menos 5 dígitos.",
         )
-        place(cost_center_label, centro_container, row=2, column=2)
+        place(cost_center_label, centro_container, row=2, column=3)
 
         occurrence_label = build_required_label(
             frame,
@@ -343,6 +378,8 @@ class CaseFrame:
                 "case_cat2_cb": case_cat2_cb,
                 "case_mod_cb": case_mod_cb,
                 "canal_cb": canal_cb,
+                "proc_id_entry": proc_id_entry,
+                "proc_id_button": proc_id_button,
                 "proc_cb": proc_cb,
                 "centro_costo_entry": centro_costo_entry,
                 "fecha_case_entry": fecha_case_entry,
@@ -365,6 +402,18 @@ class CaseFrame:
                 owner.logs,
                 "Caso - ID",
                 variables=[owner.id_caso_var],
+            )
+        )
+        owner.validators.append(
+            FieldValidator(
+                inputs["proc_id_entry"],
+                self.badges.wrap_validation(
+                    "case_process_id",
+                    owner._validate_process_identifier,
+                ),
+                owner.logs,
+                "Caso - ID de proceso",
+                variables=[owner.id_proceso_var],
             )
         )
         owner.validators.append(

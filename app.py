@@ -138,7 +138,7 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_phone_list, validate_product_dates,
                         validate_product_id, validate_reclamo_id,
                         validate_required_text, validate_risk_id,
-                        validate_team_member_id)
+                        validate_team_member_id, validate_process_id)
 
 PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
 if PIL_AVAILABLE:
@@ -771,6 +771,7 @@ class FraudCaseApp:
         self.team_lookup = {}
         self.client_lookup = {}
         self.product_lookup = {}
+        self.process_lookup = {}
         self.claim_lookup = {}
         self.risk_lookup = {}
         self.norm_lookup = {}
@@ -915,6 +916,7 @@ class FraudCaseApp:
 
         # Variables de caso
         self.id_caso_var = tk.StringVar()
+        self.id_proceso_var = tk.StringVar()
         self.tipo_informe_var = tk.StringVar(value=TIPO_INFORME_LIST[0])
         self.cat_caso1_var = tk.StringVar(value=list(TAXONOMIA.keys())[0])
         subcats = list(TAXONOMIA[self.cat_caso1_var.get()].keys())
@@ -4072,6 +4074,7 @@ class FraudCaseApp:
 
         required_attrs = (
             "id_caso_var",
+            "id_proceso_var",
             "tipo_informe_var",
             "cat_caso1_var",
             "cat_caso2_var",
@@ -4096,6 +4099,7 @@ class FraudCaseApp:
             default_mod = TAXONOMIA[default_cat1][default_cat2][0]
 
             _maybe_var("id_caso_var")
+            _maybe_var("id_proceso_var")
             _maybe_var("tipo_informe_var", TIPO_INFORME_LIST[0])
             _maybe_var("cat_caso1_var", default_cat1)
             _maybe_var("cat_caso2_var", default_cat2)
@@ -4116,6 +4120,7 @@ class FraudCaseApp:
             default_mod = TAXONOMIA[default_cat1][default_cat2][0]
 
             _fallback("id_caso_var")
+            _fallback("id_proceso_var")
             _fallback("tipo_informe_var", TIPO_INFORME_LIST[0])
             _fallback("cat_caso1_var", default_cat1)
             _fallback("cat_caso2_var", default_cat2)
@@ -5923,6 +5928,154 @@ class FraudCaseApp:
         self.investigator_nombre_var.set(composed_name)
         self._notify_dataset_changed()
 
+    @staticmethod
+    def _normalize_process_identifier(value: str) -> str:
+        return (value or "").replace(" ", "").strip().upper()
+
+    @staticmethod
+    def _normalize_process_record(record: Mapping | dict | None) -> dict:
+        normalized: dict[str, str] = {}
+        if not record:
+            return normalized
+        for key, value in dict(record).items():
+            normalized[(key or "").strip().lower()] = (value or "").strip()
+        return normalized
+
+    def _set_case_dropdown_value(self, var, value: str, catalog: list[str], widget_key: str) -> bool:
+        try:
+            text = (value or "").strip()
+        except Exception:
+            return False
+        if not text or text not in catalog:
+            return False
+        var.set(text)
+        widget = getattr(self, "_case_inputs", {}).get(widget_key, None)
+        if widget is not None:
+            with suppress(Exception):
+                widget.set(text)
+        return True
+
+    def _apply_process_payload(self, payload: Mapping | dict | None, *, show_errors: bool) -> None:
+        normalized = self._normalize_process_record(payload)
+        proceso = normalized.get("proceso") or normalized.get("nombre")
+        canal = normalized.get("canal") or normalized.get("canal_proceso")
+        proceso_set = False
+        canal_set = False
+        if proceso:
+            proceso_set = self._set_case_dropdown_value(
+                self.proceso_caso_var, proceso, PROCESO_LIST, "proc_cb"
+            )
+        if canal:
+            canal_set = self._set_case_dropdown_value(
+                self.canal_caso_var, canal, CANAL_LIST, "canal_cb"
+            )
+        if show_errors and not getattr(self, "_suppress_messagebox", False):
+            if proceso and not proceso_set:
+                messagebox.showerror(
+                    "Proceso inválido",
+                    f"El proceso '{proceso}' no se encuentra en el catálogo de procesos.",
+                )
+            if canal and not canal_set:
+                messagebox.showerror(
+                    "Canal inválido",
+                    f"El canal '{canal}' no se encuentra en el catálogo de canales.",
+                )
+        if proceso_set or canal_set:
+            self._notify_dataset_changed()
+
+    def _autofill_process_from_id(self, process_id: str, *, show_errors: bool) -> None:
+        normalized = self._normalize_process_identifier(process_id)
+        if not normalized:
+            return
+        lookup = self.process_lookup.get(normalized)
+        if not lookup:
+            if show_errors and not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror(
+                    "ID de proceso desconocido",
+                    "El ID de proceso no se encontró en process_details.csv. Verifica el catálogo antes de continuar.",
+                )
+            return
+        self._apply_process_payload(lookup, show_errors=show_errors)
+
+    def _validate_process_identifier(self) -> Optional[str]:
+        raw_value = self.id_proceso_var.get()
+        normalized = self._normalize_process_identifier(raw_value)
+        if raw_value != normalized:
+            try:
+                self.id_proceso_var.set(normalized)
+            except Exception:
+                pass
+        error = validate_process_id(normalized)
+        if error:
+            return error
+        self._autofill_process_from_id(normalized, show_errors=True)
+        return None
+
+    def open_process_selector(self) -> None:
+        if not self.process_lookup:
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror(
+                    "Catálogo de procesos",
+                    "No se encontraron procesos cargados. Importa process_details.csv y vuelve a intentarlo.",
+                )
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Seleccionar proceso")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        ThemeManager.register_toplevel(dialog)
+
+        container = ttk.Frame(dialog, padding=(COL_PADX, ROW_PADY))
+        container.grid(sticky="nsew")
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
+
+        tree = ttk.Treeview(
+            container,
+            columns=("id", "proceso", "canal"),
+            show="headings",
+            height=8,
+        )
+        tree.heading("id", text="ID")
+        tree.heading("proceso", text="Proceso")
+        tree.heading("canal", text="Canal")
+        tree.column("id", width=130, anchor="w")
+        tree.column("proceso", width=260, anchor="w")
+        tree.column("canal", width=140, anchor="w")
+
+        for pid, payload in sorted(self.process_lookup.items()):
+            normalized_payload = self._normalize_process_record(payload)
+            tree.insert(
+                "",
+                tk.END,
+                values=(pid, normalized_payload.get("proceso", ""), normalized_payload.get("canal", "")),
+            )
+
+        tree.grid(row=0, column=0, columnspan=2, sticky="nsew")
+        self._apply_treeview_theme(tree)
+
+        def _confirm_selection(_event=None):
+            selection = tree.selection()
+            if not selection:
+                return
+            item = tree.item(selection[0])
+            values = item.get("values", [])
+            process_id = values[0] if values else ""
+            if process_id:
+                self.id_proceso_var.set(process_id)
+                self._autofill_process_from_id(process_id, show_errors=True)
+            dialog.destroy()
+
+        confirm_btn = ttk.Button(container, text="Usar proceso", command=_confirm_selection)
+        confirm_btn.grid(row=1, column=0, pady=(ROW_PADY, 0), sticky="e")
+        cancel_btn = ttk.Button(container, text="Cancelar", command=dialog.destroy)
+        cancel_btn.grid(row=1, column=1, pady=(ROW_PADY, 0), padx=(COL_PADX, 0), sticky="w")
+
+        tree.bind("<Double-1>", _confirm_selection)
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+
     def _ensure_investigator_vars(self) -> None:
         if hasattr(self, "investigator_id_var"):
             return
@@ -7653,6 +7806,12 @@ class FraudCaseApp:
         }
         self.team_catalog = self.catalog_service.team_hierarchy
         self.product_lookup = self._extract_lookup_or_empty("id_producto")
+        raw_process_lookup = self._extract_lookup_or_empty("id_proceso")
+        self.process_lookup = {
+            self._normalize_process_identifier(key): self._normalize_process_record(value)
+            for key, value in raw_process_lookup.items()
+            if self._normalize_process_identifier(key)
+        }
         self.claim_lookup = self._extract_lookup_or_empty("id_reclamo")
         self.risk_lookup = self._extract_lookup_or_empty("id_riesgo")
         self.norm_lookup = self._extract_lookup_or_empty("id_norma")
@@ -7680,6 +7839,7 @@ class FraudCaseApp:
             if hasattr(frame, 'set_lookup'):
                 frame.set_lookup(self.norm_lookup)
                 frame.on_id_change(preserve_existing=True, silent=True)
+        self._autofill_process_from_id(self.id_proceso_var.get(), show_errors=False)
         self._autofill_investigator(show_errors=False)
 
     def _extract_lookup_or_empty(self, canonical_key):
@@ -11812,6 +11972,7 @@ class FraudCaseApp:
         self._user_has_edited = False
         self._autosave_start_guard = True
         self.id_caso_var.set("")
+        self.id_proceso_var.set("")
         self.tipo_informe_var.set(TIPO_INFORME_LIST[0])
         self.cat_caso1_var.set(list(TAXONOMIA.keys())[0])
         self.on_case_cat1_change()
@@ -12021,6 +12182,7 @@ class FraudCaseApp:
         investigator_role = self._sanitize_text(self.investigator_cargo_var.get()) or "Investigador Principal"
         data['caso'] = {
             "id_caso": self._sanitize_text(self.id_caso_var.get()),
+            "id_proceso": self._sanitize_text(self.id_proceso_var.get()),
             "tipo_informe": self._sanitize_text(self.tipo_informe_var.get()),
             "categoria1": self._sanitize_text(self.cat_caso1_var.get()),
             "categoria2": self._sanitize_text(self.cat_caso2_var.get()),
@@ -12227,6 +12389,7 @@ class FraudCaseApp:
 
             caso = data.get('caso', {})
             self.id_caso_var.set(caso.get('id_caso', ''))
+            self.id_proceso_var.set(self._normalize_process_identifier(caso.get('id_proceso', '')))
             if caso.get('tipo_informe') in TIPO_INFORME_LIST:
                 self.tipo_informe_var.set(caso.get('tipo_informe'))
             if caso.get('categoria1') in TAXONOMIA:
@@ -12513,6 +12676,22 @@ class FraudCaseApp:
         case_message = validate_case_id(id_caso)
         if case_message:
             errors.append(case_message)
+        process_id_value = self._normalize_process_identifier(self.id_proceso_var.get())
+        try:
+            self.id_proceso_var.set(process_id_value)
+        except Exception:
+            pass
+        process_message = validate_process_id(process_id_value)
+        if process_message:
+            errors.append(process_message)
+        elif process_id_value and process_id_value not in self.process_lookup:
+            errors.append(
+                "El ID de proceso no se encuentra en el catálogo process_details.csv."
+            )
+        elif process_id_value:
+            self._apply_process_payload(
+                self.process_lookup.get(process_id_value, {}), show_errors=False
+            )
         # Validar campos obligatorios del caso antes de validar entidades hijas
         tipo_informe_value = (self.tipo_informe_var.get() or '').strip()
         tipo_message = validate_required_text(tipo_informe_value, "el tipo de informe")

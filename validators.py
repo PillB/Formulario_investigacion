@@ -179,6 +179,18 @@ def validate_reclamo_id(value: str) -> Optional[str]:
     return None
 
 
+PROCESS_ID_PATTERN = re.compile(r"^BPID-(?:RNF-)?\d{6}$")
+
+
+def validate_process_id(value: str) -> Optional[str]:
+    text = (value or "").strip()
+    if not text:
+        return "Debe ingresar el ID de proceso."
+    if not PROCESS_ID_PATTERN.fullmatch(text):
+        return "El ID de proceso debe seguir el formato BPID-XXXXXX o BPID-RNF-XXXXXX."
+    return None
+
+
 def validate_codigo_analitica(value: str) -> Optional[str]:
     text = (value or "").strip()
     if not text:
@@ -740,6 +752,7 @@ __all__ = [
     'validate_money_bounds',
     'validate_multi_selection',
     'validate_norm_id',
+    'validate_process_id',
     'validate_phone_list',
     'validate_product_dates',
     'validate_product_id',

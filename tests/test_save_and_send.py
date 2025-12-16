@@ -42,6 +42,7 @@ def _build_case_data(case_id: str) -> dict:
     return {
         'caso': {
             'id_caso': case_id,
+            'id_proceso': 'BPID-000001',
             'tipo_informe': TIPO_INFORME_LIST[0],
             'categoria1': cat1,
             'categoria2': cat2,
@@ -77,6 +78,7 @@ def _make_minimal_app():
     app._last_temp_signature = None
     for attr in [
         'id_caso_var',
+        'id_proceso_var',
         'tipo_informe_var',
         'cat_caso1_var',
         'cat_caso2_var',

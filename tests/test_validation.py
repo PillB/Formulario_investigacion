@@ -539,7 +539,9 @@ def build_headless_app(
     app._firma_vars = {}
     app._recommendation_widgets = {}
     app._reset_extended_sections()
+    app.process_lookup = {"BPID-000001": {"proceso": PROCESO_LIST[0], "canal": CANAL_LIST[0]}}
     app.id_caso_var = DummyVar("2024-0001")
+    app.id_proceso_var = DummyVar("BPID-000001")
     app.tipo_informe_var = DummyVar(TIPO_INFORME_LIST[0])
     app.cat_caso1_var = DummyVar(case_cat1)
     app.cat_caso2_var = DummyVar(case_cat2)
@@ -2330,6 +2332,7 @@ def test_populate_from_data_keeps_product_dropdowns_blank_when_missing():
     app.logs = []
     for attr in [
         'id_caso_var',
+        'id_proceso_var',
         'tipo_informe_var',
         'cat_caso1_var',
         'cat_caso2_var',
@@ -2437,6 +2440,7 @@ def test_validate_data_normalizes_risk_exposure_after_populate():
     client_id = "12345678"
     for attr in [
         'id_caso_var',
+        'id_proceso_var',
         'tipo_informe_var',
         'cat_caso1_var',
         'cat_caso2_var',
@@ -2453,6 +2457,7 @@ def test_validate_data_normalizes_risk_exposure_after_populate():
     ]:
         setattr(app, attr, DummyVar(""))
     app.id_caso_var.set("2024-0001")
+    app.id_proceso_var.set("BPID-000001")
     app.tipo_informe_var.set(TIPO_INFORME_LIST[0])
     app.cat_caso1_var.set(case_cat1)
     app.cat_caso2_var.set(case_cat2)
