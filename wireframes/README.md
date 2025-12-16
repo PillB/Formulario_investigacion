@@ -29,3 +29,19 @@ El script realiza las siguientes acciones:
 6. Registra los eventos de ejecución en `wireframes_generation.log` para facilitar depuración sin depender de la salida estándar.
 
 Si prefiere evitar dependencias externas en pruebas automatizadas, `generate_assets` acepta un parámetro `renderer` para inyectar una función de renderizado personalizada que reciba `(source_path, png_target)`. El valor por defecto usa `mmdc` y fallará con un mensaje claro si la CLI no está instalada.
+
+## Exportar wireframes a Excel
+El script `tools/export_wireframes_to_excel.py` construye la interfaz real de `FraudCaseApp` y toma las posiciones de los widgets (labels, entradas, combobox, badges de validación, tablas y botones) para generar un wireframe interactivo en Excel. Cada pestaña del `Notebook` se escribe en una hoja con colores y comentarios que describen el tipo de control, estado (`readonly`, autocompletar), posición de `grid` y jerarquía de secciones.
+
+Requisitos adicionales:
+- `openpyxl` (incluido en `requirements.txt`).
+- Un entorno con soporte para Tkinter; si no hay display, ejecute bajo `xvfb-run`.
+
+Ejecución:
+
+```bash
+export APP_START_CHOICE=new
+python tools/export_wireframes_to_excel.py --output wireframes/Formulario_UI_wireframe.xlsx
+```
+
+El comando anterior usa el modo de arranque silencioso que ya empleamos en pruebas (`APP_START_CHOICE=new` y `PYTEST_CURRENT_TEST` se fijan automáticamente) para evitar diálogos. El archivo resultante se guarda bajo `wireframes/Formulario_UI_wireframe.xlsx` sin modificar la generación de los diagramas Mermaid existente.
