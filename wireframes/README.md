@@ -33,6 +33,11 @@ Si prefiere evitar dependencias externas en pruebas automatizadas, `generate_ass
 ## Exportar wireframes a Excel
 El script `tools/export_wireframes_to_excel.py` construye la interfaz real de `FraudCaseApp` y toma las posiciones de los widgets (labels, entradas, combobox, badges de validación, tablas y botones) para generar un wireframe interactivo en Excel. Cada pestaña del `Notebook` se escribe en una hoja con colores y comentarios que describen el tipo de control, estado (`readonly`, autocompletar), posición de `grid` y jerarquía de secciones.
 
+Además del wireframe de UI, el Excel incluye tres hojas de trazabilidad de exportación:
+- **Reportes_DOCX_MD**: esquema de nombres generados por `build_report_filename` y las cabeceras reales de `build_llave_tecnica_rows`, `build_event_rows` y las narrativas definidas en `build_analysis_tab`, con filas de ejemplo que ilustran formatos de fechas, montos e identificadores.
+- **Exports_CSV**: orden de columnas usado por `FraudCaseApp._perform_save_exports` y los CSV masivos (`*_masivos.csv`) consumidos por `iter_massive_csv_rows`, con notas de origen y ejemplos de valores válidos.
+- **Logs_normalizados**: columnas de `validators.LOG_FIELDNAMES` tal como se exportan mediante `normalize_log_row`, para alinear auditorías con los CSV.
+
 Requisitos adicionales:
 - `openpyxl` (incluido en `requirements.txt`).
 - Un entorno con soporte para Tkinter; si no hay display, ejecute bajo `xvfb-run`.

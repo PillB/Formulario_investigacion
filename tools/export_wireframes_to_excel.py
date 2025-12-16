@@ -22,9 +22,10 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import csv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Mapping, Sequence
 
 import tkinter as tk
 from tkinter import TclError, scrolledtext, ttk
@@ -35,6 +36,9 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from app import FraudCaseApp
+from models.catalogs import iter_massive_csv_rows
+from report_builder import build_event_rows, build_llave_tecnica_rows, build_report_filename
+from validators import LOG_FIELDNAMES, normalize_log_row
 from validation_badge.validation_badge import (
     NEUTRAL_STYLE,
     SUCCESS_STYLE,
@@ -55,6 +59,161 @@ STYLE_MAP = {
     "action": PatternFill("solid", fgColor="D9D9D9"),
     "badge": PatternFill("solid", fgColor="F8CBAD"),
     "label": PatternFill("solid", fgColor="F2F2F2"),
+}
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+ANALYSIS_HEADERS: Sequence[str] = (
+    "id_caso",
+    "antecedentes",
+    "modus_operandi",
+    "hallazgos",
+    "descargos",
+    "conclusiones",
+    "recomendaciones",
+)
+
+EXPORT_HEADER_MAP: Sequence[tuple[str, Sequence[str] | None]] = (
+    (
+        "casos.csv",
+        (
+            "id_caso",
+            "tipo_informe",
+            "categoria1",
+            "categoria2",
+            "modalidad",
+            "canal",
+            "proceso",
+            "fecha_de_ocurrencia",
+            "fecha_de_descubrimiento",
+            "centro_costos",
+            "matricula_investigador",
+            "investigador_nombre",
+            "investigador_cargo",
+        ),
+    ),
+    ("llave_tecnica.csv", None),
+    ("eventos.csv", None),
+    (
+        "clientes.csv",
+        (
+            "id_cliente",
+            "id_caso",
+            "nombres",
+            "apellidos",
+            "tipo_id",
+            "flag",
+            "telefonos",
+            "correos",
+            "direcciones",
+            "accionado",
+        ),
+    ),
+    (
+        "colaboradores.csv",
+        (
+            "id_colaborador",
+            "id_caso",
+            "flag",
+            "nombres",
+            "apellidos",
+            "division",
+            "area",
+            "servicio",
+            "puesto",
+            "fecha_carta_inmediatez",
+            "fecha_carta_renuncia",
+            "nombre_agencia",
+            "codigo_agencia",
+            "tipo_falta",
+            "tipo_sancion",
+        ),
+    ),
+    (
+        "productos.csv",
+        (
+            "id_producto",
+            "id_caso",
+            "id_cliente",
+            "categoria1",
+            "categoria2",
+            "modalidad",
+            "canal",
+            "proceso",
+            "fecha_ocurrencia",
+            "fecha_descubrimiento",
+            "monto_investigado",
+            "tipo_moneda",
+            "monto_perdida_fraude",
+            "monto_falla_procesos",
+            "monto_contingencia",
+            "monto_recuperado",
+            "monto_pago_deuda",
+            "tipo_producto",
+        ),
+    ),
+    (
+        "producto_reclamo.csv",
+        (
+            "id_reclamo",
+            "id_caso",
+            "id_producto",
+            "nombre_analitica",
+            "codigo_analitica",
+        ),
+    ),
+    (
+        "involucramiento.csv",
+        (
+            "id_producto",
+            "id_caso",
+            "id_colaborador",
+            "monto_asignado",
+        ),
+    ),
+    (
+        "detalles_riesgo.csv",
+        (
+            "id_riesgo",
+            "id_caso",
+            "lider",
+            "descripcion",
+            "criticidad",
+            "exposicion_residual",
+            "planes_accion",
+        ),
+    ),
+    (
+        "detalles_norma.csv",
+        (
+            "id_norma",
+            "id_caso",
+            "descripcion",
+            "fecha_vigencia",
+            "acapite_inciso",
+            "detalle_norma",
+        ),
+    ),
+    ("analisis.csv", ANALYSIS_HEADERS),
+    ("logs.csv", LOG_FIELDNAMES),
+)
+
+MASSIVE_FILES: Sequence[tuple[str, str]] = (
+    ("clientes_masivos.csv", "Clientes masivos"),
+    ("colaboradores_masivos.csv", "Colaboradores masivos"),
+    ("productos_masivos.csv", "Productos masivos"),
+    ("datos_combinados_masivos.csv", "Archivo combinado masivo"),
+    ("normas_masivas.csv", "Normas masivas"),
+    ("riesgos_masivos.csv", "Riesgos masivos"),
+)
+
+EMPTY_CASE_DATA: Mapping[str, object] = {
+    "caso": {},
+    "productos": [],
+    "reclamos": [],
+    "involucramientos": [],
+    "clientes": [],
+    "colaboradores": [],
 }
 
 
@@ -310,6 +469,189 @@ def _ranges_overlap(existing: str, target: str) -> bool:
     return rows_overlap and cols_overlap
 
 
+def _placeholder_value(field: str) -> str:
+    lower = field.lower()
+    if "fecha" in lower:
+        return "2024-05-01 (YYYY-MM-DD <= hoy)"
+    if "monto" in lower or "importe" in lower or "exposicion" in lower:
+        return "12345.67 (2 decimales, 12 dígitos)"
+    if lower == "id_caso":
+        return "2024-0001 (AAAA-NNNN)"
+    if "id_reclamo" in lower:
+        return "C12345678 (C+8 dígitos)"
+    if "id_colaborador" in lower:
+        return "T12345 (una letra + 5 dígitos)"
+    if "codigo_analitica" in lower:
+        return "4300000001 (10 dígitos, 43/45/46/56)"
+    if "codigo_agencia" in lower:
+        return "123456 (6 dígitos)"
+    if "telefonos" in lower:
+        return "999999999;988888888"
+    if "correos" in lower:
+        return "a@ejemplo.com;b@ejemplo.com"
+    if "tipo_moneda" in lower:
+        return "PEN|USD"
+    if "tipologia" in lower or "tipo_informe" in lower:
+        return "Texto controlado"
+    return "Texto libre"
+
+
+def _build_sample_row(headers: Sequence[str]) -> list[str]:
+    return [_placeholder_value(field) for field in headers]
+
+
+def _build_row_from_mapping(headers: Sequence[str], row: Mapping[str, str]) -> list[str]:
+    return [row.get(field, "") for field in headers]
+
+
+def _write_schema_block(
+    sheet,
+    start_row: int,
+    title: str,
+    headers: Sequence[str],
+    sample_row: Sequence[str],
+    note: str,
+) -> int:
+    title_cell = sheet.cell(row=start_row, column=1, value=title)
+    title_cell.font = Font(bold=True)
+    if note:
+        title_cell.comment = Comment(note, "wireframe")
+
+    header_row = start_row + 1
+    for idx, header in enumerate(headers, start=1):
+        header_cell = sheet.cell(row=header_row, column=idx, value=header)
+        header_cell.font = Font(bold=True)
+
+    sample_row_index = header_row + 1
+    for idx, value in enumerate(sample_row, start=1):
+        sheet.cell(row=sample_row_index, column=idx, value=value)
+
+    return sample_row_index + 2
+
+
+def _resolve_dynamic_headers(filename: str) -> Sequence[str]:
+    if filename == "llave_tecnica.csv":
+        return build_llave_tecnica_rows(EMPTY_CASE_DATA)[1]
+    if filename == "eventos.csv":
+        return build_event_rows(EMPTY_CASE_DATA)[1]
+    return []
+
+
+def _load_massive_headers(base_dir: Path) -> list[tuple[str, list[str], Path]]:
+    headers: list[tuple[str, list[str], Path]] = []
+    for filename, label in MASSIVE_FILES:
+        path = base_dir / filename
+        header: list[str] = []
+        try:
+            with path.open(newline='', encoding="utf-8-sig") as handle:
+                reader = csv.DictReader(line for line in handle if line.strip())
+                header = list(reader.fieldnames or [])
+        except FileNotFoundError:
+            header = []
+        headers.append((label, header, path))
+    return headers
+
+
+def _add_docx_md_sheet(workbook) -> None:
+    sheet = workbook.create_sheet(title="Reportes_DOCX_MD")
+    docx_name = build_report_filename("Inicial", "2024-0001", "docx")
+    md_name = build_report_filename("Inicial", "2024-0001", "md")
+    sheet.cell(row=1, column=1, value="Ejemplos de nombres de archivo").font = Font(bold=True)
+    sheet.cell(row=2, column=1, value=docx_name)
+    sheet.cell(row=2, column=2, value=md_name)
+    sheet.cell(row=3, column=1, value="Fuente: report_builder.build_report_filename")
+
+    row = 5
+    llave_header = build_llave_tecnica_rows(EMPTY_CASE_DATA)[1]
+    row = _write_schema_block(
+        sheet,
+        row,
+        "Llave técnica (build_llave_tecnica_rows)",
+        llave_header,
+        _build_sample_row(llave_header),
+        "Campos usados en DOCX/MD y CSV; fuente: report_builder.build_llave_tecnica_rows",
+    )
+
+    event_header = build_event_rows(EMPTY_CASE_DATA)[1]
+    row = _write_schema_block(
+        sheet,
+        row,
+        "Eventos (build_event_rows)",
+        event_header,
+        _build_sample_row(event_header),
+        "Orden real de exportación desde report_builder.build_event_rows",
+    )
+
+    row = _write_schema_block(
+        sheet,
+        row,
+        "Narrativas (build_analysis_tab)",
+        ANALYSIS_HEADERS,
+        _build_sample_row(ANALYSIS_HEADERS),
+        "Campos enriquecidos de análisis; origen: app.build_analysis_tab",
+    )
+
+
+def _add_csv_exports_sheet(workbook, base_dir: Path) -> None:
+    sheet = workbook.create_sheet(title="Exports_CSV")
+    row = 1
+    for filename, header in EXPORT_HEADER_MAP:
+        resolved_header = header or _resolve_dynamic_headers(filename)
+        if not resolved_header:
+            continue
+        row = _write_schema_block(
+            sheet,
+            row,
+            f"{filename} (export)",
+            resolved_header,
+            _build_sample_row(resolved_header),
+            "Generado en app.FraudCaseApp._perform_save_exports",
+        )
+
+    sheet.cell(row=row, column=1, value="Archivos masivos (entradas CSV)").font = Font(bold=True)
+    row += 1
+    for label, headers, path in _load_massive_headers(base_dir):
+        if not headers:
+            continue
+        row = _write_schema_block(
+            sheet,
+            row,
+            label,
+            headers,
+            _build_sample_row(headers),
+            f"Fuente: {path.name} leído con models.iter_massive_csv_rows",
+        )
+
+
+def _add_logs_sheet(workbook) -> None:
+    sheet = workbook.create_sheet(title="Logs_normalizados")
+    sample_log = normalize_log_row(
+        {
+            "timestamp": "2024-05-01 10:00:00",
+            "tipo": "validacion",
+            "subtipo": "wireframe",
+            "widget_id": "entry_id_caso",
+            "coords": (10, 20),
+            "mensaje": "Valores de ejemplo normalizados",
+        }
+    )
+    _write_schema_block(
+        sheet,
+        1,
+        "Logs normalizados",
+        LOG_FIELDNAMES,
+        _build_row_from_mapping(LOG_FIELDNAMES, sample_log),
+        "Columnas reales de validators.LOG_FIELDNAMES y validators.normalize_log_row",
+    )
+
+
+def _add_supporting_sheets(workbook, base_dir: Path | None = None) -> None:
+    base = base_dir or REPO_ROOT
+    _add_docx_md_sheet(workbook)
+    _add_csv_exports_sheet(workbook, base)
+    _add_logs_sheet(workbook)
+
+
 def _build_app() -> FraudCaseApp:
     os.environ.setdefault("PYTEST_CURRENT_TEST", "wireframe_export")
     os.environ.setdefault("APP_START_CHOICE", "new")
@@ -359,6 +701,8 @@ def export_wireframes(output_path: Path) -> Path:
         header_row = next_row + 1
         sheet.cell(row=header_row, column=1, value=f"Tab: {tab_name}").font = Font(bold=True)
         _place_records(sheet, records, row_offset=header_row + 1)
+
+    _add_supporting_sheets(wb)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
