@@ -12665,8 +12665,10 @@ class FraudCaseApp:
             except Exception:
                 return ''
 
-        canal_value = (_safe_get(getattr(self, 'canal_caso_var', None)) or '').strip()
-        proceso_value = (_safe_get(getattr(self, 'proceso_caso_var', None)) or '').strip()
+        def _get_canal_proceso_values():
+            canal = (_safe_get(getattr(self, 'canal_caso_var', None)) or '').strip()
+            proceso = (_safe_get(getattr(self, 'proceso_caso_var', None)) or '').strip()
+            return canal, proceso
 
         def _report_catalog_error(message):
             """Acumula los errores de catálogo para notificarlos en bloque."""
@@ -12777,6 +12779,7 @@ class FraudCaseApp:
             self._apply_process_payload(
                 process_lookup.get(process_id_value, {}), show_errors=False
             )
+        canal_value, proceso_value = _get_canal_proceso_values()
         # Validar campos obligatorios del caso antes de validar entidades hijas
         tipo_informe_value = (self.tipo_informe_var.get() or '').strip()
         tipo_message = validate_required_text(tipo_informe_value, "el tipo de informe")
