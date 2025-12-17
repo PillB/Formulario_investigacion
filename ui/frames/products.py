@@ -49,23 +49,46 @@ SPINBOX_STYLE = ThemeManager.SPINBOX_STYLE
 BUTTON_STYLE = ThemeManager.BUTTON_STYLE
 
 
-class InvolvementRow:
-    """Representa una fila de asignación de monto a un colaborador dentro de un producto."""
+class BaseInvolvementRow:
+    """Representa una fila de involucramiento reutilizable para colaboradores o clientes."""
 
-    def __init__(self, parent, product_frame, idx, team_getter, remove_callback, logs, tooltip_register):
+    def __init__(
+        self,
+        parent,
+        product_frame,
+        idx,
+        options_getter,
+        remove_callback,
+        logs,
+        tooltip_register,
+        *,
+        entity_label: str,
+        entity_key: str,
+        id_field_key: str,
+        involvement_type: str,
+        selector_tooltip: str,
+        remove_tooltip: str,
+    ):
         self.parent = parent
         self.product_frame = product_frame
         self.idx = idx
-        self.team_getter = team_getter
+        self.options_getter = options_getter
         self.remove_callback = remove_callback
         self.logs = logs
         self.tooltip_register = tooltip_register
-        self.validators = []
+        self.entity_label = entity_label
+        self.entity_label_lower = entity_label.lower()
+        self.entity_key = entity_key
+        self.id_field_key = id_field_key
+        self.involvement_type = involvement_type
+        self.selector_tooltip = selector_tooltip
+        self.remove_tooltip = remove_tooltip
+        self.validators: list[FieldValidator] = []
         self.validator_keys: set[str] = set()
-        self.team_validator = None
+        self.selector_validator: FieldValidator | None = None
         self.badge_manager = None
 
-        self.team_var = tk.StringVar()
+        self.id_var = tk.StringVar()
         self.monto_var = tk.StringVar()
 
         self.section = self._create_section(parent)
@@ -80,26 +103,31 @@ class InvolvementRow:
         self.section.pack_content(self.frame, fill="x", expand=True)
         self.badge_manager = self._get_badge_manager(self.frame)
 
-        ttk.Label(self.frame, text="Colaborador:").grid(
+        ttk.Label(self.frame, text=f"{self.entity_label}:").grid(
             row=0, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
-        team_container, self.team_cb = self._create_badged_container(
+        selector_container, self.selector_cb = self._create_badged_container(
             parent=self.frame,
-            badge_key=self._badge_key("team"),
+            badge_key=self._badge_key("selector"),
             widget_factory=lambda container: ttk.Combobox(
                 container,
-                textvariable=self.team_var,
-                values=self.team_getter(),
+                textvariable=self.id_var,
+                values=self.options_getter(),
                 state="readonly",
                 width=20,
                 style=COMBOBOX_STYLE,
             ),
         )
-        team_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
-        self.team_cb.set('')
-        self.team_cb.bind("<FocusOut>", lambda _e: self._handle_team_focus_out(), add="+")
-        self.team_cb.bind("<<ComboboxSelected>>", lambda _e: self._handle_team_focus_out(), add="+")
-        self.tooltip_register(self.team_cb, "Elige al colaborador que participa en este producto.")
+        selector_container.grid(row=0, column=1, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
+        try:
+            self.selector_cb.set("")
+        except Exception:
+            pass
+        self.selector_cb.bind("<FocusOut>", lambda _e: self._handle_selection_focus_out(), add="+")
+        self.selector_cb.bind(
+            "<<ComboboxSelected>>", lambda _e: self._handle_selection_focus_out(), add="+"
+        )
+        self.tooltip_register(self.selector_cb, self.selector_tooltip)
 
         ttk.Label(self.frame, text="Monto asignado:").grid(
             row=0, column=2, padx=COL_PADX, pady=ROW_PADY, sticky="e"
@@ -113,13 +141,15 @@ class InvolvementRow:
         )
         amount_container.grid(row=0, column=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         monto_entry.bind("<FocusOut>", lambda _e: self._handle_amount_focus_out(), add="+")
-        self.tooltip_register(monto_entry, "Monto en soles asignado a este colaborador.")
+        self.tooltip_register(
+            monto_entry, f"Monto en soles asignado a este {self.entity_label_lower}."
+        )
 
         remove_btn = ttk.Button(
             self.frame, text="Eliminar", command=self.remove, style=BUTTON_STYLE
         )
         remove_btn.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
-        self.tooltip_register(remove_btn, "Elimina esta asignación específica.")
+        self.tooltip_register(remove_btn, self.remove_tooltip)
 
         amount_validator = FieldValidator(
             monto_entry,
@@ -130,17 +160,17 @@ class InvolvementRow:
         )
         self.validators.append(amount_validator)
 
-        self.team_validator = FieldValidator(
-            self.team_cb,
-            self._wrap_involvement_validation("team", self._validate_team_selection),
+        self.selector_validator = FieldValidator(
+            self.selector_cb,
+            self._wrap_involvement_validation("selector", self._validate_selection),
             self.logs,
-            f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1} colaborador",
-            variables=[self.team_var, self.monto_var],
+            f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1} {self.entity_label_lower}",
+            variables=[self.id_var, self.monto_var],
         )
-        self.team_validator.add_widget(monto_entry)
-        self.validators.append(self.team_validator)
+        self.selector_validator.add_widget(monto_entry)
+        self.validators.append(self.selector_validator)
 
-        self._capture_validator_keys(amount_validator, self.team_validator)
+        self._capture_validator_keys(amount_validator, self.selector_validator)
 
         self._register_title_traces()
         self._sync_section_title()
@@ -165,62 +195,11 @@ class InvolvementRow:
         return badge_registry
 
     def _badge_key(self, name: str) -> str:
-        return f"product{self.product_frame.idx}_inv{self.idx}_{name}"
+        return f"product{self.product_frame.idx}_inv{self.entity_key}{self.idx}_{name}"
 
     def _wrap_involvement_validation(self, key: str, validate_fn):
         manager = self.badge_manager or self._get_badge_manager(self.frame)
         return manager.wrap_validation(self._badge_key(key), validate_fn)
-
-    def get_data(self):
-        return {
-            "id_colaborador": self.team_var.get().strip(),
-            "monto_asignado": self.monto_var.get().strip(),
-        }
-
-    def update_team_options(self):
-        options = self.team_getter()
-        self.team_cb['values'] = options
-        current_value = self.team_var.get().strip()
-        if not current_value:
-            return
-        known_ids = {option.strip() for option in options if option and option.strip()}
-        if current_value not in known_ids:
-            message = (
-                "El colaborador seleccionado ya no está disponible. Selecciona un nuevo colaborador."
-            )
-            if self.team_validator:
-                self.team_validator.show_custom_error(message)
-            else:
-                messagebox.showerror("Colaborador eliminado", message)
-            self._notify_summary_change()
-
-    def remove(self):
-        if messagebox.askyesno("Confirmar", "¿Desea eliminar esta asignación?"):
-            self.product_frame.log_change(
-                f"Se eliminó asignación de colaborador en producto {self.product_frame.idx+1}"
-            )
-            self.remove_callback(self)
-
-    def _handle_amount_focus_out(self):
-        self.product_frame.log_change(
-            f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto"
-        )
-        self.product_frame.trigger_duplicate_check(show_popup=False)
-
-    def _handle_team_focus_out(self):
-        self.product_frame.log_change(
-            f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó colaborador"
-        )
-        self.product_frame.trigger_duplicate_check(show_popup=False)
-
-    def _notify_summary_change(self):
-        self.product_frame._schedule_product_summary_refresh()
-
-    def _register_title_traces(self):
-        for var in (self.team_var, self.monto_var):
-            trace_add = getattr(var, "trace_add", None)
-            if callable(trace_add):
-                trace_add("write", self._sync_section_title)
 
     def _configure_grid_columns(self):
         columnconfigure = getattr(self.frame, "columnconfigure", None)
@@ -245,7 +224,7 @@ class InvolvementRow:
     def _compute_label_minsize(self) -> int:
         try:
             base_font = tkfont.nametofont("TkDefaultFont")
-            labels = ("Colaborador:", "Monto asignado:")
+            labels = (f"{self.entity_label}:", "Monto asignado:")
             widest = max(base_font.measure(text) for text in labels)
             return widest + COL_PADX
         except Exception:
@@ -261,9 +240,9 @@ class InvolvementRow:
     def _build_section_title(self) -> str:
         base_title = f"Asignación {self.idx+1}"
         if getattr(self, "section", None) and not self.section.is_open:
-            team_value = self.team_var.get().strip()
+            selector_value = self.id_var.get().strip()
             monto_value = self.monto_var.get().strip()
-            details = [value for value in (team_value, monto_value) if value]
+            details = [value for value in (selector_value, monto_value) if value]
             if details:
                 base_title = f"{base_title} – {' | '.join(details)}"
         return base_title
@@ -275,12 +254,18 @@ class InvolvementRow:
         if callable(set_title):
             self.section.set_title(self._build_section_title())
 
+    def _register_title_traces(self):
+        for var in (self.id_var, self.monto_var):
+            trace_add = getattr(var, "trace_add", None)
+            if callable(trace_add):
+                trace_add("write", self._sync_section_title)
+
     def refresh_indexed_state(self):
         prefix = f"Producto {self.product_frame.idx+1} - Asignación {self.idx+1}"
         if getattr(self, "validators", None):
             for validator in self.validators:
                 if getattr(validator, "field_name", None):
-                    suffix = " colaborador" if "colaborador" in validator.field_name else ""
+                    suffix = f" {self.entity_label_lower}" if "Asignación" in validator.field_name else ""
                     validator.field_name = f"{prefix}{suffix}"
             self._capture_validator_keys()
         self._sync_section_title()
@@ -303,20 +288,6 @@ class InvolvementRow:
         target_id = id(widget) if widget is not None else field_name
         return f"field:{field_name}:{target_id}"
 
-    def _create_section(self, parent):
-        return create_collapsible_card(
-            parent,
-            title="",
-            open=False,
-            on_toggle=lambda _section: self._sync_section_title(),
-            log_error=lambda exc: log_event(
-                "validacion",
-                f"No se pudo crear sección colapsable para reclamo {self.idx+1}: {exc}",
-                self.logs,
-            ),
-            collapsible_cls=CollapsibleSection,
-        )
-
     def _create_badged_container(self, parent, badge_key: str, widget_factory):
         container = ttk.Frame(parent)
         ensure_grid_support(container)
@@ -334,39 +305,43 @@ class InvolvementRow:
         )
         return container, widget
 
-    def _get_known_team_ids(self):
-        return {option.strip() for option in self.team_getter() if option and option.strip()}
+    def _get_known_ids(self):
+        return {option.strip() for option in self.options_getter() if option and option.strip()}
 
     def _clear_if_completely_blank(self):
-        if self.team_var.get().strip() or self.monto_var.get().strip():
+        if self.id_var.get().strip() or self.monto_var.get().strip():
             return
 
         def _clear():
-            self.team_cb.set('')
-            self.team_var.set('')
-            self.monto_var.set('')
+            try:
+                self.selector_cb.set("")
+            except Exception:
+                pass
+            self.id_var.set("")
+            self.monto_var.set("")
 
-        if self.team_validator:
-            self.team_validator.suppress_during(_clear)
+        if self.selector_validator:
+            self.selector_validator.suppress_during(_clear)
         else:
             _clear()
         self._notify_summary_change()
 
-    def _validate_team_selection(self):
+    def _validate_selection(self):
         monto_text = self.monto_var.get().strip()
-        team_value = self.team_var.get().strip()
-        if not monto_text:
-            if team_value:
-                if team_value not in self._get_known_team_ids():
-                    return "Debe seleccionar un colaborador válido."
-                return "Debe ingresar un monto asignado para este colaborador."
+        identifier = self.id_var.get().strip()
+        if not monto_text and not identifier:
             self._clear_if_completely_blank()
             return None
-        if not team_value:
-            return "Debe seleccionar un colaborador para este monto asignado."
-        if team_value not in self._get_known_team_ids():
-            return "Debe seleccionar un colaborador válido."
-        return None
+        if identifier:
+            required_message = validate_required_text(identifier, f"el {self.entity_label_lower}")
+            if required_message:
+                return required_message
+            if identifier not in self._get_known_ids():
+                return f"Debe seleccionar un {self.entity_label_lower} válido."
+            if not monto_text:
+                return f"Debe ingresar un monto asignado para este {self.entity_label_lower}."
+            return None
+        return f"Debe seleccionar un {self.entity_label_lower} para este monto asignado."
 
     def _validate_assignment_amount(self):
         message, _decimal_value, normalized_text = validate_money_bounds(
@@ -378,14 +353,74 @@ class InvolvementRow:
             self.monto_var.set(normalized_text)
         return message
 
+    def _handle_amount_focus_out(self):
+        self.product_frame.log_change(
+            f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó monto"
+        )
+        self.product_frame.trigger_duplicate_check(show_popup=False)
+
+    def _handle_selection_focus_out(self):
+        self.product_frame.log_change(
+            f"Producto {self.product_frame.idx+1}, asignación {self.idx+1}: modificó {self.entity_label_lower}"
+        )
+        self.product_frame.trigger_duplicate_check(show_popup=False)
+
+    def _notify_summary_change(self):
+        self.product_frame._schedule_product_summary_refresh()
+
+    def update_options(self):
+        options = self.options_getter()
+        self.selector_cb["values"] = options
+        current_value = self.id_var.get().strip()
+        if not current_value:
+            return
+        known_ids = {option.strip() for option in options if option and option.strip()}
+        if current_value not in known_ids:
+            message = (
+                f"El {self.entity_label_lower} seleccionado ya no está disponible. "
+                f"Selecciona un nuevo {self.entity_label_lower}."
+            )
+            def _clear_selection():
+                self.id_var.set("")
+                try:
+                    self.selector_cb.set("")
+                except Exception:
+                    pass
+            if self.selector_validator:
+                self.selector_validator.suppress_during(_clear_selection)
+            else:
+                _clear_selection()
+            if self.selector_validator:
+                self.selector_validator.show_custom_error(message)
+            else:
+                messagebox.showerror(f"{self.entity_label} eliminado", message)
+            self._notify_summary_change()
+
+    def remove(self):
+        if messagebox.askyesno(
+            "Confirmar",
+            f"¿Desea eliminar esta asignación de {self.entity_label_lower}?",
+        ):
+            self.product_frame.log_change(
+                f"Se eliminó asignación de {self.entity_label_lower} en producto {self.product_frame.idx+1}"
+            )
+            self.remove_callback(self)
+
+    def get_data(self):
+        return {
+            self.id_field_key: self.id_var.get().strip(),
+            "monto_asignado": self.monto_var.get().strip(),
+            "tipo_involucrado": self.involvement_type,
+        }
+
     def clear_values(self):
         """Limpia las variables asociadas sin eliminar el UI."""
 
         def _reset():
-            self.team_var.set("")
+            self.id_var.set("")
             self.monto_var.set("")
             try:
-                self.team_cb.set("")
+                self.selector_cb.set("")
             except Exception:
                 pass
 
@@ -398,6 +433,57 @@ class InvolvementRow:
                 break
         if not managed:
             _reset()
+
+
+class CollaboratorInvolvementRow(BaseInvolvementRow):
+    """Fila de involucramiento para colaboradores."""
+
+    def __init__(self, parent, product_frame, idx, team_getter, remove_callback, logs, tooltip_register):
+        super().__init__(
+            parent,
+            product_frame,
+            idx,
+            team_getter,
+            remove_callback,
+            logs,
+            tooltip_register,
+            entity_label="Colaborador",
+            entity_key="col",
+            id_field_key="id_colaborador",
+            involvement_type="colaborador",
+            selector_tooltip="Elige al colaborador que participa en este producto.",
+            remove_tooltip="Elimina esta asignación específica.",
+        )
+        # Alias para compatibilidad con código y pruebas existentes.
+        self.team_var = self.id_var
+        self.team_cb = self.selector_cb
+
+
+class ClientInvolvementRow(BaseInvolvementRow):
+    """Fila de involucramiento para clientes."""
+
+    def __init__(self, parent, product_frame, idx, client_getter, remove_callback, logs, tooltip_register):
+        super().__init__(
+            parent,
+            product_frame,
+            idx,
+            client_getter,
+            remove_callback,
+            logs,
+            tooltip_register,
+            entity_label="Cliente",
+            entity_key="cli",
+            id_field_key="id_cliente_involucrado",
+            involvement_type="cliente",
+            selector_tooltip="Selecciona al cliente involucrado en este producto.",
+            remove_tooltip="Elimina este involucramiento de cliente.",
+        )
+        self.client_var = self.id_var
+        self.client_cb = self.selector_cb
+
+
+# Alias de compatibilidad para las referencias existentes.
+InvolvementRow = CollaboratorInvolvementRow
 
 
 class ClaimRow:
@@ -1037,6 +1123,7 @@ class ProductFrame:
         self.validators = []
         self.client_validator = None
         self.involvements = []
+        self.client_involvements: list[ClientInvolvementRow] = []
         self.claims = []
         self._last_missing_lookup_id = None
         self._claim_requirement_active = False
@@ -1407,22 +1494,37 @@ class ProductFrame:
             ),
         )
 
-        self.invol_frame = ttk.LabelFrame(self.frame, text="Involucramiento de colaboradores")
-        ensure_grid_support(self.invol_frame)
-        self.invol_frame.grid(row=13, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we")
-        if hasattr(self.invol_frame, "columnconfigure"):
-            self.invol_frame.columnconfigure(1, weight=1)
-            self.invol_frame.columnconfigure(3, weight=1)
-        inv_add_btn = ttk.Button(self.invol_frame, text="Añadir involucrado", command=self.add_involvement)
+        self.collab_invol_frame = ttk.LabelFrame(self.frame, text="Involucramiento de colaboradores")
+        ensure_grid_support(self.collab_invol_frame)
+        self.collab_invol_frame.grid(row=13, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        if hasattr(self.collab_invol_frame, "columnconfigure"):
+            self.collab_invol_frame.columnconfigure(1, weight=1)
+            self.collab_invol_frame.columnconfigure(3, weight=1)
+        inv_add_btn = ttk.Button(self.collab_invol_frame, text="Añadir involucrado", command=self.add_involvement)
         inv_add_btn.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(
             inv_add_btn,
             "Registra un colaborador asociado a este producto. Es obligatorio para validar duplicados.",
         )
 
+        self.client_invol_frame = ttk.LabelFrame(self.frame, text="Involucramiento de clientes")
+        ensure_grid_support(self.client_invol_frame)
+        self.client_invol_frame.grid(row=14, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we")
+        if hasattr(self.client_invol_frame, "columnconfigure"):
+            self.client_invol_frame.columnconfigure(1, weight=1)
+            self.client_invol_frame.columnconfigure(3, weight=1)
+        client_inv_btn = ttk.Button(
+            self.client_invol_frame, text="Añadir cliente involucrado", command=self.add_client_involvement
+        )
+        client_inv_btn.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
+        self.tooltip_register(
+            client_inv_btn,
+            "Agrega clientes relacionados al producto y gestiona montos asignados.",
+        )
+
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=14, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
+        action_row.grid(row=15, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
@@ -1628,6 +1730,7 @@ class ProductFrame:
         if initialize_rows:
             self.add_claim()
             self.add_involvement()
+            self.add_client_involvement()
 
         self._populate_header_tree()
         self._internal_state_ready = True
@@ -2321,6 +2424,12 @@ class ProductFrame:
             else:
                 inv.frame.destroy()
         self.involvements.clear()
+        for inv in self.client_involvements:
+            if getattr(inv, "section", None):
+                inv.section.destroy()
+            else:
+                inv.frame.destroy()
+        self.client_involvements.clear()
 
     def set_claims_from_data(self, claims):
         self.clear_claims()
@@ -2400,7 +2509,10 @@ class ProductFrame:
         case_id = (case_var.get().strip() if case_var else "") or placeholder
         product_id = self.id_var.get().strip() or placeholder
         client_id = self.client_var.get().strip() or placeholder
-        collaborator_id = self._get_primary_collaborator() or placeholder
+        involucrado_tipo, involucrado_id = self._get_primary_involucrado()
+        collaborator_id = involucrado_id or placeholder
+        if involucrado_tipo:
+            collaborator_id = f"{involucrado_tipo}: {collaborator_id}"
         occ_date = self.fecha_oc_var.get().strip()
         desc_date = self.fecha_desc_var.get().strip()
         date_block = f"{occ_date or placeholder} / {desc_date or placeholder}"
@@ -2415,12 +2527,16 @@ class ProductFrame:
         )
         return f"({', '.join(tuple_parts)})"
 
-    def _get_primary_collaborator(self) -> str:
+    def _get_primary_involucrado(self) -> tuple[str, str]:
         for inv in self.involvements:
             collaborator_id = (inv.team_var.get() if hasattr(inv, "team_var") else "").strip()
             if collaborator_id:
-                return collaborator_id
-        return ""
+                return ("colaborador", collaborator_id)
+        for inv in self.client_involvements:
+            client_id = (inv.client_var.get() if hasattr(inv, "client_var") else "").strip()
+            if client_id:
+                return ("cliente", client_id)
+        return ("", "")
 
     def _get_primary_claim_id(self) -> str:
         for claim in self.claims:
@@ -2873,8 +2989,8 @@ class ProductFrame:
         return normalized
 
     def _build_involvement_row(self, idx: int):
-        return InvolvementRow(
-            self.invol_frame,
+        return CollaboratorInvolvementRow(
+            self.collab_invol_frame,
             self,
             idx,
             self.get_team_options,
@@ -2883,9 +2999,20 @@ class ProductFrame:
             self.tooltip_register,
         )
 
-    def _refresh_involvement_rows(self, *, min_rows: int = 1):
+    def _build_client_involvement_row(self, idx: int):
+        return ClientInvolvementRow(
+            self.client_invol_frame,
+            self,
+            idx,
+            self.get_client_options,
+            self.remove_client_involvement,
+            self.logs,
+            self.tooltip_register,
+        )
+
+    def _refresh_involvement_rows(self, rows, *, min_rows: int = 1):
         refresh_dynamic_rows(
-            self.involvements,
+            rows,
             start_row=1,
             columnspan=6,
             padx=COL_PADX,
@@ -2897,7 +3024,14 @@ class ProductFrame:
     def add_involvement(self):
         row = self._build_involvement_row(len(self.involvements))
         self.involvements.append(row)
-        self._refresh_involvement_rows()
+        self._refresh_involvement_rows(self.involvements)
+        self.schedule_summary_refresh('involucramientos')
+        return row
+
+    def add_client_involvement(self):
+        row = self._build_client_involvement_row(len(self.client_involvements))
+        self.client_involvements.append(row)
+        self._refresh_involvement_rows(self.client_involvements)
         self.schedule_summary_refresh('involucramientos')
         return row
 
@@ -2917,7 +3051,26 @@ class ProductFrame:
                 pass
         if row in self.involvements:
             self.involvements.remove(row)
-        self._refresh_involvement_rows(min_rows=1)
+        self._refresh_involvement_rows(self.involvements, min_rows=1)
+        self.schedule_summary_refresh('involucramientos')
+
+    def remove_client_involvement(self, row):
+        self._unregister_involvement_validations(row)
+        section = getattr(row, "section", None)
+        frame = getattr(row, "frame", None)
+        if section and hasattr(section, "destroy"):
+            try:
+                section.destroy()
+            except Exception:
+                pass
+        elif frame and hasattr(frame, "destroy"):
+            try:
+                frame.destroy()
+            except Exception:
+                pass
+        if row in self.client_involvements:
+            self.client_involvements.remove(row)
+        self._refresh_involvement_rows(self.client_involvements, min_rows=1)
         self.schedule_summary_refresh('involucramientos')
 
     def _unregister_involvement_validations(self, row):
@@ -2960,10 +3113,12 @@ class ProductFrame:
                 f"Cliente {current} eliminado. Selecciona un nuevo titular para este producto."
             )
             self.client_validator.show_custom_error(warning_msg)
+        for client_inv in self.client_involvements:
+            client_inv.update_options()
 
     def update_team_options(self):
         for inv in self.involvements:
-            inv.update_team_options()
+            inv.update_options()
 
     def _register_lookup_sync(self, widget):
         if widget is None:
@@ -3368,6 +3523,9 @@ class ProductFrame:
             for involvement in self.involvements:
                 if hasattr(involvement, "clear_values"):
                     involvement.clear_values()
+            for involvement in self.client_involvements:
+                if hasattr(involvement, "clear_values"):
+                    involvement.clear_values()
 
             self._refresh_amount_validation_after_programmatic_update()
 
@@ -3403,14 +3561,27 @@ class ProductFrame:
             "tipo_producto": self.tipo_prod_var.get(),
         }
         self._normalize_optional_amount_strings(producto_data)
+
+        def _collect_involucramientos(rows):
+            collected = []
+            for inv in rows:
+                data = inv.get_data()
+                identifier_keys = [key for key in data.keys() if key.startswith("id_")]
+                has_identifier = any((data.get(key) or "").strip() for key in identifier_keys)
+                has_amount = bool((data.get("monto_asignado") or "").strip())
+                if has_identifier or has_amount:
+                    collected.append(data)
+            return collected
+
+        collaborator_assignments = _collect_involucramientos(self.involvements)
+        client_assignments = _collect_involucramientos(self.client_involvements)
+        combined_assignments = collaborator_assignments + client_assignments
         return {
             "producto": producto_data,
             "reclamos": [claim.get_data() for claim in self.claims],
-            "asignaciones": [
-                data
-                for data in (inv.get_data() for inv in self.involvements)
-                if any(data.values())
-            ],
+            "asignaciones": combined_assignments,
+            "asignaciones_colaboradores": collaborator_assignments,
+            "asignaciones_clientes": client_assignments,
         }
 
     def _normalize_optional_amount_strings(self, producto_data):
@@ -3479,7 +3650,8 @@ class ProductFrame:
 
 __all__ = [
     "ClaimRow",
-    "InvolvementRow",
+    "CollaboratorInvolvementRow",
+    "ClientInvolvementRow",
     "PRODUCT_MONEY_SPECS",
     "ProductFrame",
 ]

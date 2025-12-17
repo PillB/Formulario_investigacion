@@ -425,7 +425,21 @@ class DummyProductFrame:
         producto_overrides=None,
         reclamos=None,
         asignaciones=None,
+        asignaciones_clientes=None,
+        asignaciones_colaboradores=None,
     ):
+        base_assignments = list(asignaciones or [])
+        collaborator_list = list(
+            asignaciones_colaboradores if asignaciones_colaboradores is not None else base_assignments
+        )
+        for item in collaborator_list:
+            if isinstance(item, dict):
+                item.setdefault("tipo_involucrado", "colaborador")
+        client_list = list(asignaciones_clientes or [])
+        for item in client_list:
+            if isinstance(item, dict):
+                item.setdefault("tipo_involucrado", "cliente")
+
         base_product = {
             "producto": {
                 "id_producto": "1234567890123",
@@ -448,7 +462,9 @@ class DummyProductFrame:
                 "tipo_producto": tipo_producto,
             },
             "reclamos": list(reclamos or []),
-            "asignaciones": list(asignaciones or []),
+            "asignaciones": collaborator_list + client_list,
+            "asignaciones_colaboradores": collaborator_list,
+            "asignaciones_clientes": client_list,
         }
         if producto_overrides:
             base_product["producto"].update(producto_overrides)
@@ -594,6 +610,8 @@ def build_headless_app(
             producto_overrides=definition.get("producto_overrides"),
             reclamos=definition.get("reclamos"),
             asignaciones=definition.get("asignaciones"),
+            asignaciones_clientes=definition.get("asignaciones_clientes"),
+            asignaciones_colaboradores=definition.get("asignaciones_colaboradores"),
         )
         for definition in product_definitions
     ]
@@ -1133,9 +1151,10 @@ def test_validate_data_normalizes_valid_involvement_amounts():
     assert not any(
         "Monto asignado del colaborador" in error for error in errors
     )
-    asignaciones = app.product_frames[0].get_data()['asignaciones']
+    asignaciones = app.product_frames[0].get_data()['asignaciones_colaboradores']
     assert asignaciones[0]['monto_asignado'] == '10.50'
     assert asignaciones[1]['monto_asignado'] == '75.00'
+    assert all(item['tipo_involucrado'] == 'colaborador' for item in asignaciones)
 
 
 def test_get_form_data_exports_normalized_involucramientos():
@@ -1144,6 +1163,9 @@ def test_get_form_data_exports_normalized_involucramientos():
         "asignaciones": [
             {"id_colaborador": "T12345", "monto_asignado": "0010.50"},
             {"id_colaborador": "T54321", "monto_asignado": "75"},
+        ],
+        "asignaciones_clientes": [
+            {"id_cliente_involucrado": "12345678", "monto_asignado": "25"},
         ],
     }
     team_configs = [{"team_id": "T12345"}, {"team_id": "T54321"}]
@@ -1158,8 +1180,11 @@ def test_get_form_data_exports_normalized_involucramientos():
 
     form_data = app.gather_data()
     exported_amounts = [row['monto_asignado'] for row in form_data['involucramientos']]
-    assert exported_amounts == ['10.50', '75.00']
+    assert exported_amounts == ['10.50', '75.00', '25.00']
     assert all(amount.strip() and '.' in amount for amount in exported_amounts)
+    assert any(row.get('tipo_involucrado') == 'cliente' for row in form_data['involucramientos'])
+    client_row = next(row for row in form_data['involucramientos'] if row.get('tipo_involucrado') == 'cliente')
+    assert client_row['id_cliente_involucrado'] == '12345678'
 
 
 def test_gather_data_serializes_rich_text_analysis():
