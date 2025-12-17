@@ -776,6 +776,53 @@ def _build_report_context(case_data: CaseData):
         for col in team
     ]
 
+    client_rows = [
+        [
+            _safe_text(client.get("id_cliente"), placeholder="-"),
+            _safe_text(client.get("nombres"), placeholder="-"),
+            _safe_text(client.get("apellidos"), placeholder="-"),
+            _safe_text(client.get("tipo_id"), placeholder="-"),
+            _safe_text(client.get("flag"), placeholder="-"),
+            _safe_text(client.get("telefonos"), placeholder="-"),
+            _safe_text(client.get("correos"), placeholder="-"),
+            _safe_text(client.get("direcciones"), placeholder="-"),
+            _safe_text(client.get("accionado"), placeholder="-"),
+        ]
+        for client in clients
+    ]
+
+    event_rows, _ = build_event_rows(case_data)
+    combined_product_rows = [
+        [
+            _safe_text(row.get("id_producto"), placeholder="-"),
+            _safe_text(row.get("id_cliente"), placeholder="-"),
+            _safe_text(row.get("tipo_producto"), placeholder="-"),
+            _safe_text(row.get("canal"), placeholder="-"),
+            _safe_text(row.get("proceso"), placeholder="-"),
+            _format_decimal_value(parse_decimal_amount(row.get("monto_investigado"))),
+            _safe_text(row.get("nombre_analitica"), placeholder="-"),
+            _safe_text(
+                " ".join(
+                    filter(
+                        None,
+                        [row.get("cliente_nombres"), row.get("cliente_apellidos")],
+                    )
+                ),
+                placeholder="-",
+            ),
+            _safe_text(
+                " ".join(
+                    filter(
+                        None,
+                        [row.get("colaborador_nombres"), row.get("colaborador_apellidos")],
+                    )
+                ),
+                placeholder="-",
+            ),
+        ]
+        for row in event_rows
+    ]
+
     def _build_placeholder_operation_rows(count: int = 3) -> List[List[str]]:
         placeholder_cells = [PLACEHOLDER] * 10
         return [[str(idx)] + placeholder_cells for idx in range(1, count + 1)]
@@ -898,6 +945,8 @@ def _build_report_context(case_data: CaseData):
         "header_headers": header_headers,
         "header_row": header_row,
         "collaborator_rows": collaborator_rows,
+        "client_rows": client_rows,
+        "combined_product_rows": combined_product_rows,
         "operation_rows": operation_table_rows,
         "risk_rows": risk_rows,
         "norm_rows": norm_rows,
@@ -966,6 +1015,12 @@ def _build_sections_summary(context: Mapping[str, Any], analysis: Mapping[str, A
         ["Encabezado Institucional", "Tabla", _section_state(any(val != PLACEHOLDER for val in context["header_row"]))],
         ["Antecedentes", "Narrativa", _section_state(bool(analysis.get("antecedentes")))],
         ["Colaboradores", "Tabla", _section_state(bool(context["collaborator_rows"]))],
+        ["Tabla de clientes", "Tabla", _section_state(bool(context["client_rows"]))],
+        [
+            "Tabla de productos combinado",
+            "Tabla",
+            _section_state(bool(context["combined_product_rows"])),
+        ],
         ["Modus operandi", "Narrativa", _section_state(bool(analysis.get("modus_operandi")))],
         ["Principales Hallazgos", "Tabla + texto", _section_state(bool(context["operation_rows"]))],
         ["Descargos", "Narrativa", _section_state(bool(analysis.get("descargos")))],
@@ -1329,7 +1384,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
     for row_idx, col_idx in monetary_rows:
         for run in header_table.rows[row_idx].cells[col_idx].paragraphs[0].runs:
             run.font.bold = True
-    style_section_heading(document.add_heading("Antecedentes", level=2))
+    style_section_heading(document.add_heading("1. Antecedentes", level=2))
     _add_rich_text_paragraphs(document, raw_analysis.get("antecedentes"))
     style_section_heading(document.add_heading("Detalle de los Colaboradores Involucrados", level=2))
     append_table(
@@ -1388,6 +1443,36 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             "Detalle de Norma",
         ],
         context["norm_rows"],
+    )
+    style_section_heading(document.add_heading("Tabla de clientes", level=2))
+    append_table(
+        [
+            "ID Cliente",
+            "Nombres",
+            "Apellidos",
+            "Tipo ID",
+            "Flag",
+            "Teléfonos",
+            "Correos",
+            "Direcciones",
+            "Accionado",
+        ],
+        context["client_rows"],
+    )
+    style_section_heading(document.add_heading("Tabla de productos combinado", level=2))
+    append_table(
+        [
+            "ID Producto",
+            "ID Cliente",
+            "Tipo de producto",
+            "Canal",
+            "Proceso",
+            "Monto investigado",
+            "Analítica",
+            "Cliente",
+            "Colaborador",
+        ],
+        context["combined_product_rows"],
     )
     style_section_heading(document.add_heading("Conclusiones", level=2))
     _add_rich_text_paragraphs(document, raw_analysis.get("conclusiones"))

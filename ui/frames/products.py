@@ -1750,12 +1750,13 @@ class ProductFrame:
         return (self.client_var.get() or "").strip() == self.INTERNAL_CLIENT_ID
 
     def _compute_afectacion_interna_state(self) -> bool:
-        if self._afectacion_interna_var is not None:
+        var = getattr(self, "_afectacion_interna_var", None)
+        if var is not None:
             try:
-                return bool(self._afectacion_interna_var.get())
+                return bool(var.get())
             except Exception:
-                return bool(self.afectacion_interna)
-        return bool(self.afectacion_interna)
+                return bool(getattr(self, "afectacion_interna", False))
+        return bool(getattr(self, "afectacion_interna", False))
 
     def _is_internal_mode_active(self) -> bool:
         return self._compute_afectacion_interna_state() or self._is_internal_client_selected()

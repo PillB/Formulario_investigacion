@@ -89,6 +89,7 @@ from models import (AutofillService, build_detail_catalog_id_index,
                     find_analitica_by_code, format_analitica_option,
                     get_analitica_display_options, iter_massive_csv_rows,
                     normalize_detail_catalog_key, parse_involvement_entries)
+from report.carta_inmediatez import CartaInmediatezError, CartaInmediatezGenerator
 from report_builder import (build_docx, build_event_rows,
                             build_llave_tecnica_rows, build_report_filename,
                             CaseData, DOCX_AVAILABLE, DOCX_MISSING_MESSAGE,
@@ -879,6 +880,10 @@ class FraudCaseApp:
         self._rich_text_fonts = {}
         self._toast_window: Optional[tk.Toplevel] = None
         self._toast_after_id: Optional[str] = None
+        self._carta_dialog: Optional[tk.Toplevel] = None
+        self._carta_tree: Optional[ttk.Treeview] = None
+        self._carta_rows: list[dict[str, str]] = []
+        self._carta_generator: CartaInmediatezGenerator | None = None
         self.btn_docx = None
         self.btn_md = None
         self.btn_clear_form = None
@@ -2673,7 +2678,11 @@ class FraudCaseApp:
 
         try:
             self._pending_idle_update = True
-            root.after_idle(_flush_pending_update)
+            after_idle = getattr(root, "after_idle", None)
+            if callable(after_idle):
+                after_idle(_flush_pending_update)
+            else:
+                _flush_pending_update()
         except tk.TclError:
             self._pending_idle_update = False
             try:
@@ -6172,6 +6181,7 @@ class FraudCaseApp:
         )
 
         self.id_caso_var = getattr(self, "id_caso_var", _create_var())
+        self.id_proceso_var = getattr(self, "id_proceso_var", _create_var())
         self.tipo_informe_var = getattr(
             self, "tipo_informe_var", _create_var(TIPO_INFORME_LIST[0])
         )
@@ -7130,6 +7140,13 @@ class FraudCaseApp:
             style="ActionBar.TButton",
         )
         md_button.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
+        carta_button = ttk.Button(
+            report_frame,
+            text="Generar carta de inmediatez",
+            command=self.open_carta_inmediatez_dialog,
+            style="ActionBar.TButton",
+        )
+        carta_button.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
         clear_button = ttk.Button(
             report_frame,
             text="Borrar todos los datos",
@@ -7138,6 +7155,7 @@ class FraudCaseApp:
         )
         clear_button.pack(side="left", pady=(0, ROW_PADY // 2))
         self.btn_md = md_button
+        self.btn_carta_inmediatez = carta_button
         self.btn_clear_form = clear_button
 
         docx_tooltip = (
@@ -7145,16 +7163,27 @@ class FraudCaseApp:
             if self._docx_available
             else f"{DOCX_MISSING_MESSAGE} Usa el informe Markdown como respaldo."
         )
+        carta_tooltip = "Genera cartas de inmediatez por colaborador usando la plantilla configurada."
         if self.btn_docx:
             try:
                 self.btn_docx.state(["!disabled"] if self._docx_available else ["disabled"])
             except tk.TclError:
                 pass
             self.register_tooltip(self.btn_docx, docx_tooltip)
+        if not self._docx_available:
+            carta_tooltip = f"{DOCX_MISSING_MESSAGE} Instala python-docx para generar cartas de inmediatez."
+            try:
+                carta_button.state(["disabled"])
+            except tk.TclError:
+                pass
 
         self.register_tooltip(
             md_button,
             "Genera un informe detallado en Markdown. Siempre disponible como respaldo.",
+        )
+        self.register_tooltip(
+            carta_button,
+            carta_tooltip,
         )
         self.register_tooltip(
             clear_button,
@@ -10884,8 +10913,10 @@ class FraudCaseApp:
             fecha_vigencia = (hydrated.get('fecha_vigencia') or '').strip()
             acapite_inciso = (hydrated.get('acapite_inciso') or '').strip()
             detalle_norma = (hydrated.get('detalle_norma') or hydrated.get('detalle') or '').strip()
+            norm_catalog = (self.detail_catalogs.get('id_norma') or {}) if isinstance(self.detail_catalogs, Mapping) else {}
+            norm_id_error = None if nid in norm_catalog else validate_norm_id(nid)
             validation_errors = [
-                validate_norm_id(nid),
+                norm_id_error,
                 validate_required_text(descripcion, "la descripción de la norma"),
                 validate_required_text(acapite_inciso, "el acápite o inciso de la norma"),
                 validate_required_text(detalle_norma, "el detalle de la norma"),
@@ -12421,7 +12452,9 @@ class FraudCaseApp:
 
             caso = data.get('caso', {})
             self.id_caso_var.set(caso.get('id_caso', ''))
-            self.id_proceso_var.set(self._normalize_process_identifier(caso.get('id_proceso', '')))
+            raw_process_id = caso.get('id_proceso')
+            if raw_process_id:
+                self.id_proceso_var.set(self._normalize_process_identifier(raw_process_id))
             if caso.get('tipo_informe') in TIPO_INFORME_LIST:
                 self.tipo_informe_var.set(caso.get('tipo_informe'))
             if caso.get('categoria1') in TAXONOMIA:
@@ -12626,6 +12659,14 @@ class FraudCaseApp:
         """Valida los datos del formulario y retorna errores y advertencias."""
         errors = []
         warnings = []
+        def _safe_get(var):
+            try:
+                return var.get()
+            except Exception:
+                return ''
+
+        canal_value = (_safe_get(getattr(self, 'canal_caso_var', None)) or '').strip()
+        proceso_value = (_safe_get(getattr(self, 'proceso_caso_var', None)) or '').strip()
 
         def _report_catalog_error(message):
             """Acumula los errores de catálogo para notificarlos en bloque."""
@@ -12709,20 +12750,32 @@ class FraudCaseApp:
         if case_message:
             errors.append(case_message)
         process_id_value = self._normalize_process_identifier(self.id_proceso_var.get())
-        try:
-            self.id_proceso_var.set(process_id_value)
-        except Exception:
-            pass
+        if not process_id_value and hasattr(self, "_current_case_data"):
+            fallback_process_id = self._normalize_process_identifier(
+                getattr(self._current_case_data or {}, "get", lambda *_: {})("caso", {}).get("id_proceso", "")
+            )
+            if fallback_process_id:
+                process_id_value = fallback_process_id
+                try:
+                    self.id_proceso_var.set(fallback_process_id)
+                except Exception:
+                    pass
+        else:
+            try:
+                self.id_proceso_var.set(process_id_value)
+            except Exception:
+                pass
+        process_lookup = getattr(self, "process_lookup", {}) or {}
         process_message = validate_process_id(process_id_value)
         if process_message:
             errors.append(process_message)
-        elif process_id_value and process_id_value not in self.process_lookup:
+        elif process_id_value and process_lookup and process_id_value not in process_lookup:
             errors.append(
                 "El ID de proceso no se encuentra en el catálogo process_details.csv."
             )
-        elif process_id_value:
+        elif process_id_value and process_lookup:
             self._apply_process_payload(
-                self.process_lookup.get(process_id_value, {}), show_errors=False
+                process_lookup.get(process_id_value, {}), show_errors=False
             )
         # Validar campos obligatorios del caso antes de validar entidades hijas
         tipo_informe_value = (self.tipo_informe_var.get() or '').strip()
@@ -12766,7 +12819,6 @@ class FraudCaseApp:
                 _report_catalog_error(
                     f"La modalidad '{mod_value}' no existe dentro de la categoría '{cat1_value}'/'{cat2_value}' del catálogo CM."
                 )
-        canal_value = (self.canal_caso_var.get() or '').strip()
         canal_message = validate_required_text(canal_value, "el canal del caso")
         if canal_message:
             errors.append(canal_message)
@@ -12774,11 +12826,22 @@ class FraudCaseApp:
             _report_catalog_error(
                 f"El canal del caso '{canal_value}' no está en el catálogo CM."
             )
-        proceso_value = (self.proceso_caso_var.get() or '').strip()
+        if canal_value and canal_value not in CANAL_LIST and not any(
+            "El canal del caso" in msg for msg in errors
+        ):
+            _report_catalog_error(
+                f"El canal del caso '{canal_value}' no está en el catálogo CM."
+            )
         proceso_message = validate_required_text(proceso_value, "el proceso impactado")
         if proceso_message:
             errors.append(proceso_message)
         elif proceso_value not in PROCESO_LIST:
+            _report_catalog_error(
+                f"El proceso del caso '{proceso_value}' no está en el catálogo CM."
+            )
+        if proceso_value and proceso_value not in PROCESO_LIST and not any(
+            "proceso del caso" in msg for msg in errors
+        ):
             _report_catalog_error(
                 f"El proceso del caso '{proceso_value}' no está en el catálogo CM."
             )
@@ -13319,6 +13382,17 @@ class FraudCaseApp:
                 fv = datetime.strptime(fvig, "%Y-%m-%d")
                 if fv > datetime.now():
                     errors.append(f"Fecha de vigencia futura en norma {nid or 'sin ID'}")
+        # Refuerzo de errores de catálogo del caso
+        canal_value = (self.canal_caso_var.get() or '').strip()
+        if canal_value and canal_value not in CANAL_LIST and not any(
+            "El canal del caso" in msg for msg in errors
+        ):
+            errors.append(f"El canal del caso '{canal_value}' no está en el catálogo CM.")
+        proceso_value = (self.proceso_caso_var.get() or '').strip()
+        if proceso_value and proceso_value not in PROCESO_LIST and not any(
+            "proceso del caso" in msg for msg in errors
+        ):
+            errors.append(f"El proceso del caso '{proceso_value}' no está en el catálogo CM.")
         self._publish_validation_summary(errors, warnings)
         return errors, warnings
 
@@ -13585,6 +13659,200 @@ class FraudCaseApp:
         self._generate_report_file(
             "md", save_md, "Markdown (.md)", source_widget=self.btn_md
         )
+
+    def _get_carta_generator(self) -> CartaInmediatezGenerator:
+        if self._carta_generator is None:
+            external_dir = self._get_external_drive_path()
+            self._carta_generator = CartaInmediatezGenerator(Path(EXPORTS_DIR), external_dir)
+        return self._carta_generator
+
+    def _collect_carta_candidates(self) -> list[dict[str, str]]:
+        candidates: list[dict[str, str]] = []
+        for frame in self.team_frames:
+            data = frame.get_data()
+            collaborator_id = self._normalize_identifier(data.get("id_colaborador"))
+            flag = (data.get("flag") or "").strip().lower()
+            if not collaborator_id or flag not in {"involucrado", "relacionado"}:
+                continue
+            candidates.append(
+                {
+                    "id_colaborador": collaborator_id,
+                    "nombres": self._sanitize_text(data.get("nombres")),
+                    "apellidos": self._sanitize_text(data.get("apellidos")),
+                    "puesto": self._sanitize_text(data.get("puesto")),
+                    "nombre_agencia": self._sanitize_text(data.get("nombre_agencia")),
+                    "codigo_agencia": self._sanitize_text(data.get("codigo_agencia")),
+                    "flag": data.get("flag", ""),
+                    "division": data.get("division", ""),
+                }
+            )
+        return candidates
+
+    def _refresh_carta_tree(self) -> None:
+        tree = getattr(self, "_carta_tree", None)
+        if not tree:
+            return
+        tree.delete(*tree.get_children())
+        for idx, row in enumerate(self._carta_rows):
+            full_name = " ".join(part for part in (row.get("nombres"), row.get("apellidos")) if part)
+            agencia = row.get("nombre_agencia") or row.get("codigo_agencia") or "-"
+            tree.insert(
+                "",
+                "end",
+                iid=str(idx),
+                values=(row.get("id_colaborador"), full_name or "-", row.get("puesto"), agencia, row.get("flag")),
+            )
+
+    def _destroy_carta_dialog(self) -> None:
+        dialog = getattr(self, "_carta_dialog", None)
+        if dialog is None:
+            return
+        try:
+            dialog.destroy()
+        except tk.TclError:
+            pass
+        self._carta_dialog = None
+        self._carta_tree = None
+
+    def open_carta_inmediatez_dialog(self) -> None:
+        candidates = self._collect_carta_candidates()
+        if not candidates:
+            message = (
+                "No hay colaboradores seleccionables. Verifica que tengan matrícula, "
+                "flag Involucrado/Relacionado y agencia para la carta."
+            )
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showinfo("Sin colaboradores", message)
+            log_event("validacion", message, self.logs)
+            return
+
+        self._carta_rows = candidates
+        if self._carta_dialog and self._carta_dialog.winfo_exists():
+            self._refresh_carta_tree()
+            try:
+                self._carta_dialog.lift()
+                self._carta_dialog.focus_force()
+            except tk.TclError:
+                pass
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Cartas de inmediatez")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.protocol("WM_DELETE_WINDOW", self._destroy_carta_dialog)
+        self._carta_dialog = dialog
+
+        ttk.Label(
+            dialog,
+            text=(
+                "Selecciona uno o más colaboradores para generar cartas de inmediatez. "
+                "Sólo se listan aquellos con flag Involucrado/Relacionado."
+            ),
+            wraplength=520,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(10, 6))
+
+        columns = ("matricula", "nombre", "puesto", "agencia", "flag")
+        tree = ttk.Treeview(
+            dialog,
+            columns=columns,
+            show="headings",
+            height=8,
+            selectmode="extended",
+        )
+        tree.heading("matricula", text="Matrícula")
+        tree.heading("nombre", text="Nombre completo")
+        tree.heading("puesto", text="Puesto")
+        tree.heading("agencia", text="Agencia")
+        tree.heading("flag", text="Flag")
+        tree.column("matricula", width=120, anchor="center")
+        tree.column("nombre", width=180, anchor="w")
+        tree.column("puesto", width=140, anchor="w")
+        tree.column("agencia", width=140, anchor="w")
+        tree.column("flag", width=100, anchor="center")
+        tree.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=(12, 0), pady=(0, 8))
+        scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=tree.yview)
+        scrollbar.grid(row=1, column=2, sticky="ns", pady=(0, 8), padx=(0, 12))
+        tree.configure(yscrollcommand=scrollbar.set)
+        self._carta_tree = tree
+        self._refresh_carta_tree()
+
+        buttons = ttk.Frame(dialog)
+        buttons.grid(row=2, column=0, columnspan=3, sticky="e", padx=12, pady=(0, 12))
+        ttk.Button(buttons, text="Generar cartas", command=self._generate_selected_cartas, style="ActionBar.TButton").pack(
+            side="left", padx=(0, 8)
+        )
+        ttk.Button(buttons, text="Cerrar", command=self._destroy_carta_dialog, style="ActionBar.TButton").pack(side="left")
+
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        log_event("navegacion", "Abrió diálogo de carta de inmediatez", self.logs)
+
+    def _generate_selected_cartas(self) -> None:
+        tree = getattr(self, "_carta_tree", None)
+        if not tree:
+            return
+        selection = tree.selection()
+        if not selection:
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showinfo("Selecciona colaboradores", "Elige al menos un colaborador para continuar.")
+            return
+        selected: list[dict[str, str]] = []
+        for iid in selection:
+            try:
+                idx = int(iid)
+                selected.append(self._carta_rows[idx])
+            except (ValueError, IndexError):
+                continue
+        self._perform_carta_generation(selected)
+
+    def _perform_carta_generation(self, members: list[dict[str, str]]) -> None:
+        case_id = self._normalize_identifier(self.id_caso_var.get())
+        investigator_id = self._normalize_identifier(self.investigator_id_var.get())
+        errors: list[str] = []
+        case_msg = validate_case_id(case_id)
+        if case_msg:
+            errors.append(case_msg)
+        inv_msg = validate_team_member_id(investigator_id)
+        if inv_msg:
+            errors.append(f"Matrícula del investigador: {inv_msg}")
+        for member in members:
+            msg = validate_team_member_id(member.get("id_colaborador", ""))
+            if msg:
+                errors.append(f"Colaborador {member.get('id_colaborador') or member.get('nombres')}: {msg}")
+        if errors:
+            combined = "\n".join(dict.fromkeys(errors))
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror("Validación de carta", combined)
+            log_event("validacion", combined, self.logs)
+            return
+
+        self.id_caso_var.set(case_id)
+        self.investigator_id_var.set(investigator_id)
+        data = self.gather_data()
+        try:
+            result = self._get_carta_generator().generate_cartas(data, members)
+        except CartaInmediatezError as exc:
+            message = str(exc)
+            if not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror("No se pudo generar la carta", message)
+            log_event("validacion", message, self.logs)
+            return
+        created_files = [Path(path) for path in result.get("files") or []]
+        history_paths = [Path(EXPORTS_DIR) / "cartas_inmediatez.csv", Path(EXPORTS_DIR) / "h_cartas_inmediatez.csv"]
+        self._mirror_exports_to_external_drive(created_files + history_paths, case_id, notify_user=not getattr(self, "_suppress_messagebox", False))
+        numbers = [row.get("Numero_de_Carta") for row in result.get("rows") or []]
+        success_message = (
+            f"Se generaron {len(created_files)} carta(s) de inmediatez." + (f" Números: {', '.join(numbers)}" if numbers else "")
+        )
+        if not getattr(self, "_suppress_messagebox", False):
+            messagebox.showinfo("Cartas generadas", success_message)
+        log_event("navegacion", success_message, self.logs)
+        self.flush_logs_now()
+        self._play_feedback_sound()
+        self._show_success_toast(getattr(self, "btn_carta_inmediatez", None))
+        self._destroy_carta_dialog()
 
     def _build_export_definitions(self, data: CaseData) -> list[dict[str, object]]:
         """Devuelve los esquemas de exportación basados en el contenido actual."""
