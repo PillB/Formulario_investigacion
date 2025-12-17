@@ -13842,7 +13842,55 @@ class FraudCaseApp:
         created_files = [Path(path) for path in result.get("files") or []]
         history_paths = [Path(EXPORTS_DIR) / "cartas_inmediatez.csv", Path(EXPORTS_DIR) / "h_cartas_inmediatez.csv"]
         self._mirror_exports_to_external_drive(created_files + history_paths, case_id, notify_user=not getattr(self, "_suppress_messagebox", False))
-        numbers = [row.get("Numero_de_Carta") for row in result.get("rows") or []]
+        rows = result.get("rows") or []
+        generation_date = next(
+            (
+                (row.get("fecha_generacion") or "").strip()
+                for row in rows
+                if (row.get("fecha_generacion") or "").strip()
+            ),
+            "",
+        ) or datetime.now().strftime("%Y-%m-%d")
+        updated_dates = False
+
+        def _find_team_frame_by_id(collaborator_id: str):
+            frame = self._find_team_frame(collaborator_id)
+            if frame:
+                return frame
+            for candidate in getattr(self, "team_frames", []):
+                id_var = getattr(candidate, "id_var", None)
+                current = ""
+                if id_var and hasattr(id_var, "get"):
+                    current = self._normalize_identifier(id_var.get())
+                if current and current == collaborator_id:
+                    return candidate
+            return None
+
+        member_lookup = {
+            self._normalize_identifier(member.get("id_colaborador")): member for member in members if member.get("id_colaborador")
+        }
+        for row in rows:
+            normalized_id = self._normalize_identifier(row.get("matricula_team_member") or row.get("id_colaborador"))
+            if not normalized_id and len(member_lookup) == 1:
+                normalized_id = next(iter(member_lookup))
+            if not normalized_id:
+                continue
+            frame = _find_team_frame_by_id(normalized_id)
+            if not frame:
+                continue
+            fecha_var = getattr(frame, "fecha_carta_inmediatez_var", None)
+            if not fecha_var or not hasattr(fecha_var, "get") or not hasattr(fecha_var, "set"):
+                continue
+            if (fecha_var.get() or "").strip():
+                continue
+            carta_date = (row.get("fecha_generacion") or generation_date).strip() or generation_date
+            fecha_var.set(carta_date)
+            updated_dates = True
+
+        if updated_dates:
+            self._schedule_summary_refresh("colaboradores")
+
+        numbers = [row.get("Numero_de_Carta") for row in rows]
         success_message = (
             f"Se generaron {len(created_files)} carta(s) de inmediatez." + (f" Números: {', '.join(numbers)}" if numbers else "")
         )
