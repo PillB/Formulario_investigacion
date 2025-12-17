@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -23,12 +24,13 @@ DOCX_MISSING_MESSAGE = (
     "Instálala con 'pip install python-docx' para habilitar el informe Word."
 )
 
-from settings import RICH_TEXT_MAX_CHARS
+import settings
 from validators import parse_decimal_amount, sanitize_rich_text
 from report.styling_enhancer import apply_cell_shading, apply_header_band, style_section_heading, style_table, style_title
 
 
 PLACEHOLDER = "No aplica / Sin información registrada."
+LOGGER = logging.getLogger(__name__)
 
 
 def _group_relations_by_product(items: Iterable[Any]) -> dict[str, list[Mapping[str, Any]]]:
@@ -447,10 +449,10 @@ def _normalize_tag_ranges(tags: Iterable[Mapping[str, Any]], text: str) -> List[
 
 def _parse_rich_text_entry(entry: Any) -> tuple[str, List[TagRange]]:
     if isinstance(entry, Mapping):
-        text = sanitize_rich_text(entry.get("text"), RICH_TEXT_MAX_CHARS)
+        text = sanitize_rich_text(entry.get("text"), settings.RICH_TEXT_MAX_CHARS)
         tags = _normalize_tag_ranges(entry.get("tags") or [], text)
     else:
-        text = sanitize_rich_text(_extract_analysis_text(entry), RICH_TEXT_MAX_CHARS)
+        text = sanitize_rich_text(_extract_analysis_text(entry), settings.RICH_TEXT_MAX_CHARS)
         tags = []
     return text, tags
 
@@ -691,6 +693,19 @@ def build_report_filename(tipo_informe: str | None, case_id: str | None, extensi
 def _create_word_document():
     if not DOCX_AVAILABLE or DocxDocument is None:
         raise RuntimeError(DOCX_MISSING_MESSAGE)
+    template_path = getattr(settings, "REPORT_TEMPLATE_PATH", None)
+    if template_path:
+        candidate = Path(template_path)
+        try:
+            if candidate.is_file():
+                return DocxDocument(candidate)
+            LOGGER.warning("Plantilla de reporte no encontrada en %s. Se usará un documento en blanco.", candidate)
+        except Exception as exc:  # pragma: no cover - defensivo ante archivos corruptos
+            LOGGER.warning(
+                "No se pudo cargar la plantilla de reporte %s. Se usará un documento en blanco. Detalle: %s",
+                candidate,
+                exc,
+            )
     return DocxDocument()
 
 

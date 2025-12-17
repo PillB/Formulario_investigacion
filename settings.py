@@ -178,6 +178,9 @@ EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 EXTERNAL_DRIVE_DIR = os.path.join(BASE_DIR, "external drive")
 EXTERNAL_LOGS_FILE = os.path.join(EXTERNAL_DRIVE_DIR, "logs.csv")
 PENDING_CONSOLIDATION_FILE = os.path.join(BASE_DIR, "pending_consolidation.txt")
+REPORT_TEMPLATE_PATH = Path(
+    os.getenv("REPORT_TEMPLATE_PATH", os.path.join(BASE_DIR, "templates", "report_template.dotx"))
+)
 STORE_LOGS_LOCALLY = True
 ENABLE_EXTENDED_ANALYSIS_SECTIONS = False
 TEMP_AUTOSAVE_DEBOUNCE_SECONDS = 120
