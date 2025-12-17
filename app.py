@@ -1362,7 +1362,12 @@ class FraudCaseApp:
                     header = reader.fieldnames or []
                     rows = []
                     for row in reader:
-                        if "id_caso" in row and row.get("id_caso") and row.get("id_caso") != case_id:
+                        matching_fields = [
+                            str(row.get(field))
+                            for field in ("id_caso", "numero_caso")
+                            if field in row and row.get(field)
+                        ]
+                        if matching_fields and case_id not in matching_fields:
                             continue
                         rows.append(row)
                     if header:
