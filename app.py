@@ -121,6 +121,7 @@ from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
 from utils.background_worker import (run_guarded_task,
                                      shutdown_background_workers)
+from utils.historical_consolidator import append_historical_records
 from utils.mass_import_manager import MassImportManager
 from utils.persistence_manager import (CURRENT_SCHEMA_VERSION,
                                        PersistenceError, PersistenceManager,
@@ -13490,8 +13491,11 @@ class FraudCaseApp:
         llave_rows, llave_header = build_llave_tecnica_rows(data)
         event_rows, event_header = build_event_rows(data)
         warnings: list[str] = []
+        history_targets: list[tuple[str, list[dict[str, object]], list[str]]] = []
+        normalized_case_id = self._normalize_identifier(case_id)
+        history_timestamp = datetime.now()
 
-        def write_csv(file_name, rows, header):
+        def write_csv(file_name, rows, header, *, historical_name: Optional[str] = None):
             path = folder / f"{report_prefix}_{file_name}"
             with path.open('w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=header)
@@ -13502,6 +13506,8 @@ class FraudCaseApp:
                     }
                     writer.writerow(sanitized_row)
             created_files.append(path)
+            if historical_name:
+                history_targets.append((historical_name, rows, header))
 
         write_csv(
             'casos.csv',
@@ -13522,8 +13528,8 @@ class FraudCaseApp:
                 'investigador_cargo',
             ],
         )
-        write_csv('llave_tecnica.csv', llave_rows, llave_header)
-        write_csv('eventos.csv', event_rows, event_header)
+        write_csv('llave_tecnica.csv', llave_rows, llave_header, historical_name='llave_tecnica')
+        write_csv('eventos.csv', event_rows, event_header, historical_name='eventos')
         write_csv(
             'clientes.csv',
             data['clientes'],
@@ -13539,6 +13545,7 @@ class FraudCaseApp:
                 'direcciones',
                 'accionado',
             ],
+            historical_name='clientes',
         )
         write_csv(
             'colaboradores.csv',
@@ -13560,15 +13567,17 @@ class FraudCaseApp:
                 'tipo_falta',
                 'tipo_sancion',
             ],
+            historical_name='colaboradores',
         )
-        write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'])
-        write_csv('producto_reclamo.csv', data['reclamos'], ['id_reclamo', 'id_caso', 'id_producto', 'nombre_analitica', 'codigo_analitica'])
-        write_csv('involucramiento.csv', data['involucramientos'], ['id_producto', 'id_caso', 'id_colaborador', 'monto_asignado'])
-        write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'])
+        write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'], historical_name='productos')
+        write_csv('producto_reclamo.csv', data['reclamos'], ['id_reclamo', 'id_caso', 'id_producto', 'nombre_analitica', 'codigo_analitica'], historical_name='producto_reclamo')
+        write_csv('involucramiento.csv', data['involucramientos'], ['id_producto', 'id_caso', 'id_colaborador', 'monto_asignado'], historical_name='involucramiento')
+        write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'], historical_name='detalles_riesgo')
         write_csv(
             'detalles_norma.csv',
             data['normas'],
             ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia', 'acapite_inciso', 'detalle_norma'],
+            historical_name='detalles_norma',
         )
         analysis_texts = self._normalize_analysis_texts(data['analisis'])
         analysis_row = {
@@ -13578,9 +13587,9 @@ class FraudCaseApp:
                 for key, value in analysis_texts.items()
             },
         }
-        write_csv('analisis.csv', [analysis_row], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'])
+        write_csv('analisis.csv', [analysis_row], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'], historical_name='analisis')
         if self.logs:
-            write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES)
+            write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES, historical_name='logs')
         json_path = folder / f"{report_prefix}_version.json"
         with json_path.open('w', encoding="utf-8") as f:
             json.dump(data.as_dict(), f, ensure_ascii=False, indent=2)
@@ -13601,13 +13610,24 @@ class FraudCaseApp:
             else:
                 if docx_path:
                     created_files.append(docx_path)
+        for table_name, rows, header in history_targets:
+            history_path = append_historical_records(
+                table_name,
+                rows,
+                header,
+                folder,
+                normalized_case_id,
+                timestamp=history_timestamp,
+            )
+            if history_path:
+                created_files.append(history_path)
         export_definitions = self._build_export_definitions(data)
         architecture_path = self._update_architecture_diagram(export_definitions)
         if architecture_path:
             created_files.append(architecture_path)
         warnings.extend(
             self._mirror_exports_to_external_drive(
-                created_files, case_id, notify_user=False
+                created_files, normalized_case_id, notify_user=False
             )
         )
         return {

@@ -157,3 +157,11 @@ def test_save_exports_writes_event_rows(tmp_path, with_relations):
         assert row["cliente_telefonos"] == ""
         assert row["nombre_analitica"] == ""
         assert row["colaborador_flag"] == ""
+
+    history_path = export_dir / "h_eventos.csv"
+    assert history_path.exists()
+    history_rows = list(csv.DictReader(history_path.open("r", newline="", encoding="utf-8")))
+    assert len(history_rows) == 1
+    history_row = history_rows[0]
+    assert history_row["case_id"] == case_id
+    assert history_row["fecactualizacion"]
