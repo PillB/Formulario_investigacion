@@ -464,6 +464,69 @@ class ThemeManager:
         cls._missing_text_child_warned.add(widget)
         logger.warning("ScrolledText sin hijos Text configurables: %s", widget)
 
+    @staticmethod
+    def _is_date_entry(widget: tk.Misc) -> bool:
+        try:
+            from tkcalendar import DateEntry  # type: ignore
+        except Exception:
+            DateEntry = None  # type: ignore
+        if DateEntry is not None and isinstance(widget, DateEntry):
+            return True
+        return hasattr(widget, "_calendar") and callable(getattr(widget, "get_date", None))
+
+    @classmethod
+    def _style_date_entry(cls, widget: tk.Misc, theme: Dict[str, str]) -> None:
+        try:
+            widget.configure(style=cls.COMBOBOX_STYLE)
+        except tk.TclError as exc:
+            logger.warning("No se pudo configurar el estilo de DateEntry: %s", exc)
+            return
+        cls._register_focus_glow(widget)
+
+        calendar = getattr(widget, "_calendar", None)
+        if calendar is None or not cls._widget_exists(calendar):
+            return
+
+        try:
+            allowed_options = set(calendar.keys())
+        except Exception:
+            allowed_options = set()
+
+        calendar_colors = {
+            "background": theme["background"],
+            "foreground": theme["foreground"],
+            "bordercolor": theme["border"],
+            "normalbackground": theme["input_background"],
+            "normalforeground": theme["input_foreground"],
+            "selectbackground": theme["select_background"],
+            "selectforeground": theme["select_foreground"],
+            "weekendbackground": theme["heading_background"],
+            "weekendforeground": theme["foreground"],
+            "othermonthbackground": theme["background"],
+            "othermonthforeground": theme["foreground"],
+            "othermonthwebackground": theme["background"],
+            "othermonthweforeground": theme["foreground"],
+            "headersbackground": theme["heading_background"],
+            "headersforeground": theme["foreground"],
+            "disabledbackground": theme["heading_background"],
+            "disabledforeground": theme["select_foreground"],
+            "disableddaybackground": theme["border"],
+            "disableddayforeground": theme["select_foreground"],
+            "tooltipbackground": theme["background"],
+            "tooltipforeground": theme["foreground"],
+        }
+
+        filtered_options = (
+            {key: value for key, value in calendar_colors.items() if not allowed_options or key in allowed_options}
+        )
+        if not filtered_options:
+            return
+
+        try:
+            calendar.configure(**filtered_options)
+        except tk.TclError as exc:
+            logger.warning("No se pudo aplicar el tema al calendario de DateEntry: %s", exc)
+
     @classmethod
     def _apply_widget_tree(cls, root: tk.Misc, theme: Dict[str, str]) -> None:
         """Recursively apply ttk style names and tk attributes to a widget tree."""
@@ -490,6 +553,10 @@ class ThemeManager:
         input_foreground = theme["input_foreground"]
 
         if not cls._widget_exists(widget):
+            return
+
+        if cls._is_date_entry(widget):
+            cls._style_date_entry(widget, theme)
             return
 
         try:
@@ -715,6 +782,8 @@ class ThemeManager:
 
     @classmethod
     def _base_style_for_widget(cls, widget: tk.Misc) -> str:
+        if cls._is_date_entry(widget):
+            return cls.COMBOBOX_STYLE
         if isinstance(widget, ttk.Entry):
             return cls.ENTRY_STYLE
         if isinstance(widget, ttk.Combobox):
@@ -725,6 +794,8 @@ class ThemeManager:
 
     @classmethod
     def _focus_style_for_widget(cls, widget: tk.Misc) -> str:
+        if cls._is_date_entry(widget):
+            return cls.COMBOBOX_FOCUS_STYLE
         if isinstance(widget, ttk.Entry):
             return cls.ENTRY_FOCUS_STYLE
         if isinstance(widget, ttk.Combobox):
