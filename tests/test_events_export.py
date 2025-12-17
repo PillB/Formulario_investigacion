@@ -17,7 +17,7 @@ def _build_export_app():
     app._build_export_definitions = types.MethodType(lambda self, data: [], app)
     app._update_architecture_diagram = types.MethodType(lambda self, defs: None, app)
     app._mirror_exports_to_external_drive = types.MethodType(
-        lambda self, files, case_id, notify_user=False: [], app
+        lambda self, files, case_id, notify_user=False, consolidation_timestamp=None: [], app
     )
     return app
 

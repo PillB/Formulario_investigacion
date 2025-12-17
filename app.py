@@ -100,6 +100,7 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       ensure_external_drive_dir, EXPORTS_DIR,
                       EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
+                      PENDING_CONSOLIDATION_FILE,
                       NORM_ID_ALIASES, PROCESO_LIST, PRODUCT_ID_ALIASES,
                       RICH_TEXT_MAX_CHARS, RISK_ID_ALIASES, STORE_LOGS_LOCALLY,
                       TAXONOMIA, TEAM_ID_ALIASES, TEMP_AUTOSAVE_COMPRESS_OLD,
@@ -712,6 +713,8 @@ class FraudCaseApp:
         self._last_temp_saved_at = None
         # Lista para logs de navegación y validación
         self.logs = []
+        self.pending_consolidation_flag = False
+        self._pending_manifest_path = Path(PENDING_CONSOLIDATION_FILE)
         self.mass_import_manager = MassImportManager(Path(BASE_DIR) / "logs")
         self._streak_file = Path(AUTOSAVE_FILE).with_name("streak_status.json")
         self._streak_info: dict[str, object] = self._load_streak_info()
@@ -739,6 +742,7 @@ class FraudCaseApp:
         self._external_log_file_initialized = bool(
             EXTERNAL_LOGS_FILE and os.path.exists(EXTERNAL_LOGS_FILE)
         )
+        self._process_pending_consolidations()
         self._export_base_path: Optional[Path] = None
         self._walkthrough_state_file = Path(AUTOSAVE_FILE).with_name("walkthrough_flags.json")
         self._walkthrough_state: dict[str, object] = self._load_walkthrough_state()
@@ -1265,6 +1269,185 @@ class FraudCaseApp:
         if self._external_drive_path:
             return Path(self._external_drive_path)
         return None
+
+    def _get_pending_manifest_path(self) -> Path:
+        return getattr(self, "_pending_manifest_path", Path(PENDING_CONSOLIDATION_FILE))
+
+    def _append_pending_consolidation(
+        self,
+        case_id: str,
+        history_files: list[str],
+        *,
+        timestamp: datetime | None = None,
+        base_dir: Path | None = None,
+    ) -> None:
+        unique_files = sorted({Path(name).name for name in history_files if name})
+        if not unique_files:
+            return
+        manifest_path = self._get_pending_manifest_path()
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "case_id": case_id,
+            "history_files": unique_files,
+            "timestamp": (timestamp or datetime.now()).isoformat(),
+            "base_dir": str(base_dir or EXPORTS_DIR),
+        }
+        try:
+            with manifest_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            log_event("validacion", f"No se pudo registrar consolidación pendiente: {exc}", self.logs)
+        self.pending_consolidation_flag = True
+
+    def _load_pending_consolidations(self) -> list[dict[str, object]]:
+        manifest_path = self._get_pending_manifest_path()
+        entries: list[dict[str, object]] = []
+        if not manifest_path.exists():
+            return entries
+        try:
+            lines = manifest_path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            log_event("validacion", f"No se pudo leer el manifiesto de consolidación: {exc}", self.logs)
+            return entries
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                log_event("validacion", f"Entrada inválida en manifiesto de consolidación: {line}", self.logs)
+                continue
+            if isinstance(payload, Mapping):
+                entries.append(dict(payload))
+        return entries
+
+    def _write_pending_consolidations(self, entries: list[dict[str, object]]) -> None:
+        manifest_path = self._get_pending_manifest_path()
+        if not entries:
+            with suppress(FileNotFoundError):
+                manifest_path.unlink()
+            return
+        try:
+            manifest_path.write_text(
+                "\n".join(json.dumps(entry, ensure_ascii=False) for entry in entries),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            log_event("validacion", f"No se pudo actualizar el manifiesto de consolidación: {exc}", self.logs)
+
+    def _load_history_rows_for_entry(
+        self, case_id: str, history_file: str, base_dir: Path
+    ) -> tuple[list[dict[str, object]], list[str]]:
+        base_dir = Path(base_dir)
+        table_name = history_file.removeprefix("h_")
+        base_name = table_name
+        if base_name.endswith(".csv"):
+            base_name = base_name[:-4]
+        candidate_pattern = f"*_{base_name}.csv" if not base_name.endswith(".csv") else f"*_{base_name}"
+        try:
+            candidates = sorted(
+                base_dir.glob(candidate_pattern),
+                key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                reverse=True,
+            )
+        except OSError:
+            candidates = []
+        preferred: list[Path] = [path for path in candidates if case_id in path.name]
+        candidates = preferred or candidates
+        for csv_path in candidates:
+            try:
+                with csv_path.open(newline="", encoding="utf-8") as handle:
+                    reader = csv.DictReader(handle)
+                    header = reader.fieldnames or []
+                    rows = []
+                    for row in reader:
+                        if "id_caso" in row and row.get("id_caso") and row.get("id_caso") != case_id:
+                            continue
+                        rows.append(row)
+                    if header:
+                        return rows, header
+            except OSError as exc:
+                log_event("validacion", f"No se pudo leer {csv_path}: {exc}", self.logs)
+                continue
+        return [], []
+
+    def _reapply_pending_consolidation(self, entry: Mapping[str, object], external_base: Path) -> bool:
+        case_id = str(entry.get("case_id") or "caso")
+        history_files = entry.get("history_files") or []
+        if not history_files:
+            return True
+        timestamp_text = entry.get("timestamp")
+        try:
+            timestamp = datetime.fromisoformat(timestamp_text) if timestamp_text else datetime.now()
+        except ValueError:
+            timestamp = datetime.now()
+        base_dir_text = entry.get("base_dir") or EXPORTS_DIR
+        base_dir = Path(base_dir_text)
+        case_folder = Path(external_base) / case_id
+        try:
+            case_folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            log_event("validacion", f"No se pudo preparar la carpeta externa {case_folder}: {exc}", self.logs)
+            return False
+        success = True
+        for history_file in history_files:
+            rows, header = self._load_history_rows_for_entry(case_id, str(history_file), base_dir)
+            if not header:
+                continue
+            table_name = str(history_file)
+            if table_name.startswith("h_"):
+                table_name = table_name[2:]
+            if table_name.endswith(".csv"):
+                table_name = table_name[:-4]
+            try:
+                append_historical_records(
+                    table_name,
+                    rows,
+                    header,
+                    case_folder,
+                    case_id,
+                    timestamp=timestamp,
+                )
+            except OSError as exc:
+                log_event("validacion", f"No se pudo consolidar {history_file} para {case_id}: {exc}", self.logs)
+                success = False
+        return success
+
+    def _process_pending_consolidations(self) -> None:
+        entries = self._load_pending_consolidations()
+        if not entries:
+            self.pending_consolidation_flag = False
+            return
+        external_base = self._get_external_drive_path()
+        if not external_base:
+            self.pending_consolidation_flag = True
+            if not getattr(self, "_suppress_messagebox", False):
+                try:
+                    messagebox.showwarning(
+                        "Copia pendiente",
+                        "Hay consolidaciones pendientes pero no se encontró la unidad externa.",
+                    )
+                except tk.TclError:
+                    pass
+            return
+        remaining: list[dict[str, object]] = []
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            if not self._reapply_pending_consolidation(entry, external_base):
+                remaining.append(dict(entry))
+        self._write_pending_consolidations(remaining)
+        self.pending_consolidation_flag = bool(remaining)
+        if remaining and not getattr(self, "_suppress_messagebox", False):
+            try:
+                messagebox.showwarning(
+                    "Copia pendiente",
+                    "No se pudieron consolidar todas las exportaciones pendientes. "
+                    "Se reintentará en el próximo inicio.",
+                )
+            except tk.TclError:
+                pass
 
     def _resolve_external_log_target(self) -> Optional[str]:
         if not EXTERNAL_LOGS_FILE:
@@ -13627,7 +13810,7 @@ class FraudCaseApp:
             created_files.append(architecture_path)
         warnings.extend(
             self._mirror_exports_to_external_drive(
-                created_files, normalized_case_id, notify_user=False
+                created_files, normalized_case_id, notify_user=False, consolidation_timestamp=history_timestamp
             )
         )
         return {
@@ -13861,7 +14044,12 @@ class FraudCaseApp:
             return
         created_files = [Path(path) for path in result.get("files") or []]
         history_paths = [Path(EXPORTS_DIR) / "cartas_inmediatez.csv", Path(EXPORTS_DIR) / "h_cartas_inmediatez.csv"]
-        self._mirror_exports_to_external_drive(created_files + history_paths, case_id, notify_user=not getattr(self, "_suppress_messagebox", False))
+        self._mirror_exports_to_external_drive(
+            created_files + history_paths,
+            case_id,
+            notify_user=not getattr(self, "_suppress_messagebox", False),
+            consolidation_timestamp=datetime.now(),
+        )
         rows = result.get("rows") or []
         generation_date = next(
             (
@@ -14233,14 +14421,25 @@ class FraudCaseApp:
                 pass
 
     def _mirror_exports_to_external_drive(
-        self, file_paths, case_id: str, *, notify_user: bool = True
+        self,
+        file_paths,
+        case_id: str,
+        *,
+        notify_user: bool = True,
+        consolidation_timestamp: datetime | None = None,
     ) -> list[str]:
         normalized_sources = [Path(path) for path in file_paths or [] if path]
         messages: list[str] = []
         if not normalized_sources:
             return messages
+        history_paths = [path for path in normalized_sources if path.name.startswith("h_")]
+        history_base = history_paths[0].parent if history_paths else Path(EXPORTS_DIR)
         external_base = self._get_external_drive_path()
         if not external_base:
+            if history_paths:
+                self._append_pending_consolidation(
+                    case_id, [path.name for path in history_paths], timestamp=consolidation_timestamp, base_dir=history_base
+                )
             return messages
         case_label = case_id or 'caso'
         case_folder = external_base / case_label
@@ -14249,6 +14448,10 @@ class FraudCaseApp:
         except OSError as exc:
             message = f"No se pudo crear la carpeta de respaldo {case_folder}: {exc}"
             log_event("validacion", message, self.logs)
+            if history_paths:
+                self._append_pending_consolidation(
+                    case_id, [path.name for path in history_paths], timestamp=consolidation_timestamp, base_dir=history_base
+                )
             if notify_user and not getattr(self, '_suppress_messagebox', False):
                 messagebox.showwarning("Copia pendiente", message)
             else:
@@ -14275,9 +14478,16 @@ class FraudCaseApp:
             lines = [
                 "Se exportaron los archivos, pero algunos no se copiaron al respaldo externo:",
             ]
+            history_failures: list[str] = []
             for source, exc in failures:
                 lines.append(f"- {source.name}: {exc}")
+                if source.name.startswith("h_"):
+                    history_failures.append(source.name)
             warning_message = "\n".join(lines)
+            if history_failures:
+                self._append_pending_consolidation(
+                    case_id, history_failures, timestamp=consolidation_timestamp, base_dir=history_base
+                )
             if notify_user and not getattr(self, '_suppress_messagebox', False):
                 messagebox.showwarning("Copia incompleta", warning_message)
             else:

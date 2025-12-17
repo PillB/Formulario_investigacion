@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +73,8 @@ def _build_case_data(case_id: str) -> dict:
 def _make_minimal_app():
     app = FraudCaseApp.__new__(FraudCaseApp)
     app.logs = []
+    app.pending_consolidation_flag = False
+    app._pending_manifest_path = Path(app_module.PENDING_CONSOLIDATION_FILE)
     app._export_base_path = None
     app._docx_available = DOCX_AVAILABLE
     app._last_temp_saved_at = None
@@ -303,6 +306,46 @@ def test_save_and_send_warns_when_external_copy_fails(tmp_path, monkeypatch, mes
     assert '2024-9002' in message or 'archivos' in message
 
 
+def test_pending_manifest_recorded_when_external_missing(tmp_path, monkeypatch):
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+    manifest_path = tmp_path / 'pending_consolidation.txt'
+    monkeypatch.setattr(settings, 'PENDING_CONSOLIDATION_FILE', manifest_path)
+    monkeypatch.setattr(app_module, 'PENDING_CONSOLIDATION_FILE', manifest_path)
+    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', lambda: (_ for _ in ()).throw(OSError('sin unidad')))
+
+    app = _make_minimal_app()
+    app._pending_manifest_path = manifest_path
+    app._export_base_path = export_dir
+    app._suppress_messagebox = True
+    case_data = _build_case_data('2024-9333')
+    case_data['clientes'] = [
+        {
+            'id_cliente': 'CL-1',
+            'id_caso': '2024-9333',
+            'nombres': 'Ana',
+            'apellidos': 'Gómez',
+            'tipo_id': 'DNI',
+            'flag': 'Involucrado',
+            'telefonos': '',
+            'correos': '',
+            'direcciones': '',
+            'accionado': '',
+        }
+    ]
+    app._current_case_data = case_data
+
+    app.save_and_send()
+
+    assert manifest_path.exists()
+    recorded = manifest_path.read_text(encoding='utf-8').splitlines()
+    assert recorded
+    payload = json.loads(recorded[-1])
+    assert payload.get('case_id') == '2024-9333'
+    assert any(name.startswith('h_') for name in payload.get('history_files', []))
+    assert app.pending_consolidation_flag
+
+
 def test_save_temp_version_mirrors_to_external_drive(tmp_path, monkeypatch, external_drive_dir):
     app = _make_minimal_app()
     case_id = '2024-1234'
@@ -333,6 +376,62 @@ def test_save_temp_version_mirrors_to_external_drive(tmp_path, monkeypatch, exte
         for path in (base_target, mirror_target):
             with suppress(FileNotFoundError):
                 path.unlink()
+
+
+def test_pending_consolidation_retries_on_startup(tmp_path, monkeypatch):
+    export_dir = tmp_path / 'exports'
+    export_dir.mkdir()
+    manifest_path = tmp_path / 'pending_consolidation.txt'
+    external_dir = tmp_path / 'external drive'
+    monkeypatch.setattr(settings, 'PENDING_CONSOLIDATION_FILE', manifest_path)
+    monkeypatch.setattr(app_module, 'PENDING_CONSOLIDATION_FILE', manifest_path)
+    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', lambda: (_ for _ in ()).throw(OSError('apagado')))
+
+    first_app = _make_minimal_app()
+    first_app._pending_manifest_path = manifest_path
+    first_app._export_base_path = export_dir
+    first_app._suppress_messagebox = True
+    case_data = _build_case_data('2024-9444')
+    case_data['clientes'] = [
+        {
+            'id_cliente': 'C-44',
+            'id_caso': '2024-9444',
+            'nombres': 'Bea',
+            'apellidos': 'Quispe',
+            'tipo_id': 'DNI',
+            'flag': 'Involucrado',
+            'telefonos': '',
+            'correos': '',
+            'direcciones': '',
+            'accionado': '',
+        }
+    ]
+    first_app._current_case_data = case_data
+    first_app.save_and_send()
+    assert manifest_path.exists()
+
+    def ready_drive():
+        external_dir.mkdir(parents=True, exist_ok=True)
+        return external_dir
+
+    monkeypatch.setattr(app_module, 'ensure_external_drive_dir', ready_drive)
+    retry_app = _make_minimal_app()
+    retry_app._pending_manifest_path = manifest_path
+    retry_app._export_base_path = export_dir
+    retry_app._external_drive_path = external_dir
+    retry_app._suppress_messagebox = True
+    retry_app.logs = []
+
+    retry_app._process_pending_consolidations()
+    retry_app._process_pending_consolidations()
+
+    history_path = external_dir / '2024-9444' / 'h_clientes.csv'
+    assert history_path.exists()
+    with history_path.open(newline='', encoding='utf-8') as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows and rows[0].get('case_id') == '2024-9444'
+    assert len(rows) == 1
+    assert not manifest_path.exists()
 
 
 def test_flush_log_queue_writes_external_when_local_blocked(
