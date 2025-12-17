@@ -447,8 +447,13 @@ class ThemeManager:
     def _widget_exists(cls, widget: Optional[tk.Misc]) -> bool:
         if widget is None:
             return False
+        exists_method = getattr(widget, "winfo_exists", None)
+        if exists_method is None:
+            return True
+        if not callable(exists_method):
+            return False
         try:
-            return bool(widget.winfo_exists())
+            return bool(exists_method())
         except tk.TclError:
             return False
 
