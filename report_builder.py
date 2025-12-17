@@ -91,6 +91,8 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
         "id_producto",
         "id_cliente",
         "id_colaborador",
+        "id_cliente_involucrado",
+        "tipo_involucrado",
         "id_reclamo",
         "fecha_ocurrencia",
     ]
@@ -106,12 +108,24 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
     for product, inv, claim in _iter_product_combinations(
         productos, reclamos_por_producto, involucramientos_por_producto
     ):
+        involucrado_tipo = inv.get("tipo_involucrado", "") if isinstance(inv, Mapping) else ""
+        if not involucrado_tipo and isinstance(inv, Mapping):
+            if inv.get("id_cliente_involucrado"):
+                involucrado_tipo = "cliente"
+            elif inv.get("id_colaborador"):
+                involucrado_tipo = "colaborador"
         rows.append(
             {
                 **base_row,
                 "id_producto": product.get("id_producto", ""),
                 "id_cliente": product.get("id_cliente", ""),
-                "id_colaborador": inv.get("id_colaborador", ""),
+                "id_colaborador": inv.get("id_colaborador", "")
+                if involucrado_tipo != "cliente"
+                else "",
+                "id_cliente_involucrado": inv.get("id_cliente_involucrado", "")
+                if involucrado_tipo == "cliente"
+                else "",
+                "tipo_involucrado": involucrado_tipo,
                 "id_reclamo": claim.get("id_reclamo", ""),
                 "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
             }
@@ -155,6 +169,8 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
         "id_producto",
         "id_cliente",
         "id_colaborador",
+        "id_cliente_involucrado",
+        "tipo_involucrado",
         "id_reclamo",
         "fecha_ocurrencia",
         "fecha_descubrimiento",
@@ -214,7 +230,19 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
         productos, reclamos_por_producto, involucramientos_por_producto
     ):
         client = clientes_por_id.get(product.get("id_cliente", ""), {})
-        collaborator = colaboradores_por_id.get(inv.get("id_colaborador", ""), {})
+        inv_tipo = inv.get("tipo_involucrado", "") if isinstance(inv, Mapping) else ""
+        if not inv_tipo and isinstance(inv, Mapping):
+            if inv.get("id_cliente_involucrado"):
+                inv_tipo = "cliente"
+            elif inv.get("id_colaborador"):
+                inv_tipo = "colaborador"
+        is_client_involvement = inv_tipo == "cliente"
+        collaborator = (
+            colaboradores_por_id.get(inv.get("id_colaborador", ""), {})
+            if not is_client_involvement
+            else {}
+        )
+        involved_client_id = inv.get("id_cliente_involucrado", "") if is_client_involvement else ""
         rows.append(
             {
                 **base_row,
@@ -225,7 +253,9 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 "proceso": product.get("proceso", base_row.get("proceso", "")),
                 "id_producto": product.get("id_producto", ""),
                 "id_cliente": product.get("id_cliente", ""),
-                "id_colaborador": inv.get("id_colaborador", ""),
+                "id_colaborador": inv.get("id_colaborador", "") if not is_client_involvement else "",
+                "id_cliente_involucrado": involved_client_id,
+                "tipo_involucrado": inv_tipo,
                 "id_reclamo": claim.get("id_reclamo", ""),
                 "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
                 "fecha_descubrimiento": product.get("fecha_descubrimiento", ""),
@@ -247,23 +277,35 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 "cliente_correos": client.get("correos", ""),
                 "cliente_direcciones": client.get("direcciones", ""),
                 "cliente_accionado": client.get("accionado", ""),
-                "colaborador_flag": collaborator.get("flag", ""),
-                "colaborador_nombres": collaborator.get("nombres", ""),
-                "colaborador_apellidos": collaborator.get("apellidos", ""),
-                "colaborador_division": collaborator.get("division", ""),
-                "colaborador_area": collaborator.get("area", ""),
-                "colaborador_servicio": collaborator.get("servicio", ""),
-                "colaborador_puesto": collaborator.get("puesto", ""),
+                "colaborador_flag": collaborator.get("flag", "") if not is_client_involvement else "",
+                "colaborador_nombres": collaborator.get("nombres", "") if not is_client_involvement else "",
+                "colaborador_apellidos": collaborator.get("apellidos", "") if not is_client_involvement else "",
+                "colaborador_division": collaborator.get("division", "") if not is_client_involvement else "",
+                "colaborador_area": collaborator.get("area", "") if not is_client_involvement else "",
+                "colaborador_servicio": collaborator.get("servicio", "") if not is_client_involvement else "",
+                "colaborador_puesto": collaborator.get("puesto", "") if not is_client_involvement else "",
                 "colaborador_fecha_carta_inmediatez": collaborator.get(
                     "fecha_carta_inmediatez", ""
-                ),
+                )
+                if not is_client_involvement
+                else "",
                 "colaborador_fecha_carta_renuncia": collaborator.get(
                     "fecha_carta_renuncia", ""
-                ),
-                "colaborador_nombre_agencia": collaborator.get("nombre_agencia", ""),
-                "colaborador_codigo_agencia": collaborator.get("codigo_agencia", ""),
-                "colaborador_tipo_falta": collaborator.get("tipo_falta", ""),
-                "colaborador_tipo_sancion": collaborator.get("tipo_sancion", ""),
+                )
+                if not is_client_involvement
+                else "",
+                "colaborador_nombre_agencia": collaborator.get("nombre_agencia", "")
+                if not is_client_involvement
+                else "",
+                "colaborador_codigo_agencia": collaborator.get("codigo_agencia", "")
+                if not is_client_involvement
+                else "",
+                "colaborador_tipo_falta": collaborator.get("tipo_falta", "")
+                if not is_client_involvement
+                else "",
+                "colaborador_tipo_sancion": collaborator.get("tipo_sancion", "")
+                if not is_client_involvement
+                else "",
                 "monto_asignado": inv.get("monto_asignado", ""),
             }
         )

@@ -105,8 +105,15 @@ def _build_case_payload(case_id: str, *, with_relations: bool) -> CaseData:
             {
                 "id_producto": product_id,
                 "id_colaborador": collaborator_id,
+                "tipo_involucrado": "colaborador",
                 "monto_asignado": "50",
-            }
+            },
+            {
+                "id_producto": product_id,
+                "id_cliente_involucrado": client_id,
+                "tipo_involucrado": "cliente",
+                "monto_asignado": "25",
+            },
         ],
         "riesgos": [],
         "normas": [],
@@ -136,32 +143,36 @@ def test_save_exports_writes_event_rows(tmp_path, with_relations):
     assert expected_path in result["created_files"]
 
     rows = list(csv.DictReader(expected_path.open("r", newline="", encoding="utf-8")))
-    assert len(rows) == 1
+    expected_count = 2 if with_relations else 1
+    assert len(rows) == expected_count
 
-    row = rows[0]
-    assert row["id_caso"] == case_id
-    assert row["id_producto"] == _sanitize_csv_value("=P-1" if with_relations else "P-EMPTY")
-    assert row["id_cliente"] == ("CL1" if with_relations else "CL2")
-    assert row["fecha_ocurrencia"] == "2024-02-01"
-    assert row["monto_investigado"] == "100.00"
+    collaborator_row = next((row for row in rows if row.get("tipo_involucrado") == "colaborador"), rows[0])
+    assert collaborator_row["id_caso"] == case_id
+    assert collaborator_row["id_producto"] == _sanitize_csv_value("=P-1" if with_relations else "P-EMPTY")
+    assert collaborator_row["id_cliente"] == ("CL1" if with_relations else "CL2")
+    assert collaborator_row["fecha_ocurrencia"] == "2024-02-01"
+    assert collaborator_row["monto_investigado"] == "100.00"
 
     if with_relations:
-        assert row["id_colaborador"] == _sanitize_csv_value("=COL1")
-        assert row["id_reclamo"] == _sanitize_csv_value("-RC1")
-        assert row["cliente_telefonos"] == _sanitize_csv_value("=999")
-        assert row["monto_contingencia"] == "20.00"
-        assert row["colaborador_tipo_falta"] == "Grave"
+        assert collaborator_row["id_colaborador"] == _sanitize_csv_value("=COL1")
+        assert collaborator_row["id_reclamo"] == _sanitize_csv_value("-RC1")
+        assert collaborator_row["cliente_telefonos"] == _sanitize_csv_value("=999")
+        assert collaborator_row["monto_contingencia"] == "20.00"
+        assert collaborator_row["colaborador_tipo_falta"] == "Grave"
+        client_row = next(row for row in rows if row.get("tipo_involucrado") == "cliente")
+        assert client_row["id_cliente_involucrado"] == "CL1"
+        assert client_row["id_colaborador"] == ""
     else:
-        assert row["id_colaborador"] == ""
-        assert row["id_reclamo"] == ""
-        assert row["cliente_telefonos"] == ""
-        assert row["nombre_analitica"] == ""
-        assert row["colaborador_flag"] == ""
+        assert collaborator_row["id_colaborador"] == ""
+        assert collaborator_row["id_reclamo"] == ""
+        assert collaborator_row["cliente_telefonos"] == ""
+        assert collaborator_row["nombre_analitica"] == ""
+        assert collaborator_row["colaborador_flag"] == ""
 
     history_path = export_dir / "h_eventos.csv"
     assert history_path.exists()
     history_rows = list(csv.DictReader(history_path.open("r", newline="", encoding="utf-8")))
-    assert len(history_rows) == 1
+    assert len(history_rows) == expected_count
     history_row = history_rows[0]
     assert history_row["case_id"] == case_id
     assert history_row["fecactualizacion"]

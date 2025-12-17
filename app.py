@@ -9841,6 +9841,14 @@ class FraudCaseApp:
                 collaborator_ids.add(
                     self._normalize_identifier((involvement_data.get("id_colaborador") or ""))
                 )
+            client_involvement_ids: set[str] = set()
+            for involvement in getattr(product, "client_involvements", []):
+                involvement_data = involvement.get_data()
+                client_involvement_ids.add(
+                    self._normalize_identifier(
+                        (involvement_data.get("id_cliente_involucrado") or "")
+                    )
+                )
             product_snapshots.append(
                 {
                     "pid": pid_norm,
@@ -9848,6 +9856,7 @@ class FraudCaseApp:
                     "occ": occ_date,
                     "claims": sorted(claim_ids),
                     "collabs": sorted(collaborator_ids),
+                    "client_involucrados": sorted(client_involvement_ids),
                 }
             )
         fingerprint = {"case": normalized_case_id, "products": product_snapshots}
@@ -12466,13 +12475,28 @@ class FraudCaseApp:
                     "codigo_analitica": claim['codigo_analitica'],
                 })
             # Involucramientos
-            for inv in prod_data['asignaciones']:
-                involucs.append({
-                    "id_producto": prod_data['producto']['id_producto'],
-                    "id_caso": "",  # se completará al exportar
-                    "id_colaborador": inv['id_colaborador'],
-                    "monto_asignado": inv['monto_asignado'],
-                })
+            collaborator_assignments = list(prod_data.get('asignaciones_colaboradores') or [])
+            client_assignments = list(prod_data.get('asignaciones_clientes') or [])
+            if not collaborator_assignments and not client_assignments:
+                collaborator_assignments = list(prod_data.get('asignaciones') or [])
+
+            def _append_involucramiento(inv_payload, tipo_por_defecto):
+                inv_tipo = (inv_payload.get('tipo_involucrado') or tipo_por_defecto).strip() or tipo_por_defecto
+                involucs.append(
+                    {
+                        "id_producto": prod_data['producto']['id_producto'],
+                        "id_caso": "",  # se completará al exportar
+                        "id_colaborador": inv_payload.get('id_colaborador', '') if inv_tipo == "colaborador" else "",
+                        "id_cliente_involucrado": inv_payload.get('id_cliente_involucrado', '') if inv_tipo == "cliente" else "",
+                        "tipo_involucrado": inv_tipo,
+                        "monto_asignado": inv_payload.get('monto_asignado', ''),
+                    }
+                )
+
+            for inv in collaborator_assignments:
+                _append_involucramiento(inv, "colaborador")
+            for inv in client_assignments:
+                _append_involucramiento(inv, "cliente")
         data['productos'] = productos
         data['reclamos'] = reclamos
         data['involucramientos'] = involucs
@@ -12769,9 +12793,19 @@ class FraudCaseApp:
                     continue
                 pframe.clear_involvements()
                 for inv in involvement_map[pid]:
-                    assign = pframe.add_involvement()
-                    assign.team_var.set(inv.get('id_colaborador', ''))
-                    assign.monto_var.set(inv.get('monto_asignado', ''))
+                    tipo = (inv.get('tipo_involucrado') or '').strip().lower()
+                    if tipo == "cliente" or inv.get('id_cliente_involucrado'):
+                        assign = pframe.add_client_involvement()
+                        assign.client_var.set(inv.get('id_cliente_involucrado', ''))
+                        assign.monto_var.set(inv.get('monto_asignado', ''))
+                    else:
+                        assign = pframe.add_involvement()
+                        assign.team_var.set(inv.get('id_colaborador', ''))
+                        assign.monto_var.set(inv.get('monto_asignado', ''))
+                if not pframe.involvements:
+                    pframe.add_involvement()
+                if not getattr(pframe, "client_involvements", []):
+                    pframe.add_client_involvement()
             # Riesgos
             for i, risk in enumerate(data.get('riesgos', [])):
                 if i >= len(self.risk_frames):
@@ -13193,6 +13227,11 @@ class FraudCaseApp:
             normalized_team_id = self._normalize_identifier(tm.id_var.get())
             if normalized_team_id:
                 collaborator_ids.add(normalized_team_id)
+        client_ids = set()
+        for cf in self.client_frames:
+            normalized_client_id = self._normalize_identifier(cf.id_var.get())
+            if normalized_client_id:
+                client_ids.add(normalized_client_id)
         for idx, p in enumerate(self.product_frames, start=1):
             prod_data = p.get_data()
             producto = prod_data['producto']
@@ -13256,26 +13295,29 @@ class FraudCaseApp:
                 )
                 if catalog_error:
                     errors.append(catalog_error)
-            # For each involvement; require collaborator IDs to validate clave técnica
+            # For each involvement; require IDs to validar clave técnica
             claim_rows = prod_data['reclamos'] or []
             product_occurrence_date = prod_data['producto'].get('fecha_ocurrencia')
-            assignments = prod_data['asignaciones'] or []
-            product_has_involvements = hasattr(p, "involvements")
+            collaborator_assignments = list(prod_data.get('asignaciones_colaboradores') or [])
+            client_assignments = list(prod_data.get('asignaciones_clientes') or [])
+            if not collaborator_assignments and not client_assignments:
+                collaborator_assignments = list(prod_data.get('asignaciones') or [])
+            combined_assignments = collaborator_assignments + client_assignments
+            product_has_involvements = hasattr(p, "involvements") or hasattr(p, "client_involvements")
             enforce_assignations = bool(product_has_involvements)
-            if enforce_assignations and not assignments:
+            if enforce_assignations and not combined_assignments:
                 errors.append(
                     (
-                        f"Producto {producto_label}: agrega al menos un colaborador en"
-                        " 'Involucramiento de colaboradores' para validar la clave técnica."
+                        f"Producto {producto_label}: agrega al menos un involucrado en"
+                        " 'Involucramiento de colaboradores' o 'Involucramiento de clientes' para validar la clave técnica."
                     )
                 )
                 continue
-            for inv_idx, inv in enumerate(assignments, start=1):
-                collaborator_id = (inv.get('id_colaborador') or '').strip()
-                collaborator_norm = self._normalize_identifier(collaborator_id)
-                amount_value = (inv.get('monto_asignado') or '').strip()
+
+            def _validate_involucrado(inv_idx, inv_payload, tipo_involucrado, identifier, normalized_identifier, known_ids, entity_label):
+                amount_value = (inv_payload.get('monto_asignado') or '').strip()
                 amount_label = (
-                    f"Monto asignado del colaborador {collaborator_id or f'sin ID ({inv_idx})'} "
+                    f"Monto asignado del {entity_label} {identifier or f'sin ID ({inv_idx})'} "
                     f"en el producto {producto_label}"
                 )
                 amount_error, _amount, normalized_amount = validate_money_bounds(
@@ -13285,58 +13327,85 @@ class FraudCaseApp:
                 if amount_error:
                     errors.append(amount_error)
                 else:
-                    inv['monto_asignado'] = normalized_amount or amount_value
-                if amount_value and not collaborator_id:
+                    inv_payload['monto_asignado'] = normalized_amount or amount_value
+                if amount_value and not identifier:
                     errors.append(
-                        f"Producto {pid}: la asignación {inv_idx} tiene un monto sin colaborador."
+                        f"Producto {pid}: la asignación {inv_idx} tiene un monto sin {entity_label}."
                     )
-                if collaborator_id and not amount_value:
+                if identifier and not amount_value:
                     errors.append(
-                        f"Producto {pid}: la asignación {inv_idx} tiene un colaborador sin monto."
+                        f"Producto {pid}: la asignación {inv_idx} tiene un {entity_label} sin monto."
                     )
-                if collaborator_id and collaborator_norm not in collaborator_ids:
+                if identifier and known_ids is not None and normalized_identifier not in known_ids:
                     errors.append(
-                        f"Producto {pid}: la asignación {inv_idx} referencia un colaborador eliminado (ID {collaborator_id})."
+                        f"Producto {pid}: la asignación {inv_idx} referencia un {entity_label} eliminado (ID {identifier})."
                     )
-                if not collaborator_norm:
+                if not normalized_identifier:
                     errors.append(
                         (
                             f"Producto {producto_label}: la asignación {inv_idx} requiere un ID"
-                            " de colaborador para validar duplicados."
+                            f" de {entity_label} para validar duplicados."
                         )
                     )
-                    continue
-                collaborator_label = collaborator_norm or collaborator_id or 'sin ID'
+                    return None
+                involvement_label = normalized_identifier or identifier or 'sin ID'
                 if not claim_rows:
                     key = (
                         normalized_case_id,
                         pid_norm,
                         cid_norm,
-                        collaborator_norm,
+                        tipo_involucrado,
+                        normalized_identifier,
                         product_occurrence_date,
                         "",
                     )
                     if key in key_set:
                         errors.append(
-                            f"Registro duplicado de clave técnica (producto {producto_label}, colaborador {collaborator_label})"
+                            f"Registro duplicado de clave técnica (producto {producto_label}, {entity_label} {involvement_label})"
                         )
                     key_set.add(key)
-                    continue
+                    return None
                 for claim in claim_rows:
                     claim_id = (claim.get('id_reclamo') or '').strip()
                     key = (
                         normalized_case_id,
                         pid_norm,
                         cid_norm,
-                        collaborator_norm,
+                        tipo_involucrado,
+                        normalized_identifier,
                         product_occurrence_date,
                         self._normalize_identifier(claim_id),
                     )
                     if key in key_set:
                         errors.append(
-                            f"Registro duplicado de clave técnica (producto {producto_label}, colaborador {collaborator_label})"
+                            f"Registro duplicado de clave técnica (producto {producto_label}, {entity_label} {involvement_label})"
                         )
                     key_set.add(key)
+
+            for inv_idx, inv in enumerate(collaborator_assignments, start=1):
+                collaborator_id = (inv.get('id_colaborador') or '').strip()
+                collaborator_norm = self._normalize_identifier(collaborator_id)
+                _validate_involucrado(
+                    inv_idx,
+                    inv,
+                    "colaborador",
+                    collaborator_id,
+                    collaborator_norm,
+                    collaborator_ids,
+                    "colaborador",
+                )
+            for offset, inv in enumerate(client_assignments, start=1):
+                client_id = (inv.get('id_cliente_involucrado') or '').strip()
+                client_norm = self._normalize_identifier(client_id)
+                _validate_involucrado(
+                    offset + len(collaborator_assignments),
+                    inv,
+                    "cliente",
+                    client_id,
+                    client_norm,
+                    client_ids,
+                    "cliente",
+                )
         # Validar fechas y montos por producto
         for p in self.product_frames:
             data = p.get_data()
