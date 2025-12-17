@@ -434,6 +434,47 @@ def test_pending_consolidation_retries_on_startup(tmp_path, monkeypatch):
     assert not manifest_path.exists()
 
 
+def test_pending_consolidation_filters_carta_history(tmp_path):
+    manifest_path = tmp_path / 'pending_consolidation.txt'
+    base_dir = tmp_path / 'exports'
+    external_dir = tmp_path / 'external'
+    base_dir.mkdir()
+    external_dir.mkdir()
+    history_path = base_dir / 'h_cartas_inmediatez.csv'
+    target_case = '2024-5555'
+
+    with history_path.open('w', newline='', encoding='utf-8') as handle:
+        writer = csv.DictWriter(handle, fieldnames=['numero_caso', 'detalle'])
+        writer.writeheader()
+        writer.writerow({'numero_caso': target_case, 'detalle': 'objetivo'})
+        writer.writerow({'numero_caso': '2024-9999', 'detalle': 'otro'})
+
+    entry = {
+        'case_id': target_case,
+        'history_files': ['h_cartas_inmediatez.csv'],
+        'timestamp': datetime.now().isoformat(),
+        'base_dir': str(base_dir),
+    }
+    manifest_path.write_text(json.dumps(entry), encoding='utf-8')
+
+    app = _make_minimal_app()
+    app._pending_manifest_path = manifest_path
+    app._export_base_path = base_dir
+    app._external_drive_path = external_dir
+    app._suppress_messagebox = True
+    app.logs = []
+
+    app._process_pending_consolidations()
+
+    mirrored_history = external_dir / target_case / 'h_cartas_inmediatez.csv'
+    assert mirrored_history.exists()
+    with mirrored_history.open(newline='', encoding='utf-8') as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows and all(row['numero_caso'] == target_case for row in rows)
+    assert len(rows) == 1
+    assert not manifest_path.exists()
+
+
 def test_flush_log_queue_writes_external_when_local_blocked(
     tmp_path,
     monkeypatch,
