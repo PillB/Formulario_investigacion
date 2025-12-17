@@ -177,6 +177,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 EXTERNAL_DRIVE_DIR = os.path.join(BASE_DIR, "external drive")
 EXTERNAL_LOGS_FILE = os.path.join(EXTERNAL_DRIVE_DIR, "logs.csv")
+PENDING_CONSOLIDATION_FILE = os.path.join(BASE_DIR, "pending_consolidation.txt")
 STORE_LOGS_LOCALLY = True
 ENABLE_EXTENDED_ANALYSIS_SECTIONS = False
 TEMP_AUTOSAVE_DEBOUNCE_SECONDS = 120
@@ -270,4 +271,5 @@ __all__ = [
     "TEMP_AUTOSAVE_MAX_AGE_DAYS",
     "TEMP_AUTOSAVE_MAX_PER_CASE",
     "ensure_external_drive_dir",
+    "PENDING_CONSOLIDATION_FILE",
 ]
