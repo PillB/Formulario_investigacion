@@ -629,16 +629,26 @@ class ClientFrame:
                     pass
 
     def _set_identifier_defaults(self, enabled: bool) -> None:
+        default_name = "BCP"
+        default_id = "20100047218"
         if enabled:
             if self.tipo_id_var.get() != "RUC":
                 self.tipo_id_var.set("RUC")
-            if self.id_var.get() != "20100047218":
-                self.id_var.set("20100047218")
+            if self.id_var.get() != default_id:
+                self.id_var.set(default_id)
+            if self.nombres_var.get() != default_name:
+                self.nombres_var.set(default_name)
+            if self.apellidos_var.get() != default_name:
+                self.apellidos_var.set(default_name)
             return
         if self.tipo_id_var.get() == "RUC":
             self.tipo_id_var.set("")
-        if self.id_var.get() == "20100047218":
+        if self.id_var.get() == default_id:
             self.id_var.set("")
+        if self.nombres_var.get() == default_name:
+            self.nombres_var.set("")
+        if self.apellidos_var.get() == default_name:
+            self.apellidos_var.set("")
 
     def _with_all_validators_suspended(self, callback):
         suspended: list[FieldValidator] = []

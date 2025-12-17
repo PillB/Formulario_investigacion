@@ -264,6 +264,8 @@ def test_afectacion_interna_toggle_autofills_and_notifies():
 
     assert frame.tipo_id_var.get() == "RUC"
     assert frame.id_var.get() == "20100047218"
+    assert frame.nombres_var.get() == "BCP"
+    assert frame.apellidos_var.get() == "BCP"
     id_validator = _find_validator("ID")
     tipo_validator = _find_validator("Tipo de ID")
     assert id_validator is not None and id_validator.suspend_count == 0
@@ -279,5 +281,7 @@ def test_afectacion_interna_toggle_autofills_and_notifies():
 
     assert frame.tipo_id_var.get() == ""
     assert frame.id_var.get() == ""
+    assert frame.nombres_var.get() == ""
+    assert frame.apellidos_var.get() == ""
     assert callback_states[-1] is False
     assert all(v.suspend_count == 0 for v in other_validators)
