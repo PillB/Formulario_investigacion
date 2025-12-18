@@ -133,6 +133,7 @@ from utils.persistence_manager import (CURRENT_SCHEMA_VERSION,
                                        PersistenceError, PersistenceManager,
                                        validate_schema_payload)
 from utils.progress_dialog import ProgressDialog
+from utils.widget_registry import WidgetIdRegistry
 from validators import (drain_log_queue, FieldValidator, log_event,
                         LOG_FIELDNAMES, normalize_log_row,
                         normalize_without_accents, parse_decimal_amount,
@@ -749,6 +750,11 @@ class FraudCaseApp:
         self._log_flush_job_id: Optional[str] = None
         self._docx_available = DOCX_AVAILABLE
         self._pptx_available = PPTX_AVAILABLE
+        self._widget_registry = WidgetIdRegistry()
+        self._field_validators: list[FieldValidator] = []
+        self._tab_widgets: dict[str, tk.Widget] = {}
+        FieldValidator.instance_registry = self._field_validators
+        FieldValidator.widget_registry_consumer = self._register_field_widget
         local_log_path = LOGS_FILE if STORE_LOGS_LOCALLY else None
         self._log_file_initialized = bool(local_log_path and os.path.exists(local_log_path))
         self._external_drive_path = self._prepare_external_drive()
@@ -1477,6 +1483,67 @@ class FraudCaseApp:
         self._widget_event_counts = defaultdict(int)
         self._heatmap_counts = defaultdict(int)
 
+    def _slugify_identifier(self, value: str) -> str:
+        normalized = normalize_without_accents(value or "").lower()
+        normalized = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+        return normalized or "widget"
+
+    def _is_descendant_of(self, ancestor, widget) -> bool:
+        current = widget
+        while current is not None:
+            if current is ancestor:
+                return True
+            current = getattr(current, "master", None)
+        return False
+
+    def _register_tab_widget(self, widget, logical_label: str) -> str:
+        logical_id = f"tab.{self._slugify_identifier(logical_label)}"
+        registry = getattr(self, "_widget_registry", None)
+        if registry is None:
+            return logical_id
+        return registry.register(widget, logical_id, role="tab", label=logical_label)
+
+    def _register_section_widget(self, widget, logical_label: str) -> str:
+        tab_id = None
+        for candidate in getattr(self, "_tab_widgets", {}).values():
+            if candidate is not None and self._is_descendant_of(candidate, widget):
+                registry = getattr(self, "_widget_registry", None)
+                if registry:
+                    tab_id = registry.resolve(candidate)
+                break
+        base_id = f"section.{self._slugify_identifier(logical_label)}"
+        logical_id = base_id if not tab_id else f"{tab_id}.{base_id}"
+        registry = getattr(self, "_widget_registry", None)
+        if registry is None:
+            return logical_id
+        return registry.register(widget, logical_id, role="section", label=logical_label)
+
+    def _register_field_widget(self, widget, field_label: str) -> None:
+        tab_id = None
+        section_label = None
+        for candidate in getattr(self, "_tab_widgets", {}).values():
+            if candidate is not None and self._is_descendant_of(candidate, widget):
+                registry = getattr(self, "_widget_registry", None)
+                if registry:
+                    tab_id = registry.resolve(candidate)
+                break
+        current = getattr(widget, "master", None)
+        while current is not None:
+            text = None
+            if hasattr(current, "cget"):
+                with suppress(Exception):
+                    text = current.cget("text")
+            if text:
+                section_label = text
+                break
+            current = getattr(current, "master", None)
+        parts = [value for value in (tab_id, "field", self._slugify_identifier(field_label)) if value]
+        logical_id = ".".join(parts) if parts else self._slugify_identifier(field_label)
+        label = field_label if section_label is None else f"{section_label} › {field_label}"
+        registry = getattr(self, "_widget_registry", None)
+        if registry:
+            registry.register(widget, logical_id, role="field", label=label)
+
     def _ensure_navigation_metrics_initialized(self) -> None:
         if not hasattr(self, "_widget_event_counts") or not hasattr(
             self, "_heatmap_counts"
@@ -1567,15 +1634,18 @@ class FraudCaseApp:
             x_coord = y_coord = None
 
         safe_coords = (x_coord, y_coord)
+        widget_id = self._resolve_widget_id(widget)
+        if not widget_id:
+            widget_id = self._describe_widget(widget)
         log_event(
             "navegacion",
             f"Evento {subtype} en {widget.winfo_class()}",
             self.logs,
-            widget_id=widget.winfo_name(),
+            widget_id=widget_id,
             coords=safe_coords,
             event_subtipo=subtype,
         )
-        self._accumulate_navigation_metrics(widget.winfo_name(), safe_coords)
+        self._accumulate_navigation_metrics(widget_id, safe_coords)
 
     def _register_navigation_bindings(self) -> None:
         if getattr(self, "_navigation_bindings_registered", False):
@@ -1910,31 +1980,43 @@ class FraudCaseApp:
         # --- Pestaña principal: caso y participantes ---
         self.main_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.main_tab, text="Caso y participantes")
+        self._tab_widgets["caso_participantes"] = self.main_tab
+        self._register_tab_widget(self.main_tab, "Caso y participantes")
         self.build_case_and_participants_tab(self.main_tab)
 
         # --- Pestaña Riesgos ---
         risk_tab = ttk.Frame(self.notebook)
         self.notebook.add(risk_tab, text="Riesgos")
+        self._tab_widgets["riesgos"] = risk_tab
+        self._register_tab_widget(risk_tab, "Riesgos")
         self.build_risk_tab(risk_tab)
 
         # --- Pestaña Normas ---
         norm_tab = ttk.Frame(self.notebook)
         self.notebook.add(norm_tab, text="Normas")
+        self._tab_widgets["normas"] = norm_tab
+        self._register_tab_widget(norm_tab, "Normas")
         self.build_norm_tab(norm_tab)
 
         # --- Pestaña Análisis ---
         analysis_tab = ttk.Frame(self.notebook)
         self.notebook.add(analysis_tab, text="Análisis y narrativas")
+        self._tab_widgets["analisis"] = analysis_tab
+        self._register_tab_widget(analysis_tab, "Análisis y narrativas")
         self.build_analysis_tab(analysis_tab)
 
         # --- Pestaña Acciones ---
         actions_tab = ttk.Frame(self.notebook)
         self.notebook.add(actions_tab, text="Acciones")
+        self._tab_widgets["acciones"] = actions_tab
+        self._register_tab_widget(actions_tab, "Acciones")
         self.build_actions_tab(actions_tab)
 
         # --- Pestaña Resumen ---
         summary_tab = ttk.Frame(self.notebook)
         self.notebook.add(summary_tab, text="Resumen")
+        self._tab_widgets["resumen"] = summary_tab
+        self._register_tab_widget(summary_tab, "Resumen")
         self.build_summary_tab(summary_tab)
         self._current_tab_id = self.notebook.select()
         self._scroll_binder.activate_tab(self._current_tab_id)
@@ -2803,6 +2885,7 @@ class FraudCaseApp:
         case_section = ttk.LabelFrame(
             self._main_scrollable_frame, text="1. Datos generales del caso"
         )
+        self._register_section_widget(case_section, "Datos generales del caso")
         grid_and_configure(
             case_section,
             self._main_scrollable_frame,
@@ -2818,6 +2901,7 @@ class FraudCaseApp:
         clients_section = ttk.LabelFrame(
             self._main_scrollable_frame, text="2. Clientes implicados"
         )
+        self._register_section_widget(clients_section, "Clientes implicados")
         grid_and_configure(
             clients_section,
             self._main_scrollable_frame,
@@ -2832,6 +2916,7 @@ class FraudCaseApp:
         products_section = ttk.LabelFrame(
             self._main_scrollable_frame, text="3. Productos investigados"
         )
+        self._register_section_widget(products_section, "Productos investigados")
         grid_and_configure(
             products_section,
             self._main_scrollable_frame,
@@ -2846,6 +2931,7 @@ class FraudCaseApp:
         team_section = ttk.LabelFrame(
             self._main_scrollable_frame, text="4. Colaboradores involucrados"
         )
+        self._register_section_widget(team_section, "Colaboradores involucrados")
         grid_and_configure(
             team_section,
             self._main_scrollable_frame,
@@ -7449,16 +7535,26 @@ class FraudCaseApp:
         self.refresh_autosave_list()
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
 
+    def _describe_widget(self, widget) -> str:
+        try:
+            registry = getattr(self, "_widget_registry", None)
+            if registry:
+                return registry.describe(widget)
+        except Exception:
+            return getattr(widget, "__class__", type("obj", (), {})).__name__
+        return getattr(widget, "__class__", type("obj", (), {})).__name__
+
     def _resolve_widget_id(self, widget: Optional[tk.Widget], fallback: Optional[str] = None) -> Optional[str]:
         """Devuelve un identificador estable para registrar eventos de widgets."""
 
         if widget is None:
             return fallback
-        try:
-            name = widget.winfo_name()
-            return name or fallback
-        except tk.TclError:
-            return fallback
+        registry = getattr(self, "_widget_registry", None)
+        if registry:
+            resolved = registry.resolve(widget)
+            if resolved:
+                return resolved
+        return fallback or self._describe_widget(widget)
 
     def _toggle_theme(self):
         palette = ThemeManager.toggle()
