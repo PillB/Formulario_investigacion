@@ -106,8 +106,9 @@ def test_ingest_summary_rows_create_frames_with_normalized_values(monkeypatch, m
 
     product_row = ["1234567890123", "12345678", "credito personal", "2500.50"]
     product_rows = app._transform_clipboard_productos([product_row])
+    assert len(product_rows[0]) == len(app.IMPORT_CONFIG["productos"]["expected_headers"])
     assert product_rows[0][2] == "Crédito personal"
-    assert product_rows[0][3] == "2500.50"
+    assert product_rows[0][10] == "2500.50"
     assert app.ingest_summary_rows("productos", product_rows) == 1
     assert [frame.id_var.get() for frame in app.product_frames] == ["1234567890123"]
     assert app.product_frames[0].populated_rows[-1]["tipo_producto"] == "Crédito personal"
