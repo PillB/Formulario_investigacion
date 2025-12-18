@@ -11267,8 +11267,9 @@ class FraudCaseApp:
                                     pass
                             target_row = inv_row
 
-                        target_row.monto_var.set(amount_value)
-                        changes_detected = True
+                        if amount_value != "":
+                            target_row.monto_var.set(amount_value)
+                            changes_detected = True
 
         def finalize():
             previous_flag = getattr(self, "_consolidate_import_feedback", False)
