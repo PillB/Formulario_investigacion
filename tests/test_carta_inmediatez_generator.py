@@ -134,3 +134,43 @@ def test_carta_generator_detects_duplicate(tmp_path: Path) -> None:
 
     with pytest.raises(CartaInmediatezError):
         generator.generate_cartas(case_payload, members)
+
+
+def test_default_template_matches_required_layout(tmp_path: Path) -> None:
+    pytest.importorskip("docx")
+    exports_dir = tmp_path / "exports"
+    generator = CartaInmediatezGenerator(exports_dir, None, docx_available=True)
+
+    placeholders = {
+        "FECHA_LARGA": "01 enero 2024",
+        "NOMBRE_COMPLETO": "Ana Pérez",
+        "MATRICULA": "T12345",
+        "APELLIDOS": "Pérez",
+        "AREA": "Área Comercial",
+        "NUMERO_CARTA": "001-2024",
+        "NUMERO_CASO": "2024-0001",
+        "COLABORADOR": "Ana Pérez",
+        "PUESTO": "Analista",
+        "AGENCIA": "Agencia Central",
+        "INVESTIGADOR": "Investigador X",
+        "FECHA": "2024-01-01",
+    }
+    output_path = exports_dir / "cartas" / "carta_prueba.docx"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    generator._render_with_docx(generator.template_path, output_path, placeholders)
+
+    from docx import Document  # imported after importorskip to avoid optional dependency issues
+
+    document = Document(output_path)
+    text_blocks = [paragraph.text for paragraph in document.paragraphs if paragraph.text]
+    assert f"Lima, {placeholders['FECHA_LARGA']}" in text_blocks
+    assert "Señora" in text_blocks
+    assert f"Matrícula {placeholders['MATRICULA']}" in text_blocks
+    assert any("irregularidades" in paragraph and placeholders["AREA"] in paragraph for paragraph in text_blocks)
+    assert any(paragraph.startswith("Carta N°") and placeholders["NUMERO_CARTA"] in paragraph for paragraph in text_blocks)
+    assert document.tables, "La plantilla debe incluir el bloque de firmas en tabla para evitar superposiciones."
+    signature_table = document.tables[0]
+    assert "Funcionario" in signature_table.rows[1].cells[0].text
+    assert "Funcionario" in signature_table.rows[1].cells[1].text
+    assert generator.template_path.exists()
