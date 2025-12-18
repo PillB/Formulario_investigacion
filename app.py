@@ -76,7 +76,7 @@ from decimal import Decimal
 from importlib import util as importlib_util
 from pathlib import Path
 from queue import SimpleQueue
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 import tkinter as tk
 from tkinter import filedialog
@@ -89,6 +89,11 @@ from models import (AutofillService, build_detail_catalog_id_index,
                     find_analitica_by_code, format_analitica_option,
                     get_analitica_display_options, iter_massive_csv_rows,
                     normalize_detail_catalog_key, parse_involvement_entries)
+from report.alerta_temprana import (
+    PPTX_AVAILABLE,
+    PPTX_MISSING_MESSAGE,
+    build_alerta_temprana_ppt,
+)
 from report.carta_inmediatez import CartaInmediatezError, CartaInmediatezGenerator
 from report_builder import (build_docx, build_event_rows,
                             build_llave_tecnica_rows, build_report_filename,
@@ -736,6 +741,7 @@ class FraudCaseApp:
         self._last_validated_risk_exposure_total = Decimal('0')
         self._log_flush_job_id: Optional[str] = None
         self._docx_available = DOCX_AVAILABLE
+        self._pptx_available = PPTX_AVAILABLE
         local_log_path = LOGS_FILE if STORE_LOGS_LOCALLY else None
         self._log_file_initialized = bool(local_log_path and os.path.exists(local_log_path))
         self._external_drive_path = self._prepare_external_drive()
@@ -891,6 +897,7 @@ class FraudCaseApp:
         self._carta_generator: CartaInmediatezGenerator | None = None
         self.btn_docx = None
         self.btn_md = None
+        self.btn_alerta_temprana = None
         self.btn_clear_form = None
         self.clients_detail_wrapper = None
         self.team_detail_wrapper = None
@@ -3870,6 +3877,7 @@ class FraudCaseApp:
                 getattr(self, "actions_action_bar", None),
                 getattr(self, "btn_docx", None),
                 getattr(self, "btn_md", None),
+                getattr(self, "btn_alerta_temprana", None),
                 getattr(self, "btn_clear_form", None),
             ]
         elif key == "export":
@@ -3878,6 +3886,7 @@ class FraudCaseApp:
                 getattr(self, "_export_anchor_widget", None),
                 getattr(self, "btn_docx", None),
                 getattr(self, "btn_md", None),
+                getattr(self, "btn_alerta_temprana", None),
                 action_bar,
             ]
         elif key == "validation":
@@ -7324,6 +7333,13 @@ class FraudCaseApp:
             style="ActionBar.TButton",
         )
         md_button.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
+        alerta_button = ttk.Button(
+            report_frame,
+            text="Generar alerta temprana (.pptx)",
+            command=self.generate_alerta_temprana_ppt,
+            style="ActionBar.TButton",
+        )
+        alerta_button.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
         carta_button = ttk.Button(
             report_frame,
             text="Generar carta de inmediatez",
@@ -7339,6 +7355,7 @@ class FraudCaseApp:
         )
         clear_button.pack(side="left", pady=(0, ROW_PADY // 2))
         self.btn_md = md_button
+        self.btn_alerta_temprana = alerta_button
         self.btn_carta_inmediatez = carta_button
         self.btn_clear_form = clear_button
 
@@ -7347,6 +7364,11 @@ class FraudCaseApp:
             if self._docx_available
             else f"{DOCX_MISSING_MESSAGE} Usa el informe Markdown como respaldo."
         )
+        alerta_tooltip = (
+            "Genera una alerta temprana en formato PPT utilizando el resumen validado."
+            if self._pptx_available
+            else f"{PPTX_MISSING_MESSAGE} Instala la dependencia para habilitar este botón."
+        )
         carta_tooltip = "Genera cartas de inmediatez por colaborador usando la plantilla configurada."
         if self.btn_docx:
             try:
@@ -7354,6 +7376,12 @@ class FraudCaseApp:
             except tk.TclError:
                 pass
             self.register_tooltip(self.btn_docx, docx_tooltip)
+        if self.btn_alerta_temprana:
+            try:
+                self.btn_alerta_temprana.state(["!disabled"] if self._pptx_available else ["disabled"])
+            except tk.TclError:
+                pass
+            self.register_tooltip(self.btn_alerta_temprana, alerta_tooltip)
         if not self._docx_available:
             carta_tooltip = f"{DOCX_MISSING_MESSAGE} Instala python-docx para generar cartas de inmediatez."
             try:
@@ -7366,6 +7394,10 @@ class FraudCaseApp:
             "Genera un informe detallado en Markdown. Siempre disponible como respaldo.",
         )
         self.register_tooltip(
+            alerta_button,
+            alerta_tooltip,
+        )
+        self.register_tooltip(
             carta_button,
             carta_tooltip,
         )
@@ -7375,7 +7407,9 @@ class FraudCaseApp:
         )
 
         if getattr(self, "_export_anchor_widget", None) is None:
-            self._export_anchor_widget = self.btn_docx or md_button or self.actions_action_bar
+            self._export_anchor_widget = (
+                self.btn_docx or self.btn_alerta_temprana or md_button or self.actions_action_bar
+            )
         if md_button is not None and self._actions_bar_anchor is None:
             self._actions_bar_anchor = md_button
 
@@ -13736,6 +13770,28 @@ class FraudCaseApp:
             build_report_filename(case.get("tipo_informe"), case.get("id_caso"), "csv")
         ).stem
 
+    def _run_export_action(self, button: Optional[tk.Widget], action: Callable[[], None]) -> None:
+        """Deshabilita temporalmente un botón mientras se ejecuta una acción de exportación."""
+
+        was_disabled = False
+        if button is not None:
+            try:
+                was_disabled = button.instate(["disabled"])
+                button.state(["disabled"])
+            except Exception:
+                with suppress(Exception):
+                    was_disabled = str(button.cget("state")).strip().lower() == "disabled"
+                    button.configure(state="disabled")
+        try:
+            action()
+        finally:
+            if button is not None:
+                try:
+                    button.state(["disabled" if was_disabled else "!disabled"])
+                except Exception:
+                    with suppress(Exception):
+                        button.configure(state="disabled" if was_disabled else "normal")
+
     def _perform_save_exports(self, data: CaseData, folder: Path, case_id: str):
         folder = Path(folder)
         report_prefix = self._build_report_prefix(data)
@@ -13902,6 +13958,11 @@ class FraudCaseApp:
             messagebox.showwarning("Informe Word no disponible", warning)
             log_event("validacion", warning, self.logs)
             return
+        if extension == "pptx" and not self._pptx_available:
+            warning = f"No se puede generar la alerta temprana sin python-pptx. {PPTX_MISSING_MESSAGE}"
+            messagebox.showwarning("Presentación no disponible", warning)
+            log_event("validacion", warning, self.logs)
+            return
         report_path = self._build_report_path(data, folder, extension)
         try:
             created_path = builder(data, report_path)
@@ -13923,13 +13984,30 @@ class FraudCaseApp:
         self._show_success_toast(source_widget)
 
     def generate_docx_report(self):
-        self._generate_report_file(
-            "docx", build_docx, "Word (.docx)", source_widget=self.btn_docx
+        self._run_export_action(
+            getattr(self, "btn_docx", None),
+            lambda: self._generate_report_file(
+                "docx", build_docx, "Word (.docx)", source_widget=self.btn_docx
+            ),
         )
 
     def generate_md_report(self):
-        self._generate_report_file(
-            "md", save_md, "Markdown (.md)", source_widget=self.btn_md
+        self._run_export_action(
+            getattr(self, "btn_md", None),
+            lambda: self._generate_report_file(
+                "md", save_md, "Markdown (.md)", source_widget=self.btn_md
+            ),
+        )
+
+    def generate_alerta_temprana_ppt(self):
+        self._run_export_action(
+            getattr(self, "btn_alerta_temprana", None),
+            lambda: self._generate_report_file(
+                "pptx",
+                build_alerta_temprana_ppt,
+                "Alerta temprana (.pptx)",
+                source_widget=self.btn_alerta_temprana,
+            ),
         )
 
     def _get_carta_generator(self) -> CartaInmediatezGenerator:
