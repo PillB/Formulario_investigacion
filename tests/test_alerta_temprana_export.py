@@ -156,3 +156,40 @@ def test_synthesize_section_text_uses_fallback_when_llm_missing():
         "Resumen", caso, analisis, productos, riesgos, operaciones, colaboradores, NullLLM()
     )
     assert "transferencias sospechosas" in resumen
+
+
+def test_llm_loader_handles_missing_model(monkeypatch):
+    helper = SpanishSummaryHelper(model_name="missing/offline")
+    monkeypatch.setattr(alerta_temprana, "TRANSFORMERS_AVAILABLE", True)
+
+    import sys
+    import types
+
+    fake_transformers = types.ModuleType("transformers")
+
+    class DummyTokenizer:
+        @classmethod
+        def from_pretrained(cls, model_name):
+            raise OSError(f"weights for {model_name} not found")
+
+    class DummyModel:
+        @classmethod
+        def from_pretrained(cls, model_name):
+            raise OSError(f"weights for {model_name} not found")
+
+    def pipeline(*args, **kwargs):  # pragma: no cover - no debería invocarse
+        raise AssertionError("pipeline debería evitarse cuando fallan los pesos")
+
+    def set_seed(_seed):
+        return None
+
+    fake_transformers.AutoTokenizer = DummyTokenizer
+    fake_transformers.AutoModelForSeq2SeqLM = DummyModel
+    fake_transformers.pipeline = pipeline
+    fake_transformers.set_seed = set_seed
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    summary = helper.summarize("Resumen", "Contexto irrelevante")
+
+    assert summary is None
+    assert isinstance(helper._load_error, OSError)

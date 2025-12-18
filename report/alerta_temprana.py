@@ -219,15 +219,18 @@ class SpanishSummaryHelper:
         if not TRANSFORMERS_AVAILABLE:
             self._load_error = RuntimeError("transformers no disponible")
             return
-        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
+        try:
+            from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
-        self._pipeline = pipeline(
-            task="text2text-generation",
-            model=model,
-            tokenizer=tokenizer,
-        )
+            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
+            self._pipeline = pipeline(
+                task="text2text-generation",
+                model=model,
+                tokenizer=tokenizer,
+            )
+        except Exception as exc:  # pragma: no cover - defensivo frente a entornos sin pesos locales
+            self._load_error = exc
 
     def summarize(self, section: str, prompt: str, *, max_new_tokens: int | None = None) -> str | None:
         key = (section, prompt, max_new_tokens or self.max_new_tokens)
