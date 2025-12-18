@@ -1603,6 +1603,39 @@ class FraudCaseApp:
             )
         self._reset_navigation_metrics()
 
+    def _normalize_root_coords(
+        self, coords: Optional[tuple]
+    ) -> Optional[tuple[float, float]]:
+        """Convierte coordenadas absolutas en ``float`` descartando valores inválidos."""
+
+        if not coords or len(coords) < 2:
+            return None
+        try:
+            x_coord = float(coords[0]) if coords[0] is not None else None
+            y_coord = float(coords[1]) if coords[1] is not None else None
+        except (TypeError, ValueError):
+            return None
+
+        if x_coord is None or y_coord is None:
+            return None
+        if any(math.isnan(value) or math.isinf(value) for value in (x_coord, y_coord)):
+            return None
+
+        return (x_coord, y_coord)
+
+    def _serialize_coords_for_log(self, coords: Optional[tuple[float, float]]) -> Optional[str]:
+        """Serializa coordenadas normalizadas en un formato estable ``"x,y"``."""
+
+        if not coords:
+            return None
+        return f"{coords[0]},{coords[1]}"
+
+    def _get_widget_root_coords(self, widget) -> Optional[tuple[float, float]]:
+        try:
+            return (widget.winfo_rootx(), widget.winfo_rooty())
+        except Exception:
+            return None
+
     def _handle_global_navigation_event(self, event: tk.Event, subtype: str) -> None:
         # FIX 2: focus_displayof() falla en macOS con widgets temporales (popdown, tooltips, etc.)
         # FIX FINAL: focus_get() explota con widgets temporales como .popdown (macOS)
@@ -1622,27 +1655,28 @@ class FraudCaseApp:
             return
         if widget is None:
             return
-        coords = (
+        raw_coords = (
             getattr(event, "x_root", None),
             getattr(event, "y_root", None),
         )
-        # FIX 1: x_root/y_root pueden ser strings en macOS (sí, es un bug real de Tk)
-        try:
-            x_coord = float(coords[0]) if coords[0] is not None else None
-            y_coord = float(coords[1]) if coords[1] is not None else None
-        except (TypeError, ValueError):
-            x_coord = y_coord = None
-
-        safe_coords = (x_coord, y_coord)
+        safe_coords = self._normalize_root_coords(raw_coords)
+        if safe_coords is None:
+            # Tras refrescar la geometría, usamos las coordenadas absolutas del widget
+            # para no perder eventos que carecen de x/y_root (ocurre en macOS al
+            # interactuar con pop-ups o cuando Tk entrega strings vacíos).
+            self._safe_update_idletasks()
+            fallback_coords = self._get_widget_root_coords(widget)
+            safe_coords = self._normalize_root_coords(fallback_coords)
         widget_id = self._resolve_widget_id(widget)
         if not widget_id:
             widget_id = self._describe_widget(widget)
+        serialized_coords = self._serialize_coords_for_log(safe_coords)
         log_event(
             "navegacion",
             f"Evento {subtype} en {widget.winfo_class()}",
             self.logs,
             widget_id=widget_id,
-            coords=safe_coords,
+            coords=serialized_coords,
             event_subtipo=subtype,
         )
         self._accumulate_navigation_metrics(widget_id, safe_coords)
