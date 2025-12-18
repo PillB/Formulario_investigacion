@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from contextlib import suppress
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_UP
 from typing import Callable, Dict, List, Optional, Tuple
@@ -374,6 +375,7 @@ class FieldValidator:
 
     modal_notifications_enabled = True
     status_consumer: Optional[Callable[[str, Optional[str], object], None]] = None
+    widget_registry_consumer: Optional[Callable[[object, str], None]] = None
     # Permite que los tests o herramientas de depuración recopilen instancias
     # sin necesidad de aplicar un monkeypatch explícito. Si ``instance_registry``
     # o ``instances`` apunta a una lista, cada validador se añadirá
@@ -408,6 +410,10 @@ class FieldValidator:
         self._validation_armed = False
         self._debounce_job: Optional[str] = None
         self._last_validated_value = self._capture_current_value()
+        registry_consumer = getattr(self.__class__, "widget_registry_consumer", None)
+        if callable(registry_consumer):
+            with suppress(Exception):
+                registry_consumer(widget, field_name)
         for var in self.variables:
             self._traces.append(var.trace_add("write", self._on_change))
         self._bind_widget_events(widget)

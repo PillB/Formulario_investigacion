@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import math
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
@@ -75,12 +76,22 @@ def parse_timestamp(value: str) -> Optional[datetime]:
         return None
 
 
+def _tokenize(text: str) -> List[str]:
+    sanitized = (text or "").lower()
+    tokens = re.split(r"[\s\._\-/]+", sanitized)
+    return [token for token in tokens if token]
+
+
 def infer_screen(row: MutableMapping[str, str], screen_hints: Dict[str, Sequence[str]] | None = None) -> str:
     hints = screen_hints or DEFAULT_SCREEN_HINTS
-    content = f"{row.get('widget_id', '')} {row.get('mensaje', '')}".lower()
+    widget_tokens = _tokenize(row.get("widget_id", ""))
+    content_tokens = widget_tokens + _tokenize(row.get("mensaje", ""))
     for screen, keywords in hints.items():
         for keyword in keywords:
-            if keyword in content:
+            lowered = keyword.lower()
+            if any(lowered in token or token in lowered for token in widget_tokens):
+                return screen
+            if any(lowered in token or token in lowered for token in content_tokens):
                 return screen
     return "general"
 
@@ -207,7 +218,8 @@ def visualize_usage(
     datasets = _build_heatmap_dataset(rows, hints, screen_dimensions)
     screen_counts = Counter(infer_screen(row, hints) for row in rows)
     widget_counts = Counter(
-        (row.get("widget_id") or row.get("mensaje") or "desconocido") for row in rows
+        (row.get("widget_id") or row.get("mensaje") or "desconocido").strip()
+        for row in rows
     )
     validation_share = sum(1 for row in rows if row.get("tipo") == "validacion") / (len(rows) or 1)
     time_spent_seconds = _accumulate_time_by_screen(rows, hints)
