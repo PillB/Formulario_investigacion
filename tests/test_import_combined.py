@@ -338,6 +338,33 @@ def test_import_combined_normalizes_involvement_amounts_without_two_decimals(
     assert messagebox_spy.errors == []
 
 
+def test_import_combined_rejects_missing_structured_involvement_amount(monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+    rows = [
+        {
+            'id_cliente': '12345678',
+            'id_colaborador': 'T12345',
+            'id_producto': 'PRD-123',
+            'tipo_producto': 'Crédito personal',
+            'monto_investigado': '100.00',
+            'tipo_involucrado': 'colaborador',
+            'monto_asignado': '',
+            'involucramiento': '',
+        }
+    ]
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter(rows),
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        app.import_combined(filename="dummy.csv")
+
+    assert "monto asignado" in str(excinfo.value).lower()
+    assert messagebox_spy.errors
+
+
 def test_import_combined_preserves_existing_product_fields(monkeypatch, messagebox_spy):
     app = build_import_app(monkeypatch)
     existing_product = ProductFrameStub()

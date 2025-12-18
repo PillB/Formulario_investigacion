@@ -9679,7 +9679,7 @@ class FraudCaseApp:
                 def _resolve_client_tipo(client_identifier: str) -> str:
                     return self._resolve_client_type_for_involvement(client_identifier)
 
-                def _append_involvement_entry(tipo: str, collab: str, client: str, amount_text: str):
+                def _append_involvement_entry(tipo: str, collab: str, client: str, amount_text: str, *, requires_amount: bool = False):
                     tipo_norm = (tipo or "colaborador").strip().lower()
                     collab = (collab or "").strip()
                     client = (client or "").strip()
@@ -9717,21 +9717,51 @@ class FraudCaseApp:
                         'id_colaborador': collab if tipo_norm == 'colaborador' else '',
                         'id_cliente_involucrado': client if tipo_norm == 'cliente' else '',
                         'monto_asignado': cleaned_amount,
+                        'requires_amount': requires_amount,
                     }
                     existing = involvement_map.get(key)
-                    if not existing or (cleaned_amount and not (existing.get('monto_asignado') or "")):
+                    if not existing:
                         involvement_map[key] = entry
+                    else:
+                        entry['requires_amount'] = existing.get('requires_amount', False) or requires_amount
+                        if cleaned_amount and not (existing.get('monto_asignado') or ""):
+                            existing.update({**entry, 'monto_asignado': cleaned_amount, 'requires_amount': entry['requires_amount']})
+                        else:
+                            existing['requires_amount'] = entry['requires_amount']
 
                 _append_involvement_entry(
                     raw_row.get('tipo_involucrado', ''),
                     raw_row.get('id_colaborador', ''),
                     raw_row.get('id_cliente_involucrado', ''),
                     raw_row.get('monto_asignado', ''),
+                    requires_amount=bool(raw_row.get('tipo_involucrado') or raw_row.get('monto_asignado')),
                 )
                 for collaborator, amount_text in parse_involvement_entries(raw_row.get('involucramiento', '')):
-                    _append_involvement_entry("colaborador", collaborator, "", amount_text)
+                    _append_involvement_entry("colaborador", collaborator, "", amount_text, requires_amount=True)
                 if not involvement_map and collaborator_id and raw_row.get('monto_asignado'):
-                    _append_involvement_entry("colaborador", collaborator_id, "", raw_row.get('monto_asignado', ''))
+                    _append_involvement_entry("colaborador", collaborator_id, "", raw_row.get('monto_asignado', ''), requires_amount=True)
+
+                involvement_list: list[dict[str, str]] = []
+                for involvement in involvement_map.values():
+                    label_subject = involvement.get('id_colaborador') or involvement.get('id_cliente_involucrado') or 'sin ID'
+                    label = (
+                        f"Monto asignado del {involvement.get('tipo_involucrado', 'involucrado')} "
+                        f"{label_subject} en el producto {(raw_row.get('id_producto') or 'sin ID')}"
+                    )
+                    amount_value = involvement.get('monto_asignado', '')
+                    requires_amount = bool(involvement.get('requires_amount'))
+                    if amount_value or requires_amount:
+                        msg, _amount, normalized_amount = validate_money_bounds(
+                            amount_value,
+                            label,
+                            allow_blank=not requires_amount,
+                        )
+                        if msg:
+                            raise ValueError(msg)
+                        involvement['monto_asignado'] = normalized_amount or amount_value
+                    involvement.pop('requires_amount', None)
+                    involvement_list.append(involvement)
+
                 prepared_rows.append(
                     {
                         'raw_row': raw_row,
@@ -9741,7 +9771,7 @@ class FraudCaseApp:
                         'team_found': team_found,
                         'product_row': product_row,
                         'product_found': product_found,
-                        'involvements': list(involvement_map.values()),
+                        'involvements': involvement_list,
                     }
                 )
             return prepared_rows
