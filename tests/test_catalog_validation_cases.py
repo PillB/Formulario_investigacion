@@ -243,12 +243,17 @@ def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
                 "id_colaborador",
                 "nombres",
                 "apellidos",
+                "flag",
                 "division",
                 "area",
                 "servicio",
                 "puesto",
+                "fecha_carta_inmediatez",
+                "fecha_carta_renuncia",
                 "nombre_agencia",
                 "codigo_agencia",
+                "tipo_falta",
+                "tipo_sancion",
                 "fecha_actualizacion",
             ],
         )
@@ -258,12 +263,17 @@ def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
                 "id_colaborador": "12345",
                 "nombres": "Nombre",
                 "apellidos": "Apellido",
+                "flag": "Relacionado",
                 "division": "DCA",
                 "area": "Área Comercial",
                 "servicio": "",
                 "puesto": "",
+                "fecha_carta_inmediatez": "",
+                "fecha_carta_renuncia": "",
                 "nombre_agencia": "",
                 "codigo_agencia": "12",
+                "tipo_falta": "Inconducta funcional",
+                "tipo_sancion": "Suspensión 2 días",
                 "fecha_actualizacion": "2024/05/01",
             }
         )
@@ -278,3 +288,42 @@ def test_invalid_massive_and_detail_rows_surface_expected_errors(tmp_path):
     assert validate_team_member_id(team_entry.get("id_colaborador", "")) is not None
     assert validate_agency_code(team_entry.get("codigo_agencia", ""), allow_blank=False) is not None
     assert validate_date_text(team_entry.get("fecha_actualizacion", ""), "Fecha de actualización", allow_blank=False) is not None
+
+
+def test_load_detail_catalogs_handles_alias_ids_and_extra_fields(tmp_path):
+    detail_dir = tmp_path / "details"
+    detail_dir.mkdir()
+
+    with (detail_dir / "risk_details.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = DictWriter(
+            handle,
+            fieldnames=[
+                "planes_accion",
+                "IdRiesgo",
+                "descripcion",
+                "criticidad",
+                "exposicion_residual",
+                "pda",
+                "lider",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "planes_accion": "Mitigar accesos",
+                "IdRiesgo": "RSK-ALIAS",
+                "descripcion": "Orden de columnas no estándar",
+                "criticidad": "Moderado",
+                "exposicion_residual": "1200",
+                "pda": "PDA-01",
+                "lider": "Líder QA",
+            }
+        )
+
+    catalogs = load_detail_catalogs(detail_dir)
+
+    assert catalogs.get("risk")
+    entry = catalogs["risk"]["RSK-ALIAS"]
+    assert entry["id_riesgo"] == "RSK-ALIAS"
+    assert entry["planes_accion"] == "Mitigar accesos"
+    assert entry["pda"] == "PDA-01"
