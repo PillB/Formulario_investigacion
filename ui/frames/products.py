@@ -504,6 +504,7 @@ class ClaimRow:
         self._duplicate_trace_after_id = None
 
         self.id_var = tk.StringVar()
+        self.case_id_var = tk.StringVar()
         self.name_var = tk.StringVar()
         self.code_var = tk.StringVar()
         self.badge_manager = None
@@ -758,14 +759,25 @@ class ClaimRow:
             refresher('reclamos')
 
     def get_data(self):
+        case_var = getattr(self, "case_id_var", None)
+        case_value = ""
+        if case_var and hasattr(case_var, "get"):
+            try:
+                case_value = case_var.get().strip()
+            except Exception:
+                case_value = ""
         return {
             "id_reclamo": self.id_var.get().strip(),
+            "id_caso": case_value,
             "nombre_analitica": self.name_var.get().strip(),
             "codigo_analitica": self.code_var.get().strip(),
         }
 
     def set_data(self, data):
         self.id_var.set((data.get("id_reclamo") or "").strip())
+        case_var = getattr(self, "case_id_var", None)
+        if case_var and hasattr(case_var, "set"):
+            case_var.set((data.get("id_caso") or "").strip())
         self.name_var.set((data.get("nombre_analitica") or "").strip())
         self.code_var.set((data.get("codigo_analitica") or "").strip())
         self.on_id_change(preserve_existing=True, silent=True)

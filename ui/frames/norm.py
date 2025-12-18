@@ -60,6 +60,7 @@ class NormFrame:
         self._refresh_after_id = None
 
         self.id_var = tk.StringVar()
+        self.case_id_var = tk.StringVar()
         self.descripcion_var = tk.StringVar()
         self.fecha_var = tk.StringVar()
         self.acapite_var = tk.StringVar()
@@ -512,6 +513,7 @@ class NormFrame:
             return None
         return {
             "id_norma": norm_id,
+            "id_caso": self.case_id_var.get().strip(),
             "descripcion": descripcion,
             "fecha_vigencia": fecha,
             "acapite_inciso": acapite,

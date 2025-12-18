@@ -1,5 +1,5 @@
 id_riesgo,id_caso,lider,descripcion,criticidad,exposicion_residual,planes_accion
-RSK-123456,2025-0001,Tribu A,Descripción del riesgo 1,Moderado,5000,Plan1;Plan2
-RSK-654321,2025-0001,Tribu B,Descripción del riesgo 2,Alto,15000,Plan3
-RSK-777888,2025-0002,Tribu C,Descripción del riesgo 3,Bajo,2500,Plan4;Plan5
-RSK-999000,2025-0003,Tribu D,Descripción del riesgo 4,Alto,20000,Plan6
+RSK-123456,2025-0001,Tribu A,Descripción del riesgo 1,Moderado,5000.00,Plan1;Plan2
+RSK-654321,2025-0001,Tribu B,Descripción del riesgo 2,Alto,15000.00,Plan3
+RSK-777888,2025-0002,Tribu C,Descripción del riesgo 3,Bajo,2500.00,Plan4;Plan5
+RSK-999000,2025-0003,Tribu D,Descripción del riesgo 4,Alto,20000.00,Plan6

@@ -113,21 +113,23 @@ def test_ingest_summary_rows_create_frames_with_normalized_values(monkeypatch, m
     assert [frame.id_var.get() for frame in app.product_frames] == ["1234567890123"]
     assert app.product_frames[0].populated_rows[-1]["tipo_producto"] == "Crédito personal"
 
-    risk_row = ["rsk-000001", "Líder", CRITICIDAD_LIST[1], "100.00"]
+    risk_row = ["rsk-000001", "2024-0001", "Líder", "Descripción", CRITICIDAD_LIST[1], "100.00", "Plan"]
     risk_rows = app._transform_clipboard_riesgos([risk_row])
     assert risk_rows[0][0] == "RSK-000001"
     assert app.ingest_summary_rows("riesgos", risk_rows) == 1
     assert [frame.id_var.get() for frame in app.risk_frames] == ["RSK-000001"]
     assert app.risk_frames[0].criticidad_var.get() == CRITICIDAD_LIST[1]
     assert app.risk_frames[0].exposicion_var.get() == "100.00"
+    assert getattr(app.risk_frames[0], "case_id_var", None).get() == "2024-0001"
 
-    norm_row = ["2024.001.01.01", "Nueva norma", "2024-01-01", "Art. 2", "Detalle"]
+    norm_row = ["2024.001.01.01", "2024-0001", "Nueva norma", "2024-01-01", "Art. 2", "Detalle"]
     norm_rows = app._transform_clipboard_normas([norm_row])
     assert app.ingest_summary_rows("normas", norm_rows) == 1
     assert [frame.id_var.get() for frame in app.norm_frames] == ["2024.001.01.01"]
     assert app.norm_frames[0].descripcion_var.get() == "Nueva norma"
     assert app.norm_frames[0].acapite_var.get() == "Art. 2"
     assert app.norm_frames[0]._get_detalle_text() == "Detalle"
+    assert getattr(app.norm_frames[0], "case_id_var", None).get() == "2024-0001"
 
 
 @pytest.mark.parametrize(
@@ -159,14 +161,14 @@ def test_transform_clipboard_rows_invalid_inputs(monkeypatch, messagebox_spy, tr
         (
             "riesgos",
             "risk_frames",
-            ["RSK-000010", "Líder", CRITICIDAD_LIST[0], "50.00"],
+            ["RSK-000010", "2024-0001", "Líder", "Descripción", CRITICIDAD_LIST[0], "50.00", "Plan"],
             "Riesgos duplicados",
             "Riesgo duplicado RSK-000010",
         ),
         (
             "normas",
             "norm_frames",
-            ["2024.001.02.01", "Descripción", "2024-01-01", "Art. 1", "Detalle"],
+            ["2024.001.02.01", "2024-0001", "Descripción", "2024-01-01", "Art. 1", "Detalle"],
             "Normas duplicadas",
             "Norma duplicada 2024.001.02.01",
         ),

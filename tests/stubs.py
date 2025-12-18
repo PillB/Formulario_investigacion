@@ -103,16 +103,29 @@ class TeamFrameStub(BaseFrameStub):
 class RiskFrameStub(BaseFrameStub):
     def __init__(self):
         super().__init__()
+        self.case_id_var = DummyVar("")
         self.lider_var = DummyVar("")
         self.descripcion_var = DummyVar("")
         self.criticidad_var = DummyVar("")
         self.exposicion_var = DummyVar("")
         self.planes_var = DummyVar("")
 
+    def get_data(self):
+        return {
+            "id_riesgo": self.id_var.get(),
+            "id_caso": self.case_id_var.get(),
+            "lider": self.lider_var.get(),
+            "descripcion": self.descripcion_var.get(),
+            "criticidad": self.criticidad_var.get(),
+            "exposicion_residual": self.exposicion_var.get(),
+            "planes_accion": self.planes_var.get(),
+        }
+
 
 class NormFrameStub:
     def __init__(self):
         self.id_var = DummyVar("")
+        self.case_id_var = DummyVar("")
         self.descripcion_var = DummyVar("")
         self.fecha_var = DummyVar("")
         self.acapite_var = DummyVar("")
@@ -133,18 +146,42 @@ class NormFrameStub:
             return clean
         return clean[: max_length - 1].rstrip() + "…"
 
+    def get_data(self):
+        if not any(
+            (
+                self.id_var.get(),
+                self.descripcion_var.get(),
+                self.fecha_var.get(),
+                self.acapite_var.get(),
+                self._detalle_text,
+            )
+        ):
+            return None
+        return {
+            "id_norma": self.id_var.get(),
+            "id_caso": self.case_id_var.get(),
+            "descripcion": self.descripcion_var.get(),
+            "fecha_vigencia": self.fecha_var.get(),
+            "acapite_inciso": self.acapite_var.get(),
+            "detalle_norma": self._detalle_text,
+        }
+
 
 class ClaimStub:
     def __init__(self):
         self.data = {}
         self.id_var = DummyVar("")
+        self.case_id_var = DummyVar("")
 
     def set_data(self, payload):
         self.data = dict(payload)
         self.id_var.set(payload.get('id_reclamo', ''))
+        self.case_id_var.set(payload.get('id_caso', ''))
 
     def get_data(self):
-        return dict(self.data)
+        payload = dict(self.data)
+        payload.setdefault("id_caso", self.case_id_var.get())
+        return payload
 
 
 class ProductFrameStub(BaseFrameStub):
