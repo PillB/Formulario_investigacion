@@ -633,6 +633,9 @@ def _add_logs_sheet(workbook) -> None:
             "widget_id": "entry_id_caso",
             "coords": (10, 20),
             "mensaje": "Valores de ejemplo normalizados",
+            "old_value": "2023-0001",
+            "new_value": "2024-0001",
+            "action_result": "ok",
         }
     )
     _write_schema_block(

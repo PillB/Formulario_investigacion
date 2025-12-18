@@ -22,9 +22,24 @@ def test_generate_report_file_records_widget_id(monkeypatch, tmp_path, messagebo
     original_log_event = app_module.log_event
     captured: list[dict] = []
 
-    def capture(event_type, message, logs, widget_id=None, event_subtipo=None, coords=None):
-        captured.append({"tipo": event_type, "mensaje": message, "widget_id": widget_id})
-        return original_log_event(event_type, message, logs, widget_id=widget_id, event_subtipo=event_subtipo, coords=coords)
+    def capture(event_type, message, logs, widget_id=None, event_subtipo=None, coords=None, **kwargs):
+        captured.append(
+            {
+                "tipo": event_type,
+                "mensaje": message,
+                "widget_id": widget_id,
+                "action_result": kwargs.get("action_result"),
+            }
+        )
+        return original_log_event(
+            event_type,
+            message,
+            logs,
+            widget_id=widget_id,
+            event_subtipo=event_subtipo,
+            coords=coords,
+            **kwargs,
+        )
 
     monkeypatch.setattr(app_module, "log_event", capture)
 
@@ -34,7 +49,12 @@ def test_generate_report_file_records_widget_id(monkeypatch, tmp_path, messagebo
 
     app._generate_report_file("md", builder, "Markdown (.md)", widget_id="btn_md")
 
-    assert any(entry["widget_id"] == "btn_md" and entry["tipo"] == "navegacion" for entry in captured)
+    assert any(
+        entry["widget_id"] == "btn_md"
+        and entry["tipo"] == "navegacion"
+        and entry["action_result"] == "success"
+        for entry in captured
+    )
 
 
 def test_load_autosave_logs_with_widget_id(monkeypatch, tmp_path, messagebox_spy):
@@ -57,9 +77,24 @@ def test_load_autosave_logs_with_widget_id(monkeypatch, tmp_path, messagebox_spy
     original_log_event = app_module.log_event
     captured: list[dict] = []
 
-    def capture(event_type, message, logs, widget_id=None, event_subtipo=None, coords=None):
-        captured.append({"tipo": event_type, "mensaje": message, "widget_id": widget_id})
-        return original_log_event(event_type, message, logs, widget_id=widget_id, event_subtipo=event_subtipo, coords=coords)
+    def capture(event_type, message, logs, widget_id=None, event_subtipo=None, coords=None, **kwargs):
+        captured.append(
+            {
+                "tipo": event_type,
+                "mensaje": message,
+                "widget_id": widget_id,
+                "action_result": kwargs.get("action_result"),
+            }
+        )
+        return original_log_event(
+            event_type,
+            message,
+            logs,
+            widget_id=widget_id,
+            event_subtipo=event_subtipo,
+            coords=coords,
+            **kwargs,
+        )
 
     monkeypatch.setattr(app_module, "log_event", capture)
 
