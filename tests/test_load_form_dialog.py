@@ -78,6 +78,7 @@ class _PopulateProductFrame:
         self.tipo_prod_var = DummyVar()
         self.claims_payload = None
         self.involvements: list[InvolvementRowStub] = []
+        self.client_involvements: list[InvolvementRowStub] = []
         self.refresh_amounts_called = False
 
     def on_cat1_change(self):
@@ -95,6 +96,11 @@ class _PopulateProductFrame:
     def add_involvement(self):
         row = InvolvementRowStub()
         self.involvements.append(row)
+        return row
+
+    def add_client_involvement(self):
+        row = InvolvementRowStub()
+        self.client_involvements.append(row)
         return row
 
     def _refresh_amount_validation_after_programmatic_update(self):

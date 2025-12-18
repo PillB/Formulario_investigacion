@@ -83,7 +83,21 @@ class ClientFrameStub(BaseFrameStub):
 
 
 class TeamFrameStub(BaseFrameStub):
-    pass
+    def __init__(self):
+        super().__init__()
+        self.nombres_var = DummyVar("")
+        self.apellidos_var = DummyVar("")
+        self.flag_var = DummyVar("")
+        self.division_var = DummyVar("")
+        self.area_var = DummyVar("")
+        self.servicio_var = DummyVar("")
+        self.puesto_var = DummyVar("")
+        self.fecha_carta_inmediatez_var = DummyVar("")
+        self.fecha_carta_renuncia_var = DummyVar("")
+        self.nombre_agencia_var = DummyVar("")
+        self.codigo_agencia_var = DummyVar("")
+        self.tipo_falta_var = DummyVar("")
+        self.tipo_sancion_var = DummyVar("")
 
 
 class RiskFrameStub(BaseFrameStub):
@@ -157,6 +171,7 @@ class ProductFrameStub(BaseFrameStub):
 
 class InvolvementRowStub:
     def __init__(self):
+        self.client_var = DummyVar("")
         self.team_var = DummyVar("")
         self.monto_var = DummyVar("")
 
@@ -192,6 +207,10 @@ def build_populate_method(id_field):
                 frame.id_var.set(value)
             return
         frame.id_var.set(value)
+        for key, raw in (row or {}).items():
+            attr_name = f"{key}_var"
+            if hasattr(frame, attr_name):
+                getattr(frame, attr_name).set((raw or "").strip())
         frame.populated_rows.append(dict(row))
 
     return _populate

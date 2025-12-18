@@ -105,10 +105,36 @@ def build_import_app(monkeypatch, messagebox_spy=None):
         build_populate_method('id_cliente'),
         app,
     )
-    app._populate_team_frame_from_row = types.MethodType(
-        build_populate_method('id_colaborador'),
-        app,
-    )
+    def _populate_team_stub(self, frame, row, preserve_existing=False):
+        value = (row.get('id_colaborador') or "").strip()
+        if not preserve_existing or not frame.id_var.get().strip():
+            frame.id_var.set(value)
+        mapping = {
+            'nombres_var': ('nombres', 'nombre'),
+            'apellidos_var': ('apellidos', 'apellido'),
+            'flag_var': ('flag', 'flag_colaborador'),
+            'division_var': ('division',),
+            'area_var': ('area',),
+            'servicio_var': ('servicio',),
+            'puesto_var': ('puesto',),
+            'fecha_carta_inmediatez_var': ('fecha_carta_inmediatez',),
+            'fecha_carta_renuncia_var': ('fecha_carta_renuncia',),
+            'nombre_agencia_var': ('nombre_agencia',),
+            'codigo_agencia_var': ('codigo_agencia',),
+            'tipo_falta_var': ('tipo_falta',),
+            'tipo_sancion_var': ('tipo_sancion',),
+        }
+        for attr, keys in mapping.items():
+            if not hasattr(frame, attr):
+                continue
+            for key in keys:
+                candidate = (row.get(key) or "").strip()
+                if candidate:
+                    getattr(frame, attr).set(candidate)
+                    break
+        frame.populated_rows.append(dict(row))
+
+    app._populate_team_frame_from_row = types.MethodType(_populate_team_stub, app)
     app._populate_product_frame_from_row = types.MethodType(
         build_populate_method('id_producto'),
         app,

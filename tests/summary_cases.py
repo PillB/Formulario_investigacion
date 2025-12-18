@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Callable, TYPE_CHECKING
 
 from settings import (ACCIONADO_OPTIONS, CRITICIDAD_LIST, FLAG_CLIENTE_LIST,
-                      TIPO_ID_LIST, TIPO_SANCION_LIST)
+                      FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_ID_LIST,
+                      TIPO_SANCION_LIST)
 
 if TYPE_CHECKING:
     from app import FraudCaseApp
@@ -82,30 +83,38 @@ SUMMARY_CASES = [
     ),
     SummaryPasteCase(
         key="colaboradores",
-        columns=build_columns(10),
+        columns=build_columns(14),
         valid_row=[
             "T67890",
             "Ana",
             "López",
+            FLAG_COLABORADOR_LIST[0],
             "Division B",
             "Área Comercial",
             "Servicio A",
             "Puesto B",
-            TIPO_SANCION_LIST[0],
             "2023-01-01",
             "2023-02-01",
+            "Agencia Sur",
+            "123456",
+            TIPO_FALTA_LIST[0],
+            TIPO_SANCION_LIST[0],
         ],
         invalid_row=[
             "bad",
             "",
             "",
+            "",
             "Division B",
             "Área Comercial",
             "Servicio A",
             "Puesto B",
-            "Inválida",
             "2023-01-01",
             "2023-02-01",
+            "",
+            "12345",
+            "Inválida",
+            "Inválida",
         ],
         state_getter=lambda app: collect_ids(app.team_frames),
         expected_state=["T67890"],

@@ -265,7 +265,7 @@ class BaseInvolvementRow:
         if getattr(self, "validators", None):
             for validator in self.validators:
                 if getattr(validator, "field_name", None):
-                    suffix = f" {self.entity_label_lower}" if "Asignación" in validator.field_name else ""
+                    suffix = f" {self.entity_label_lower}" if validator is self.selector_validator else ""
                     validator.field_name = f"{prefix}{suffix}"
             self._capture_validator_keys()
         self._sync_section_title()

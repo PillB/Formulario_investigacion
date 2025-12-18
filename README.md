@@ -108,6 +108,7 @@ el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con la
 
 ### Pegado rápido en Resumen
 - En **Resumen**, pega datos tabulares (Ctrl+V). Las tablas sincronizan con las secciones principales.
+- Orden único para **Colaboradores** (Resumen y CSV): `id_colaborador`, `nombres`, `apellidos`, `flag`, `division`, `area`, `servicio`, `puesto`, `fecha_carta_inmediatez`, `fecha_carta_renuncia`, `nombre_agencia`, `codigo_agencia`, `tipo_falta`, `tipo_sancion`. Incluye ambas fechas para evitar ambigüedad al pegar desde Excel.
 
 ## Guía por pestaña
 | Pestaña / sección | Propósito | Entradas clave | Validaciones destacadas |
