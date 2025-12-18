@@ -174,3 +174,45 @@ def test_default_template_matches_required_layout(tmp_path: Path) -> None:
     assert "Funcionario" in signature_table.rows[1].cells[0].text
     assert "Funcionario" in signature_table.rows[1].cells[1].text
     assert generator.template_path.exists()
+
+
+def test_placeholder_map_uses_member_details(tmp_path: Path) -> None:
+    captured: list[dict[str, str]] = []
+
+    def renderer(_template_path: Path, output_path: Path, placeholders: dict[str, str]) -> None:
+        captured.append(placeholders)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("placeholder-carta")
+
+    year = datetime.now().year
+    exports_dir = tmp_path / "exports"
+    generator = CartaInmediatezGenerator(exports_dir, None, renderer=renderer, docx_available=True)
+
+    case_payload = {
+        "caso": {
+            "id_caso": f"{year}-0101",
+            "investigador": {"matricula": "inv123", "nombre": "Investigador X"},
+        }
+    }
+    members = [
+        {
+            "id_colaborador": "tm010",
+            "nombres": "Ana",
+            "apellidos": "Pérez Gómez",
+            "puesto": "Analista",
+            "area": "Área Comercial",
+            "nombre_agencia": "Agencia Central",
+            "codigo_agencia": "000123",
+            "flag": "Involucrado",
+            "division": "Division Comercial",
+        }
+    ]
+
+    generator.generate_cartas(case_payload, members)
+
+    assert captured, "El renderer debe recibir los placeholders generados."
+    placeholders = captured[0]
+    assert placeholders["NOMBRE_COMPLETO"] == "Ana Pérez Gómez"
+    assert placeholders["APELLIDOS"] == "Pérez Gómez"
+    assert placeholders["MATRICULA"] == "TM010"
+    assert placeholders["AREA"] == "Área Comercial"
