@@ -8369,6 +8369,8 @@ class FraudCaseApp:
             return "break"
         expected_columns = len(columns)
         allowed_counts = expected_columns
+        if key == "riesgos":
+            allowed_counts = {expected_columns, 6, 4}
         if key == "productos":
             allowed_counts = {expected_columns, expected_columns - 3}
         if key == "involucramientos":
