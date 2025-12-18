@@ -9,6 +9,7 @@ uso y validación.
 from __future__ import annotations
 
 import csv
+import math
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
@@ -69,17 +70,25 @@ def load_log_rows(log_path: Path | str) -> List[MutableMapping[str, str]]:
 def _parse_coords(value: str) -> Optional[Tuple[float, float]]:
     if not value:
         return None
-    if "," in value:
-        try:
-            x_str, y_str = value.split(",", 1)
-            return float(x_str), float(y_str)
-        except ValueError:
-            return None
-    try:
-        number = float(value)
-        return number, number
-    except ValueError:
+    text = str(value).strip()
+    if not text:
         return None
+    if "," in text:
+        try:
+            x_str, y_str = text.split(",", 1)
+            x_val = float(x_str.strip())
+            y_val = float(y_str.strip())
+        except (ValueError, TypeError):
+            return None
+    else:
+        try:
+            x_val = y_val = float(text)
+        except (ValueError, TypeError):
+            return None
+
+    if any(math.isnan(value) or math.isinf(value) for value in (x_val, y_val)):
+        return None
+    return x_val, y_val
 
 
 def _assign_screen(

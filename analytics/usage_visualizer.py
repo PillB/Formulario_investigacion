@@ -64,9 +64,13 @@ def _parse_coords(value: str | None) -> Optional[Tuple[float, float]]:
         return None
     try:
         x_str, y_str = value.split(",", maxsplit=1)
-        return float(x_str.strip()), float(y_str.strip())
+        x_val = float(x_str.strip())
+        y_val = float(y_str.strip())
     except (ValueError, TypeError):
         return None
+    if any(math.isnan(val) or math.isinf(val) for val in (x_val, y_val)):
+        return None
+    return x_val, y_val
 
 
 def parse_timestamp(value: str) -> Optional[datetime]:
