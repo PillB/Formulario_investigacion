@@ -160,7 +160,15 @@ def test_import_combined_massive_dataset_hydrates_frames(monkeypatch, messagebox
     expected_clients = {row["id_cliente"].strip() for row in rows if row.get("id_cliente")}
     expected_products = {row["id_producto"].strip() for row in rows if row.get("id_producto")}
     expected_team = set()
+    expected_client_involvements = set()
     for row in rows:
+        tipo_involucrado = (row.get("tipo_involucrado") or "").strip().lower()
+        if tipo_involucrado == "cliente" and row.get("id_cliente_involucrado"):
+            client_id = row["id_cliente_involucrado"].strip()
+            expected_clients.add(client_id)
+            expected_client_involvements.add(client_id)
+        if tipo_involucrado == "colaborador" and row.get("id_colaborador"):
+            expected_team.add(row["id_colaborador"].strip())
         involvement = row.get("involucramiento") or ""
         for chunk in involvement.split(";"):
             if not chunk.strip():
@@ -176,6 +184,13 @@ def test_import_combined_massive_dataset_hydrates_frames(monkeypatch, messagebox
     assert {frame.id_var.get() for frame in app.client_frames if frame.id_var.get()} == expected_clients
     assert {frame.id_var.get() for frame in app.product_frames if frame.id_var.get()} == expected_products
     assert {frame.id_var.get() for frame in app.team_frames if frame.id_var.get()} >= expected_team
+    imported_client_involvements = {
+        inv.client_var.get()
+        for product in app.product_frames
+        for inv in getattr(product, "client_involvements", [])
+        if inv.client_var.get()
+    }
+    assert expected_client_involvements <= imported_client_involvements
     assert messagebox_spy.errors == []
 
 
@@ -212,11 +227,17 @@ def test_combined_massive_dataset_matches_expected_entities_and_validations():
     clients = {row["id_cliente"].strip() for row in rows if row.get("id_cliente")}
     products = {row["id_producto"].strip() for row in rows if row.get("id_producto")}
     collaborators = set()
+    client_involvements = set()
     for row in rows:
         collaborator = (row.get("id_colaborador") or "").strip()
         if collaborator:
             assert TEAM_MEMBER_ID_PATTERN.fullmatch(collaborator)
             collaborators.add(collaborator)
+        if (row.get("tipo_involucrado") or "").strip().lower() == "cliente":
+            client_id = (row.get("id_cliente_involucrado") or "").strip()
+            if client_id:
+                assert validate_client_id("", client_id) is None
+                client_involvements.add(client_id)
         involvement = row.get("involucramiento") or ""
         for chunk in involvement.split(";"):
             if not chunk.strip():
@@ -258,6 +279,7 @@ def test_combined_massive_dataset_matches_expected_entities_and_validations():
     assert len(clients) == 16
     assert len(products) == 16
     assert len(collaborators) == 20
+    assert client_involvements
 
 
 @pytest.mark.parametrize(

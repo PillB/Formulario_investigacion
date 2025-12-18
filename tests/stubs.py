@@ -151,6 +151,7 @@ class ProductFrameStub(BaseFrameStub):
     def __init__(self):
         super().__init__()
         self.involvements = []
+        self.client_involvements = []
         self.claims = []
         self.persisted_lookups = 0
 
@@ -167,6 +168,11 @@ class ProductFrameStub(BaseFrameStub):
 
     def persist_lookup_snapshot(self):
         self.persisted_lookups += 1
+
+    def add_client_involvement(self):
+        row = InvolvementRowStub()
+        self.client_involvements.append(row)
+        return row
 
 
 class InvolvementRowStub:
@@ -194,6 +200,18 @@ def build_involvement_slot():
                 return inv
         row = InvolvementRowStub()
         product_frame.involvements.append(row)
+        return row
+
+    return _obtain
+
+
+def build_client_involvement_slot():
+    def _obtain(self, product_frame):
+        for inv in getattr(product_frame, 'client_involvements', []):
+            if not inv.client_var.get().strip():
+                return inv
+        row = InvolvementRowStub()
+        product_frame.client_involvements.append(row)
         return row
 
     return _obtain
