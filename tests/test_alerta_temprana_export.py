@@ -6,7 +6,11 @@ import pytest
 
 import app as app_module
 from report import alerta_temprana
-from report.alerta_temprana import build_alerta_temprana_ppt
+from report.alerta_temprana import (
+    SpanishSummaryHelper,
+    _synthesize_section_text,
+    build_alerta_temprana_ppt,
+)
 from report_builder import CaseData
 
 
@@ -73,6 +77,14 @@ def test_generate_alerta_temprana_ppt_uses_report_helper(monkeypatch, messagebox
 
 @pytest.mark.skipif(not alerta_temprana.PPTX_AVAILABLE, reason="python-pptx no disponible")
 def test_build_alerta_temprana_ppt_generates_presentation(tmp_path):
+    class StubLLM:
+        def __init__(self):
+            self.prompts = []
+
+        def summarize(self, section, prompt, *, max_new_tokens=None):
+            self.prompts.append((section, prompt))
+            return f"{section} sintetizado"
+
     data = CaseData.from_mapping(
         {
             "caso": {
@@ -85,7 +97,7 @@ def test_build_alerta_temprana_ppt_generates_presentation(tmp_path):
                 "fecha_de_descubrimiento": "2025-01-02",
             },
             "clientes": [{"id_cliente": "CLI1"}],
-            "colaboradores": [],
+            "colaboradores": [{"nombres": "Carlos", "flag": "involucrado", "area": "TI"}],
             "productos": [
                 {
                     "monto_investigado": "100.00",
@@ -99,7 +111,10 @@ def test_build_alerta_temprana_ppt_generates_presentation(tmp_path):
             "involucramientos": [],
             "riesgos": [{"id_riesgo": "R1"}],
             "normas": [],
-            "analisis": {},
+            "analisis": {
+                "antecedentes": {"text": "Se detectaron cargos inusuales en tarjetas digitales."},
+                "recomendaciones": {"text": "Suspender temporalmente los accesos y revisar monitoreo."},
+            },
             "encabezado": {},
             "operaciones": [],
             "anexos": [],
@@ -109,17 +124,35 @@ def test_build_alerta_temprana_ppt_generates_presentation(tmp_path):
     )
 
     output = tmp_path / "alerta_temprana.pptx"
-    path = build_alerta_temprana_ppt(data, output)
+    stub_llm = StubLLM()
+    path = build_alerta_temprana_ppt(data, output, llm_helper=stub_llm)
     assert path.exists()
 
     from pptx import Presentation
 
     deck = Presentation(path)
-    all_text = " ".join(
-        shape.text
-        for slide in deck.slides
-        for shape in slide.shapes
-        if hasattr(shape, "text")
-    )
+    all_text = " ".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
     assert "Alerta temprana" in all_text
     assert "2025-0001" in all_text
+    assert "Cronología" in all_text
+    assert "Riesgos" in all_text
+    assert "sintetizado" in all_text
+    assert any("Fraude" in prompt for _section, prompt in stub_llm.prompts)
+
+
+def test_synthesize_section_text_uses_fallback_when_llm_missing():
+    caso = {"id_caso": "123", "tipo_informe": "Fraude", "modalidad": "Digital"}
+    analisis = {"antecedentes": {"text": "Hubo transferencias sospechosas sin autorización."}}
+    productos = [{"fecha_ocurrencia": "2025-01-01"}]
+    riesgos = [{"id_riesgo": "R1", "descripcion": "Credenciales filtradas"}]
+    operaciones = [{"accion": "Bloquear tarjeta", "estado": "Pendiente"}]
+    colaboradores = [{"nombres": "Ana", "flag": "involucrado", "area": "Seguridad"}]
+
+    class NullLLM(SpanishSummaryHelper):
+        def summarize(self, section, prompt, *, max_new_tokens=None):
+            return None
+
+    resumen = _synthesize_section_text(
+        "Resumen", caso, analisis, productos, riesgos, operaciones, colaboradores, NullLLM()
+    )
+    assert "transferencias sospechosas" in resumen
