@@ -13609,7 +13609,9 @@ class FraudCaseApp:
             if pid_message:
                 errors.append(f"Producto {idx}: {pid_message}")
             cid = producto['id_cliente']
+            raw_cid = (cid or '').strip()
             cid_norm = self._normalize_identifier(cid)
+            has_titular_cliente = bool(raw_cid)
             if not cid:
                 errors.append(
                     f"Producto {idx}: el cliente vinculado fue eliminado. Selecciona un nuevo titular antes de exportar."
@@ -13670,15 +13672,42 @@ class FraudCaseApp:
                 collaborator_assignments = list(prod_data.get('asignaciones') or [])
             combined_assignments = collaborator_assignments + client_assignments
             product_has_involvements = hasattr(p, "involvements") or hasattr(p, "client_involvements")
-            enforce_assignations = bool(product_has_involvements)
+            try:
+                afectacion_interna_active = bool(getattr(self, "afectacion_interna_var", None).get())
+            except Exception:
+                afectacion_interna_active = False
+            allow_involvementless = afectacion_interna_active or has_titular_cliente
+            enforce_assignations = bool(product_has_involvements) and not allow_involvementless
             if enforce_assignations and not combined_assignments:
                 errors.append(
                     (
                         f"Producto {producto_label}: agrega al menos un involucrado en"
-                        " 'Involucramiento de colaboradores' o 'Involucramiento de clientes' para validar la clave técnica."
+                        " 'Involucramiento de colaboradores' o 'Involucramiento de clientes' para validar la clave técnica"
+                        " (o marca afectación interna/solo titular)."
                     )
                 )
                 continue
+
+            def _register_duplicate_key(tipo_involucrado, normalized_identifier, claim_id, label_subject):
+                label = label_subject or normalized_identifier or tipo_involucrado
+                entity_prefix = tipo_involucrado.strip() if isinstance(tipo_involucrado, str) else ""
+                message_subject = (
+                    f"{entity_prefix} {label}".strip() if entity_prefix else label
+                )
+                key = (
+                    normalized_case_id,
+                    pid_norm,
+                    cid_norm,
+                    tipo_involucrado,
+                    normalized_identifier,
+                    product_occurrence_date,
+                    self._normalize_identifier(claim_id),
+                )
+                if key in key_set:
+                    errors.append(
+                        f"Registro duplicado de clave técnica (producto {producto_label}, {message_subject})"
+                    )
+                key_set.add(key)
 
             def _validate_involucrado(inv_idx, inv_payload, tipo_involucrado, identifier, normalized_identifier, known_ids, entity_label):
                 amount_value = (inv_payload.get('monto_asignado') or '').strip()
@@ -13716,37 +13745,15 @@ class FraudCaseApp:
                     return None
                 involvement_label = normalized_identifier or identifier or 'sin ID'
                 if not claim_rows:
-                    key = (
-                        normalized_case_id,
-                        pid_norm,
-                        cid_norm,
-                        tipo_involucrado,
-                        normalized_identifier,
-                        product_occurrence_date,
-                        "",
+                    _register_duplicate_key(
+                        tipo_involucrado, normalized_identifier, "", involvement_label
                     )
-                    if key in key_set:
-                        errors.append(
-                            f"Registro duplicado de clave técnica (producto {producto_label}, {entity_label} {involvement_label})"
-                        )
-                    key_set.add(key)
                     return None
                 for claim in claim_rows:
                     claim_id = (claim.get('id_reclamo') or '').strip()
-                    key = (
-                        normalized_case_id,
-                        pid_norm,
-                        cid_norm,
-                        tipo_involucrado,
-                        normalized_identifier,
-                        product_occurrence_date,
-                        self._normalize_identifier(claim_id),
+                    _register_duplicate_key(
+                        tipo_involucrado, normalized_identifier, claim_id, involvement_label
                     )
-                    if key in key_set:
-                        errors.append(
-                            f"Registro duplicado de clave técnica (producto {producto_label}, {entity_label} {involvement_label})"
-                        )
-                    key_set.add(key)
 
             for inv_idx, inv in enumerate(collaborator_assignments, start=1):
                 collaborator_id = (inv.get('id_colaborador') or '').strip()
@@ -13772,6 +13779,28 @@ class FraudCaseApp:
                     client_ids,
                     "cliente",
                 )
+            if not combined_assignments and allow_involvementless:
+                baseline_identifier = (
+                    cid_norm
+                    or (raw_cid if has_titular_cliente else "")
+                    or ("afectacion_interna" if afectacion_interna_active else "")
+                )
+                if baseline_identifier:
+                    baseline_label = (
+                        "afectación interna"
+                        if afectacion_interna_active and not (cid_norm or raw_cid)
+                        else (cid_norm or raw_cid)
+                    )
+                    if not claim_rows:
+                        _register_duplicate_key("cliente", baseline_identifier, "", baseline_label)
+                    else:
+                        for claim in claim_rows:
+                            _register_duplicate_key(
+                                "cliente",
+                                baseline_identifier,
+                                (claim.get('id_reclamo') or '').strip(),
+                                baseline_label,
+                            )
         # Validar fechas y montos por producto
         for p in self.product_frames:
             data = p.get_data()

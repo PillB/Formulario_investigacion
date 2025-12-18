@@ -1516,7 +1516,10 @@ class ProductFrame:
         inv_add_btn.grid(row=0, column=4, padx=COL_PADX, pady=ROW_PADY, sticky="e")
         self.tooltip_register(
             inv_add_btn,
-            "Registra un colaborador asociado a este producto. Es obligatorio para validar duplicados.",
+            (
+                "Registra un colaborador asociado a este producto. Es obligatorio para validar duplicados,"
+                " salvo en afectación interna o cuando basta con el cliente titular."
+            ),
         )
 
         self.client_invol_frame = ttk.LabelFrame(self.frame, text="Involucramiento de clientes")

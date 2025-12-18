@@ -542,6 +542,7 @@ def build_headless_app(
     product_configs=None,
     team_configs=None,
     risk_configs=None,
+    afectacion_interna=False,
 ):
     app = FraudCaseApp.__new__(FraudCaseApp)
     app._suppress_messagebox = True
@@ -576,6 +577,7 @@ def build_headless_app(
         'recomendaciones_var',
     ):
         setattr(app, attr, DummyVar(""))
+    app.afectacion_interna_var = DummyVar(afectacion_interna)
     client_id = "12345678"
     app.client_frames = [DummyClient(client_id)]
     team_definitions = team_configs or [{"team_id": "T12345"}]
@@ -1155,6 +1157,53 @@ def test_validate_data_normalizes_valid_involvement_amounts():
     assert asignaciones[0]['monto_asignado'] == '10.50'
     assert asignaciones[1]['monto_asignado'] == '75.00'
     assert all(item['tipo_involucrado'] == 'colaborador' for item in asignaciones)
+
+
+def test_validate_data_allows_afectacion_interna_without_involucramientos():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [],
+        "asignaciones_clientes": [],
+    }
+    app = build_headless_app(
+        "Crédito personal",
+        product_configs=[product_config],
+        afectacion_interna=True,
+    )
+
+    errors, warnings = app.validate_data()
+
+    assert errors == []
+    assert warnings == []
+
+
+def test_validate_data_allows_client_only_product_without_involucramientos():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [],
+        "asignaciones_clientes": [],
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+
+    errors, warnings = app.validate_data()
+
+    assert errors == []
+    assert warnings == []
+
+
+def test_validate_data_blocks_missing_entities_when_no_client_or_involucramiento():
+    product_config = {
+        "tipo_producto": "Crédito personal",
+        "asignaciones": [],
+        "asignaciones_clientes": [],
+        "client_id": "",
+    }
+    app = build_headless_app("Crédito personal", product_configs=[product_config])
+    app.client_frames = []
+
+    errors, _ = app.validate_data()
+
+    assert any("cliente vinculado fue eliminado" in error for error in errors)
 
 
 def test_get_form_data_exports_normalized_involucramientos():
