@@ -213,3 +213,29 @@ def test_status_consumer_receives_updates(monkeypatch):
     validator._display_error(None)
 
     assert events == [("Campo", "Primer error", widget), ("Campo", None, widget)]
+
+
+def test_focusout_logs_value_transitions(monkeypatch):
+    monkeypatch.setattr(validators, "ValidationTooltip", DummyTooltip)
+    widget = DummyWidgetWithAfter()
+    variable = DummyVar("initial")
+    captured = []
+
+    def fake_log(event_type, message, logs, **kwargs):
+        captured.append({**kwargs, "event_type": event_type, "message": message})
+        logs.append(kwargs)
+
+    monkeypatch.setattr(validators, "log_event", fake_log)
+
+    validator = validators.FieldValidator(widget, lambda: None, [], "Campo", variables=[variable])
+    variable.set("updated")
+
+    focus_event = DummyEvent(widget, "FocusOut")
+    validator._on_change(focus_event)
+
+    assert captured
+    last = captured[-1]
+    assert last["old_value"] == ("initial",)
+    assert last["new_value"] == ("updated",)
+    assert last["action_result"] == "ok"
+    assert last.get("event_subtipo") == "focus_out"

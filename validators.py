@@ -15,7 +15,17 @@ from settings import RICH_TEXT_MAX_CHARS, TIPO_PRODUCTO_LIST
 from ui.tooltips import ValidationTooltip
 
 _LOG_QUEUE: List[dict] = []
-LOG_FIELDNAMES = ["timestamp", "tipo", "subtipo", "widget_id", "coords", "mensaje"]
+LOG_FIELDNAMES = [
+    "timestamp",
+    "tipo",
+    "subtipo",
+    "widget_id",
+    "coords",
+    "mensaje",
+    "old_value",
+    "new_value",
+    "action_result",
+]
 
 
 def _scrub_control_characters(text: str) -> str:
@@ -473,6 +483,7 @@ class FieldValidator:
 
         should_validate = False
         allow_modal_notifications = False
+        event_context: Optional[str] = None
 
         if is_variable_trace:
             if value_changed_since_validation:
@@ -481,6 +492,7 @@ class FieldValidator:
                     allow_modal_notifications=False,
                     transient=False,
                     is_focus_out=False,
+                    event_context=None,
                 )
             return
 
@@ -488,9 +500,11 @@ class FieldValidator:
             should_validate = True
             allow_modal_notifications = True
             self._validation_armed = False
+            event_context = "focus_out"
         elif is_commit_event:
             self._validation_armed = True
             should_validate = True
+            event_context = "commit"
         elif is_user_event and not is_focus_out:
             self._validation_armed = True
 
@@ -502,6 +516,7 @@ class FieldValidator:
             allow_modal_notifications=allow_modal_notifications,
             transient=is_focus_out,
             is_focus_out=is_focus_out,
+            event_context=event_context,
         )
 
     def _run_validation(
@@ -510,15 +525,21 @@ class FieldValidator:
         allow_modal_notifications: bool,
         transient: bool,
         is_focus_out: bool,
+        event_context: Optional[str],
     ) -> None:
         self._debounce_job = None
+        previous_value = self._last_validated_value
+        current_value = self._capture_current_value()
         error = self.validate_callback()
         self._display_error(
             error,
             allow_modal=allow_modal_notifications,
             transient=transient,
+            event_context=event_context,
+            previous_value=previous_value,
+            current_value=current_value,
         )
-        self._last_validated_value = self._capture_current_value()
+        self._last_validated_value = current_value
         if not is_focus_out:
             self._validation_armed = False
 
@@ -528,6 +549,7 @@ class FieldValidator:
         allow_modal_notifications: bool,
         transient: bool,
         is_focus_out: bool,
+        event_context: Optional[str],
         delay_ms: int = 120,
     ) -> None:
         self._cancel_pending_validation()
@@ -540,6 +562,7 @@ class FieldValidator:
                         allow_modal_notifications=allow_modal_notifications,
                         transient=transient,
                         is_focus_out=is_focus_out,
+                        event_context=event_context,
                     ),
                 )
                 return
@@ -549,6 +572,7 @@ class FieldValidator:
             allow_modal_notifications=allow_modal_notifications,
             transient=transient,
             is_focus_out=is_focus_out,
+            event_context=event_context,
         )
 
     def _cancel_pending_validation(self) -> None:
@@ -573,6 +597,16 @@ class FieldValidator:
                 return None
         return None
 
+    def _resolve_widget_id(self) -> Optional[str]:
+        widget_name = getattr(self.widget, "winfo_name", None)
+        if callable(widget_name):
+            with suppress(Exception):
+                return widget_name()
+        widget_id = getattr(self.widget, "widget_id", None)
+        if isinstance(widget_id, str):
+            return widget_id
+        return None
+
     @staticmethod
     def _is_focus_out(event) -> bool:
         event_type = getattr(event, "type", None)
@@ -591,6 +625,9 @@ class FieldValidator:
         *,
         allow_modal: bool = True,
         transient: bool = False,
+        event_context: Optional[str] = None,
+        previous_value=None,
+        current_value=None,
     ) -> None:
         tooltip_visible = getattr(self.tooltip, "is_visible", True)
         if callable(tooltip_visible):
@@ -598,7 +635,7 @@ class FieldValidator:
                 tooltip_visible = tooltip_visible()
             except Exception:
                 tooltip_visible = True
-        if error == self.last_error and tooltip_visible:
+        if error == self.last_error and tooltip_visible and event_context is None:
             return
         consumer = self.__class__.status_consumer
         if error:
@@ -611,11 +648,16 @@ class FieldValidator:
                 self.tooltip.show(error, auto_hide_ms=auto_hide_ms)
             except TypeError:
                 self.tooltip.show(error)
-            log_event("validacion", f"{self.field_name}: {error}", self.logs)
         else:
             if consumer:
                 consumer(self.field_name, None, self.widget)
             self.tooltip.hide()
+        self._log_validation_result(
+            error,
+            event_context,
+            previous_value,
+            current_value,
+        )
         self.last_error = error
 
     def _notify_modal_error(self, error: str) -> None:
@@ -626,6 +668,34 @@ class FieldValidator:
             messagebox.showerror("Error de validación", message)
         except TclError:
             return
+
+    def _log_validation_result(
+        self,
+        error: Optional[str],
+        event_context: Optional[str],
+        previous_value,
+        current_value,
+    ) -> None:
+        if error:
+            message = f"{self.field_name}: {error}"
+            action_result = "error"
+        else:
+            if event_context not in {"focus_out", "commit"}:
+                return
+            if previous_value == current_value:
+                return
+            message = f"{self.field_name}: validación exitosa"
+            action_result = "ok"
+        log_event(
+            "validacion",
+            message,
+            self.logs,
+            widget_id=self._resolve_widget_id(),
+            event_subtipo=event_context,
+            old_value=previous_value,
+            new_value=current_value,
+            action_result=action_result,
+        )
 
     def show_custom_error(self, message: Optional[str]) -> None:
         self._validation_armed = True
@@ -699,6 +769,11 @@ def normalize_log_row(row: dict) -> dict:
         "mensaje": _sanitize_log_value(
             row.get("mensaje", ""), neutralize_formulas=True
         ),
+        "old_value": _sanitize_log_value(row.get("old_value", ""), collapse_newlines=False),
+        "new_value": _sanitize_log_value(row.get("new_value", ""), collapse_newlines=False),
+        "action_result": _sanitize_log_value(
+            row.get("action_result", ""), neutralize_formulas=True
+        ),
     }
 
 
@@ -709,6 +784,9 @@ def log_event(
     widget_id: Optional[str] = None,
     event_subtipo: Optional[str] = None,
     coords=None,
+    old_value=None,
+    new_value=None,
+    action_result: Optional[str] = None,
 ) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     row = normalize_log_row(
@@ -719,6 +797,9 @@ def log_event(
             "widget_id": widget_id or "",
             "coords": coords,
             "mensaje": message,
+            "old_value": old_value,
+            "new_value": new_value,
+            "action_result": action_result,
         }
     )
     logs.append(row)

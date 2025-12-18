@@ -14,13 +14,13 @@ from analytics.usage_visualizer import (
 def sample_log_file(tmp_path):
     log_path = tmp_path / "logs.csv"
     log_path.write_text(
-        "timestamp,tipo,subtipo,widget_id,coords,mensaje\n"
-        "2024-01-01 10:00:00,navegacion,click,tab_clientes,100,200,Abrio pestaña Clientes\n"
-        "2024-01-01 10:02:00,validacion,error,entry_cliente,150,250,Error cliente duplicado\n"
-        "2024-01-01 10:10:00,navegacion,click,tab_productos,300,120,Abrio pestaña Productos\n"
-        "2024-01-01 10:15:00,navegacion,click,btn_resumen,220,180,Visita pestaña Resumen\n"
-        "2024-01-01 10:17:00,validacion,warning,btn_guardar,,Advertencia de guardado\n"
-        "2024-01-01 10:25:00,navegacion,click,tab_clientes,80,90,Volvió a Clientes\n",
+        "timestamp,tipo,subtipo,widget_id,coords,mensaje,old_value,new_value,action_result\n"
+        "2024-01-01 10:00:00,navegacion,click,tab_clientes,100,200,Abrio pestaña Clientes,,,\n"
+        "2024-01-01 10:02:00,validacion,error,entry_cliente,150,250,Error cliente duplicado,prev,now,error\n"
+        "2024-01-01 10:10:00,navegacion,click,tab_productos,300,120,Abrio pestaña Productos,,,\n"
+        "2024-01-01 10:15:00,navegacion,click,btn_resumen,220,180,Visita pestaña Resumen,,,\n"
+        "2024-01-01 10:17:00,validacion,warning,btn_guardar,,Advertencia de guardado,,,warning\n"
+        "2024-01-01 10:25:00,navegacion,click,tab_clientes,80,90,Volvió a Clientes,,,\n",
         encoding="utf-8",
     )
     return log_path

@@ -14438,12 +14438,24 @@ class FraudCaseApp:
         if extension == "docx" and not self._docx_available:
             warning = f"No se puede generar Word sin python-docx. {DOCX_MISSING_MESSAGE}"
             messagebox.showwarning("Informe Word no disponible", warning)
-            log_event("validacion", warning, self.logs, widget_id=resolved_widget_id)
+            log_event(
+                "validacion",
+                warning,
+                self.logs,
+                widget_id=resolved_widget_id,
+                action_result="failure",
+            )
             return
         if extension == "pptx" and not self._pptx_available:
             warning = f"No se puede generar la alerta temprana sin python-pptx. {PPTX_MISSING_MESSAGE}"
             messagebox.showwarning("Presentación no disponible", warning)
-            log_event("validacion", warning, self.logs, widget_id=resolved_widget_id)
+            log_event(
+                "validacion",
+                warning,
+                self.logs,
+                widget_id=resolved_widget_id,
+                action_result="failure",
+            )
             return
         report_path = self._build_report_path(data, folder, extension)
         try:
@@ -14453,14 +14465,26 @@ class FraudCaseApp:
                 "Error al generar informe",
                 f"No se pudo generar el informe {description.lower()}: {exc}",
             )
-            log_event("validacion", f"Error al generar informe {extension}: {exc}", self.logs, widget_id=resolved_widget_id)
+            log_event(
+                "validacion",
+                f"Error al generar informe {extension}: {exc}",
+                self.logs,
+                widget_id=resolved_widget_id,
+                action_result="failure",
+            )
             return
         self._mirror_exports_to_external_drive([created_path], case_id)
         messagebox.showinfo(
             "Informe generado",
             f"El informe {description} se ha guardado como {created_path.name}.",
         )
-        log_event("navegacion", f"Informe {extension} generado", self.logs, widget_id=resolved_widget_id)
+        log_event(
+            "navegacion",
+            f"Informe {extension} generado",
+            self.logs,
+            widget_id=resolved_widget_id,
+            action_result="success",
+        )
         self.flush_logs_now()
         self._play_feedback_sound()
         self._show_success_toast(source_widget)
