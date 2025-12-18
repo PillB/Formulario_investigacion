@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 from typing import Dict, Iterable, Iterator, List, Tuple
 
 from settings import BASE_DIR, DETAIL_LOOKUP_ALIASES
@@ -13,6 +14,44 @@ def normalize_detail_catalog_key(key: str) -> str:
     """Normaliza una clave de catálogo de detalle a minúsculas sin espacios."""
 
     return (key or "").strip().lower()
+
+
+def _normalize_identifier_token(value: str) -> str:
+    """Genera un token comparable eliminando separadores y acentos básicos."""
+
+    return re.sub(r"[^a-z0-9]", "", normalize_detail_catalog_key(value))
+
+
+def _resolve_id_fields(entity_name: str, fieldnames: list[str] | None) -> tuple[str | None, str | None]:
+    """Selecciona la columna llave incluso si está desordenada o usa alias.
+
+    Retorna el nombre original de la columna encontrada y el identificador
+    canónico (por ejemplo ``id_colaborador``) cuando es posible deducirlo.
+    """
+
+    alias_token_map = {
+        _normalize_identifier_token(name): canonical
+        for canonical, aliases in (DETAIL_LOOKUP_ALIASES or {}).items()
+        for name in tuple(aliases or ()) + (canonical,)
+    }
+    normalized_entity = _normalize_identifier_token(entity_name)
+    canonical_field = alias_token_map.get(normalized_entity)
+    tokens = {token for token, target in alias_token_map.items() if target == canonical_field}
+    if not tokens:
+        tokens = set(alias_token_map.keys())
+
+    chosen_field = None
+    for field in fieldnames or []:
+        normalized_field = _normalize_identifier_token(field)
+        starts_with_id = normalize_detail_catalog_key(field).startswith("id")
+        if normalized_field in tokens or starts_with_id:
+            chosen_field = field
+            canonical_field = canonical_field or alias_token_map.get(normalized_field)
+            break
+
+    if not canonical_field and chosen_field:
+        canonical_field = normalize_detail_catalog_key(chosen_field)
+    return chosen_field, canonical_field
 
 
 def load_detail_catalogs(base_dir: str | os.PathLike = BASE_DIR) -> Dict[str, Dict[str, Dict[str, str]]]:
@@ -39,20 +78,18 @@ def load_detail_catalogs(base_dir: str | os.PathLike = BASE_DIR) -> Dict[str, Di
         try:
             with open(path, newline='', encoding="utf-8-sig") as file_handle:
                 reader = csv.DictReader(line for line in file_handle if line.strip())
-                fieldnames = reader.fieldnames or []
-                key_field = next(
-                    (field for field in fieldnames if field and field.lower().startswith("id_")),
-                    None,
-                )
+                key_field, canonical_id_field = _resolve_id_fields(entity_name, reader.fieldnames or [])
                 if not key_field:
                     continue
                 for row in reader:
                     key = (row.get(key_field) or "").strip()
                     if not key:
                         continue
-                    catalogs.setdefault(entity_name, {})[key] = {
-                        (k or ""): (v or "").strip() for k, v in row.items()
-                    }
+                    cleaned_row = {(k or ""): (v or "").strip() for k, v in row.items()}
+                    canonical_id_field = canonical_id_field or key_field
+                    if canonical_id_field and canonical_id_field not in cleaned_row:
+                        cleaned_row[canonical_id_field] = key
+                    catalogs.setdefault(entity_name, {})[key] = cleaned_row
         except (FileNotFoundError, OSError):
             continue
     return catalogs
