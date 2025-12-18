@@ -5358,6 +5358,8 @@ class FraudCaseApp:
             existing_ids_provider=lambda _rf=None: self._collect_existing_ids(self.risk_frames),
             modal_factory=getattr(self, "risk_modal_factory", None),
         )
+        with suppress(Exception):
+            risk.case_id_var.set(self.id_caso_var.get())
         risk.set_refresh_callbacks(
             shared_tree_refresher=self._refresh_shared_risk_tree,
             summary_refresher=lambda: self._schedule_summary_refresh('riesgos'),
@@ -5470,6 +5472,8 @@ class FraudCaseApp:
             change_notifier=self._log_navigation_change,
             header_tree=self.norm_header_tree,
         )
+        with suppress(Exception):
+            norm.case_id_var.set(self.id_caso_var.get())
         norm.set_refresh_callbacks(
             shared_tree_refresher=self._refresh_shared_norm_tree,
             summary_refresher=lambda: self._schedule_summary_refresh('normas'),
@@ -8181,6 +8185,42 @@ class FraudCaseApp:
             (field, product_header_labels.get(field, field))
             for field in self.IMPORT_CONFIG["productos"]["expected_headers"]
         ]
+        claim_header_labels = {
+            "id_reclamo": "ID Reclamo",
+            "id_caso": "ID Caso",
+            "id_producto": "ID Producto",
+            "nombre_analitica": "Analítica",
+            "codigo_analitica": "Código analítica",
+        }
+        claim_columns = [
+            (field, claim_header_labels.get(field, field))
+            for field in self.IMPORT_CONFIG["reclamos"]["expected_headers"]
+        ]
+        risk_header_labels = {
+            "id_riesgo": "ID Riesgo",
+            "id_caso": "ID Caso",
+            "lider": "Líder",
+            "descripcion": "Descripción",
+            "criticidad": "Criticidad",
+            "exposicion_residual": "Exposición residual",
+            "planes_accion": "Planes de acción",
+        }
+        risk_columns = [
+            (field, risk_header_labels.get(field, field))
+            for field in self.IMPORT_CONFIG["riesgos"]["expected_headers"]
+        ]
+        norm_header_labels = {
+            "id_norma": "ID Norma",
+            "id_caso": "ID Caso",
+            "descripcion": "Descripción",
+            "fecha_vigencia": "Vigencia",
+            "acapite_inciso": "Acápite/Inciso",
+            "detalle_norma": "Detalle de norma",
+        }
+        norm_columns = [
+            (field, norm_header_labels.get(field, field))
+            for field in self.IMPORT_CONFIG["normas"]["expected_headers"]
+        ]
         config = [
             (
                 "clientes",
@@ -8221,35 +8261,17 @@ class FraudCaseApp:
             (
                 "riesgos",
                 "Riesgos registrados",
-                [
-                    ("id", "ID Riesgo"),
-                    ("lider", "Líder"),
-                    ("descripcion", "Descripción"),
-                    ("criticidad", "Criticidad"),
-                    ("exposicion", "Exposición"),
-                    ("planes", "Planes de acción"),
-                ],
+                risk_columns,
             ),
             (
                 "reclamos",
                 "Reclamos asociados",
-                [
-                    ("id", "ID Reclamo"),
-                    ("producto", "Producto"),
-                    ("analitica", "Analítica"),
-                    ("codigo", "Código analítica"),
-                ],
+                claim_columns,
             ),
             (
                 "normas",
                 "Normas transgredidas",
-                [
-                    ("id", "ID Norma"),
-                    ("acapite", "Acápite/Inciso"),
-                    ("vigencia", "Vigencia"),
-                    ("descripcion", "Descripción"),
-                    ("detalle", "Detalle de norma"),
-                ],
+                norm_columns,
             ),
         ]
 
@@ -8395,10 +8417,10 @@ class FraudCaseApp:
             allowed_counts = set(expected_columns)
         else:
             allowed_counts = {expected_columns}
-        cleaned = (text or "").strip()
-        if not cleaned:
+        cleaned = text or ""
+        if not cleaned.strip():
             raise ValueError("El portapapeles está vacío.")
-        lines = [line for line in cleaned.splitlines() if line.strip()]
+        lines = [line.rstrip("\r\n") for line in cleaned.splitlines() if line.strip("\r\n")]
         if not lines:
             raise ValueError("No se encontraron filas para pegar.")
         rows = []
@@ -8766,16 +8788,29 @@ class FraudCaseApp:
 
     def _transform_clipboard_reclamos(self, rows):
         sanitized = []
+        field_order = list(self.IMPORT_CONFIG["reclamos"]["expected_headers"])
+        expected_length = len(field_order)
         for idx, values in enumerate(rows, start=1):
+            if len(values) != expected_length:
+                raise ValueError(
+                    f"Reclamo fila {idx}: se esperaban {expected_length} columnas y se recibieron {len(values)}."
+                )
             claim = {
-                "id_reclamo": values[0].strip(),
-                "id_producto": values[1].strip(),
-                "nombre_analitica": values[2].strip(),
-                "codigo_analitica": values[3].strip(),
+                field: (values[pos] or "").strip()
+                for pos, field in enumerate(field_order)
             }
+            claim["id_reclamo"] = claim.get("id_reclamo", "").upper()
+            claim["id_reclamo"] = claim.get("id_reclamo", "").strip()
+            if not claim.get("id_caso"):
+                fallback_case = getattr(self, "id_caso_var", None)
+                if fallback_case and hasattr(fallback_case, "get"):
+                    claim["id_caso"] = (fallback_case.get() or "").strip()
             message = validate_reclamo_id(claim["id_reclamo"])
             if message:
                 raise ValueError(f"Reclamo fila {idx}: {message}")
+            case_message = validate_case_id(claim.get("id_caso", "")) if claim.get("id_caso") else None
+            if case_message:
+                raise ValueError(f"Reclamo fila {idx}: {case_message}")
             product_message = validate_required_text(claim["id_producto"], "el ID de producto")
             if product_message:
                 raise ValueError(f"Reclamo fila {idx}: {product_message}")
@@ -8788,88 +8823,102 @@ class FraudCaseApp:
             code_message = validate_codigo_analitica(claim["codigo_analitica"])
             if code_message:
                 raise ValueError(f"Reclamo fila {idx}: {code_message}")
-            sanitized.append(
-                (
-                    claim["id_reclamo"],
-                    claim["id_producto"],
-                    claim["nombre_analitica"],
-                    claim["codigo_analitica"],
-                )
-            )
+            sanitized.append(tuple(claim.get(field, "") for field in field_order))
         return sanitized
 
     def _transform_clipboard_riesgos(self, rows):
         sanitized = []
         valid_criticidades = set(CRITICIDAD_LIST)
         valid_criticidades_text = ", ".join(CRITICIDAD_LIST)
+        field_order = list(self.IMPORT_CONFIG["riesgos"]["expected_headers"])
+        expected_length = len(field_order)
         for idx, values in enumerate(rows, start=1):
-            if len(values) == 4:
+            length = len(values)
+            if length == expected_length:
                 risk = {
-                    "id_riesgo": values[0].strip().upper(),
-                    "lider": values[1].strip(),
-                    "descripcion": "",
-                    "criticidad": values[2].strip() or CRITICIDAD_LIST[0],
-                    "exposicion": values[3].strip(),
-                    "planes_accion": "",
+                    field: (values[pos] or "").strip()
+                    for pos, field in enumerate(field_order)
                 }
-            elif len(values) >= 6:
+            elif length == 6:
                 risk = {
-                    "id_riesgo": values[0].strip().upper(),
-                    "lider": values[1].strip(),
-                    "descripcion": values[2].strip(),
-                    "criticidad": values[3].strip() or CRITICIDAD_LIST[0],
-                    "exposicion": values[4].strip(),
-                    "planes_accion": values[5].strip(),
+                    "id_riesgo": (values[0] or "").strip(),
+                    "id_caso": "",
+                    "lider": (values[1] or "").strip(),
+                    "descripcion": (values[2] or "").strip(),
+                    "criticidad": (values[3] or "").strip() or CRITICIDAD_LIST[0],
+                    "exposicion_residual": (values[4] or "").strip(),
+                    "planes_accion": (values[5] or "").strip(),
+                }
+            elif length == 4:
+                risk = {
+                    "id_riesgo": (values[0] or "").strip(),
+                    "id_caso": "",
+                    "lider": (values[1] or "").strip(),
+                    "descripcion": "",
+                    "criticidad": (values[2] or "").strip() or CRITICIDAD_LIST[0],
+                    "exposicion_residual": (values[3] or "").strip(),
+                    "planes_accion": "",
                 }
             else:
                 raise ValueError(
-                    "Riesgo: número de columnas no válido. Se esperaban 4 (versión anterior) o 6 columnas."
+                    f"Riesgo: número de columnas no válido. Se esperaban {expected_length}, 6 o 4 columnas."
                 )
+            risk["id_riesgo"] = (risk.get("id_riesgo") or "").upper()
+            risk["criticidad"] = risk.get("criticidad") or CRITICIDAD_LIST[0]
+            if not risk.get("id_caso"):
+                fallback_case = getattr(self, "id_caso_var", None)
+                if fallback_case and hasattr(fallback_case, "get"):
+                    risk["id_caso"] = (fallback_case.get() or "").strip()
             message = validate_risk_id(risk["id_riesgo"])
             if message:
                 raise ValueError(f"Riesgo fila {idx}: {message}")
+            case_message = validate_case_id(risk.get("id_caso", "")) if risk.get("id_caso") else None
+            if case_message:
+                raise ValueError(f"Riesgo fila {idx}: {case_message}")
             if risk["criticidad"] not in valid_criticidades:
                 raise ValueError(
                     f"Riesgo fila {idx}: la criticidad debe ser una de {valid_criticidades_text}."
                 )
             exposure_message, exposure_decimal, _ = validate_money_bounds(
-                risk["exposicion"],
+                risk.get("exposicion_residual", ""),
                 "la exposición residual",
                 allow_blank=True,
             )
             if exposure_message:
                 raise ValueError(f"Riesgo fila {idx}: {exposure_message}")
-            exposure_text = f"{exposure_decimal:.2f}" if exposure_decimal is not None else ""
-            sanitized.append(
-                (
-                    risk["id_riesgo"],
-                    risk["lider"],
-                    risk["descripcion"],
-                    risk["criticidad"],
-                    exposure_text,
-                    risk["planes_accion"],
-                )
+            risk["exposicion_residual"] = (
+                f"{exposure_decimal:.2f}" if exposure_decimal is not None else ""
             )
+            sanitized.append(tuple(risk.get(field, "") for field in field_order))
         return sanitized
 
     def _transform_clipboard_normas(self, rows):
         sanitized = []
+        field_order = list(self.IMPORT_CONFIG["normas"]["expected_headers"])
+        expected_length = len(field_order)
         for idx, values in enumerate(rows, start=1):
-            padded = list(values) + [""] * max(0, 5 - len(values))
+            if len(values) != expected_length:
+                raise ValueError(
+                    f"Norma: número de columnas no válido. Se esperaban {expected_length} columnas."
+                )
             norm = {
-                "id_norma": padded[0].strip(),
-                "descripcion": padded[1].strip(),
-                "vigencia": padded[2].strip(),
-                "acapite_inciso": padded[3].strip(),
-                "detalle_norma": padded[4].strip(),
+                field: (values[pos] or "").strip()
+                for pos, field in enumerate(field_order)
             }
+            if not norm.get("id_caso"):
+                fallback_case = getattr(self, "id_caso_var", None)
+                if fallback_case and hasattr(fallback_case, "get"):
+                    norm["id_caso"] = (fallback_case.get() or "").strip()
             message = validate_norm_id(norm["id_norma"])
             if message:
                 raise ValueError(f"Norma fila {idx}: {message}")
+            case_message = validate_case_id(norm.get("id_caso", "")) if norm.get("id_caso") else None
+            if case_message:
+                raise ValueError(f"Norma fila {idx}: {case_message}")
             desc_message = validate_required_text(norm["descripcion"], "la descripción de la norma")
             if desc_message:
                 raise ValueError(f"Norma fila {idx}: {desc_message}")
-            date_message = validate_date_text(norm["vigencia"], "la fecha de vigencia")
+            date_message = validate_date_text(norm["fecha_vigencia"], "la fecha de vigencia")
             if date_message:
                 raise ValueError(f"Norma fila {idx}: {date_message}")
             acapite_message = validate_required_text(
@@ -8882,15 +8931,7 @@ class FraudCaseApp:
             )
             if detalle_message:
                 raise ValueError(f"Norma fila {idx}: {detalle_message}")
-            sanitized.append(
-                (
-                    norm["id_norma"],
-                    norm["descripcion"],
-                    norm["vigencia"],
-                    norm["acapite_inciso"],
-                    norm["detalle_norma"],
-                )
-            )
+            sanitized.append(tuple(norm.get(field, "") for field in field_order))
         return sanitized
 
     def ingest_summary_rows(self, section_key, rows, stay_on_summary=False):
@@ -9185,13 +9226,21 @@ class FraudCaseApp:
         if section_key == "reclamos":
             missing_products = []
             unhydrated_products = []
+            expected_fields = list(self.IMPORT_CONFIG["reclamos"]["expected_headers"])
+            expected_length = len(expected_fields)
             for values in rows:
+                if len(values) != expected_length:
+                    raise ValueError(
+                        f"Se esperaban {expected_length} columnas de reclamos y se recibieron {len(values)}."
+                    )
                 row_dict = {
-                    'id_reclamo': (values[0] or "").strip(),
-                    'id_producto': (values[1] or "").strip(),
-                    'nombre_analitica': (values[2] or "").strip(),
-                    'codigo_analitica': (values[3] or "").strip(),
+                    field: (values[pos] or "").strip()
+                    for pos, field in enumerate(expected_fields)
                 }
+                if not row_dict.get("id_caso"):
+                    case_var = getattr(self, "id_caso_var", None)
+                    if case_var and hasattr(case_var, "get"):
+                        row_dict["id_caso"] = (case_var.get() or "").strip()
                 hydrated, found = self._hydrate_row_from_details(row_dict, 'id_producto', PRODUCT_ID_ALIASES)
                 product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
@@ -9220,9 +9269,14 @@ class FraudCaseApp:
                 )
                 claim_payload = {
                     'id_reclamo': (hydrated.get('id_reclamo') or row_dict.get('id_reclamo') or '').strip(),
+                    'id_caso': (hydrated.get('id_caso') or row_dict.get('id_caso') or '').strip(),
                     'nombre_analitica': (hydrated.get('nombre_analitica') or row_dict.get('nombre_analitica') or '').strip(),
                     'codigo_analitica': (hydrated.get('codigo_analitica') or row_dict.get('codigo_analitica') or '').strip(),
                 }
+                if not claim_payload["id_caso"]:
+                    case_var = getattr(self, "id_caso_var", None)
+                    if case_var and hasattr(case_var, "get"):
+                        claim_payload["id_caso"] = (case_var.get() or "").strip()
                 if not any(claim_payload.values()):
                     continue
                 target = product_frame.find_claim_by_id(claim_payload['id_reclamo']) if claim_payload['id_reclamo'] else None
@@ -9246,8 +9300,18 @@ class FraudCaseApp:
             return processed
         if section_key == "riesgos":
             duplicate_ids = []
+            expected_fields = list(self.IMPORT_CONFIG["riesgos"]["expected_headers"])
+            expected_length = len(expected_fields)
             for values in rows:
-                risk_id = (values[0] or "").strip()
+                if len(values) != expected_length:
+                    raise ValueError(
+                        f"Se esperaban {expected_length} columnas de riesgos y se recibieron {len(values)}."
+                    )
+                payload = {
+                    field: (values[pos] or "").strip()
+                    for pos, field in enumerate(expected_fields)
+                }
+                risk_id = payload.get("id_riesgo", "")
                 if not risk_id:
                     continue
                 if any(r.id_var.get().strip() == risk_id for r in self.risk_frames):
@@ -9257,13 +9321,20 @@ class FraudCaseApp:
                 self.add_risk()
                 frame = self.risk_frames[-1]
                 frame.id_var.set(risk_id)
-                frame.lider_var.set((values[1] or "").strip())
-                frame.descripcion_var.set((values[2] or "").strip())
-                criticidad = (values[3] or CRITICIDAD_LIST[0]).strip()
+                frame.lider_var.set(payload.get("lider", ""))
+                frame.descripcion_var.set(payload.get("descripcion", ""))
+                criticidad = (payload.get("criticidad") or CRITICIDAD_LIST[0]).strip()
                 if criticidad in CRITICIDAD_LIST:
                     frame.criticidad_var.set(criticidad)
-                frame.exposicion_var.set((values[4] or "").strip())
-                frame.planes_var.set((values[5] or "").strip())
+                frame.exposicion_var.set(payload.get("exposicion_residual", ""))
+                frame.planes_var.set(payload.get("planes_accion", ""))
+                if hasattr(frame, "case_id_var"):
+                    case_value = payload.get("id_caso", "")
+                    if not case_value:
+                        case_var = getattr(self, "id_caso_var", None)
+                        if case_var and hasattr(case_var, "get"):
+                            case_value = (case_var.get() or "").strip()
+                    frame.case_id_var.set(case_value)
                 self._trigger_import_id_refresh(frame, risk_id, preserve_existing=True)
                 processed += 1
             if duplicate_ids:
@@ -9277,8 +9348,18 @@ class FraudCaseApp:
             return processed
         if section_key == "normas":
             duplicate_ids = []
+            expected_fields = list(self.IMPORT_CONFIG["normas"]["expected_headers"])
+            expected_length = len(expected_fields)
             for values in rows:
-                norm_id = (values[0] or "").strip()
+                if len(values) != expected_length:
+                    raise ValueError(
+                        f"Se esperaban {expected_length} columnas de normas y se recibieron {len(values)}."
+                    )
+                payload = {
+                    field: (values[pos] or "").strip()
+                    for pos, field in enumerate(expected_fields)
+                }
+                norm_id = payload.get("id_norma", "")
                 if not norm_id:
                     continue
                 if any(n.id_var.get().strip() == norm_id for n in self.norm_frames):
@@ -9288,10 +9369,17 @@ class FraudCaseApp:
                 self.add_norm()
                 frame = self.norm_frames[-1]
                 frame.id_var.set(norm_id)
-                frame.descripcion_var.set((values[1] if len(values) > 1 else "").strip())
-                frame.fecha_var.set((values[2] if len(values) > 2 else "").strip())
-                frame.acapite_var.set((values[3] if len(values) > 3 else "").strip())
-                frame._set_detalle_text((values[4] if len(values) > 4 else "").strip())
+                frame.descripcion_var.set(payload.get("descripcion", ""))
+                frame.fecha_var.set(payload.get("fecha_vigencia", ""))
+                frame.acapite_var.set(payload.get("acapite_inciso", ""))
+                frame._set_detalle_text(payload.get("detalle_norma", ""))
+                if hasattr(frame, "case_id_var"):
+                    case_value = payload.get("id_caso", "")
+                    if not case_value:
+                        case_var = getattr(self, "id_caso_var", None)
+                        if case_var and hasattr(case_var, "get"):
+                            case_value = (case_var.get() or "").strip()
+                    frame.case_id_var.set(case_value)
                 processed += 1
             if duplicate_ids:
                 messagebox.showwarning(
@@ -9515,35 +9603,32 @@ class FraudCaseApp:
                 )
             return rows
         if section == "riesgos":
+            fields = [field for field, _label in self.summary_config.get("riesgos", [])]
+            case_id = (dataset.get("caso", {}) or {}).get("id_caso", "")
             return [
-                (
-                    risk.get("id_riesgo", ""),
-                    risk.get("lider", ""),
-                    risk.get("descripcion", ""),
-                    risk.get("criticidad", ""),
-                    risk.get("exposicion_residual", ""),
-                    risk.get("planes_accion", ""),
+                tuple(
+                    (risk or {}).get(field, "") if field != "id_caso" else (risk or {}).get("id_caso", "") or case_id
+                    for field in fields
                 )
                 for risk in dataset.get("riesgos", [])
             ]
         if section == "reclamos":
+            fields = [field for field, _label in self.summary_config.get("reclamos", [])]
+            case_id = (dataset.get("caso", {}) or {}).get("id_caso", "")
             return [
-                (
-                    rec.get("id_reclamo", ""),
-                    rec.get("id_producto", ""),
-                    rec.get("nombre_analitica", ""),
-                    rec.get("codigo_analitica", ""),
+                tuple(
+                    rec.get(field, "") if field != "id_caso" else rec.get("id_caso", "") or case_id
+                    for field in fields
                 )
                 for rec in dataset.get("reclamos", [])
             ]
         if section == "normas":
+            fields = [field for field, _label in self.summary_config.get("normas", [])]
+            case_id = (dataset.get("caso", {}) or {}).get("id_caso", "")
             return [
-                (
-                    norm.get("id_norma", ""),
-                    norm.get("acapite_inciso", ""),
-                    norm.get("fecha_vigencia", ""),
-                    norm.get("descripcion", ""),
-                    norm.get("detalle_norma", "") or norm.get("detalle", ""),
+                tuple(
+                    norm.get(field, "") if field != "id_caso" else norm.get("id_caso", "") or case_id
+                    for field in fields
                 )
                 for norm in dataset.get("normas", [])
             ]
@@ -12708,8 +12793,9 @@ class FraudCaseApp:
         investigator_id = self._normalize_identifier(self.investigator_id_var.get())
         investigator_name = self._sanitize_text(self.investigator_nombre_var.get())
         investigator_role = self._sanitize_text(self.investigator_cargo_var.get()) or "Investigador Principal"
+        case_id_value = self._sanitize_text(self.id_caso_var.get())
         data['caso'] = {
-            "id_caso": self._sanitize_text(self.id_caso_var.get()),
+            "id_caso": case_id_value,
             "id_proceso": self._sanitize_text(self.id_proceso_var.get()),
             "tipo_informe": self._sanitize_text(self.tipo_informe_var.get()),
             "categoria1": self._sanitize_text(self.cat_caso1_var.get()),
@@ -12741,7 +12827,7 @@ class FraudCaseApp:
                     continue
                 reclamos.append({
                     "id_reclamo": claim['id_reclamo'],
-                    "id_caso": "",  # se añade al exportar
+                    "id_caso": (claim.get("id_caso") or case_id_value),
                     "id_producto": prod_data['producto']['id_producto'],
                     "nombre_analitica": claim['nombre_analitica'],
                     "codigo_analitica": claim['codigo_analitica'],
@@ -12772,12 +12858,20 @@ class FraudCaseApp:
         data['productos'] = productos
         data['reclamos'] = reclamos
         data['involucramientos'] = involucs
-        data['riesgos'] = [r.get_data() for r in self.risk_frames]
+        risk_rows = []
+        for r in self.risk_frames:
+            risk_data = r.get_data()
+            if not risk_data:
+                continue
+            risk_data["id_caso"] = risk_data.get("id_caso") or case_id_value
+            risk_rows.append(risk_data)
+        data['riesgos'] = risk_rows
         normas = []
         for n in self.norm_frames:
             norm_data = n.get_data()
             if not norm_data:
                 continue
+            norm_data["id_caso"] = norm_data.get("id_caso") or case_id_value
             normas.append(norm_data)
         data['normas'] = normas
         analysis_widgets = self._analysis_text_widgets()

@@ -267,6 +267,7 @@ class RiskFrame:
         self.modal_factory = modal_factory
 
         self.id_var = tk.StringVar()
+        self.case_id_var = tk.StringVar()
         self.new_risk_var = tk.BooleanVar(value=False)
         self._auto_id_value = ""
         self._id_user_modified = False
@@ -705,6 +706,7 @@ class RiskFrame:
         )
         return {
             "id_riesgo": self.id_var.get().strip(),
+            "id_caso": self.case_id_var.get().strip(),
             "lider": self.lider_var.get().strip(),
             "descripcion": self.descripcion_var.get().strip(),
             "criticidad": self.criticidad_var.get(),
