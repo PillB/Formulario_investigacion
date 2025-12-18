@@ -1,7 +1,8 @@
 import pytest
 
 from settings import (ACCIONADO_OPTIONS, CRITICIDAD_LIST, FLAG_CLIENTE_LIST,
-                      TIPO_ID_LIST, TIPO_SANCION_LIST)
+                      FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_ID_LIST,
+                      TIPO_SANCION_LIST)
 from tests.app_factory import SummaryTableStub, build_summary_app
 from tests.stubs import NormFrameStub, RiskFrameStub
 from tests.summary_cases import SUMMARY_CASES, build_columns
@@ -85,17 +86,23 @@ def test_ingest_summary_rows_create_frames_with_normalized_values(monkeypatch, m
         "T67890",
         "Ana",
         "López",
+        FLAG_COLABORADOR_LIST[0],
         "Division B",
         "Área Comercial",
         "Servicio A",
         "Puesto B",
-        TIPO_SANCION_LIST[0],
         "2023-01-01",
         "2023-02-01",
+        "Agencia Sur",
+        "123456",
+        TIPO_FALTA_LIST[0],
+        TIPO_SANCION_LIST[0],
     ]
     team_rows = app._transform_clipboard_colaboradores([team_row])
     assert app.ingest_summary_rows("colaboradores", team_rows) == 1
     assert [frame.id_var.get() for frame in app.team_frames] == ["T67890"]
+    assert app.team_frames[0].flag_var.get() == FLAG_COLABORADOR_LIST[0]
+    assert app.team_frames[0].tipo_falta_var.get() == TIPO_FALTA_LIST[0]
 
     product_row = ["1234567890123", "12345678", "credito personal", "2500.50"]
     product_rows = app._transform_clipboard_productos([product_row])

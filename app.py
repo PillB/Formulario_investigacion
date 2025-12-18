@@ -146,7 +146,8 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_phone_list, validate_product_dates,
                         validate_product_id, validate_reclamo_id,
                         validate_required_text, validate_risk_id,
-                        validate_team_member_id, validate_process_id)
+                        validate_team_member_id, validate_process_id,
+                        normalize_team_member_identifier)
 
 PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
 if PIL_AVAILABLE:
@@ -571,6 +572,7 @@ class FraudCaseApp:
         ("Crear producto nuevo (vacío)", "add_empty"),
         ("Crear producto heredando del caso", "inherit_case"),
     )
+    COLLABORATOR_SUMMARY_COLUMNS: tuple[tuple[str, str], ...] = TeamMemberFrame.SUMMARY_COLUMNS
     IMPORT_CONFIG = {
         "clientes": {
             "title": "Seleccionar CSV de clientes",
@@ -593,13 +595,15 @@ class FraudCaseApp:
             "initialfile": Path(MASSIVE_SAMPLE_FILES.get("colaboradores", "")).name,
             "expected_headers": (
                 "id_colaborador",
-                "flag",
                 "nombres",
                 "apellidos",
+                "flag",
                 "division",
                 "area",
                 "servicio",
                 "puesto",
+                "fecha_carta_inmediatez",
+                "fecha_carta_renuncia",
                 "nombre_agencia",
                 "codigo_agencia",
                 "tipo_falta",
@@ -8167,18 +8171,7 @@ class FraudCaseApp:
             (
                 "colaboradores",
                 "Colaboradores involucrados",
-                [
-                    ("id", "ID"),
-                    ("nombres", "Nombres"),
-                    ("apellidos", "Apellidos"),
-                    ("division", "División"),
-                    ("area", "Área"),
-                    ("servicio", "Servicio"),
-                    ("puesto", "Puesto"),
-                    ("tipo_sancion", "Tipo sanción"),
-                    ("fecha_carta_inmediatez", "Carta inmediatez"),
-                    ("fecha_carta_renuncia", "Carta renuncia"),
-                ],
+                list(self.COLLABORATOR_SUMMARY_COLUMNS),
             ),
             (
                 "involucramientos",
@@ -8470,26 +8463,48 @@ class FraudCaseApp:
 
     def _transform_clipboard_colaboradores(self, rows):
         sanitized = []
+        field_order = [field for field, _ in self.COLLABORATOR_SUMMARY_COLUMNS]
         for idx, values in enumerate(rows, start=1):
             collaborator = {
-                "id_colaborador": values[0].strip(),
-                "nombres": values[1].strip(),
-                "apellidos": values[2].strip(),
-                "division": values[3].strip(),
-                "area": values[4].strip(),
-                "servicio": values[5].strip(),
-                "puesto": values[6].strip(),
-                "tipo_sancion": values[7].strip(),
-                "fecha_carta_inmediatez": values[8].strip(),
-                "fecha_carta_renuncia": values[9].strip(),
+                field: (values[pos] if pos < len(values) else "").strip()
+                for pos, field in enumerate(field_order)
             }
-            if collaborator["tipo_sancion"] not in TIPO_SANCION_LIST:
+            collaborator["id_colaborador"] = normalize_team_member_identifier(collaborator["id_colaborador"])
+            collaborator["flag"] = collaborator.get("flag", "") or "No aplica"
+            collaborator["tipo_falta"] = collaborator.get("tipo_falta", "") or "No aplica"
+            collaborator["tipo_sancion"] = collaborator.get("tipo_sancion", "") or "No aplica"
+
+            id_message = validate_team_member_id(collaborator["id_colaborador"])
+            if id_message:
+                raise ValueError(f"Colaborador fila {idx}: {id_message}")
+            nombres_message = validate_required_text(
+                collaborator.get("nombres", ""), "los nombres del colaborador"
+            )
+            if nombres_message:
+                raise ValueError(f"Colaborador fila {idx}: {nombres_message}")
+            apellidos_message = validate_required_text(
+                collaborator.get("apellidos", ""), "los apellidos del colaborador"
+            )
+            if apellidos_message:
+                raise ValueError(f"Colaborador fila {idx}: {apellidos_message}")
+            flag_value = collaborator.get("flag", "")
+            if flag_value and flag_value not in FLAG_COLABORADOR_LIST:
+                raise ValueError(
+                    f"Colaborador fila {idx}: el flag '{flag_value}' no está en el catálogo CM."
+                )
+            if collaborator["tipo_falta"] and collaborator["tipo_falta"] not in TIPO_FALTA_LIST:
+                raise ValueError(
+                    f"Colaborador fila {idx}: el tipo de falta no es válido."
+                )
+            if collaborator["tipo_sancion"] and collaborator["tipo_sancion"] not in TIPO_SANCION_LIST:
                 raise ValueError(
                     f"Colaborador fila {idx}: debe seleccionar un tipo de sanción válido."
                 )
-            message = validate_team_member_id(collaborator["id_colaborador"])
-            if message:
-                raise ValueError(f"Colaborador fila {idx}: {message}")
+            agency_message = validate_agency_code(
+                collaborator.get("codigo_agencia", ""), allow_blank=True
+            )
+            if agency_message:
+                raise ValueError(f"Colaborador fila {idx}: {agency_message}")
             carta_inm_msg = validate_date_text(
                 collaborator["fecha_carta_inmediatez"],
                 "la fecha de carta de inmediatez",
@@ -8504,20 +8519,7 @@ class FraudCaseApp:
             )
             if carta_ren_msg:
                 raise ValueError(f"Colaborador fila {idx}: {carta_ren_msg}")
-            sanitized.append(
-                (
-                    collaborator["id_colaborador"],
-                    collaborator["nombres"],
-                    collaborator["apellidos"],
-                    collaborator["division"],
-                    collaborator["area"],
-                    collaborator["servicio"],
-                    collaborator["puesto"],
-                    collaborator["tipo_sancion"],
-                    collaborator["fecha_carta_inmediatez"],
-                    collaborator["fecha_carta_renuncia"],
-                )
-            )
+            sanitized.append(tuple(collaborator.get(field, "") for field in field_order))
         return sanitized
 
     def _resolve_product_type_for_involvement(self, product_id):
@@ -8883,23 +8885,18 @@ class FraudCaseApp:
                 self.sync_main_form_after_import("clientes", stay_on_summary=stay_on_summary)
             return processed
         if section_key == "colaboradores":
+            field_order = [field for field, _ in self.COLLABORATOR_SUMMARY_COLUMNS]
+            expected_length = len(field_order)
             for values in rows:
+                if len(values) != expected_length:
+                    raise ValueError(
+                        f"Se esperaban {expected_length} columnas de colaboradores y se recibieron {len(values)}."
+                    )
                 payload = {
-                    "id_colaborador": (values[0] or "").strip(),
-                    "nombres": (values[1] or "").strip(),
-                    "apellidos": (values[2] or "").strip(),
-                    "division": (values[3] or "").strip(),
-                    "area": (values[4] or "").strip(),
-                    "servicio": (values[5] or "").strip(),
-                    "puesto": (values[6] or "").strip(),
-                    "tipo_sancion": (values[7] or "").strip(),
-                    "fecha_carta_inmediatez": (values[8] or "").strip(),
-                    "fecha_carta_renuncia": (values[9] or "").strip(),
-                    "flag_colaborador": "No aplica",
-                    "nombre_agencia": "",
-                    "codigo_agencia": "",
-                    "tipo_falta": "No aplica",
+                    field: (values[pos] or "").strip()
+                    for pos, field in enumerate(field_order)
                 }
+                payload["flag_colaborador"] = payload.get("flag", "") or payload.get("flag_colaborador", "")
                 hydrated, found = self._hydrate_row_from_details(payload, 'id_colaborador', TEAM_ID_ALIASES)
                 collaborator_id = (hydrated.get('id_colaborador') or '').strip()
                 if not collaborator_id:
@@ -9366,19 +9363,9 @@ class FraudCaseApp:
                 for client in dataset.get("clientes", [])
             ]
         if section == "colaboradores":
+            collaborator_fields = [field for field, _ in self.COLLABORATOR_SUMMARY_COLUMNS]
             return [
-                (
-                    col.get("id_colaborador", ""),
-                    col.get("nombres", ""),
-                    col.get("apellidos", ""),
-                    col.get("division", ""),
-                    col.get("area", ""),
-                    col.get("servicio", ""),
-                    col.get("puesto", ""),
-                    col.get("tipo_sancion", ""),
-                    col.get("fecha_carta_inmediatez", ""),
-                    col.get("fecha_carta_renuncia", ""),
-                )
+                tuple(col.get(field, "") for field in collaborator_fields)
                 for col in dataset.get("colaboradores", [])
             ]
         if section == "involucramientos":
@@ -9766,6 +9753,7 @@ class FraudCaseApp:
             {
                 'nombres': frame.nombres_var.get,
                 'apellidos': frame.apellidos_var.get,
+                'flag': frame.flag_var.get,
                 'flag_colaborador': frame.flag_var.get,
                 'division': frame.division_var.get,
                 'area': frame.area_var.get,
@@ -10483,6 +10471,7 @@ class FraudCaseApp:
             self.team_lookup[lookup_key] = {
                 'nombres': frame.nombres_var.get(),
                 'apellidos': frame.apellidos_var.get(),
+                'flag': frame.flag_var.get(),
                 'division': frame.division_var.get(),
                 'area': frame.area_var.get(),
                 'servicio': frame.servicio_var.get(),
@@ -10491,6 +10480,8 @@ class FraudCaseApp:
                 'fecha_carta_renuncia': frame.fecha_carta_renuncia_var.get(),
                 'nombre_agencia': frame.nombre_agencia_var.get(),
                 'codigo_agencia': frame.codigo_agencia_var.get(),
+                'tipo_falta': frame.tipo_falta_var.get(),
+                'tipo_sancion': frame.tipo_sancion_var.get(),
             }
 
     def _populate_product_frame_from_row(self, frame, row, preserve_existing: bool = False):

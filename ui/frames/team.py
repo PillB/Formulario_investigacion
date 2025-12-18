@@ -30,6 +30,22 @@ class TeamMemberFrame:
 
     ENTITY_LABEL = "colaborador"
     MIN_TEXT_ENTRY_WIDTH = 11
+    SUMMARY_COLUMNS: tuple[tuple[str, str], ...] = (
+        ("id_colaborador", "ID"),
+        ("nombres", "Nombres"),
+        ("apellidos", "Apellidos"),
+        ("flag", "Flag"),
+        ("division", "División"),
+        ("area", "Área"),
+        ("servicio", "Servicio"),
+        ("puesto", "Puesto"),
+        ("fecha_carta_inmediatez", "Carta inmediatez"),
+        ("fecha_carta_renuncia", "Carta renuncia"),
+        ("nombre_agencia", "Nombre agencia"),
+        ("codigo_agencia", "Código agencia"),
+        ("tipo_falta", "Tipo falta"),
+        ("tipo_sancion", "Tipo sanción"),
+    )
 
     def __init__(
         self,
@@ -1485,18 +1501,7 @@ class TeamMemberFrame:
             column_weight=1,
         )
 
-        columns = (
-            ("id", "ID"),
-            ("nombres", "Nombres"),
-            ("apellidos", "Apellidos"),
-            ("division", "División"),
-            ("area", "Área"),
-            ("servicio", "Servicio"),
-            ("puesto", "Puesto"),
-            ("tipo_sancion", "Tipo sanción"),
-            ("fecha_carta_inmediatez", "Carta inmediatez"),
-            ("fecha_carta_renuncia", "Carta renuncia"),
-        )
+        columns = self.SUMMARY_COLUMNS
         tree = ttk.Treeview(summary_frame, columns=[col for col, _ in columns], show="headings", height=5)
         vscroll = ttk.Scrollbar(summary_frame, orient="vertical", command=tree.yview)
         hscroll = ttk.Scrollbar(summary_frame, orient="horizontal", command=tree.xview)
@@ -1542,20 +1547,10 @@ class TeamMemberFrame:
 
         seen_iids: set[str] = set()
         inserted_count = 0
+        field_order = [field for field, _ in self.SUMMARY_COLUMNS]
         for idx, member in enumerate(team_frames):
             data = member.get_data()
-            values = (
-                data.get("id_colaborador", ""),
-                data.get("nombres", ""),
-                data.get("apellidos", ""),
-                data.get("division", ""),
-                data.get("area", ""),
-                data.get("servicio", ""),
-                data.get("puesto", ""),
-                data.get("tipo_sancion", ""),
-                data.get("fecha_carta_inmediatez", ""),
-                data.get("fecha_carta_renuncia", ""),
-            )
+            values = tuple(data.get(field, "") for field in field_order)
             base_iid = data.get("id_colaborador", f"colaborador-{idx+1}")
             iid = build_unique_iid(base_iid, seen_iids)
             tag = "even" if inserted_count % 2 == 0 else "odd"

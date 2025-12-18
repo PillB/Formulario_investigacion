@@ -1,10 +1,10 @@
-id_colaborador,nombres,apellidos,division,area,servicio,puesto,nombre_agencia,codigo_agencia,fecha_actualizacion
-T12345,María,Acuña,Finanzas,Área Operativa,Servicio 1,Analista,Agencia Central,123456,2024-05-15
-T12345,María,Acuña,Finanzas,Área Operativa,Servicio 1,Analista,Agencia Central,123456,2023-07-22
-U00123,Luis,Ramírez,Marketing,Área Comercial,Servicio 2,Gerente,Agencia Sur,654321,2023-09-12
-T54321,Carmen,López,DCA,Área Comercial,Servicio 3,Jefe,Agencia Norte,111111,2024-01-10
-T54321,Carmen,López,DCA,Área Comercial,Servicio 3,Jefe,Agencia Norte,111111,2020-11-20
-Z99999,Julio,Pereira,Canales de atención,Área Comercial,Servicio 4,Analista,Agencia Lima,222222,2024-06-18
-Z99999,Julio,Pereira,Canales de atención,Área Comercial,Servicio 4,Analista,Agencia Lima,222222,2022-02-14
-S50005,Sofía,Núñez,Seguridad,Área de Riesgos,Servicio 5,Especialista,,,2023-11-05
-A60006,Andrés,Quispe,Operaciones,Área de Tecnología,Servicio 6,Coordinador,Agencia Digital,333333,2024-02-27
+id_colaborador,nombres,apellidos,flag,division,area,servicio,puesto,fecha_carta_inmediatez,fecha_carta_renuncia,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion,fecha_actualizacion
+T12345,María,Acuña,Involucrado,Finanzas,Área Operativa,Servicio 1,Analista,2024-05-01,,Agencia Central,123456,Inconducta funcional,Amonestación,2024-05-15
+T12345,María,Acuña,Relacionado,Finanzas,Área Operativa,Servicio 1,Analista,,,Agencia Central,123456,No aplica,No aplica,2023-07-22
+U00123,Luis,Ramírez,Relacionado,Marketing,Área Comercial,Servicio 2,Gerente,,,Agencia Sur,654321,Negligencia funcional,Suspensión 2 días,2023-09-12
+T54321,Carmen,López,Involucrado,DCA,Área Comercial,Servicio 3,Jefe,,,Agencia Norte,111111,Inconducta funcional,Exhortación,2024-01-10
+T54321,Carmen,López,Involucrado,DCA,Área Comercial,Servicio 3,Jefe,,,Agencia Norte,111111,Inconducta funcional,Exhortación,2020-11-20
+Z99999,Julio,Pereira,Relacionado,Canales de atención,Área Comercial,Servicio 4,Analista,,,Agencia Lima,222222,No aplica,No aplica,2024-06-18
+Z99999,Julio,Pereira,Relacionado,Canales de atención,Área Comercial,Servicio 4,Analista,,,Agencia Lima,222222,No aplica,No aplica,2022-02-14
+S50005,Sofía,Núñez,No aplica,Seguridad,Área de Riesgos,Servicio 5,Especialista,,,,No aplica,No aplica,2023-11-05
+A60006,Andrés,Quispe,Relacionado,Operaciones,Área de Tecnología,Servicio 6,Coordinador,,,Agencia Digital,333333,No aplica,No aplica,2024-02-27
