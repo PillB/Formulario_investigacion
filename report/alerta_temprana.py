@@ -41,6 +41,8 @@ SLIDE_HEIGHT_16_9 = Inches(7.5) if Inches else 0
 MARGIN = Inches(0.4) if Inches else 0
 COLUMN_GAP = Inches(0.3) if Inches else 0
 MASTHEAD_HEIGHT = Inches(1.1) if Inches else 0
+SECTION_HEADER_HEIGHT = Inches(0.28) if Inches else 0
+PANEL_PADDING = Inches(0.18) if Inches else 0
 
 
 def _safe_text(value: str | None, placeholder: str = PLACEHOLDER) -> str:
@@ -299,94 +301,90 @@ def _synthesize_section_text(
         fallback_source = timeline
     elif section == "Análisis":
         fallback_source = narrative
-    elif section == "Riesgos":
+    elif section == "Riesgos" or section.startswith("Riesgos"):
         fallback_source = riesgos_text
-    elif section == "Acciones":
+    elif section == "Acciones" or section.startswith("Acciones"):
         fallback_source = acciones_text
     else:  # Responsables
         fallback_source = responsables_text
     return fallback_source or PLACEHOLDER
 
 
-def _add_section_box(slide, left, top, width, height, title: str, body: str):
+def _add_section_panel(slide, left, top, width, height, title: str, body: str, *, accent: RGBColor | None = None):
     if not PPTX_AVAILABLE:
         return None
-    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height)
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = RGBColor(235, 239, 249)
-    shape.line.color.rgb = RGBColor(51, 73, 123)
-    text_frame = shape.text_frame
-    text_frame.clear()
+    panel = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
+    panel.fill.solid()
+    panel.fill.fore_color.rgb = RGBColor(248, 250, 253)
+    panel.line.color.rgb = RGBColor(196, 204, 219)
 
-    title_para = text_frame.paragraphs[0]
-    title_para.text = title
-    title_para.font.size = Pt(16)
-    title_para.font.bold = True
-    title_para.font.color.rgb = RGBColor(36, 64, 112)
+    header = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, SECTION_HEADER_HEIGHT)
+    header.fill.solid()
+    header.fill.fore_color.rgb = accent or RGBColor(230, 233, 240)
+    header.line.fill.background()
+    header_frame = header.text_frame
+    header_frame.clear()
+    header_para = header_frame.paragraphs[0]
+    header_para.text = title
+    header_para.font.size = Pt(16)
+    header_para.font.bold = True
+    header_para.font.color.rgb = RGBColor(32, 45, 71)
 
-    body_para = text_frame.add_paragraph()
-    body_para.text = body
-    body_para.font.size = Pt(12)
-    body_para.space_before = Pt(4)
-    body_para.space_after = Pt(0)
-    body_para.alignment = PP_ALIGN.LEFT
-    return shape
+    text_left = left + PANEL_PADDING
+    text_top = top + SECTION_HEADER_HEIGHT + PANEL_PADDING
+    text_width = width - (2 * PANEL_PADDING)
+    text_height = height - SECTION_HEADER_HEIGHT - (2 * PANEL_PADDING)
+    body_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
+    frame = body_box.text_frame
+    frame.clear()
+    frame.word_wrap = True
+    para = frame.paragraphs[0]
+    para.text = body
+    para.font.size = Pt(12)
+    para.alignment = PP_ALIGN.LEFT
+    para.line_spacing = 1.15
+    return panel
 
 
-def _add_masthead(slide, slide_width, title_text: str, subtitle: str):
+def _add_masthead(slide, slide_width, caso: Mapping[str, object]):
     if not PPTX_AVAILABLE:
         return None
     masthead = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, slide_width, MASTHEAD_HEIGHT)
     masthead.fill.solid()
     masthead.fill.fore_color.rgb = RGBColor(21, 43, 77)
     masthead.line.fill.background()
-    text_frame = masthead.text_frame
-    text_frame.clear()
 
-    title = text_frame.paragraphs[0]
-    title.text = title_text
-    title.font.size = Pt(24)
-    title.font.bold = True
-    title.font.color.rgb = RGBColor(255, 255, 255)
+    left_box = slide.shapes.add_textbox(MARGIN, Inches(0.12), int(slide_width * 0.62), MASTHEAD_HEIGHT - Inches(0.2))
+    left_frame = left_box.text_frame
+    left_frame.clear()
+    title_para = left_frame.paragraphs[0]
+    title_para.text = "Alerta temprana · Reporte/Informe de Alertas Tempranas por Casos de Fraude"
+    title_para.font.size = Pt(20)
+    title_para.font.bold = True
+    title_para.font.color.rgb = RGBColor(255, 255, 255)
 
-    subtitle_para = text_frame.add_paragraph()
-    subtitle_para.text = subtitle
-    subtitle_para.font.size = Pt(14)
-    subtitle_para.font.color.rgb = RGBColor(214, 225, 240)
+    case_line = left_frame.add_paragraph()
+    case_line.text = f"Caso: {_safe_text(caso.get('titulo') or caso.get('resumen'), _default_case_title(caso))}"
+    case_line.font.size = Pt(14)
+    case_line.font.color.rgb = RGBColor(214, 225, 240)
+
+    right_box_width = int(slide_width * 0.32)
+    right_box = slide.shapes.add_textbox(slide_width - right_box_width - MARGIN, Inches(0.12), right_box_width, MASTHEAD_HEIGHT - Inches(0.24))
+    right_frame = right_box.text_frame
+    right_frame.clear()
+    code_para = right_frame.paragraphs[0]
+    code_para.text = f"Código: {_safe_text(caso.get('id_caso'), 'BCP-0XX')}"
+    code_para.font.size = Pt(14)
+    code_para.font.bold = True
+    code_para.font.color.rgb = RGBColor(255, 255, 255)
+    code_para.alignment = PP_ALIGN.RIGHT
+
+    issuer_para = right_frame.add_paragraph()
+    issuer_para.text = f"Emitido por: {_safe_text(caso.get('investigador_nombre') or (caso.get('investigador') or {}).get('nombre'), 'Equipo de investigación')}"
+    issuer_para.font.size = Pt(13)
+    issuer_para.font.color.rgb = RGBColor(214, 225, 240)
+    issuer_para.alignment = PP_ALIGN.RIGHT
     return masthead
-
-
-def _add_header_cards(slide, left, top, width, height, caso: Mapping[str, object], totals: Mapping[str, Decimal]):
-    if not PPTX_AVAILABLE:
-        return None
-    shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = RGBColor(246, 248, 252)
-    shape.line.color.rgb = RGBColor(179, 191, 214)
-    frame = shape.text_frame
-    frame.clear()
-
-    entries = [
-        ("Código", _safe_text(caso.get("id_caso"), "Caso sin código")),
-        ("Tipo", _safe_text(caso.get("tipo_informe"))),
-        ("Categoría", _safe_text(caso.get("categoria1"))),
-        ("Modalidad", _safe_text(caso.get("modalidad"))),
-        ("Proceso", _safe_text(caso.get("proceso"))),
-        (
-            "Fechas",
-            f"{_format_date(caso.get('fecha_de_ocurrencia'))} / {_format_date(caso.get('fecha_de_descubrimiento'))}",
-        ),
-        ("Investigador", _safe_text(caso.get("investigador_nombre") or (caso.get("investigador") or {}).get("nombre"))),
-        ("Monto investigado", _format_amount(totals.get("investigado"))),
-        ("Contingencia", _format_amount(totals.get("contingencia"))),
-    ]
-    for label, value in entries:
-        para = frame.add_paragraph()
-        para.text = f"{label}: {value}"
-        para.font.size = Pt(12)
-        if para.runs:
-            para.runs[0].font.bold = True
-    return shape
 
 
 def build_alerta_temprana_ppt(
@@ -417,98 +415,122 @@ def build_alerta_temprana_ppt(
     presentation.slide_height = SLIDE_HEIGHT_16_9
     slide = presentation.slides.add_slide(presentation.slide_layouts[6])
 
-    totals = _aggregate_amounts(productos if isinstance(productos, list) else [])
-    _add_masthead(
-        slide,
-        presentation.slide_width,
-        title_text="Alerta temprana | " + _safe_text(caso.get("titulo") or caso.get("id_caso"), "Caso sin título"),
-        subtitle=_default_case_title(caso),
-    )
+    _add_masthead(slide, presentation.slide_width, caso)
 
-    body_top = MARGIN + MASTHEAD_HEIGHT
-    column_width = (presentation.slide_width - (2 * MARGIN) - COLUMN_GAP) // 2
+    body_top = MARGIN + MASTHEAD_HEIGHT + Inches(0.05)
+    total_width = presentation.slide_width - (2 * MARGIN) - COLUMN_GAP
+    left_column_width = int(total_width * 0.66)
+    right_column_width = total_width - left_column_width
 
     left_x = MARGIN
-    right_x = MARGIN + column_width + COLUMN_GAP
+    right_x = MARGIN + left_column_width + COLUMN_GAP
 
-    header_height = Inches(2.25)
-    summary_height = Inches(1.5)
-    responsables_height = Inches(1.2)
-    cronologia_height = Inches(1.2)
-    analisis_height = Inches(1.8)
-    riesgos_height = Inches(1.1)
-    acciones_height = Inches(0.9)
+    available_height = presentation.slide_height - body_top - MARGIN
+    section_gap = Inches(0.08)
 
-    _add_header_cards(slide, left_x, body_top, column_width, header_height, caso, totals)
+    left_usable_height = available_height - (2 * section_gap)
+    resumen_height = int(left_usable_height * 0.36)
+    cronologia_height = int(left_usable_height * 0.3)
+    analisis_height = left_usable_height - resumen_height - cronologia_height
+
+    right_usable_height = available_height - (2 * section_gap)
+    riesgos_height = int(right_usable_height * 0.34)
+    acciones_height = int(right_usable_height * 0.26)
+    responsables_height = max(right_usable_height - riesgos_height - acciones_height, int(Inches(1)))
 
     resumen_text = _synthesize_section_text(
         "Resumen", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
     )
-    _add_section_box(slide, left_x, body_top + header_height + Inches(0.1), column_width, summary_height, "Resumen", resumen_text)
-
-    responsables_text = _synthesize_section_text(
-        "Responsables", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
-    )
-    _add_section_box(
+    _add_section_panel(
         slide,
         left_x,
-        body_top + header_height + summary_height + Inches(0.2),
-        column_width,
-        responsables_height,
-        "Responsables",
-        responsables_text,
+        body_top,
+        left_column_width,
+        resumen_height,
+        "Resumen",
+        resumen_text,
+        accent=RGBColor(219, 223, 232),
     )
 
     cronologia_text = _synthesize_section_text(
         "Cronología", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
     )
-    _add_section_box(
+    _add_section_panel(
         slide,
-        right_x,
-        body_top,
-        column_width,
+        left_x,
+        body_top + resumen_height + section_gap,
+        left_column_width,
         cronologia_height,
         "Cronología",
         cronologia_text,
+        accent=RGBColor(219, 223, 232),
     )
 
     analisis_text = _synthesize_section_text(
         "Análisis", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
     )
-    _add_section_box(
+    _add_section_panel(
         slide,
-        right_x,
-        body_top + cronologia_height + Inches(0.1),
-        column_width,
+        left_x,
+        body_top + resumen_height + cronologia_height + (2 * section_gap),
+        left_column_width,
         analisis_height,
         "Análisis",
         analisis_text,
+        accent=RGBColor(219, 223, 232),
     )
 
     riesgos_text = _synthesize_section_text(
-        "Riesgos", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
+        "Riesgos Potenciales", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
     )
-    _add_section_box(
+    _add_section_panel(
         slide,
         right_x,
-        body_top + cronologia_height + analisis_height + Inches(0.2),
-        column_width,
+        body_top,
+        right_column_width,
         riesgos_height,
-        "Riesgos",
+        "Riesgos Potenciales",
         riesgos_text,
+        accent=RGBColor(214, 226, 240),
     )
 
     acciones_text = _synthesize_section_text(
-        "Acciones", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
+        "Acciones Inmediatas", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
     )
-    _add_section_box(
+    _add_section_panel(
         slide,
         right_x,
-        body_top + cronologia_height + analisis_height + riesgos_height + Inches(0.3),
-        column_width,
+        body_top + riesgos_height + section_gap,
+        right_column_width,
         acciones_height,
-        "Acciones",
+        "Acciones Inmediatas",
         acciones_text,
+        accent=RGBColor(214, 226, 240),
+    )
+
+    responsables_text = _synthesize_section_text(
+        "Responsables", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
+    )
+    _add_section_panel(
+        slide,
+        right_x,
+        body_top + riesgos_height + acciones_height + (2 * section_gap),
+        right_column_width,
+        responsables_height,
+        "Responsables",
+        responsables_text,
+        accent=RGBColor(214, 226, 240),
+    )
+
+    notes = slide.notes_slide.notes_text_frame
+    notes.text = (
+        "Plantilla 16:9 con barra superior azul oscuro que expone el tipo de reporte, el caso y los campos de código/"
+        "emisor. El cuerpo usa grilla de dos columnas: izquierda (2/3) con Resumen, Cronología y Análisis apilados;"
+        " derecha (1/3) con Riesgos Potenciales, Acciones Inmediatas y Responsables. Las barras grises de sección"
+        " indican los encabezados. Las anotaciones rojas se usan como tooltips: en Resumen señalan proceso core,"
+        " severidad y clientes impactados; en Cronología remarcan recurrencia y aumento de criticidad; en Análisis"
+        " destacan datos sensibles, alcance transversal y conteos; en Riesgos nombran vulnerabilidad y pérdidas"
+        " potenciales; en Acciones listan bloqueos y límites; Responsables fija dueños al pie derecho."
     )
 
     presentation.save(output_path)
