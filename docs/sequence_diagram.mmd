@@ -9,7 +9,11 @@ sequenceDiagram
     participant Import as Importador CSV (iter_massive_csv_rows)
     participant Autosave as Autoguardado
     participant Logs as logger/logs.csv
-    participant Reporte as Reportes (report_builder)
+    participant Reporte as Reportes base (report_builder)
+    participant Alertas as Alerta temprana (report/alerta_temprana.py)
+    participant Cartas as Cartas (report/carta_inmediatez.py)
+    participant Historico as Históricos h_*.csv
+    participant External as external drive/<id_caso>/
 
     Gestion->>Investigador: Asigna caso y solicita informe
     Investigador->>UI: Abre aplicación y selecciona pestañas
@@ -48,10 +52,17 @@ sequenceDiagram
         Logs-->>Logs: flush a logs.csv y external drive
     end
 
-    Note over Reporte: Guardado final
-    Investigador->>UI: Acciones > Guardar y enviar
+    Note over Reporte: Guardado y exportes extendidos
+    Investigador->>UI: Acciones > Guardar y enviar / exportar
     UI->>Valid: Validación global de todas las pestañas
-    UI->>Reporte: build_report + build_docx + build_editable_deck
-    Reporte-->>Investigador: Exporta JSON/CSV/Markdown/DOCX/PDF/PPTX
+    UI->>Reporte: build_report + build_docx + save_md
+    Reporte-->>Investigador: CSV/JSON/Markdown/DOCX en exports/
+    UI->>Alertas: build_alerta_temprana_ppt()
+    Alertas-->>Investigador: PPTX de alerta temprana
+    UI->>Cartas: Abrir diálogo y generar cartas de inmediatez
+    Cartas-->>Investigador: DOCX + CSV de cartas y fechas en pestaña colaboradores
+    UI->>Historico: append_historical_records -> h_*.csv
+    Historico-->>External: Espejo automático al detectar external drive
+    Historico-->>UI: pending_consolidation.txt cuando falta la unidad externa
     UI->>Autosave: save_temp_version() + backup en external drive
-    UI->>Logs: log_event("export")
+    UI->>Logs: log_event("export", widget_id=btn_docx/md/alerta_temprana/carta_inmediatez)

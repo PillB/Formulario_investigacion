@@ -16,7 +16,12 @@ DEFAULT_SCREEN_HINTS: Dict[str, Sequence[str]] = {
     "riesgos": ["riesgo", "risk"],
     "normas": ["norma"],
     "analisis": ["analisis", "análisis", "analysis"],
-    "acciones": ["accion", "acciones", "guardar", "importar", "borrar", "cargar"],
+    "reportes": ["docx", "markdown", "md", "reporte", "export", "guardar y enviar"],
+    "alertas": ["alerta", "ppt", "pptx", "temprana"],
+    "cartas": ["carta", "inmediatez"],
+    "recuperacion": ["historial", "recuperacion", "recuperación", "autosave"],
+    "consolidacion": ["consolida", "h_", "manifiesto", "pendiente", "external"],
+    "acciones": ["accion", "acciones", "guardar", "importar", "borrar", "cargar", "autosave", "respaldo"],
     "resumen": ["resumen", "summary"],
 }
 

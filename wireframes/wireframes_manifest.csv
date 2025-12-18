@@ -1,0 +1,16 @@
+source,asset_type,output_path,line_count
+layout_hierarchy.mmd,png,layout_hierarchy.png,55
+layout_hierarchy.mmd,sketch,layout_hierarchy_sketch.png,2
+tab01_caso_participantes.mmd,png,tab01_caso_participantes.png,78
+tab01_caso_participantes.mmd,sketch,tab01_caso_participantes_sketch.png,4
+tab02_riesgos.mmd,png,tab02_riesgos.png,17
+tab02_riesgos.mmd,sketch,tab02_riesgos_sketch.png,2
+tab03_normas.mmd,png,tab03_normas.png,14
+tab03_normas.mmd,sketch,tab03_normas_sketch.png,2
+tab04_analisis.mmd,png,tab04_analisis.png,27
+tab04_analisis.mmd,sketch,tab04_analisis_sketch.png,2
+tab05_acciones.mmd,png,tab05_acciones.png,40
+tab05_acciones.mmd,sketch,tab05_acciones_sketch.png,6
+tab06_resumen.mmd,png,tab06_resumen.png,15
+tab06_resumen.mmd,sketch,tab06_resumen_sketch.png,1
+multiple,pdf,wireframes.pdf,14

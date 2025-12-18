@@ -7449,16 +7449,21 @@ class FraudCaseApp:
         self.refresh_autosave_list()
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
 
+    def _resolve_widget_id(self, widget: Optional[tk.Widget], fallback: Optional[str] = None) -> Optional[str]:
+        """Devuelve un identificador estable para registrar eventos de widgets."""
+
+        if widget is None:
+            return fallback
+        try:
+            name = widget.winfo_name()
+            return name or fallback
+        except tk.TclError:
+            return fallback
+
     def _toggle_theme(self):
         palette = ThemeManager.toggle()
         self._reapply_treeview_styles()
-        widget_name = None
-        widget = getattr(self, "theme_toggle_button", None)
-        if widget is not None:
-            try:
-                widget_name = widget.winfo_name() or "theme_toggle_button"
-            except tk.TclError:
-                widget_name = "theme_toggle_button"
+        widget_name = self._resolve_widget_id(getattr(self, "theme_toggle_button", None), "theme_toggle_button")
         message = f"Cambio de tema a {palette['name']}"
         if widget_name:
             message = f"{message} (boton={widget_name})"
@@ -11846,6 +11851,10 @@ class FraudCaseApp:
     def load_autosave(self):
         """Carga el estado guardado automáticamente si el archivo existe."""
 
+        widget_id = self._resolve_widget_id(
+            self.actions_action_bar.buttons.get("load_autosave") if hasattr(self, "actions_action_bar") else None,
+            "btn_load_autosave",
+        )
         candidates = self._discover_autosave_candidates()
         if not candidates:
             return
@@ -11855,7 +11864,7 @@ class FraudCaseApp:
 
         def _log_failures(failures: list[tuple[Path, BaseException]]) -> None:
             for path, failure in failures:
-                log_event("validacion", f"No se pudo cargar {path.name}: {failure}", self.logs)
+                log_event("validacion", f"No se pudo cargar {path.name}: {failure}", self.logs, widget_id=widget_id)
 
         def _on_success(result):
             dataset, form_state = self._parse_persisted_payload(result.payload)
@@ -11874,7 +11883,7 @@ class FraudCaseApp:
                     f"{result.path.name}."
                 )
                 self._last_autosave_notice = message
-                log_event("navegacion", message, self.logs)
+                log_event("navegacion", message, self.logs, widget_id=widget_id)
                 self._notify_user(
                     message,
                     title="Autosave recuperado",
@@ -11891,14 +11900,18 @@ class FraudCaseApp:
             self._report_persistence_failure(
                 label="el autosave", filename=paths[0] if paths else "autosave", error=exc, failures=failures
             )
-            log_event("navegacion", message, self.logs)
+            log_event("navegacion", message, self.logs, widget_id=widget_id)
 
         manager.load_first_valid(paths, on_success=_on_success, on_error=_on_error)
 
     def show_recovery_history_dialog(self) -> None:
         """Muestra un diálogo con los autosaves y checkpoints disponibles."""
 
-        log_event("navegacion", "Usuario abrió historial de recuperación", self.logs)
+        widget_id = self._resolve_widget_id(
+            self.actions_action_bar.buttons.get("recovery_history") if hasattr(self, "actions_action_bar") else None,
+            "btn_recovery_history",
+        )
+        log_event("navegacion", "Usuario abrió historial de recuperación", self.logs, widget_id=widget_id)
         if self._recovery_dialog and self._recovery_dialog.winfo_exists():
             try:
                 self._recovery_dialog.lift()
@@ -14314,20 +14327,27 @@ class FraudCaseApp:
         }
 
     def _generate_report_file(
-        self, extension: str, builder, description: str, *, source_widget: Optional[tk.Widget] = None
+        self,
+        extension: str,
+        builder,
+        description: str,
+        *,
+        source_widget: Optional[tk.Widget] = None,
+        widget_id: Optional[str] = None,
     ) -> None:
         data, folder, case_id = self._prepare_case_data_for_export()
         if not data or not folder or not case_id:
             return
+        resolved_widget_id = self._resolve_widget_id(source_widget, widget_id)
         if extension == "docx" and not self._docx_available:
             warning = f"No se puede generar Word sin python-docx. {DOCX_MISSING_MESSAGE}"
             messagebox.showwarning("Informe Word no disponible", warning)
-            log_event("validacion", warning, self.logs)
+            log_event("validacion", warning, self.logs, widget_id=resolved_widget_id)
             return
         if extension == "pptx" and not self._pptx_available:
             warning = f"No se puede generar la alerta temprana sin python-pptx. {PPTX_MISSING_MESSAGE}"
             messagebox.showwarning("Presentación no disponible", warning)
-            log_event("validacion", warning, self.logs)
+            log_event("validacion", warning, self.logs, widget_id=resolved_widget_id)
             return
         report_path = self._build_report_path(data, folder, extension)
         try:
@@ -14337,14 +14357,14 @@ class FraudCaseApp:
                 "Error al generar informe",
                 f"No se pudo generar el informe {description.lower()}: {exc}",
             )
-            log_event("validacion", f"Error al generar informe {extension}: {exc}", self.logs)
+            log_event("validacion", f"Error al generar informe {extension}: {exc}", self.logs, widget_id=resolved_widget_id)
             return
         self._mirror_exports_to_external_drive([created_path], case_id)
         messagebox.showinfo(
             "Informe generado",
             f"El informe {description} se ha guardado como {created_path.name}.",
         )
-        log_event("navegacion", f"Informe {extension} generado", self.logs)
+        log_event("navegacion", f"Informe {extension} generado", self.logs, widget_id=resolved_widget_id)
         self.flush_logs_now()
         self._play_feedback_sound()
         self._show_success_toast(source_widget)
@@ -14353,7 +14373,7 @@ class FraudCaseApp:
         self._run_export_action(
             getattr(self, "btn_docx", None),
             lambda: self._generate_report_file(
-                "docx", build_docx, "Word (.docx)", source_widget=self.btn_docx
+                "docx", build_docx, "Word (.docx)", source_widget=self.btn_docx, widget_id="btn_docx"
             ),
         )
 
@@ -14361,7 +14381,7 @@ class FraudCaseApp:
         self._run_export_action(
             getattr(self, "btn_md", None),
             lambda: self._generate_report_file(
-                "md", save_md, "Markdown (.md)", source_widget=self.btn_md
+                "md", save_md, "Markdown (.md)", source_widget=self.btn_md, widget_id="btn_md"
             ),
         )
 
@@ -14373,6 +14393,7 @@ class FraudCaseApp:
                 build_alerta_temprana_ppt,
                 "Alerta temprana (.pptx)",
                 source_widget=self.btn_alerta_temprana,
+                widget_id="btn_alerta_temprana",
             ),
         )
 
@@ -14432,6 +14453,7 @@ class FraudCaseApp:
         self._carta_tree = None
 
     def open_carta_inmediatez_dialog(self) -> None:
+        widget_id = self._resolve_widget_id(getattr(self, "btn_carta_inmediatez", None), "btn_carta_inmediatez")
         candidates = self._collect_carta_candidates()
         if not candidates:
             message = (
@@ -14440,7 +14462,7 @@ class FraudCaseApp:
             )
             if not getattr(self, "_suppress_messagebox", False):
                 messagebox.showinfo("Sin colaboradores", message)
-            log_event("validacion", message, self.logs)
+            log_event("validacion", message, self.logs, widget_id=widget_id)
             return
 
         self._carta_rows = candidates
@@ -14504,7 +14526,7 @@ class FraudCaseApp:
 
         dialog.columnconfigure(0, weight=1)
         dialog.rowconfigure(1, weight=1)
-        log_event("navegacion", "Abrió diálogo de carta de inmediatez", self.logs)
+        log_event("navegacion", "Abrió diálogo de carta de inmediatez", self.logs, widget_id=widget_id)
 
     def _generate_selected_cartas(self) -> None:
         tree = getattr(self, "_carta_tree", None)
@@ -14525,6 +14547,7 @@ class FraudCaseApp:
         self._perform_carta_generation(selected)
 
     def _perform_carta_generation(self, members: list[dict[str, str]]) -> None:
+        widget_id = self._resolve_widget_id(getattr(self, "btn_carta_inmediatez", None), "btn_carta_inmediatez")
         case_id = self._normalize_identifier(self.id_caso_var.get())
         investigator_id = self._normalize_identifier(self.investigator_id_var.get())
         errors: list[str] = []
@@ -14542,7 +14565,7 @@ class FraudCaseApp:
             combined = "\n".join(dict.fromkeys(errors))
             if not getattr(self, "_suppress_messagebox", False):
                 messagebox.showerror("Validación de carta", combined)
-            log_event("validacion", combined, self.logs)
+            log_event("validacion", combined, self.logs, widget_id=widget_id)
             return
 
         self.id_caso_var.set(case_id)
@@ -14554,7 +14577,7 @@ class FraudCaseApp:
             message = str(exc)
             if not getattr(self, "_suppress_messagebox", False):
                 messagebox.showerror("No se pudo generar la carta", message)
-            log_event("validacion", message, self.logs)
+            log_event("validacion", message, self.logs, widget_id=widget_id)
             return
         created_files = [Path(path) for path in result.get("files") or []]
         history_paths = [Path(EXPORTS_DIR) / "cartas_inmediatez.csv", Path(EXPORTS_DIR) / "h_cartas_inmediatez.csv"]
@@ -14618,7 +14641,7 @@ class FraudCaseApp:
         )
         if not getattr(self, "_suppress_messagebox", False):
             messagebox.showinfo("Cartas generadas", success_message)
-        log_event("navegacion", success_message, self.logs)
+        log_event("navegacion", success_message, self.logs, widget_id=widget_id)
         self.flush_logs_now()
         self._play_feedback_sound()
         self._show_success_toast(getattr(self, "btn_carta_inmediatez", None))

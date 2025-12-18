@@ -1,4 +1,5 @@
 Formulario_Investigacion_Architecture_and_Data_Flow.pdf
+Formulario_Investigacion_Diagramas_editables.pptx
 external drive/
 exports/
 autosave.json
@@ -8,6 +9,7 @@ __pycache__/
 docs/*.png
 wireframes/*.png
 wireframes/*.pdf
+wireframes/wireframes_generation.log
 
 # Proof assets (not tracked)
 proof/*.png
