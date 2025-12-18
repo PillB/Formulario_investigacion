@@ -166,6 +166,7 @@ el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con la
 - **Permisos**: verifica acceso a `exports/` y `external drive/` si fallan los respaldos.
 - **CSV inválidos**: confirma encabezados/separadores; la app indicará filas omitidas.
 - **Autopoblado**: si un ID existe en `client_details.csv` o `team_details.csv`, se rellenan datos; de lo contrario, se registra advertencia.
+- **Entornos con sandbox**: si un runner restringido aborta con `error running landlock: Sandbox(LandlockRestrict)` al intentar listar o ejecutar archivos, repite los comandos en un entorno estándar sin Landlock (por ejemplo, tu terminal local o un contenedor interactivo sin restricciones). Las pruebas documentadas más abajo deberían ejecutarse sin privilegios especiales.
 
 ### Análisis de causa raíz (clave técnica)
 - **Síntoma observado**: se interpretó que faltaba una validación porque algunas combinaciones carecían de colaborador o cliente.
