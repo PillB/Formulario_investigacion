@@ -701,7 +701,10 @@ class FraudCaseApp:
                 "id_reclamo",
                 "nombre_analitica",
                 "codigo_analitica",
+                "tipo_involucrado",
                 "id_colaborador",
+                "id_cliente_involucrado",
+                "monto_asignado",
             ),
             "expected_keyword": "combinado",
         },
@@ -8201,11 +8204,13 @@ class FraudCaseApp:
             ),
             (
                 "involucramientos",
-                "Asignaciones por colaborador",
+                "Asignaciones de involucrados",
                 [
-                    ("producto", "Producto"),
-                    ("colaborador", "Colaborador"),
-                    ("monto", "Monto asignado"),
+                    ("id_producto", "Producto"),
+                    ("tipo_involucrado", "Tipo"),
+                    ("id_colaborador", "Colaborador"),
+                    ("id_cliente_involucrado", "Cliente involucrado"),
+                    ("monto_asignado", "Monto asignado"),
                 ],
             ),
             (
@@ -8344,6 +8349,8 @@ class FraudCaseApp:
         allowed_counts = expected_columns
         if key == "productos":
             allowed_counts = {expected_columns, expected_columns - 3}
+        if key == "involucramientos":
+            allowed_counts = {expected_columns, 3}
         try:
             clipboard_text = self.clipboard_get()
         except tk.TclError:
@@ -8562,12 +8569,48 @@ class FraudCaseApp:
                 return (tipo_var.get() or "").strip()
         return ""
 
+    def _resolve_client_type_for_involvement(self, client_id: str) -> str:
+        """Obtiene el tipo de ID de un cliente desde formularios o catálogos."""
+
+        client_id = (client_id or "").strip()
+        if not client_id:
+            return ""
+        finder = getattr(self, "_find_client_frame", None)
+        if callable(finder):
+            frame = finder(client_id)
+            tipo_var = getattr(frame, "tipo_id_var", None) if frame else None
+            if tipo_var and hasattr(tipo_var, "get"):
+                tipo_value = (tipo_var.get() or "").strip()
+                if tipo_value:
+                    return tipo_value
+        try:
+            lookup = self._get_detail_lookup("id_cliente")
+        except Exception:
+            lookup = None
+        details = lookup.get(client_id) if isinstance(lookup, Mapping) else None
+        if isinstance(details, Mapping):
+            tipo_value = (details.get("tipo_id") or details.get("tipo") or "").strip()
+            if tipo_value:
+                return tipo_value
+        return ""
+
     def _transform_clipboard_involucramientos(self, rows):
         sanitized = []
         for idx, values in enumerate(rows, start=1):
-            product_id = (values[0] or "").strip()
-            collaborator_id = (values[1] or "").strip()
-            amount_text = (values[2] or "").strip()
+            normalized_values = [(value or "").strip() for value in values]
+            if len(normalized_values) == 3:
+                normalized_values = [
+                    normalized_values[0],
+                    "colaborador",
+                    normalized_values[1],
+                    "",
+                    normalized_values[2],
+                ]
+            if len(normalized_values) != 5:
+                raise ValueError(
+                    f"Involucramiento fila {idx}: se esperaban 5 columnas y se recibieron {len(normalized_values)}."
+                )
+            product_id, tipo_involucrado, collaborator_id, client_id, amount_text = normalized_values
             tipo_producto = self._resolve_product_type_for_involvement(product_id)
             if tipo_producto:
                 product_message = validate_product_id(tipo_producto, product_id)
@@ -8578,9 +8621,22 @@ class FraudCaseApp:
                 )
             if product_message:
                 raise ValueError(f"Involucramiento fila {idx}: {product_message}")
-            collaborator_message = validate_team_member_id(collaborator_id)
-            if collaborator_message:
-                raise ValueError(f"Involucramiento fila {idx}: {collaborator_message}")
+            tipo_normalizado = (tipo_involucrado or "colaborador").strip().lower()
+            if tipo_normalizado not in {"colaborador", "cliente"}:
+                raise ValueError(
+                    f"Involucramiento fila {idx}: el tipo de involucrado debe ser colaborador o cliente."
+                )
+            if tipo_normalizado == "colaborador":
+                collaborator_message = validate_team_member_id(collaborator_id)
+                if collaborator_message:
+                    raise ValueError(f"Involucramiento fila {idx}: {collaborator_message}")
+                client_id = ""
+            else:
+                client_tipo = self._resolve_client_type_for_involvement(client_id)
+                client_message = validate_client_id(client_tipo, client_id)
+                if client_message:
+                    raise ValueError(f"Involucramiento fila {idx}: {client_message}")
+                collaborator_id = ""
             amount_message, _decimal_value, normalized_amount = validate_money_bounds(
                 amount_text,
                 "el monto asignado",
@@ -8588,7 +8644,15 @@ class FraudCaseApp:
             )
             if amount_message:
                 raise ValueError(f"Involucramiento fila {idx}: {amount_message}")
-            sanitized.append((product_id, collaborator_id, normalized_amount))
+            sanitized.append(
+                (
+                    product_id,
+                    tipo_normalizado,
+                    collaborator_id,
+                    client_id,
+                    normalized_amount,
+                )
+            )
         return sanitized
 
     def _transform_clipboard_productos(self, rows):
@@ -8934,11 +8998,19 @@ class FraudCaseApp:
                 return None
 
             for idx, values in enumerate(rows, start=1):
-                product_id = (values[0] or "").strip()
-                collaborator_id = (values[1] or "").strip()
-                amount_text = (values[2] or "").strip()
-                if not product_id or not collaborator_id:
+                normalized = [(value or "").strip() for value in values]
+                if len(normalized) != 5:
+                    raise ValueError(
+                        f"Involucramiento fila {idx}: se esperaban 5 columnas y se recibieron {len(normalized)}."
+                    )
+                product_id, tipo_involucrado, collaborator_id, client_id, amount_text = normalized
+                if not product_id:
                     continue
+                tipo_norm = (tipo_involucrado or "colaborador").lower()
+                if tipo_norm not in {"colaborador", "cliente"}:
+                    raise ValueError(
+                        f"Involucramiento fila {idx}: el tipo de involucrado debe ser colaborador o cliente."
+                    )
                 product_frame = self._find_product_frame(product_id) or _fallback_frame(getattr(self, 'product_frames', []), product_id)
                 if not product_frame:
                     product_payload, product_found = self._hydrate_row_from_details(
@@ -8963,24 +9035,7 @@ class FraudCaseApp:
                     notify_on_missing=True,
                     preserve_existing=True,
                 )
-                team_frame = self._find_team_frame(collaborator_id) or _fallback_frame(getattr(self, 'team_frames', []), collaborator_id)
-                if not team_frame:
-                    collaborator_payload, collaborator_found = self._hydrate_row_from_details(
-                        {"id_colaborador": collaborator_id},
-                        'id_colaborador',
-                        TEAM_ID_ALIASES,
-                    )
-                    if not collaborator_found:
-                        raise ValueError(
-                            f"Involucramiento fila {idx}: el colaborador '{collaborator_id}' no existe en el formulario ni en los catálogos de detalle."
-                        )
-                    team_frame, _created = self._ensure_team_member_exists(collaborator_id, collaborator_payload)
-                self._trigger_import_id_refresh(
-                    team_frame,
-                    collaborator_id,
-                    notify_on_missing=True,
-                    preserve_existing=True,
-                )
+
                 amount_message, _amount_decimal, normalized_amount = validate_money_bounds(
                     amount_text,
                     "el monto asignado",
@@ -8988,20 +9043,75 @@ class FraudCaseApp:
                 )
                 if amount_message:
                     raise ValueError(f"Involucramiento fila {idx}: {amount_message}")
-                existing_row = next(
-                    (inv for inv in getattr(product_frame, 'involvements', []) if inv.team_var.get().strip() == collaborator_id),
-                    None,
-                )
-                if not existing_row:
-                    existing_row = self._obtain_involvement_slot(product_frame)
-                existing_row.team_var.set(collaborator_id)
-                team_widget = getattr(existing_row, 'team_cb', None)
-                if team_widget is not None:
-                    try:
-                        team_widget.set(collaborator_id)
-                    except tk.TclError:
-                        pass
-                existing_row.monto_var.set(normalized_amount)
+
+                if tipo_norm == "colaborador":
+                    team_frame = self._find_team_frame(collaborator_id) or _fallback_frame(getattr(self, 'team_frames', []), collaborator_id)
+                    if not team_frame:
+                        collaborator_payload, collaborator_found = self._hydrate_row_from_details(
+                            {"id_colaborador": collaborator_id},
+                            'id_colaborador',
+                            TEAM_ID_ALIASES,
+                        )
+                        if not collaborator_found:
+                            raise ValueError(
+                                f"Involucramiento fila {idx}: el colaborador '{collaborator_id}' no existe en el formulario ni en los catálogos de detalle."
+                            )
+                        team_frame, _created = self._ensure_team_member_exists(collaborator_id, collaborator_payload)
+                    self._trigger_import_id_refresh(
+                        team_frame,
+                        collaborator_id,
+                        notify_on_missing=True,
+                        preserve_existing=True,
+                    )
+                    existing_row = next(
+                        (inv for inv in getattr(product_frame, 'involvements', []) if inv.team_var.get().strip() == collaborator_id),
+                        None,
+                    )
+                    if not existing_row:
+                        existing_row = self._obtain_involvement_slot(product_frame)
+                    existing_row.team_var.set(collaborator_id)
+                    team_widget = getattr(existing_row, 'team_cb', None)
+                    if team_widget is not None:
+                        try:
+                            team_widget.set(collaborator_id)
+                        except tk.TclError:
+                            pass
+                    target_row = existing_row
+                else:
+                    client_frame = self._find_client_frame(client_id) or _fallback_frame(getattr(self, 'client_frames', []), client_id)
+                    if not client_frame:
+                        client_payload, client_found = self._hydrate_row_from_details(
+                            {"id_cliente": client_id},
+                            'id_cliente',
+                            CLIENT_ID_ALIASES,
+                        )
+                        if not client_found:
+                            raise ValueError(
+                                f"Involucramiento fila {idx}: el cliente '{client_id}' no existe en el formulario ni en los catálogos de detalle."
+                            )
+                        client_frame, _created = self._ensure_client_exists(client_id, client_payload)
+                    existing_row = next(
+                        (
+                            inv
+                            for inv in getattr(product_frame, 'client_involvements', [])
+                            if getattr(getattr(inv, 'client_var', None), 'get', lambda: "")().strip()
+                            == client_id
+                        ),
+                        None,
+                    )
+                    if not existing_row:
+                        existing_row = self._obtain_client_involvement_slot(product_frame)
+                    if hasattr(existing_row, 'client_var'):
+                        existing_row.client_var.set(client_id)
+                    client_widget = getattr(existing_row, 'client_cb', None)
+                    if client_widget is not None:
+                        try:
+                            client_widget.set(client_id)
+                        except tk.TclError:
+                            pass
+                    target_row = existing_row
+
+                target_row.monto_var.set(normalized_amount)
                 processed += 1
             if processed:
                 self._notify_dataset_changed(summary_sections="involucramientos")
@@ -9378,7 +9488,9 @@ class FraudCaseApp:
             return [
                 (
                     inv.get("id_producto", ""),
+                    inv.get("tipo_involucrado", ""),
                     inv.get("id_colaborador", ""),
+                    inv.get("id_cliente_involucrado", ""),
                     inv.get("monto_asignado", ""),
                 )
                 for inv in dataset.get("involucramientos", [])
@@ -9562,24 +9674,94 @@ class FraudCaseApp:
                 team_row, team_found = self._hydrate_row_from_details(raw_row, 'id_colaborador', TEAM_ID_ALIASES)
                 product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
                 collaborator_id = (team_row.get('id_colaborador') or '').strip()
-                involvement_pairs = parse_involvement_entries(raw_row.get('involucramiento', ''))
-                validated_pairs = []
-                for collaborator, amount_text in involvement_pairs:
+                involvement_map: dict[tuple[str, str, str], dict[str, str]] = {}
+
+                def _resolve_client_tipo(client_identifier: str) -> str:
+                    return self._resolve_client_type_for_involvement(client_identifier)
+
+                def _append_involvement_entry(tipo: str, collab: str, client: str, amount_text: str, *, requires_amount: bool = False):
+                    tipo_norm = (tipo or "colaborador").strip().lower()
+                    collab = (collab or "").strip()
+                    client = (client or "").strip()
+                    if tipo_norm not in {"colaborador", "cliente"}:
+                        return
+                    if tipo_norm == "colaborador" and not collab:
+                        return
+                    if tipo_norm == "cliente" and not client:
+                        return
+                    if tipo_norm == "colaborador":
+                        id_message = validate_team_member_id(collab)
+                    else:
+                        id_message = validate_client_id(_resolve_client_tipo(client), client)
+                    if id_message:
+                        raise ValueError(
+                            f"Involucramiento fila {index}: {id_message}"
+                        )
                     cleaned_amount = (amount_text or '').strip()
-                    if not cleaned_amount:
-                        validated_pairs.append((collaborator, cleaned_amount))
-                        continue
                     label = (
-                        f"Monto asignado del colaborador {collaborator or 'sin ID'} "
+                        f"Monto asignado del {tipo_norm} {(collab or client) or 'sin ID'} "
                         f"en el producto {(raw_row.get('id_producto') or 'sin ID')}"
                     )
-                    error, _amount, normalized = validate_money_bounds(cleaned_amount, label)
-                    if error:
-                        raise ValueError(error)
-                    validated_pairs.append((collaborator, normalized or cleaned_amount))
-                involvement_pairs = validated_pairs
-                if not involvement_pairs and collaborator_id and raw_row.get('monto_asignado'):
-                    involvement_pairs = [(collaborator_id, (raw_row.get('monto_asignado') or '').strip())]
+                    if cleaned_amount:
+                        error, _amount, normalized = validate_money_bounds(
+                            cleaned_amount,
+                            label,
+                            allow_blank=True,
+                        )
+                        if error:
+                            raise ValueError(error)
+                        cleaned_amount = normalized or cleaned_amount
+                    key = (tipo_norm, collab if tipo_norm == 'colaborador' else '', client if tipo_norm == 'cliente' else '')
+                    entry = {
+                        'tipo_involucrado': tipo_norm,
+                        'id_colaborador': collab if tipo_norm == 'colaborador' else '',
+                        'id_cliente_involucrado': client if tipo_norm == 'cliente' else '',
+                        'monto_asignado': cleaned_amount,
+                        'requires_amount': requires_amount,
+                    }
+                    existing = involvement_map.get(key)
+                    if not existing:
+                        involvement_map[key] = entry
+                    else:
+                        entry['requires_amount'] = existing.get('requires_amount', False) or requires_amount
+                        if cleaned_amount and not (existing.get('monto_asignado') or ""):
+                            existing.update({**entry, 'monto_asignado': cleaned_amount, 'requires_amount': entry['requires_amount']})
+                        else:
+                            existing['requires_amount'] = entry['requires_amount']
+
+                _append_involvement_entry(
+                    raw_row.get('tipo_involucrado', ''),
+                    raw_row.get('id_colaborador', ''),
+                    raw_row.get('id_cliente_involucrado', ''),
+                    raw_row.get('monto_asignado', ''),
+                    requires_amount=bool(raw_row.get('tipo_involucrado') or raw_row.get('monto_asignado')),
+                )
+                for collaborator, amount_text in parse_involvement_entries(raw_row.get('involucramiento', '')):
+                    _append_involvement_entry("colaborador", collaborator, "", amount_text, requires_amount=True)
+                if not involvement_map and collaborator_id and raw_row.get('monto_asignado'):
+                    _append_involvement_entry("colaborador", collaborator_id, "", raw_row.get('monto_asignado', ''), requires_amount=True)
+
+                involvement_list: list[dict[str, str]] = []
+                for involvement in involvement_map.values():
+                    label_subject = involvement.get('id_colaborador') or involvement.get('id_cliente_involucrado') or 'sin ID'
+                    label = (
+                        f"Monto asignado del {involvement.get('tipo_involucrado', 'involucrado')} "
+                        f"{label_subject} en el producto {(raw_row.get('id_producto') or 'sin ID')}"
+                    )
+                    amount_value = involvement.get('monto_asignado', '')
+                    requires_amount = bool(involvement.get('requires_amount'))
+                    if amount_value or requires_amount:
+                        msg, _amount, normalized_amount = validate_money_bounds(
+                            amount_value,
+                            label,
+                            allow_blank=not requires_amount,
+                        )
+                        if msg:
+                            raise ValueError(msg)
+                        involvement['monto_asignado'] = normalized_amount or amount_value
+                    involvement.pop('requires_amount', None)
+                    involvement_list.append(involvement)
+
                 prepared_rows.append(
                     {
                         'raw_row': raw_row,
@@ -9589,7 +9771,7 @@ class FraudCaseApp:
                         'team_found': team_found,
                         'product_row': product_row,
                         'product_found': product_found,
-                        'involvement_pairs': involvement_pairs,
+                        'involvements': involvement_list,
                     }
                 )
             return prepared_rows
@@ -9672,7 +9854,7 @@ class FraudCaseApp:
         """Obtiene el diccionario de detalles considerando alias configurados."""
 
         normalized = normalize_detail_catalog_key(id_column)
-        lookup = self.detail_lookup_by_id.get(normalized)
+        lookup = getattr(self, 'detail_lookup_by_id', {}).get(normalized)
         if isinstance(lookup, dict):
             return lookup
         candidate_keys = [normalized]
@@ -10286,6 +10468,22 @@ class FraudCaseApp:
             return empty
         product_frame.add_involvement()
         return product_frame.involvements[-1]
+
+    def _obtain_client_involvement_slot(self, product_frame):
+        empty = next(
+            (
+                inv
+                for inv in getattr(product_frame, 'client_involvements', [])
+                if not getattr(getattr(inv, 'client_var', None), 'get', lambda: "")().strip()
+            ),
+            None,
+        )
+        if empty:
+            return empty
+        if hasattr(product_frame, 'add_client_involvement'):
+            product_frame.add_client_involvement()
+            return product_frame.client_involvements[-1]
+        return None
 
     def _trigger_import_id_refresh(self, frame, identifier, notify_on_missing=False, preserve_existing=False):
         """Ejecuta ``on_id_change`` tras importaciones evitando mensajes redundantes.
@@ -10991,38 +11189,85 @@ class FraudCaseApp:
                     changes_detected = changes_detected or new_product or bool(product_row)
                     if not product_found and 'id_producto' in self.detail_catalogs:
                         missing_products.append(product_id)
-                involvement_pairs = entry.get('involvement_pairs') or []
-                if product_frame and involvement_pairs:
-                    for collab_id, amount in involvement_pairs:
-                        collab_id = (collab_id or '').strip()
-                        if not collab_id:
+                involvements = entry.get('involvements') or []
+                if product_frame and involvements:
+                    for involvement in involvements:
+                        if not isinstance(involvement, Mapping):
                             continue
-                        collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
-                        _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
-                        if created_team:
-                            created_records += 1
-                            changes_detected = True
-                        changes_detected = changes_detected or created_team
-                        if not collab_found and 'id_colaborador' in self.detail_catalogs:
-                            missing_team.append(collab_id)
-                        inv_row = next((inv for inv in product_frame.involvements if inv.team_var.get().strip() == collab_id), None)
-                        if not inv_row:
-                            inv_row = self._obtain_involvement_slot(product_frame)
-                            created_records += 1
-                            changes_detected = True
-                        inv_row.team_var.set(collab_id)
-                        amount_text = (amount or '').strip()
+                        tipo_norm = (involvement.get('tipo_involucrado') or 'colaborador').strip().lower()
+                        amount_text = (involvement.get('monto_asignado') or '').strip()
+                        label_subject = involvement.get('id_colaborador') if tipo_norm == 'colaborador' else involvement.get('id_cliente_involucrado')
                         label = (
-                            f"Monto asignado del colaborador {collab_id or 'sin ID'} "
+                            f"Monto asignado del {tipo_norm} {(label_subject or '').strip() or 'sin ID'} "
                             f"en el producto {product_id or 'sin ID'}"
                         )
                         error, _amount, normalized_text = validate_money_bounds(
                             amount_text,
                             label,
+                            allow_blank=True,
                         )
                         if error:
                             raise ValueError(error)
-                        inv_row.monto_var.set(normalized_text or amount_text)
+                        amount_value = normalized_text or amount_text
+                        if tipo_norm == 'cliente':
+                            client_id = (involvement.get('id_cliente_involucrado') or '').strip()
+                            if not client_id:
+                                continue
+                            client_details, client_found = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
+                            self._ensure_client_exists(client_id, client_details)
+                            if not client_found and 'id_cliente' in self.detail_catalogs:
+                                missing_clients.append(client_id)
+                            inv_row = next(
+                                (
+                                    inv
+                                    for inv in getattr(product_frame, 'client_involvements', [])
+                                    if getattr(getattr(inv, 'client_var', None), 'get', lambda: "")().strip() == client_id
+                                ),
+                                None,
+                            )
+                            if not inv_row:
+                                inv_row = self._obtain_client_involvement_slot(product_frame)
+                                if inv_row is not None:
+                                    created_records += 1
+                                    changes_detected = True
+                            if inv_row is None:
+                                continue
+                            if hasattr(inv_row, 'client_var'):
+                                inv_row.client_var.set(client_id)
+                            client_widget = getattr(inv_row, 'client_cb', None)
+                            if client_widget is not None:
+                                try:
+                                    client_widget.set(client_id)
+                                except tk.TclError:
+                                    pass
+                            target_row = inv_row
+                        else:
+                            collab_id = (involvement.get('id_colaborador') or '').strip()
+                            if not collab_id:
+                                continue
+                            collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
+                            _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
+                            if created_team:
+                                created_records += 1
+                                changes_detected = True
+                            changes_detected = changes_detected or created_team
+                            if not collab_found and 'id_colaborador' in self.detail_catalogs:
+                                missing_team.append(collab_id)
+                            inv_row = next((inv for inv in product_frame.involvements if inv.team_var.get().strip() == collab_id), None)
+                            if not inv_row:
+                                inv_row = self._obtain_involvement_slot(product_frame)
+                                created_records += 1
+                                changes_detected = True
+                            inv_row.team_var.set(collab_id)
+                            team_widget = getattr(inv_row, 'team_cb', None)
+                            if team_widget is not None:
+                                try:
+                                    team_widget.set(collab_id)
+                                except tk.TclError:
+                                    pass
+                            target_row = inv_row
+
+                        target_row.monto_var.set(amount_value)
                         changes_detected = True
 
         def finalize():
@@ -13872,7 +14117,12 @@ class FraudCaseApp:
         )
         write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'], historical_name='productos')
         write_csv('producto_reclamo.csv', data['reclamos'], ['id_reclamo', 'id_caso', 'id_producto', 'nombre_analitica', 'codigo_analitica'], historical_name='producto_reclamo')
-        write_csv('involucramiento.csv', data['involucramientos'], ['id_producto', 'id_caso', 'id_colaborador', 'monto_asignado'], historical_name='involucramiento')
+        write_csv(
+            'involucramiento.csv',
+            data['involucramientos'],
+            ['id_producto', 'id_caso', 'tipo_involucrado', 'id_colaborador', 'id_cliente_involucrado', 'monto_asignado'],
+            historical_name='involucramiento',
+        )
         write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'], historical_name='detalles_riesgo')
         write_csv(
             'detalles_norma.csv',

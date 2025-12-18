@@ -27,6 +27,8 @@ def test_import_combined_creates_entities_and_prevents_duplicates(monkeypatch, m
             'id_producto': '1234567890123',
             'tipo_producto': 'Crédito personal',
             'monto_investigado': '1000.00',
+            'tipo_involucrado': 'colaborador',
+            'monto_asignado': '120.00',
             'involucramiento': 'T12345:120.00;T54321:80.00',
         },
         {
@@ -36,8 +38,10 @@ def test_import_combined_creates_entities_and_prevents_duplicates(monkeypatch, m
             'id_producto': '1234567890123',
             'tipo_producto': 'Crédito personal',
             'monto_investigado': '1000.00',
-            'involucramiento': '',
+            'tipo_involucrado': 'cliente',
+            'id_cliente_involucrado': '12345678',
             'monto_asignado': '150.50',
+            'involucramiento': '',
         },
     ]
     monkeypatch.setattr(
@@ -56,15 +60,21 @@ def test_import_combined_creates_entities_and_prevents_duplicates(monkeypatch, m
     assert sorted(team_ids) == ['T12345', 'T54321']
     assert product_ids == ['1234567890123']
 
-    involvement_records = []
+    collaborator_records = []
+    client_records = []
     for frame in app.product_frames:
         if frame.id_var.get() != '1234567890123':
             continue
         for inv in frame.involvements:
             if not inv.team_var.get():
                 continue
-            involvement_records.append((inv.team_var.get(), inv.monto_var.get()))
-    assert sorted(involvement_records) == [('T12345', '150.50'), ('T54321', '80.00')]
+            collaborator_records.append((inv.team_var.get(), inv.monto_var.get()))
+        for inv in frame.client_involvements:
+            if not inv.client_var.get():
+                continue
+            client_records.append((inv.client_var.get(), inv.monto_var.get()))
+    assert sorted(collaborator_records) == [('T12345', '120.00'), ('T54321', '80.00')]
+    assert client_records == [('12345678', '150.50')]
 
     assert app.save_auto_called is True
     assert app.sync_calls == ['datos combinados']
@@ -133,8 +143,8 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
             },
         },
         'id_colaborador': {
-            'T0001': {
-                'id_colaborador': 'T0001',
+            'T00001': {
+                'id_colaborador': 'T00001',
                 'area': 'Comercial',
                 'tipo_sancion': TIPO_SANCION_LIST[0],
             },
@@ -154,19 +164,19 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
                 'id_cliente': ' CLI-001 ',
                 'telefonos': '',
                 'correos': '',
-                'id_colaborador': ' T0001 ',
+                'id_colaborador': ' T00001 ',
                 'id_producto': ' PRD-001 ',
-                'involucramiento': ' T0001 : 200.50 ; T9999 : 30.00 ',
+                'involucramiento': ' T00001 : 200.50 ; T99999 : 30.00 ',
             },
         {
             'id_cliente': 'CLI-002',
-            'id_colaborador': 'T1111',
+            'id_colaborador': 'T11111',
             'id_producto': 'PRD-001',
             'involucramiento': '',
         },
         {
             'id_cliente': 'CLI-001',
-            'id_colaborador': 'T0001',
+            'id_colaborador': 'T00001',
             'id_producto': 'PRD-001',
             'involucramiento': '',
             'monto_asignado': ' 50.75 ',
@@ -196,11 +206,11 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
         for inv in product_frame.involvements
         if inv.team_var.get()
     )
-    assert involvement_records == [('T0001', '50.75'), ('T9999', '30.00')]
+    assert involvement_records == [('T00001', '50.75'), ('T11111', ''), ('T99999', '30.00')]
 
     reported = {label: ids for label, ids in app.report_calls}
     assert set(reported.get('clientes', [])) == {'CLI-002'}
-    assert set(reported.get('colaboradores', [])) == {'T1111', 'T9999'}
+    assert set(reported.get('colaboradores', [])) == {'T11111', 'T99999'}
 
 
 @pytest.mark.parametrize(
@@ -328,6 +338,33 @@ def test_import_combined_normalizes_involvement_amounts_without_two_decimals(
     assert messagebox_spy.errors == []
 
 
+def test_import_combined_rejects_missing_structured_involvement_amount(monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+    rows = [
+        {
+            'id_cliente': '12345678',
+            'id_colaborador': 'T12345',
+            'id_producto': 'PRD-123',
+            'tipo_producto': 'Crédito personal',
+            'monto_investigado': '100.00',
+            'tipo_involucrado': 'colaborador',
+            'monto_asignado': '',
+            'involucramiento': '',
+        }
+    ]
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter(rows),
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        app.import_combined(filename="dummy.csv")
+
+    assert "monto asignado" in str(excinfo.value).lower()
+    assert messagebox_spy.errors
+
+
 def test_import_combined_preserves_existing_product_fields(monkeypatch, messagebox_spy):
     app = build_import_app(monkeypatch)
     existing_product = ProductFrameStub()
@@ -340,7 +377,7 @@ def test_import_combined_preserves_existing_product_fields(monkeypatch, messageb
     combined_rows = [
         {
             'id_cliente': 'CLI-NEW',
-            'id_colaborador': 'TNEW01',
+            'id_colaborador': 'T12001',
             'id_producto': 'PRD-KEPT',
             'tipo_producto': 'Tarjeta de crédito',
             'monto_investigado': '100.00',
@@ -366,7 +403,7 @@ def test_import_combined_preserves_existing_product_fields(monkeypatch, messageb
         for inv in product_frame.involvements
         if inv.team_var.get()
     ]
-    assert involvement_records == [('TNEW01', '25.00')]
+    assert involvement_records == [('T12001', '25.00')]
 
 
 def test_import_risks_and_norms_hydrate_from_catalogs(monkeypatch, messagebox_spy):

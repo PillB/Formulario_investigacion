@@ -2558,12 +2558,15 @@ def test_transform_summary_involucramientos_formats_amount():
 
     sanitized = app._transform_summary_clipboard_rows(
         "involucramientos",
-        [["PRD-001", "T12345", "001.50"], ["PRD-002", "T54321", "10.5"]],
+        [
+            ["PRD-001", "colaborador", "T12345", "", "001.50"],
+            ["PRD-002", "cliente", "", "CL-001", "10.5"],
+        ],
     )
 
     assert sanitized == [
-        ("PRD-001", "T12345", "1.50"),
-        ("PRD-002", "T54321", "10.50"),
+        ("PRD-001", "colaborador", "T12345", "", "1.50"),
+        ("PRD-002", "cliente", "", "CL-001", "10.50"),
     ]
 
 
@@ -2573,7 +2576,7 @@ def test_transform_summary_involucramientos_rejects_invalid_amount():
     with pytest.raises(ValueError) as excinfo:
         app._transform_summary_clipboard_rows(
             "involucramientos",
-            [["PRD-001", "T12345", "10.123"]],
+            [["PRD-001", "colaborador", "T12345", "", "10.123"]],
         )
 
     assert "dos decimales" in str(excinfo.value)
@@ -2643,19 +2646,27 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
             self._target_var.set(value)
 
     class _DummyInvolvement:
-        def __init__(self, team_id=""):
+        def __init__(self, team_id="", client_id=""):
             self.team_var = DummyVar(team_id)
+            self.client_var = DummyVar(client_id)
             self.monto_var = DummyVar("")
             self.team_cb = _DummyCombo(self.team_var)
+            self.client_cb = _DummyCombo(self.client_var)
 
     class _ProductFrameStub:
         def __init__(self, product_id):
             self.id_var = DummyVar(product_id)
             self.involvements = []
+            self.client_involvements = []
 
         def add_involvement(self):
             row = _DummyInvolvement()
             self.involvements.append(row)
+            return row
+
+        def add_client_involvement(self):
+            row = _DummyInvolvement(client_id="")
+            self.client_involvements.append(row)
             return row
 
         def on_id_change(self, *_args, **_kwargs):
@@ -2671,8 +2682,14 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
     existing_row = _DummyInvolvement("T12345")
     existing_row.monto_var.set("")
     product_frame.involvements.append(existing_row)
+    product_frame.client_involvements.append(_DummyInvolvement(client_id="CLI-001"))
     app.product_frames = [product_frame]
     app.team_frames = [DummyTeam("T12345"), DummyTeam("T54321")]
+    client_one = DummyClient("CLI-001")
+    client_one.tipo_id_var.set("DNI")
+    client_new = DummyClient("CLI-NEW")
+    client_new.tipo_id_var.set("RUC")
+    app.client_frames = [client_one, client_new]
     app._obtain_product_slot_for_import = lambda: product_frame
 
     def _obtain_team_slot():
@@ -2681,6 +2698,9 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
         return slot
 
     app._obtain_team_slot_for_import = _obtain_team_slot
+    app._obtain_client_slot_for_import = lambda: app.client_frames[0]
+    app._obtain_client_involvement_slot = lambda frame: frame.add_client_involvement()
+    app._obtain_involvement_slot = lambda frame: frame.add_involvement()
     app.save_auto = lambda: None
     notify_payload = {}
 
@@ -2697,8 +2717,8 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
     app.sync_main_form_after_import = _sync
 
     rows = [
-        ("PRD-001", "T12345", "100.00"),
-        ("PRD-001", "T54321", "50.50"),
+        ("PRD-001", "colaborador", "T12345", "", "100.00"),
+        ("PRD-001", "cliente", "", "CLI-NEW", "50.50"),
     ]
 
     processed = app.ingest_summary_rows("involucramientos", rows, stay_on_summary=True)
@@ -2706,11 +2726,11 @@ def test_ingest_summary_rows_involucramientos_updates_assignments():
     assert processed == 2
     assert notify_payload == {"sections": "involucramientos"}
     assert sync_payload == {"section": "involucramientos", "stay": True}
-    assert len(product_frame.involvements) == 2
+    assert len(product_frame.involvements) == 1
+    assert len(product_frame.client_involvements) == 2
     assert existing_row.monto_var.get() == "100.00"
-    new_row = product_frame.involvements[-1]
-    assert new_row.team_var.get() == "T54321"
-    assert new_row.monto_var.get() == "50.50"
+    new_client_row = next(inv for inv in product_frame.client_involvements if inv.client_var.get() == "CLI-NEW")
+    assert new_client_row.monto_var.get() == "50.50"
 
 
 def test_ingest_summary_rows_involucramientos_requires_known_product():
@@ -2725,7 +2745,7 @@ def test_ingest_summary_rows_involucramientos_requires_known_product():
     app.save_auto = lambda: None
     app.sync_main_form_after_import = lambda *_args, **_kwargs: None
 
-    rows = [("PRD-404", "T12345", "10.00")]
+    rows = [("PRD-404", "colaborador", "T12345", "", "10.00")]
 
     with pytest.raises(ValueError) as excinfo:
         app.ingest_summary_rows("involucramientos", rows)
@@ -2754,7 +2774,7 @@ def test_ingest_summary_rows_involucramientos_requires_known_collaborator():
     app.save_auto = lambda: None
     app.sync_main_form_after_import = lambda *_args, **_kwargs: None
 
-    rows = [("PRD-001", "T99999", "10.00")]
+    rows = [("PRD-001", "colaborador", "T99999", "", "10.00")]
 
     with pytest.raises(ValueError) as excinfo:
         app.ingest_summary_rows("involucramientos", rows)
@@ -2775,6 +2795,7 @@ def test_ingest_summary_rows_involucramientos_creates_product_from_details():
     class _InvolvementRowStub:
         def __init__(self):
             self.team_var = DummyVar("")
+            self.client_var = DummyVar("")
             self.monto_var = DummyVar("")
 
     app = FraudCaseApp.__new__(FraudCaseApp)
@@ -2827,7 +2848,7 @@ def test_ingest_summary_rows_involucramientos_creates_product_from_details():
     app.sync_main_form_after_import = lambda section, stay_on_summary=False: sync_calls.append((section, stay_on_summary))
     app._notify_dataset_changed = lambda *_args, **_kwargs: None
 
-    rows = [("PRD-NEW", "T12345", "001.50")]
+    rows = [("PRD-NEW", "colaborador", "T12345", "", "001.50")]
 
     processed = app.ingest_summary_rows("involucramientos", rows)
 

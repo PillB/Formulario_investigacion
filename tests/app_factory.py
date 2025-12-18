@@ -9,8 +9,9 @@ from app import FraudCaseApp
 from settings import BASE_DIR
 from settings import TIPO_ID_LIST, TIPO_SANCION_LIST
 from tests.stubs import (ClientFrameStub, NormFrameStub, ProductFrameStub,
-                         RiskFrameStub, TeamFrameStub, build_involvement_slot,
-                         build_populate_method, build_slot_factory)
+                         RiskFrameStub, TeamFrameStub, build_client_involvement_slot,
+                         build_involvement_slot, build_populate_method,
+                         build_slot_factory)
 from utils.mass_import_manager import MassImportManager
 
 
@@ -101,6 +102,7 @@ def build_import_app(monkeypatch, messagebox_spy=None):
         app,
     )
     app._obtain_involvement_slot = types.MethodType(build_involvement_slot(), app)
+    app._obtain_client_involvement_slot = types.MethodType(build_client_involvement_slot(), app)
     app._populate_client_frame_from_row = types.MethodType(
         build_populate_method('id_cliente'),
         app,
@@ -236,6 +238,7 @@ def build_summary_app(monkeypatch, messagebox_spy=None):
         app,
     )
     app._obtain_involvement_slot = types.MethodType(build_involvement_slot(), app)
+    app._obtain_client_involvement_slot = types.MethodType(build_client_involvement_slot(), app)
     app._populate_client_frame_from_row = types.MethodType(
         build_populate_method('id_cliente'),
         app,
