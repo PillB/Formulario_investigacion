@@ -8152,6 +8152,32 @@ class FraudCaseApp:
         )
         self.summary_intro_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
 
+        product_header_labels = {
+            "id_producto": "ID Producto",
+            "id_cliente": "Cliente",
+            "tipo_producto": "Tipo",
+            "categoria1": "Categoría 1",
+            "categoria2": "Categoría 2",
+            "modalidad": "Modalidad",
+            "canal": "Canal",
+            "proceso": "Proceso",
+            "fecha_ocurrencia": "Fecha ocurrencia",
+            "fecha_descubrimiento": "Fecha descubrimiento",
+            "monto_investigado": "Monto investigado",
+            "tipo_moneda": "Moneda",
+            "monto_perdida_fraude": "Pérdida",
+            "monto_falla_procesos": "Falla procesos",
+            "monto_contingencia": "Contingencia",
+            "monto_recuperado": "Recuperado",
+            "monto_pago_deuda": "Pago deuda",
+            "id_reclamo": "ID Reclamo",
+            "nombre_analitica": "Analítica",
+            "codigo_analitica": "Código analítica",
+        }
+        product_columns = [
+            (field, product_header_labels.get(field, field))
+            for field in self.IMPORT_CONFIG["productos"]["expected_headers"]
+        ]
         config = [
             (
                 "clientes",
@@ -8185,25 +8211,7 @@ class FraudCaseApp:
             (
                 "productos",
                 "Productos investigados",
-                [
-                    ("id", "ID Producto"),
-                    ("cliente", "Cliente"),
-                    ("tipo", "Tipo"),
-                    ("categoria1", "Categoría 1"),
-                    ("categoria2", "Categoría 2"),
-                    ("modalidad", "Modalidad"),
-                    ("canal", "Canal"),
-                    ("proceso", "Proceso"),
-                    ("fecha_oc", "Fecha ocurrencia"),
-                    ("fecha_desc", "Fecha descubrimiento"),
-                    ("moneda", "Moneda"),
-                    ("monto_inv", "Monto investigado"),
-                    ("monto_perdida", "Pérdida"),
-                    ("monto_falla", "Falla procesos"),
-                    ("monto_cont", "Contingencia"),
-                    ("monto_rec", "Recuperado"),
-                    ("monto_pago", "Pago deuda"),
-                ],
+                product_columns,
             ),
             (
                 "riesgos",
@@ -8332,6 +8340,10 @@ class FraudCaseApp:
         columns = self.summary_config.get(key, [])
         if not tree or not columns:
             return "break"
+        expected_columns = len(columns)
+        allowed_counts = expected_columns
+        if key == "productos":
+            allowed_counts = {expected_columns, expected_columns - 3}
         try:
             clipboard_text = self.clipboard_get()
         except tk.TclError:
@@ -8339,7 +8351,7 @@ class FraudCaseApp:
             return "break"
         log_event("navegacion", f"Intento de pegado en resumen:{key}", self.logs)
         try:
-            parsed_rows = self._parse_clipboard_rows(clipboard_text, len(columns))
+            parsed_rows = self._parse_clipboard_rows(clipboard_text, allowed_counts)
             sanitized_rows = self._transform_summary_clipboard_rows(key, parsed_rows)
         except ValueError as exc:
             messagebox.showerror("Pegado no válido", str(exc))
@@ -8371,6 +8383,11 @@ class FraudCaseApp:
     def _parse_clipboard_rows(self, text, expected_columns):
         """Convierte el texto del portapapeles en una matriz con ``expected_columns`` celdas."""
 
+        allowed_counts = expected_columns
+        if isinstance(expected_columns, (set, list, tuple)):
+            allowed_counts = set(expected_columns)
+        else:
+            allowed_counts = {expected_columns}
         cleaned = (text or "").strip()
         if not cleaned:
             raise ValueError("El portapapeles está vacío.")
@@ -8381,9 +8398,14 @@ class FraudCaseApp:
         for idx, line in enumerate(lines, start=1):
             delimiter = "\t" if "\t" in line else ";"
             parts = [cell.strip() for cell in line.split(delimiter)]
-            if len(parts) != expected_columns:
+            if len(parts) not in allowed_counts:
+                expected_text = (
+                    ", ".join(str(count) for count in sorted(allowed_counts))
+                    if len(allowed_counts) > 1
+                    else str(next(iter(allowed_counts)))
+                )
                 raise ValueError(
-                    f"La fila {idx} tiene {len(parts)} columnas y se esperaban {expected_columns}."
+                    f"La fila {idx} tiene {len(parts)} columnas y se esperaban {expected_text}."
                 )
             rows.append(parts)
         return rows
@@ -8571,53 +8593,26 @@ class FraudCaseApp:
 
     def _transform_clipboard_productos(self, rows):
         sanitized = []
-        field_order = [
-            "id_producto",
-            "id_cliente",
-            "tipo_producto",
-            "categoria1",
-            "categoria2",
-            "modalidad",
-            "canal",
-            "proceso",
-            "fecha_ocurrencia",
-            "fecha_descubrimiento",
-            "tipo_moneda",
-            "monto_investigado",
-            "monto_perdida_fraude",
-            "monto_falla_procesos",
-            "monto_contingencia",
-            "monto_recuperado",
-            "monto_pago_deuda",
-        ]
+        field_order = list(self.IMPORT_CONFIG["productos"]["expected_headers"])
+        claim_fields = ("id_reclamo", "nombre_analitica", "codigo_analitica")
+        modern_length = len(field_order)
+        legacy_without_claims = modern_length - len(claim_fields)
+        legacy_minimal = 4
         for idx, values in enumerate(rows, start=1):
-            is_legacy = len(values) == 4
-            normalized_values: list[str]
-            if len(values) == len(field_order):
+            normalized_values: list[str] = []
+            if len(values) == modern_length:
                 normalized_values = [value.strip() for value in values]
-            elif is_legacy:
-                normalized_values = [
-                    values[0].strip(),
-                    values[1].strip(),
-                    values[2].strip(),
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    values[3].strip(),
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                ]
+            elif len(values) == legacy_without_claims:
+                normalized_values = [value.strip() for value in values] + [""] * len(claim_fields)
+            elif len(values) == legacy_minimal:
+                normalized_values = [""] * modern_length
+                normalized_values[0] = values[0].strip()
+                normalized_values[1] = values[1].strip()
+                normalized_values[2] = values[2].strip()
+                normalized_values[field_order.index("monto_investigado")] = values[3].strip()
             else:
                 raise ValueError(
-                    f"Producto fila {idx}: se esperaban {len(field_order)} columnas para el pegado."
+                    f"Producto fila {idx}: se esperaban {modern_length} columnas para el pegado."
                 )
             product = dict(zip(field_order, normalized_values))
             if not product["id_cliente"]:
@@ -8680,26 +8675,29 @@ class FraudCaseApp:
                 if extra_message:
                     raise ValueError(f"Producto fila {idx}: {extra_message}")
                 product[field_name] = normalized
-            full_row = (
-                product["id_producto"],
-                product["id_cliente"],
-                product["tipo_producto"],
-                product["categoria1"],
-                product["categoria2"],
-                product["modalidad"],
-                product["canal"],
-                product["proceso"],
-                product["fecha_ocurrencia"],
-                product["fecha_descubrimiento"],
-                product["tipo_moneda"],
-                product["monto_investigado"],
-                product["monto_perdida_fraude"],
-                product["monto_falla_procesos"],
-                product["monto_contingencia"],
-                product["monto_recuperado"],
-                product["monto_pago_deuda"],
-            )
-            sanitized.append(full_row if not is_legacy else full_row[:3] + (product["monto_investigado"],))
+            claim_payload = {
+                "id_reclamo": product.get("id_reclamo", ""),
+                "nombre_analitica": product.get("nombre_analitica", ""),
+                "codigo_analitica": product.get("codigo_analitica", ""),
+            }
+            if any(claim_payload.values()):
+                if not all(claim_payload.values()):
+                    raise ValueError(
+                        f"Producto fila {idx}: completa ID, nombre y código de analítica para el reclamo."
+                    )
+                claim_message = validate_reclamo_id(claim_payload["id_reclamo"])
+                if claim_message:
+                    raise ValueError(f"Producto fila {idx}: {claim_message}")
+                analytic_message = validate_required_text(
+                    claim_payload["nombre_analitica"],
+                    "el nombre de la analítica",
+                )
+                if analytic_message:
+                    raise ValueError(f"Producto fila {idx}: {analytic_message}")
+                code_message = validate_codigo_analitica(claim_payload["codigo_analitica"])
+                if code_message:
+                    raise ValueError(f"Producto fila {idx}: {code_message}")
+            sanitized.append(tuple(product[field] for field in field_order))
         return sanitized
 
     def _transform_clipboard_reclamos(self, rows):
@@ -9012,37 +9010,34 @@ class FraudCaseApp:
                 self._run_duplicate_check_post_load()
             return processed
         if section_key == "productos":
-            for values in rows:
-                is_legacy_product = len(values) == 4
-                payload = {
-                    "id_producto": (values[0] or "").strip(),
-                    "id_cliente": (values[1] or "").strip(),
-                    "tipo_producto": (values[2] or "").strip(),
-                    "categoria1": "" if is_legacy_product else (values[3] or "").strip(),
-                    "categoria2": "" if is_legacy_product else (values[4] or "").strip(),
-                    "modalidad": "" if is_legacy_product else (values[5] or "").strip(),
-                    "canal": "" if is_legacy_product else (values[6] or "").strip(),
-                    "proceso": "" if is_legacy_product else (values[7] or "").strip(),
-                    "fecha_ocurrencia": "" if is_legacy_product else (values[8] or "").strip(),
-                    "fecha_descubrimiento": "" if is_legacy_product else (values[9] or "").strip(),
-                    "tipo_moneda": "" if is_legacy_product else (values[10] or "").strip(),
-                    "monto_investigado": (
-                        (values[11] if not is_legacy_product else values[3] if len(values) > 3 else "")
-                        or ""
-                    ).strip(),
-                    "monto_perdida_fraude": "" if is_legacy_product else (values[12] or "").strip(),
-                    "monto_falla_procesos": "" if is_legacy_product else (values[13] or "").strip(),
-                    "monto_contingencia": "" if is_legacy_product else (values[14] or "").strip(),
-                    "monto_recuperado": "" if is_legacy_product else (values[15] or "").strip(),
-                    "monto_pago_deuda": "" if is_legacy_product else (values[16] or "").strip(),
-                    "id_reclamo": "",
-                    "nombre_analitica": "",
-                    "codigo_analitica": "",
-                }
+            expected_fields = list(self.IMPORT_CONFIG["productos"]["expected_headers"])
+            claim_fields = ("id_reclamo", "nombre_analitica", "codigo_analitica")
+            modern_length = len(expected_fields)
+            without_claims_length = modern_length - len(claim_fields)
+            for idx, values in enumerate(rows, start=1):
+                normalized: list[str]
+                if len(values) == modern_length:
+                    normalized = [(value or "").strip() for value in values]
+                elif len(values) == without_claims_length:
+                    normalized = [(value or "").strip() for value in values] + [""] * len(claim_fields)
+                elif len(values) == 4:
+                    normalized = [""] * modern_length
+                    normalized[0] = (values[0] or "").strip()
+                    normalized[1] = (values[1] or "").strip()
+                    normalized[2] = (values[2] or "").strip()
+                    normalized[expected_fields.index("monto_investigado")] = (values[3] or "").strip()
+                else:
+                    raise ValueError(
+                        f"Producto fila {idx}: se esperaban {modern_length} columnas (o 4 en formato heredado)."
+                    )
+                payload = dict(zip(expected_fields, normalized))
                 hydrated, found = self._hydrate_row_from_details(payload, 'id_producto', PRODUCT_ID_ALIASES)
                 product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
                     continue
+                resolved_tipo = resolve_catalog_product_type(hydrated.get('tipo_producto', ''))
+                if resolved_tipo:
+                    hydrated['tipo_producto'] = resolved_tipo
                 frame = self._find_product_frame(product_id) or self._obtain_product_slot_for_import()
                 client_id = (hydrated.get('id_cliente') or '').strip()
                 if client_id:
@@ -9050,6 +9045,17 @@ class FraudCaseApp:
                     self._ensure_client_exists(client_id, client_details)
                 merged = self._merge_product_payload_with_frame(frame, hydrated)
                 self._populate_product_frame_from_row(frame, merged)
+                claim_payload = {
+                    "id_reclamo": (hydrated.get("id_reclamo") or "").strip(),
+                    "nombre_analitica": (hydrated.get("nombre_analitica") or "").strip(),
+                    "codigo_analitica": (hydrated.get("codigo_analitica") or "").strip(),
+                }
+                if any(claim_payload.values()):
+                    target_claim = frame.find_claim_by_id(claim_payload["id_reclamo"]) if claim_payload["id_reclamo"] else None
+                    if not target_claim:
+                        target_claim = frame.obtain_claim_slot()
+                    target_claim.set_data(claim_payload)
+                    self._sync_product_lookup_claim_fields(frame, product_id)
                 self._trigger_import_id_refresh(
                     frame,
                     product_id,
@@ -9062,7 +9068,7 @@ class FraudCaseApp:
             if missing_ids:
                 self._report_missing_detail_ids("productos", missing_ids)
             if processed:
-                self._notify_dataset_changed(summary_sections="productos")
+                self._notify_dataset_changed(summary_sections=("productos", "reclamos"))
                 self.sync_main_form_after_import("productos", stay_on_summary=stay_on_summary)
                 self._run_duplicate_check_post_load()
             return processed
@@ -9378,28 +9384,24 @@ class FraudCaseApp:
                 for inv in dataset.get("involucramientos", [])
             ]
         if section == "productos":
-            return [
-                (
-                    prod.get("id_producto", ""),
-                    prod.get("id_cliente", ""),
-                    prod.get("tipo_producto", ""),
-                    prod.get("categoria1", ""),
-                    prod.get("categoria2", ""),
-                    prod.get("modalidad", ""),
-                    prod.get("canal", ""),
-                    prod.get("proceso", ""),
-                    prod.get("fecha_ocurrencia", ""),
-                    prod.get("fecha_descubrimiento", ""),
-                    prod.get("tipo_moneda", ""),
-                    prod.get("monto_investigado", ""),
-                    prod.get("monto_perdida_fraude", ""),
-                    prod.get("monto_falla_procesos", ""),
-                    prod.get("monto_contingencia", ""),
-                    prod.get("monto_recuperado", ""),
-                    prod.get("monto_pago_deuda", ""),
+            product_fields = [field for field, _label in self.summary_config.get("productos", [])]
+            claim_fields = {"id_reclamo", "nombre_analitica", "codigo_analitica"}
+            claims_by_product: dict[str, list[dict[str, str]]] = defaultdict(list)
+            for claim in dataset.get("reclamos", []):
+                product_id = (claim.get("id_producto") or "").strip()
+                if product_id:
+                    claims_by_product[product_id].append(claim)
+            rows = []
+            for prod in dataset.get("productos", []):
+                product_id = (prod.get("id_producto") or "").strip()
+                associated_claim = next(iter(claims_by_product.get(product_id, [])), {})
+                rows.append(
+                    tuple(
+                        associated_claim.get(field, "") if field in claim_fields else prod.get(field, "")
+                        for field in product_fields
+                    )
                 )
-                for prod in dataset.get("productos", [])
-            ]
+            return rows
         if section == "riesgos":
             return [
                 (
