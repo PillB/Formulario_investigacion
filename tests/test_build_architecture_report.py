@@ -361,7 +361,10 @@ def test_sequence_diagram_is_spanish_and_covers_data_sources():
     assert "Note over UI,Import: Carga masiva" in content
     assert "UI->>UI: _apply_*_import_payload" in content
     assert "Validación por fila y duplicados (cliente/colaborador/riesgo/producto/norma)" in content
-    assert "Reporte: build_report + build_docx + build_editable_deck" in content
+    assert "UI->>Reporte: build_report + build_docx + save_md" in content
+    assert "UI->>Alertas: build_alerta_temprana_ppt()" in content
+    assert "UI->>Cartas: Abrir diálogo y generar cartas de inmediatez" in content
+    assert "append_historical_records -> h_*.csv" in content
     assert "Note over UI,Catalogos: Autocompletado/Autopoblado" in content
     assert "Validación de integridad referencial (IDs existen en catálogos/snapshots)" in content
     assert "Autofill" not in content

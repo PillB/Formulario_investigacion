@@ -123,6 +123,21 @@ SKETCH_LAYOUTS: Dict[str, Dict[str, List[str]]] = {
             "Botones CSV: clientes, colaboradores, productos, normas, riesgos, estado",
             "Barra de progreso de importación",
         ],
+        "Guardado y recuperación": [
+            "Guardar y enviar (valida + exporta)",
+            "Cargar archivo",
+            "Recuperar último autosave",
+            "Historial de recuperación",
+        ],
+        "Exportes y reportes": [
+            "Generar informe Markdown",
+            "Generar Word",
+            "Generar alerta temprana PPT",
+        ],
+        "Cartas y limpieza": [
+            "Generar carta de inmediatez",
+            "Borrar todos los datos",
+        ],
     },
     "tab06_resumen": {
         "__title__": "Resumen",

@@ -20,9 +20,13 @@ flowchart TB
         ui[["ui/frames/*<br/>Pestañas de Caso, Clientes, Team Members, Productos, Riesgos, Normas"]]
         services[["models/*<br/>Catálogos y autopoblado"]]
         validators[["validators.py<br/>Reglas + logs"]]
-        reporting[["report_builder.py<br/>Generación JSON/CSV/MD/DOCX"]]
-        files(("Sistema de archivos<br/>autosave.json, autosaves/<caso>/auto_N.json, exports/"))
-        external(("Unidad externa<br/>backups y logs"))
+        reporting[["report_builder.py<br/>Generación CSV/JSON/MD/DOCX"]]
+        alerta[["report/alerta_temprana.py<br/>Alerta temprana PPT"]]
+        carta[["report/carta_inmediatez.py<br/>Cartas de inmediatez"]]
+        files(("Sistema de archivos<br/>autosave.json, autosaves/<caso>/auto_N.json,<br/>exports/*.csv, version.json, md/docx/pptx"))
+        historical(("exports/h_*.csv<br/>Consolidación histórica"))
+        manifest(("pending_consolidation.txt<br/>Manifiesto de reaplicación"))
+        external(("external drive/<id_caso>/</br>Backups, logs y consolidación"))
     end
 
     subgraph Componentes_de_App
@@ -32,7 +36,7 @@ flowchart TB
         productTab[[Pestaña Productos]]
         riskTab[[Pestaña Riesgos]]
         normTab[[Pestaña Normas]]
-        actions[[Tab Acciones]]
+        actions[[Tab Acciones (importar/exportar/recuperar)]]
         summary[[Tab Resumen]]
         autosave[[Auto guardado temporal]]
         logging[[Bitácora logs.csv]]
@@ -74,6 +78,19 @@ flowchart TB
     actions --> autofill
     summary --> autofill
 
+    actions -- "Guardar y enviar" --> reporting
+    actions -- "Generar Word/Markdown" --> reporting
+    actions -- "Generar PPT alerta temprana" --> alerta
+    actions -- "Carta de inmediatez" --> carta
+
     appcore --> autosave
     appcore --> logging
-    appcore --> reporter --> files
+    reporting --> files
+    reporting --> historical
+    alerta --> files
+    carta --> files
+    carta --> historical
+    historical -- "Si la unidad externa existe" --> external
+    files --> external
+    historical -. "Si falta external drive se registra en manifiesto" .-> manifest
+    manifest -- "Reaplica pendientes al detectar external drive" --> external

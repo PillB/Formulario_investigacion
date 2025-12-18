@@ -25,3 +25,16 @@ flowchart TB
         barra_import["Barra de progreso indeterminada"]
     end
     tab --> importacion
+
+    subgraph acciones["Guardar, exportar y respaldar"]
+        guardar["Botón 'Guardar y enviar' (valida + CSV/JSON/MD/DOCX/h_*.csv)"]
+        cargar["Botón 'Cargar archivo…'"]
+        autosave["Botón 'Recuperar último autosave'"]
+        historial["Botón 'Historial de recuperación'"]
+        export_md["Botón 'Generar informe (.md)'"]
+        export_docx["Botón 'Generar Word (.docx)'"]
+        export_ppt["Botón 'Generar alerta temprana (.pptx)'"]
+        carta["Botón 'Generar carta de inmediatez'"]
+        borrar["Botón 'Borrar todos los datos'"]
+    end
+    tab --> acciones

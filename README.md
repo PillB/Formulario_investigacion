@@ -1,6 +1,6 @@
 # Gestión de Casos de Fraude (Tkinter)
 
-Aplicación de escritorio en Python/Tkinter para registrar, validar y exportar expedientes de fraude. Incluye pestañas para caso, clientes, colaboradores, productos, riesgos, normas, análisis y acciones; soporta validación en línea, importaciones masivas desde CSV, autoguardado y exportación a CSV/JSON/Markdown/Word.
+Aplicación de escritorio en Python/Tkinter para registrar, validar y exportar expedientes de fraude. Incluye pestañas para caso, clientes, colaboradores, productos, riesgos, normas, análisis y acciones; soporta validación en línea, importaciones masivas desde CSV, autoguardado y exportación a CSV/JSON/Markdown/Word, presentaciones de alerta temprana (PPTX) y cartas de inmediatez con historial h_*.csv.
 
 ## Contenido rápido
 - [Prerrequisitos](#prerrequisitos)
@@ -17,14 +17,16 @@ Aplicación de escritorio en Python/Tkinter para registrar, validar y exportar e
 - [Contribución y licencia](#contribución-y-licencia)
 
 ## Prerrequisitos
-- Python 3.7 o superior.
+- Python 3.13 (probado) con Tkinter disponible.
 - Dependencia requerida para el selector de fechas: `tkcalendar` (incluida en `requirements.txt`).
-- Dependencia opcional: `python-docx` para generar el informe Word.
+- Dependencias opcionales:
+  - `python-docx` para generar el informe Word y las cartas de inmediatez.
+  - `python-pptx` para la presentación de alerta temprana (.pptx).
 - Archivos CSV de referencia en la raíz del proyecto:
   - `client_details.csv`, `team_details.csv` para autopoblado.
   - `clientes_masivos.csv`, `colaboradores_masivos.csv`, `productos_masivos.csv`, `datos_combinados_masivos.csv` para importaciones de ejemplo.
   - `riesgos_masivos.csv`, `normas_masivas.csv`, `reclamos_masivos.csv` para cargas masivas de riesgos/normas/reclamos.
-- Carpeta `external drive/` (se crea automáticamente) con permisos de escritura para respaldos.
+- Carpeta `external drive/` (se crea automáticamente) con permisos de escritura para respaldos y consolidación de históricos `h_*.csv`. Si la unidad no está montada, las consolidaciones quedan en `pending_consolidation.txt` para reintento.
 
 ## Instalación
 1. Clona o descarga este repositorio.
@@ -51,8 +53,8 @@ La aplicación intenta cargar el último `autosave.json`. Para comenzar de cero,
 - **`ui/`**: widgets y pestañas (caso/participantes, riesgos, normas, análisis, acciones, resumen).
 - **`models/`**: modelos y helpers de persistencia.
 - **`validators.py`**: reglas de formato, montos y fechas.
-- **`exports/`** (generado): CSV, JSON, Markdown y Word creados por **Guardar y enviar**.
-- **`external drive/<id_caso>/`** (generado): espejo automático de los artefactos exportados, autosaves y logs.
+- **`exports/`** (generado): CSV, JSON, Markdown, Word y PPT de alerta temprana; históricos `h_*.csv` anexados en cada guardado.
+- **`external drive/<id_caso>/`** (generado): espejo automático de los artefactos exportados, autosaves, logs y consolidación histórica; si falta la unidad se registra `pending_consolidation.txt` para reaplicar.
 
 ### Diagrama de alto nivel
 ```mermaid
@@ -75,15 +77,20 @@ graph TD
     E -->|Errores| B
 ```
 
-### Generar el PDF de arquitectura
-El PDF `Formulario_Investigacion_Architecture_and_Data_Flow.pdf` no se versiona. Para crearlo de forma local:
+### Generar el PDF de arquitectura, la presentación editable y wireframes
+El PDF `Formulario_Investigacion_Architecture_and_Data_Flow.pdf` y la presentación `Formulario_Investigacion_Diagramas_editables.pptx` se generan bajo demanda (no se versionan). Para recrearlos con los últimos diagramas Mermaid (usa `mermaid-config.json` y `puppeteer-config.json` automáticamente):
 
 ```bash
 python build_architecture_report.py --output Formulario_Investigacion_Architecture_and_Data_Flow.pdf
 ```
 
-El script recompila los diagramas Mermaid (`docs/architecture.mmd`, `docs/sequence_diagram.mmd`) usando `mermaid-cli` y ensambla
-el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con las imágenes generadas.
+El script recompila los diagramas Mermaid (`docs/architecture.mmd`, `docs/sequence_diagram.mmd`) usando `mermaid-cli` y ensambla el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con las imágenes generadas. De forma predeterminada también construye el PPTX editable con formas nativas para los diagramas (puedes omitirlo con `--no-pptx` o especificar la ruta usando `--pptx-output`).
+
+Para regenerar los wireframes y sus manifiestos (`wireframe_architecture.csv`, `wireframes_manifest.csv`), ejecuta:
+```bash
+python wireframes/generate_wireframes.py
+```
+Esto renderiza los esquemas de las pestañas (incluyendo los nuevos controles de Acciones) y produce `wireframes.pdf` junto con los PNG (ignorados en git).
 
 ## Flujos principales
 ### Crear un nuevo expediente
@@ -102,7 +109,9 @@ el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con la
 3. La app hidrata y valida; al terminar, las pestañas muestran los registros listos para revisión.
 
 ### Guardar, exportar y respaldar
-- **Guardar y enviar** valida todo, genera CSV por entidad, un JSON completo, Markdown y Word; además espeja los artefactos en `external drive/<id_caso>/`.
+- **Guardar y enviar** valida todo, genera CSV por entidad, un JSON completo, Markdown y Word; añade históricos `h_*.csv` y espeja los artefactos en `external drive/<id_caso>/` (si no está disponible, queda registro en `pending_consolidation.txt` para reintentar).
+- **Generar alerta temprana (.pptx)** construye una presentación resumida desde la pestaña **Acciones** (requiere `python-pptx`).
+- **Generar carta de inmediatez** abre el diálogo de selección y produce DOCX/CSV con numeración correlativa e historial consolidado.
 - **Cargar formulario** permite restaurar cualquier respaldo JSON (versión enviada, checkpoint manual o autosave guardado).
 - **Autosave** crea `autosave.json` y versiones temporales `<id_caso>_temp_<timestamp>.json` sin interrumpir el flujo.
 
@@ -145,7 +154,7 @@ el informe con ReportLab, aplicando portada, tabla de contenidos y anexos con la
 
 ## Importación y exportación
 - **Importar CSV**: desde **Acciones**, selecciona el archivo adecuado; la app valida, omite duplicados y sincroniza combobox/listados.
-- **Exportar**: **Guardar y enviar** genera CSV por entidad, JSON completo, Markdown y Word (`python-docx` necesario) en `exports/`; luego duplica a `external drive/<id_caso>/`. Mensajes claros aparecen si hay problemas de escritura.
+- **Exportar**: **Guardar y enviar** genera CSV por entidad, JSON completo, Markdown y Word (`python-docx` necesario) en `exports/`, anexando históricos `h_*.csv` y reflejándolos en `external drive/<id_caso>/` o en `pending_consolidation.txt` si falta la unidad. **Acciones** también expone botones para PPT de alerta temprana (`python-pptx`) y cartas de inmediatez (`python-docx` + plantilla en `exports/cartas/`).
 
 ### Registro de eventos
 - Los eventos se guardan en `logs.csv` con columnas `timestamp`, `tipo`, `subtipo`, `widget_id`, `coords` y `mensaje`.
