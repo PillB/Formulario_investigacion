@@ -40,7 +40,12 @@ def collect_involvements(app: 'FraudCaseApp'):
             team = inv.team_var.get()
             amount = inv.monto_var.get()
             if team:
-                values.append((product_id, team, amount))
+                values.append((product_id, "colaborador", team, "", amount))
+        for inv in getattr(frame, "client_involvements", []):
+            client_id = inv.client_var.get()
+            amount = inv.monto_var.get()
+            if client_id:
+                values.append((product_id, "cliente", "", client_id, amount))
     return values
 
 
@@ -158,11 +163,11 @@ SUMMARY_CASES = [
     ),
     SummaryPasteCase(
         key="involucramientos",
-        columns=build_columns(3),
-        valid_row=["1234567890123", "T22222", "250.75"],
-        invalid_row=["1234567890123", "T22222", "10.123"],
+        columns=build_columns(5),
+        valid_row=["1234567890123", "colaborador", "T22222", "", "250.75"],
+        invalid_row=["1234567890123", "colaborador", "T22222", "", "10.123"],
         state_getter=collect_involvements,
-        expected_state=[("1234567890123", "T22222", "250.75")],
+        expected_state=[("1234567890123", "colaborador", "T22222", "", "250.75")],
         error_fragment="dos decimales",
     ),
 ]

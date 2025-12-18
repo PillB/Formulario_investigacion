@@ -19,14 +19,14 @@ def test_import_combined_hydrates_entities_and_deduplicates(monkeypatch, message
             },
         },
         'id_colaborador': {
-            'T2000': {
-                'id_colaborador': 'T2000',
+            'T02000': {
+                'id_colaborador': 'T02000',
                 'division': 'Div catálogo',
                 'area': 'Área catálogo',
                 'tipo_sancion': TIPO_SANCION_LIST[0],
             },
-            'T3000': {
-                'id_colaborador': 'T3000',
+            'T03000': {
+                'id_colaborador': 'T03000',
                 'division': 'Div catálogo',
                 'area': 'Área catálogo',
                 'tipo_sancion': TIPO_SANCION_LIST[0],
@@ -46,19 +46,19 @@ def test_import_combined_hydrates_entities_and_deduplicates(monkeypatch, message
     combined_rows = [
         {
             'id_cliente': 'CLI-001',
-            'id_colaborador': 'T2000',
+            'id_colaborador': 'T02000',
             'id_producto': 'PRD-100',
-            'involucramiento': 'T2000:200.00;T3000:100.00',
+            'involucramiento': 'T02000:200.00;T03000:100.00',
         },
         {
             'id_cliente': 'CLI-001',
-            'id_colaborador': 'T2000',
+            'id_colaborador': 'T02000',
             'id_producto': 'PRD-100',
             'monto_asignado': '50.75',
         },
         {
             'id_cliente': 'CLI-002',
-            'id_colaborador': 'T4000',
+            'id_colaborador': 'T04000',
             'id_producto': 'PRD-200',
             'involucramiento': '',
         },
@@ -72,7 +72,7 @@ def test_import_combined_hydrates_entities_and_deduplicates(monkeypatch, message
     app.import_combined(filename='dummy.csv')
 
     assert _collect_ids(app.client_frames) == ['CLI-001', 'CLI-002']
-    assert _collect_ids(app.team_frames) == ['T2000', 'T3000', 'T4000']
+    assert _collect_ids(app.team_frames) == ['T02000', 'T03000', 'T04000']
     assert _collect_ids(app.product_frames) == ['PRD-100', 'PRD-200']
 
     product = app._find_product_frame('PRD-100')
@@ -86,11 +86,11 @@ def test_import_combined_hydrates_entities_and_deduplicates(monkeypatch, message
         for inv in product.involvements
         if inv.team_var.get()
     )
-    assert involvement_values == [('T2000', '50.75'), ('T3000', '100.00')]
+    assert involvement_values == [('T02000', '50.75'), ('T03000', '100.00')]
 
     reported = {label: tuple(ids) for label, ids in app.report_calls}
     assert 'clientes' in reported and 'CLI-002' in reported['clientes']
-    assert 'colaboradores' in reported and 'T4000' in reported['colaboradores']
+    assert 'colaboradores' in reported and 'T04000' in reported['colaboradores']
     assert 'productos' in reported and 'PRD-200' in reported['productos']
 
 
