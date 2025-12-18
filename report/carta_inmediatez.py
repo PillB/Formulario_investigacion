@@ -143,14 +143,54 @@ class CartaInmediatezGenerator:
         if not template_path.exists():
             template_path.parent.mkdir(parents=True, exist_ok=True)
             document = Document()
-            document.add_heading("Carta de inmediatez", level=1)
-            document.add_paragraph("Número de carta: {{NUMERO_CARTA}}")
-            document.add_paragraph("Número de caso: {{NUMERO_CASO}}")
-            document.add_paragraph("Colaborador: {{COLABORADOR}}")
-            document.add_paragraph("Puesto: {{PUESTO}}")
-            document.add_paragraph("Agencia: {{AGENCIA}}")
-            document.add_paragraph("Investigador: {{INVESTIGADOR}}")
-            document.add_paragraph("Fecha: {{FECHA}}")
+            document.add_paragraph("Lima, {{FECHA_LARGA}}")
+            document.add_paragraph()
+            document.add_paragraph("Señora")
+            document.add_paragraph("{{NOMBRE_COMPLETO}}")
+            document.add_paragraph("Matrícula {{MATRICULA}}")
+            document.add_paragraph()
+            document.add_paragraph("Presente.-")
+            document.add_paragraph()
+            document.add_paragraph("Sr(a). {{APELLIDOS}}")
+            document.add_paragraph()
+            document.add_paragraph(
+                "Nos dirigimos a usted para hacerle saber que recientemente el Banco ha tomado "
+                "conocimiento de determinadas irregularidades ocurridas en el Área {{AREA}} a la cual "
+                "usted pertenece."
+            )
+            document.add_paragraph()
+            document.add_paragraph(
+                "Con el objeto de determinar la existencia de posibles responsabilidades, así como "
+                "recopilar los elementos de prueba necesarios para obtener una determinación del caso, "
+                "el Banco ha dispuesto realizar una investigación de los hechos."
+            )
+            document.add_paragraph()
+            document.add_paragraph(
+                "En tal sentido, le solicitamos, conforme a lo establecido en el Reglamento Interno de Trabajo "
+                "del Banco, nos brinde su colaboración para el esclarecimiento de los hechos materia del proceso "
+                "investigatorio referido, agradeciéndole esté usted a disposición del funcionario que se designe, "
+                "en las oportunidades que sea requerida y mientras dure el mismo."
+            )
+            document.add_paragraph()
+            document.add_paragraph(
+                "Finalmente cumplimos con informarle que esta comunicación no significa de modo alguno una "
+                "sanción disciplinaria ni la imputación de responsabilidad alguna."
+            )
+            document.add_paragraph()
+            document.add_paragraph("Atentamente,")
+            document.add_paragraph()
+            document.add_paragraph("BANCO DE CREDITO DEL PERU BCP")
+            document.add_paragraph()
+            table = document.add_table(rows=2, cols=2)
+            table.style = "Table Grid"
+            table.autofit = True
+            table.rows[0].cells[0].text = "------------------------------"
+            table.rows[0].cells[1].text = "------------------------------"
+            table.rows[1].cells[0].text = "Funcionario"
+            table.rows[1].cells[1].text = "Funcionario"
+            document.add_paragraph()
+            document.add_paragraph("c.c.: Dr. Juan Kam – Gerencia de Relaciones Laborales")
+            document.add_paragraph("Carta N° {{NUMERO_CARTA}}")
             document.save(template_path)
         document = Document(template_path)
 
@@ -168,20 +208,29 @@ class CartaInmediatezGenerator:
                     cell.text = _replace_in_text(cell.text)
         document.save(output_path)
 
-    def _build_placeholder_map(self, row: dict[str, str], member: Mapping[str, str]) -> dict[str, str]:
+    def _build_placeholder_map(self, context: CartaContext, row: dict[str, str], member: Mapping[str, str]) -> dict[str, str]:
         full_name = row.get("matricula_team_member", "")
         if member.get("nombres") or member.get("apellidos"):
             full_name = " ".join(
                 part for part in (member.get("nombres", "").strip(), member.get("apellidos", "").strip()) if part
             )
+        full_name = sanitize_rich_text(full_name, max_chars=None)
+        display_name = full_name or row.get("matricula_team_member", "")
+        last_name = sanitize_rich_text(member.get("apellidos", ""), max_chars=None)
+        area = sanitize_rich_text(member.get("area", ""), max_chars=None)
         return {
             "NUMERO_CARTA": row.get("Numero_de_Carta", ""),
             "NUMERO_CASO": row.get("numero_caso", ""),
-            "COLABORADOR": full_name,
-            "PUESTO": member.get("puesto", ""),
-            "AGENCIA": member.get("nombre_agencia", ""),
+            "COLABORADOR": display_name,
+            "PUESTO": sanitize_rich_text(member.get("puesto", ""), max_chars=None),
+            "AGENCIA": sanitize_rich_text(member.get("nombre_agencia", ""), max_chars=None),
             "INVESTIGADOR": row.get("investigador_principal", ""),
             "FECHA": row.get("fecha_generacion", ""),
+            "FECHA_LARGA": self._format_long_date(context.generation_date),
+            "NOMBRE_COMPLETO": display_name,
+            "MATRICULA": row.get("matricula_team_member", ""),
+            "APELLIDOS": last_name,
+            "AREA": area,
         }
 
     def _determine_tipo(self, division: str) -> str:
@@ -189,6 +238,25 @@ class CartaInmediatezGenerator:
         if "comercial" in normalized or normalized == "dcc":
             return "Agencia"
         return "Sede"
+
+    @staticmethod
+    def _format_long_date(date_value: datetime) -> str:
+        months = [
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
+        ]
+        month_name = months[date_value.month - 1]
+        return f"{date_value.day:02d} {month_name} {date_value.year}"
 
     def _build_row(
         self,
@@ -266,7 +334,7 @@ class CartaInmediatezGenerator:
         for member, numero_carta in zip(members, numbers):
             row = self._build_row(context, member, numero_carta)
             created_rows.append(row)
-            placeholders = self._build_placeholder_map(row, member)
+            placeholders = self._build_placeholder_map(context, row, member)
             output_name = f"carta_{row['matricula_team_member'] or 'colaborador'}_{numero_carta}.docx"
             output_path = cartas_dir / output_name
             self.renderer(self.template_path, output_path, placeholders)

@@ -14030,6 +14030,7 @@ class FraudCaseApp:
                     "nombres": self._sanitize_text(data.get("nombres")),
                     "apellidos": self._sanitize_text(data.get("apellidos")),
                     "puesto": self._sanitize_text(data.get("puesto")),
+                    "area": self._sanitize_text(data.get("area")),
                     "nombre_agencia": self._sanitize_text(data.get("nombre_agencia")),
                     "codigo_agencia": self._sanitize_text(data.get("codigo_agencia")),
                     "flag": data.get("flag", ""),
