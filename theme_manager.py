@@ -12,6 +12,8 @@ asignaciones utilizadas en la aplicación sin depender de activos externos.
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import logging
 import weakref
 from pathlib import Path
@@ -19,6 +21,15 @@ from typing import Dict, Iterable, Optional, Set
 
 import tkinter as tk
 from tkinter import scrolledtext, ttk
+
+_tkcalendar_spec = importlib.util.find_spec("tkcalendar")
+if _tkcalendar_spec is not None:
+    _tkcalendar = importlib.import_module("tkcalendar")
+    DateEntry = getattr(_tkcalendar, "DateEntry", None)
+    Calendar = getattr(_tkcalendar, "Calendar", None)
+else:
+    DateEntry = None
+    Calendar = None
 
 LIGHT_THEME: Dict[str, str] = {
     "name": "light",
@@ -466,21 +477,36 @@ class ThemeManager:
 
     @staticmethod
     def _is_date_entry(widget: tk.Misc) -> bool:
-        try:
-            from tkcalendar import DateEntry  # type: ignore
-        except Exception:
-            DateEntry = None  # type: ignore
         if DateEntry is not None and isinstance(widget, DateEntry):
             return True
-        return hasattr(widget, "_calendar") and callable(getattr(widget, "get_date", None))
+        if Calendar is not None and isinstance(widget, Calendar):
+            return False
+        has_keys = hasattr(widget, "keys")
+        supports_style = False
+        if has_keys:
+            try:
+                supports_style = "style" in widget.keys()
+            except Exception:
+                supports_style = False
+        has_inner_cal = hasattr(widget, "_calendar")
+        has_get_date = callable(getattr(widget, "get_date", None))
+        return bool(supports_style and has_inner_cal and has_get_date)
 
     @classmethod
     def _style_date_entry(cls, widget: tk.Misc, theme: Dict[str, str]) -> None:
-        try:
-            widget.configure(style=cls.COMBOBOX_STYLE)
-        except tk.TclError as exc:
-            logger.warning("No se pudo configurar el estilo de DateEntry: %s", exc)
-            return
+        supports_style = False
+        if hasattr(widget, "keys"):
+            try:
+                supports_style = "style" in widget.keys()
+            except Exception:
+                supports_style = False
+        if supports_style:
+            try:
+                widget.configure(style=cls.COMBOBOX_STYLE)
+            except Exception as exc:
+                logger.warning("No se pudo configurar el estilo de DateEntry (se omite): %s", exc)
+        else:
+            logger.debug("Skipping 'style' on DateEntry-like widget: no 'style' option (%r)", widget)
         cls._register_focus_glow(widget)
 
         calendar = getattr(widget, "_calendar", None)
@@ -524,7 +550,7 @@ class ThemeManager:
 
         try:
             calendar.configure(**filtered_options)
-        except tk.TclError as exc:
+        except Exception as exc:
             logger.warning("No se pudo aplicar el tema al calendario de DateEntry: %s", exc)
 
     @classmethod
@@ -534,7 +560,12 @@ class ThemeManager:
         def _update(widget: tk.Misc) -> None:
             if not cls._widget_exists(widget):
                 return
-            cls._apply_widget_attributes(widget, theme)
+            try:
+                cls._apply_widget_attributes(widget, theme)
+            except Exception as exc:
+                logger.warning(
+                    "[ThemeManager] Skip styling %s: %s", widget.__class__.__name__, exc
+                )
             try:
                 children = widget.winfo_children()
             except tk.TclError:
