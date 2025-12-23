@@ -1777,9 +1777,8 @@ def test_duplicate_check_normalizes_occurrence_date_formats():
         armed=True, dataset_signature="sig"
     )
 
-    assert "Duplicado detectado" in result
-    assert app._last_duplicate_warning_message
-    assert "Registro duplicado de clave técnica" in app._last_duplicate_warning_message
+    assert result == "Bloqueado: fecha inválida"
+    assert app._last_duplicate_warning_message is None
 
 
 def test_duplicate_check_allows_client_without_collaborator():

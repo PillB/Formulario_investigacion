@@ -10374,27 +10374,15 @@ class FraudCaseApp:
         duplicate_messages: list[str] = []
         missing_association_messages: list[str] = []
         missing_date_messages: list[str] = []
+        invalid_date_messages: list[str] = []
         missing_assignment_detected = False
         missing_date_detected = False
+        invalid_date_detected = False
 
-        def _normalize_occurrence_date(raw_date: str) -> str:
-            text = (raw_date or "").strip()
-            if not text:
-                return text
-            sanitized = text.replace("/", "-")
-            parsed = None
-            for parser in (datetime.fromisoformat, lambda value: datetime.strptime(value, "%Y-%m-%d")):
-                try:
-                    parsed = parser(sanitized)
-                    break
-                except ValueError:
-                    continue
-            return parsed.date().isoformat() if parsed else text
         for product in self.product_frames:
             pid_norm = self._normalize_identifier(product.id_var.get())
             client_norm = self._normalize_identifier(product.client_var.get())
             occ_date_raw = (product.fecha_oc_var.get() or '').strip()
-            occ_date_norm = _normalize_occurrence_date(occ_date_raw)
             product_label = product._get_product_label()
 
             if pid_norm and not occ_date_raw:
@@ -10406,6 +10394,18 @@ class FraudCaseApp:
                     )
                 )
             if not (pid_norm and occ_date_raw):
+                continue
+            date_message = validate_date_text(
+                occ_date_raw,
+                "la fecha de ocurrencia",
+                allow_blank=False,
+                enforce_max_today=True,
+            )
+            if date_message:
+                invalid_date_detected = True
+                invalid_date_messages.append(
+                    f"{product_label}: fecha inválida. {date_message}"
+                )
                 continue
             claim_rows = [claim.get_data() for claim in product.claims if any(claim.get_data().values())]
             if not claim_rows:
@@ -10448,7 +10448,7 @@ class FraudCaseApp:
                 for collaborator_norm in collaborator_ids:
                     collaborator_key = collaborator_norm or EMPTY_PART
                     client_key = client_norm or EMPTY_PART
-                    occ_date_key = occ_date_norm or EMPTY_PART
+                    occ_date_key = occ_date_raw or EMPTY_PART
                     key = (
                         normalized_case_id,
                         pid_norm,
@@ -10470,7 +10470,12 @@ class FraudCaseApp:
                         seen_keys[key] = True
 
         error_messages = []
-        if duplicate_messages:
+        if invalid_date_messages:
+            error_messages.append(
+                "Corrige el formato de la fecha de ocurrencia (YYYY-MM-DD) antes de validar duplicados."
+            )
+            error_messages.append("\n".join(invalid_date_messages))
+        if duplicate_messages and not invalid_date_messages:
             error_messages.append("\n".join(duplicate_messages))
         if missing_association_messages or missing_date_messages:
             guidance_parts = [
@@ -10493,13 +10498,15 @@ class FraudCaseApp:
 
         cooldown_active = (
             False
-            if (missing_assignment_detected or missing_date_detected)
+            if (missing_assignment_detected or missing_date_detected or invalid_date_detected)
             else self._is_duplicate_warning_on_cooldown(signature)
         )
 
         if error_messages:
             message = "\n\n".join(error_messages)
-            if (missing_association_messages or missing_date_messages) and not duplicate_messages:
+            if invalid_date_messages:
+                status = "Bloqueado: fecha inválida"
+            elif (missing_association_messages or missing_date_messages) and not duplicate_messages:
                 if missing_association_messages and missing_date_messages:
                     status = "Bloqueado: agrega cliente/colaborador y fecha de ocurrencia"
                 elif missing_association_messages:
@@ -13806,6 +13813,15 @@ class FraudCaseApp:
                 )
                 if catalog_error:
                     errors.append(catalog_error)
+            # Validar fechas según el Design document CM antes de construir la clave técnica.
+            date_message = validate_product_dates(
+                producto.get('id_producto'),
+                producto.get('fecha_ocurrencia'),
+                producto.get('fecha_descubrimiento'),
+            )
+            date_valid = date_message is None
+            if date_message:
+                errors.append(date_message)
             # For each involvement; require IDs to validar clave técnica
             claim_rows = prod_data['reclamos'] or []
             product_occurrence_date = prod_data['producto'].get('fecha_ocurrencia')
@@ -13837,6 +13853,8 @@ class FraudCaseApp:
                 message_subject = (
                     f"{entity_prefix} {label}".strip() if entity_prefix else label
                 )
+                if not date_valid:
+                    return None
                 key = (
                     normalized_case_id,
                     pid_norm,
@@ -13959,14 +13977,6 @@ class FraudCaseApp:
                     errors.append(
                         f"Producto {producto['id_producto']}: El tipo de producto '{tipo_producto}' no está en el catálogo."
                     )
-            # Fechas
-            date_message = validate_product_dates(
-                producto.get('id_producto'),
-                producto.get('fecha_ocurrencia'),
-                producto.get('fecha_descubrimiento'),
-            )
-            if date_message:
-                errors.append(date_message)
             # Montos
             money_values = {}
             money_error = False
