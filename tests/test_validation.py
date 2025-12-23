@@ -1717,7 +1717,7 @@ def test_validate_data_detects_duplicate_technical_keys():
     )
     errors, _ = app.validate_data()
     assert (
-        f"Registro duplicado de clave técnica (producto {DEFAULT_PRODUCT_ID}, colaborador T12345)"
+        f"Registro duplicado de clave técnica (producto {DEFAULT_PRODUCT_ID}, cliente 12345678, colaborador T12345)"
         in errors
     )
 
@@ -1733,7 +1733,7 @@ def test_validate_data_detects_case_insensitive_technical_keys():
     )
     errors, _ = app.validate_data()
     assert (
-        f"Registro duplicado de clave técnica (producto {DEFAULT_PRODUCT_ID}, colaborador T12345)"
+        f"Registro duplicado de clave técnica (producto {DEFAULT_PRODUCT_ID}, cliente 12345678, colaborador T12345)"
         in errors
     )
 
@@ -1914,7 +1914,7 @@ def test_validate_data_detects_duplicate_technical_keys_without_claims():
     errors, _ = app.validate_data()
 
     assert (
-        f"Registro duplicado de clave técnica (producto {DEFAULT_PRODUCT_ID}, colaborador T12345)"
+        f"Registro duplicado de clave técnica (producto {DEFAULT_PRODUCT_ID}, cliente 12345678, colaborador T12345)"
         in errors
     )
 
