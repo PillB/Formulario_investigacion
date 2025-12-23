@@ -182,7 +182,7 @@ def validate_phone_list(value: str, label: str) -> Optional[str]:
 
 
 def validate_reclamo_id(value: str) -> Optional[str]:
-    text = (value or "").strip()
+    text = (value or "").strip().upper()
     if not text:
         return "Debe ingresar el ID de reclamo."
     if not re.fullmatch(r"^C\d{8}$", text):

@@ -49,6 +49,10 @@ SPINBOX_STYLE = ThemeManager.SPINBOX_STYLE
 BUTTON_STYLE = ThemeManager.BUTTON_STYLE
 
 
+def normalize_claim_id(value: str) -> str:
+    return (value or "").strip().upper()
+
+
 class BaseInvolvementRow:
     """Representa una fila de involucramiento reutilizable para colaboradores o clientes."""
 
@@ -767,14 +771,14 @@ class ClaimRow:
             except Exception:
                 case_value = ""
         return {
-            "id_reclamo": self.id_var.get().strip(),
+            "id_reclamo": normalize_claim_id(self.id_var.get()),
             "id_caso": case_value,
             "nombre_analitica": self.name_var.get().strip(),
             "codigo_analitica": self.code_var.get().strip(),
         }
 
     def set_data(self, data):
-        self.id_var.set((data.get("id_reclamo") or "").strip())
+        self.id_var.set(normalize_claim_id(data.get("id_reclamo")))
         case_var = getattr(self, "case_id_var", None)
         if case_var and hasattr(case_var, "set"):
             case_var.set((data.get("id_caso") or "").strip())
@@ -792,7 +796,9 @@ class ClaimRow:
         self._refresh_claim_summary()
 
     def on_id_change(self, from_focus=False, preserve_existing=False, silent=False):
-        rid = self.id_var.get().strip()
+        rid = normalize_claim_id(self.id_var.get())
+        if rid != self.id_var.get():
+            self.id_var.set(rid)
         if not rid:
             self._last_missing_lookup_id = None
             self._refresh_claim_summary()
@@ -2948,11 +2954,11 @@ class ProductFrame:
         return self.add_claim()
 
     def find_claim_by_id(self, claim_id):
-        claim_id = (claim_id or '').strip()
+        claim_id = normalize_claim_id(claim_id)
         if not claim_id:
             return None
         for claim in self.claims:
-            if claim.id_var.get().strip() == claim_id:
+            if normalize_claim_id(claim.id_var.get()) == claim_id:
                 return claim
         return None
 
@@ -2983,7 +2989,7 @@ class ProductFrame:
 
     def _normalize_claim_dict(self, payload):
         return {
-            'id_reclamo': (payload.get('id_reclamo') or '').strip(),
+            'id_reclamo': normalize_claim_id(payload.get('id_reclamo')),
             'nombre_analitica': (payload.get('nombre_analitica') or '').strip(),
             'codigo_analitica': (payload.get('codigo_analitica') or '').strip(),
         }
