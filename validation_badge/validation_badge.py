@@ -18,6 +18,10 @@ NEUTRAL_STYLE = "NeutralBadge.TLabel"
 WARNING_ICON = "⚠️"
 SUCCESS_ICON = "✅"
 NEUTRAL_ICON = "⏳"
+DEFAULT_LABEL_WIDTH = 24
+BADGE_PADDING = (6, 2)
+BADGE_BORDERWIDTH = 1
+BADGE_RELIEF = "solid"
 
 
 @dataclass
@@ -184,6 +188,8 @@ class ValidationBadge:
         wraplength: int = 360,
         preview_chars: int = 18,
         preview_lines: int = 2,
+        label_width: int | None = None,
+        freeze_container: bool = False,
         default_state: str = "neutral",
         initial_display: str = "short",
         tk_module=None,
@@ -202,6 +208,7 @@ class ValidationBadge:
         self._wraplength = wraplength
         self._preview_chars = preview_chars
         self._preview_lines = preview_lines
+        self._label_width = label_width or max(preview_chars, DEFAULT_LABEL_WIDTH)
         self._state = default_state if default_state in self.STYLE_MAP else "neutral"
         self._display_mode = initial_display if initial_display in {"short", "full", "emoji"} else "short"
         self._message_full = ""
@@ -215,10 +222,25 @@ class ValidationBadge:
         self._textvariable = textvariable
 
         ensure_grid_support(parent)
+        if freeze_container:
+            self._freeze_container(parent)
         try:
-            self._label = self._ttk.Label(parent, textvariable=self._text_var, anchor="w", wraplength=wraplength)
+            self._label = self._ttk.Label(
+                parent,
+                textvariable=self._text_var,
+                anchor="w",
+                justify="left",
+                width=self._label_width,
+                wraplength=wraplength,
+            )
         except Exception:
-            self._label = _FallbackLabel(textvariable=self._text_var, anchor="w", wraplength=wraplength)
+            self._label = _FallbackLabel(
+                textvariable=self._text_var,
+                anchor="w",
+                justify="left",
+                width=self._label_width,
+                wraplength=wraplength,
+            )
         ensure_grid_support(self._label)
         self._label.bind("<Button-1>", self._cycle_display, add="+")
 
@@ -379,9 +401,9 @@ class ValidationBadge:
             base_name,
             background=palette.background,
             foreground=palette.foreground,
-            padding=(6, 2),
-            borderwidth=1,
-            relief="solid",
+            padding=BADGE_PADDING,
+            borderwidth=BADGE_BORDERWIDTH,
+            relief=BADGE_RELIEF,
             font=("TkDefaultFont", 9, "bold"),
             wraplength=self._wraplength,
         )
@@ -438,6 +460,14 @@ class ValidationBadge:
             if info is not None:
                 self._geometry_manager = manager
                 self._geometry_options = dict(info)
+
+    def _freeze_container(self, container) -> None:  # noqa: ANN001
+        if not hasattr(container, "grid_propagate"):
+            return
+        try:
+            container.grid_propagate(False)
+        except Exception:
+            return
 
     def _mark_destroyed(self) -> None:
         self._is_destroyed = True
