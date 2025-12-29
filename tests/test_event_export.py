@@ -1,5 +1,6 @@
 import csv
 
+import settings
 from app import _sanitize_csv_value
 from report_builder import CaseData, build_event_rows
 
@@ -117,177 +118,29 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
 
     rows, header = build_event_rows(case_data)
 
-    expected_header = [
-        "id_caso",
-        "tipo_informe",
-        "categoria1",
-        "categoria2",
-        "modalidad",
-        "canal",
-        "proceso",
-        "fecha_de_ocurrencia",
-        "fecha_de_descubrimiento",
-        "centro_costos",
-        "matricula_investigador",
-        "investigador_nombre",
-        "investigador_cargo",
-        "comentario_breve",
-        "comentario_amplio",
-        "id_producto",
-        "id_cliente",
-        "id_colaborador",
-        "id_cliente_involucrado",
-        "tipo_involucrado",
-        "id_reclamo",
-        "fecha_ocurrencia",
-        "fecha_descubrimiento",
-        "tipo_producto",
-        "tipo_moneda",
-        "monto_investigado",
-        "monto_perdida_fraude",
-        "monto_falla_procesos",
-        "monto_contingencia",
-        "monto_recuperado",
-        "monto_pago_deuda",
-        "nombre_analitica",
-        "codigo_analitica",
-        "cliente_nombres",
-        "cliente_apellidos",
-        "cliente_tipo_id",
-        "cliente_flag",
-        "cliente_telefonos",
-        "cliente_correos",
-        "cliente_direcciones",
-        "cliente_accionado",
-        "colaborador_flag",
-        "colaborador_nombres",
-        "colaborador_apellidos",
-        "colaborador_division",
-        "colaborador_area",
-        "colaborador_servicio",
-        "colaborador_puesto",
-        "colaborador_fecha_carta_inmediatez",
-        "colaborador_fecha_carta_renuncia",
-        "colaborador_nombre_agencia",
-        "colaborador_codigo_agencia",
-        "colaborador_tipo_falta",
-        "colaborador_tipo_sancion",
-        "monto_asignado",
-    ]
+    assert header == settings.EVENTOS_HEADER_CANONICO
 
-    assert header == expected_header
+    placeholder = settings.EVENTOS_PLACEHOLDER
+    colaborador_row = next(row for row in rows if row["product_id"] == "=P1")
+    assert colaborador_row["case_id"] == "2024-1001"
+    assert colaborador_row["categoria_1"] == "ProdCat1"
+    assert colaborador_row["tipo_de_producto"] == "Tarjeta"
+    assert colaborador_row["monto_falla_en_proceso_soles"] == "5.00"
+    assert colaborador_row["monto_fraude_externo_soles"] == placeholder
+    assert colaborador_row["cod_operation"] == placeholder
+    assert colaborador_row["matricula_colaborador_involucrado"] == "=COL1"
+    assert colaborador_row["nombres_involucrado"] == "Juan"
+    assert colaborador_row["telefonos_cliente_relacionado"] == "=999"
+    assert colaborador_row["id_caso"] == "2024-1001"
+    assert colaborador_row["cliente_telefonos"] == "=999"
+    assert colaborador_row["codigo_analitica"] == "4300000001"
 
-    base_row = {
-        "id_caso": "2024-1001",
-        "tipo_informe": "Inicial",
-        "categoria1": "CaseCat1",
-        "categoria2": "CaseCat2",
-        "modalidad": "CaseMod",
-        "canal": "CaseChannel",
-        "proceso": "CaseProcess",
-        "fecha_de_ocurrencia": "2024-01-01",
-        "fecha_de_descubrimiento": "2024-01-02",
-        "centro_costos": "CC-99",
-        "matricula_investigador": "TM-0001",
-        "investigador_nombre": "Lead Name",
-        "investigador_cargo": "Lead Role",
-        "comentario_breve": "",
-        "comentario_amplio": "",
-    }
-
-    assert rows == [
-        {
-            **base_row,
-            "categoria1": "ProdCat1",
-            "categoria2": "ProdCat2",
-            "modalidad": "Online",
-            "canal": "App",
-            "proceso": "Alta",
-            "id_producto": "=P1",
-            "id_cliente": "CL1",
-            "id_colaborador": "=COL1",
-            "id_cliente_involucrado": "",
-            "tipo_involucrado": "colaborador",
-            "id_reclamo": "-RC1",
-            "fecha_ocurrencia": "2024-01-05",
-            "fecha_descubrimiento": "2024-01-06",
-            "tipo_producto": "Tarjeta",
-            "tipo_moneda": "PEN",
-            "monto_investigado": "100.00",
-            "monto_perdida_fraude": "10.00",
-            "monto_falla_procesos": "5.00",
-            "monto_contingencia": "20.00",
-            "monto_recuperado": "1.00",
-            "monto_pago_deuda": "0.00",
-            "nombre_analitica": "Analítica P1",
-            "codigo_analitica": "4300000001",
-            "cliente_nombres": "Ana",
-            "cliente_apellidos": "Gómez",
-            "cliente_tipo_id": "DNI",
-            "cliente_flag": "A",
-            "cliente_telefonos": "=999",
-            "cliente_correos": "ana@example.com",
-            "cliente_direcciones": "Calle 1",
-            "cliente_accionado": "Sí",
-            "colaborador_flag": "B",
-            "colaborador_nombres": "Juan",
-            "colaborador_apellidos": "Pérez",
-            "colaborador_division": "Riesgos",
-            "colaborador_area": "Analítica",
-            "colaborador_servicio": "Monitoreo",
-            "colaborador_puesto": "Analista",
-            "colaborador_fecha_carta_inmediatez": "2024-01-02",
-            "colaborador_fecha_carta_renuncia": "",
-            "colaborador_nombre_agencia": "Agencia Central",
-            "colaborador_codigo_agencia": "000111",
-            "colaborador_tipo_falta": "Grave",
-            "colaborador_tipo_sancion": "Suspensión",
-            "monto_asignado": "50",
-        },
-        {
-            **base_row,
-            "id_producto": "P2",
-            "id_cliente": "CL2",
-            "id_colaborador": "",
-            "id_cliente_involucrado": "CL2",
-            "tipo_involucrado": "cliente",
-            "id_reclamo": "",
-            "fecha_ocurrencia": "2024-02-01",
-            "fecha_descubrimiento": "",
-            "tipo_producto": "",
-            "tipo_moneda": "",
-            "monto_investigado": "",
-            "monto_perdida_fraude": "",
-            "monto_falla_procesos": "",
-            "monto_contingencia": "",
-            "monto_recuperado": "",
-            "monto_pago_deuda": "",
-            "nombre_analitica": "",
-            "codigo_analitica": "",
-            "cliente_nombres": "Luis",
-            "cliente_apellidos": "Mora",
-            "cliente_tipo_id": "",
-            "cliente_flag": "",
-            "cliente_telefonos": "",
-            "cliente_correos": "",
-            "cliente_direcciones": "",
-            "cliente_accionado": "",
-            "colaborador_flag": "",
-            "colaborador_nombres": "",
-            "colaborador_apellidos": "",
-            "colaborador_division": "",
-            "colaborador_area": "",
-            "colaborador_servicio": "",
-            "colaborador_puesto": "",
-            "colaborador_fecha_carta_inmediatez": "",
-            "colaborador_fecha_carta_renuncia": "",
-            "colaborador_nombre_agencia": "",
-            "colaborador_codigo_agencia": "",
-            "colaborador_tipo_falta": "",
-            "colaborador_tipo_sancion": "",
-            "monto_asignado": "15",
-        },
-    ]
+    cliente_row = next(row for row in rows if row["product_id"] == "P2")
+    assert cliente_row["client_id_involucrado"] == "CL2"
+    assert cliente_row["matricula_colaborador_involucrado"] == placeholder
+    assert cliente_row["division"] == placeholder
+    assert cliente_row["tipo_de_producto"] == placeholder
+    assert cliente_row["id_colaborador"] == placeholder
 
     csv_path = tmp_path / "caso_eventos.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as file:
@@ -300,4 +153,4 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
     assert parsed[0]["id_producto"] == "'=P1"
     assert parsed[0]["id_colaborador"] == "'=COL1"
     assert parsed[0]["cliente_telefonos"] == "'=999"
-    assert parsed[-1]["id_colaborador"] == ""
+    assert parsed[-1]["id_colaborador"] == settings.EVENTOS_PLACEHOLDER

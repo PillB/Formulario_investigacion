@@ -101,7 +101,7 @@ def _build_consolidation_app(tmp_path: Path, external_dir: Path | None) -> Fraud
 
 
 def test_append_historical_records_creates_and_appends(tmp_path):
-    header = ["id_cliente", "id_caso"]
+    header = ["id_cliente", "id_caso", "extra_field"]
     rows = [{"id_cliente": "=CL1", "id_caso": "2024-0001"}]
     timestamp = datetime(2024, 1, 1, 12, 0, 0)
 
@@ -115,19 +115,27 @@ def test_append_historical_records_creates_and_appends(tmp_path):
 
     assert first_path == second_path == tmp_path / "h_clientes.csv"
     contents = (tmp_path / "h_clientes.csv").read_text(encoding="utf-8").splitlines()
-    assert contents[0].split(",") == ["id_cliente", "id_caso", "case_id", "fecactualizacion"]
+    assert contents[0].split(",") == [
+        "id_cliente",
+        "id_caso",
+        "extra_field",
+        "case_id",
+        "fecactualizacion",
+    ]
 
     data_lines = contents[1:]
     assert len(data_lines) == 2
     first_columns = data_lines[0].split(",")
     assert first_columns[0] == "'=CL1"
-    assert first_columns[2] == "2024-0001"
-    assert first_columns[3] == "2024-01-01T12:00:00"
+    assert first_columns[2] == settings.EVENTOS_PLACEHOLDER
+    assert first_columns[3] == "2024-0001"
+    assert first_columns[4] == "2024-01-01T12:00:00"
 
     second_columns = data_lines[1].split(",")
     assert second_columns[0] == "CL2"
-    assert second_columns[2] == "2024-0001"
-    assert second_columns[3] == "2024-01-01T12:00:00"
+    assert second_columns[2] == settings.EVENTOS_PLACEHOLDER
+    assert second_columns[3] == "2024-0001"
+    assert second_columns[4] == "2024-01-01T12:00:00"
 
 
 def test_perform_save_exports_records_history_and_manifest(tmp_path, monkeypatch):

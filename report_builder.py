@@ -135,6 +135,13 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
     return rows, header
 
 
+def _event_placeholder(value: object, placeholder: str) -> str:
+    if value is None:
+        return placeholder
+    text = str(value)
+    return text if text.strip() else placeholder
+
+
 def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict[str, str]], list[str]]:
     """Combina productos con clientes, reclamos e involucramientos vinculados.
 
@@ -151,68 +158,37 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
     investigator = investigator if isinstance(investigator, Mapping) else {}
     raw_analysis = case_data.get("analisis", {}) if isinstance(case_data, Mapping) else {}
     analysis_texts = normalize_analysis_texts(raw_analysis)
+    placeholder = settings.EVENTOS_PLACEHOLDER
     base_row = {
-        "id_caso": caso.get("id_caso", ""),
-        "tipo_informe": caso.get("tipo_informe", ""),
-        "categoria1": caso.get("categoria1", ""),
-        "categoria2": caso.get("categoria2", ""),
-        "modalidad": caso.get("modalidad", ""),
-        "canal": caso.get("canal", ""),
-        "proceso": caso.get("proceso", ""),
-        "fecha_de_ocurrencia": caso.get("fecha_de_ocurrencia", ""),
-        "fecha_de_descubrimiento": caso.get("fecha_de_descubrimiento", ""),
-        "centro_costos": caso.get("centro_costos", "") or caso.get("centro_costo", ""),
-        "matricula_investigador": caso.get("matricula_investigador", ""),
-        "investigador_nombre": caso.get("investigador_nombre", "")
-        or investigator.get("nombre", ""),
-        "investigador_cargo": caso.get("investigador_cargo", "")
-        or investigator.get("cargo", ""),
-        "comentario_breve": analysis_texts.get("comentario_breve", ""),
-        "comentario_amplio": analysis_texts.get("comentario_amplio", ""),
+        "id_caso": _event_placeholder(caso.get("id_caso"), placeholder),
+        "tipo_informe": _event_placeholder(caso.get("tipo_informe"), placeholder),
+        "categoria1": _event_placeholder(caso.get("categoria1"), placeholder),
+        "categoria2": _event_placeholder(caso.get("categoria2"), placeholder),
+        "modalidad": _event_placeholder(caso.get("modalidad"), placeholder),
+        "canal": _event_placeholder(caso.get("canal"), placeholder),
+        "proceso": _event_placeholder(caso.get("proceso"), placeholder),
+        "fecha_de_ocurrencia": _event_placeholder(caso.get("fecha_de_ocurrencia"), placeholder),
+        "fecha_de_descubrimiento": _event_placeholder(caso.get("fecha_de_descubrimiento"), placeholder),
+        "centro_costos": _event_placeholder(
+            caso.get("centro_costos") or caso.get("centro_costo"), placeholder
+        ),
+        "matricula_investigador": _event_placeholder(
+            caso.get("matricula_investigador"), placeholder
+        ),
+        "investigador_nombre": _event_placeholder(
+            caso.get("investigador_nombre") or investigator.get("nombre"), placeholder
+        ),
+        "investigador_cargo": _event_placeholder(
+            caso.get("investigador_cargo") or investigator.get("cargo"), placeholder
+        ),
+        "comentario_breve": _event_placeholder(
+            analysis_texts.get("comentario_breve"), placeholder
+        ),
+        "comentario_amplio": _event_placeholder(
+            analysis_texts.get("comentario_amplio"), placeholder
+        ),
     }
-
-    header = list(base_row.keys()) + [
-        "id_producto",
-        "id_cliente",
-        "id_colaborador",
-        "id_cliente_involucrado",
-        "tipo_involucrado",
-        "id_reclamo",
-        "fecha_ocurrencia",
-        "fecha_descubrimiento",
-        "tipo_producto",
-        "tipo_moneda",
-        "monto_investigado",
-        "monto_perdida_fraude",
-        "monto_falla_procesos",
-        "monto_contingencia",
-        "monto_recuperado",
-        "monto_pago_deuda",
-        "nombre_analitica",
-        "codigo_analitica",
-        "cliente_nombres",
-        "cliente_apellidos",
-        "cliente_tipo_id",
-        "cliente_flag",
-        "cliente_telefonos",
-        "cliente_correos",
-        "cliente_direcciones",
-        "cliente_accionado",
-        "colaborador_flag",
-        "colaborador_nombres",
-        "colaborador_apellidos",
-        "colaborador_division",
-        "colaborador_area",
-        "colaborador_servicio",
-        "colaborador_puesto",
-        "colaborador_fecha_carta_inmediatez",
-        "colaborador_fecha_carta_renuncia",
-        "colaborador_nombre_agencia",
-        "colaborador_codigo_agencia",
-        "colaborador_tipo_falta",
-        "colaborador_tipo_sancion",
-        "monto_asignado",
-    ]
+    header = list(settings.EVENTOS_HEADER_CANONICO)
 
     productos = case_data.get("productos") if isinstance(case_data, Mapping) else []
     reclamos = case_data.get("reclamos") if isinstance(case_data, Mapping) else []
@@ -249,70 +225,232 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
             else {}
         )
         involved_client_id = inv.get("id_cliente_involucrado", "") if is_client_involvement else ""
+        involved_client = clientes_por_id.get(involved_client_id, {}) if is_client_involvement else {}
+        categoria1 = product.get("categoria1") or base_row.get("categoria1")
+        categoria2 = product.get("categoria2") or base_row.get("categoria2")
+        modalidad = product.get("modalidad") or base_row.get("modalidad")
+        canal = product.get("canal") or base_row.get("canal")
+        proceso = product.get("proceso") or base_row.get("proceso")
+        fecha_cese = collaborator.get("fecha_carta_renuncia") if not is_client_involvement else None
+        telefono_relacionado = client.get("telefonos")
+        correos_relacionado = client.get("correos")
+        direcciones_relacionado = client.get("direcciones")
+        accionado_relacionado = client.get("accionado")
+        monto_perdida_fraude = product.get("monto_perdida_fraude")
+        monto_falla_procesos = product.get("monto_falla_procesos")
+        monto_contingencia = product.get("monto_contingencia")
+        monto_recuperado = product.get("monto_recuperado")
+        monto_pago_deuda = product.get("monto_pago_deuda")
+        canonical_row = {
+            "case_id": _event_placeholder(caso.get("id_caso"), placeholder),
+            "tipo_informe": _event_placeholder(caso.get("tipo_informe"), placeholder),
+            "categoria_1": _event_placeholder(categoria1, placeholder),
+            "categoria_2": _event_placeholder(categoria2, placeholder),
+            "modalidad": _event_placeholder(modalidad, placeholder),
+            "tipo_de_producto": _event_placeholder(product.get("tipo_producto"), placeholder),
+            "canal": _event_placeholder(canal, placeholder),
+            "proceso_impactado": _event_placeholder(proceso, placeholder),
+            "product_id": _event_placeholder(product.get("id_producto"), placeholder),
+            "cod_operation": placeholder,
+            "monto_investigado": _event_placeholder(product.get("monto_investigado"), placeholder),
+            "tipo_monead": _event_placeholder(product.get("tipo_moneda"), placeholder),
+            "tipo_id_cliente_involucrado": _event_placeholder(
+                involved_client.get("tipo_id"), placeholder
+            ),
+            "client_id_involucrado": _event_placeholder(involved_client_id, placeholder),
+            "flag_cliente_involucrado": _event_placeholder(
+                involved_client.get("flag"), placeholder
+            ),
+            "nombres_cliente_involucrado": _event_placeholder(
+                involved_client.get("nombres"), placeholder
+            ),
+            "apellidos_cliente_involucrado": _event_placeholder(
+                involved_client.get("apellidos"), placeholder
+            ),
+            "matricula_colaborador_involucrado": _event_placeholder(
+                inv.get("id_colaborador") if not is_client_involvement else None, placeholder
+            ),
+            "apellido_paterno_involucrado": _event_placeholder(
+                collaborator.get("apellidos") if not is_client_involvement else None, placeholder
+            ),
+            "apellido_materno_involucrado": placeholder,
+            "nombres_involucrado": _event_placeholder(
+                collaborator.get("nombres") if not is_client_involvement else None, placeholder
+            ),
+            "division": _event_placeholder(
+                collaborator.get("division") if not is_client_involvement else None, placeholder
+            ),
+            "area": _event_placeholder(
+                collaborator.get("area") if not is_client_involvement else None, placeholder
+            ),
+            "servicio": _event_placeholder(
+                collaborator.get("servicio") if not is_client_involvement else None, placeholder
+            ),
+            "nombre_agencia": _event_placeholder(
+                collaborator.get("nombre_agencia") if not is_client_involvement else None, placeholder
+            ),
+            "codigo_agencia": _event_placeholder(
+                collaborator.get("codigo_agencia") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "puesto": _event_placeholder(
+                collaborator.get("puesto") if not is_client_involvement else None, placeholder
+            ),
+            "fecha_cese": _event_placeholder(fecha_cese, placeholder),
+            "tipo_de_falta": _event_placeholder(
+                collaborator.get("tipo_falta") if not is_client_involvement else None, placeholder
+            ),
+            "tipo_de_sanction": _event_placeholder(
+                collaborator.get("tipo_sancion") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "fecha_ocurrencia": _event_placeholder(product.get("fecha_ocurrencia"), placeholder),
+            "fecha_descubrimiento": _event_placeholder(
+                product.get("fecha_descubrimiento"), placeholder
+            ),
+            "monto_fraude_interno_soles": _event_placeholder(monto_perdida_fraude, placeholder),
+            "monto_fraude_interno_dolares": placeholder,
+            "monto_fraude_externo_soles": placeholder,
+            "monto_fraude_externo_dolares": placeholder,
+            "monto_falla_en_proceso_soles": _event_placeholder(
+                monto_falla_procesos, placeholder
+            ),
+            "monto_falla_en_proceso_dolares": placeholder,
+            "monto_contingencia_soles": _event_placeholder(monto_contingencia, placeholder),
+            "monto_contingencia_dolares": placeholder,
+            "monto_recuperado_soles": _event_placeholder(monto_recuperado, placeholder),
+            "monto_recuperado_dolares": placeholder,
+            "monto_pagado_soles": _event_placeholder(monto_pago_deuda, placeholder),
+            "monto_pagado_dolares": placeholder,
+            "comentario_breve": _event_placeholder(
+                analysis_texts.get("comentario_breve"), placeholder
+            ),
+            "comentario_amplio": _event_placeholder(
+                analysis_texts.get("comentario_amplio"), placeholder
+            ),
+            "id_reclamo": _event_placeholder(claim.get("id_reclamo"), placeholder),
+            "nombre_analitica": _event_placeholder(
+                claim.get("nombre_analitica"), placeholder
+            ),
+            "codino_analitica": _event_placeholder(
+                claim.get("codigo_analitica"), placeholder
+            ),
+            "telefonos_cliente_relacionado": _event_placeholder(
+                telefono_relacionado, placeholder
+            ),
+            "correos_cliente_relacionado": _event_placeholder(
+                correos_relacionado, placeholder
+            ),
+            "direcciones_cliente_relacionado": _event_placeholder(
+                direcciones_relacionado, placeholder
+            ),
+            "accionado_cliente_relacionado": _event_placeholder(
+                accionado_relacionado, placeholder
+            ),
+        }
         rows.append(
             {
+                **{field: placeholder for field in header},
+                **canonical_row,
                 **base_row,
-                "categoria1": product.get("categoria1", base_row.get("categoria1", "")),
-                "categoria2": product.get("categoria2", base_row.get("categoria2", "")),
-                "modalidad": product.get("modalidad", base_row.get("modalidad", "")),
-                "canal": product.get("canal", base_row.get("canal", "")),
-                "proceso": product.get("proceso", base_row.get("proceso", "")),
-                "id_producto": product.get("id_producto", ""),
-                "id_cliente": product.get("id_cliente", ""),
-                "id_colaborador": inv.get("id_colaborador", "") if not is_client_involvement else "",
-                "id_cliente_involucrado": involved_client_id,
-                "tipo_involucrado": inv_tipo,
-                "id_reclamo": claim.get("id_reclamo", ""),
-                "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
-                "fecha_descubrimiento": product.get("fecha_descubrimiento", ""),
-                "tipo_producto": product.get("tipo_producto", ""),
-                "tipo_moneda": product.get("tipo_moneda", ""),
-                "monto_investigado": product.get("monto_investigado", ""),
-                "monto_perdida_fraude": product.get("monto_perdida_fraude", ""),
-                "monto_falla_procesos": product.get("monto_falla_procesos", ""),
-                "monto_contingencia": product.get("monto_contingencia", ""),
-                "monto_recuperado": product.get("monto_recuperado", ""),
-                "monto_pago_deuda": product.get("monto_pago_deuda", ""),
-                "nombre_analitica": claim.get("nombre_analitica", ""),
-                "codigo_analitica": claim.get("codigo_analitica", ""),
-                "cliente_nombres": client.get("nombres", ""),
-                "cliente_apellidos": client.get("apellidos", ""),
-                "cliente_tipo_id": client.get("tipo_id", ""),
-                "cliente_flag": client.get("flag", ""),
-                "cliente_telefonos": client.get("telefonos", ""),
-                "cliente_correos": client.get("correos", ""),
-                "cliente_direcciones": client.get("direcciones", ""),
-                "cliente_accionado": client.get("accionado", ""),
-                "colaborador_flag": collaborator.get("flag", "") if not is_client_involvement else "",
-                "colaborador_nombres": collaborator.get("nombres", "") if not is_client_involvement else "",
-                "colaborador_apellidos": collaborator.get("apellidos", "") if not is_client_involvement else "",
-                "colaborador_division": collaborator.get("division", "") if not is_client_involvement else "",
-                "colaborador_area": collaborator.get("area", "") if not is_client_involvement else "",
-                "colaborador_servicio": collaborator.get("servicio", "") if not is_client_involvement else "",
-                "colaborador_puesto": collaborator.get("puesto", "") if not is_client_involvement else "",
-                "colaborador_fecha_carta_inmediatez": collaborator.get(
-                    "fecha_carta_inmediatez", ""
-                )
-                if not is_client_involvement
-                else "",
-                "colaborador_fecha_carta_renuncia": collaborator.get(
-                    "fecha_carta_renuncia", ""
-                )
-                if not is_client_involvement
-                else "",
-                "colaborador_nombre_agencia": collaborator.get("nombre_agencia", "")
-                if not is_client_involvement
-                else "",
-                "colaborador_codigo_agencia": collaborator.get("codigo_agencia", "")
-                if not is_client_involvement
-                else "",
-                "colaborador_tipo_falta": collaborator.get("tipo_falta", "")
-                if not is_client_involvement
-                else "",
-                "colaborador_tipo_sancion": collaborator.get("tipo_sancion", "")
-                if not is_client_involvement
-                else "",
-                "monto_asignado": inv.get("monto_asignado", ""),
+                "categoria1": _event_placeholder(categoria1, placeholder),
+                "categoria2": _event_placeholder(categoria2, placeholder),
+                "modalidad": _event_placeholder(modalidad, placeholder),
+                "canal": _event_placeholder(canal, placeholder),
+                "proceso": _event_placeholder(proceso, placeholder),
+                "id_producto": _event_placeholder(product.get("id_producto"), placeholder),
+                "id_cliente": _event_placeholder(product.get("id_cliente"), placeholder),
+                "id_colaborador": _event_placeholder(
+                    inv.get("id_colaborador") if not is_client_involvement else None, placeholder
+                ),
+                "id_cliente_involucrado": _event_placeholder(
+                    involved_client_id if is_client_involvement else None, placeholder
+                ),
+                "tipo_involucrado": _event_placeholder(inv_tipo, placeholder),
+                "id_reclamo": _event_placeholder(claim.get("id_reclamo"), placeholder),
+                "fecha_ocurrencia": _event_placeholder(product.get("fecha_ocurrencia"), placeholder),
+                "fecha_descubrimiento": _event_placeholder(
+                    product.get("fecha_descubrimiento"), placeholder
+                ),
+                "tipo_producto": _event_placeholder(product.get("tipo_producto"), placeholder),
+                "tipo_moneda": _event_placeholder(product.get("tipo_moneda"), placeholder),
+                "monto_investigado": _event_placeholder(
+                    product.get("monto_investigado"), placeholder
+                ),
+                "monto_perdida_fraude": _event_placeholder(monto_perdida_fraude, placeholder),
+                "monto_falla_procesos": _event_placeholder(monto_falla_procesos, placeholder),
+                "monto_contingencia": _event_placeholder(monto_contingencia, placeholder),
+                "monto_recuperado": _event_placeholder(monto_recuperado, placeholder),
+                "monto_pago_deuda": _event_placeholder(monto_pago_deuda, placeholder),
+                "nombre_analitica": _event_placeholder(
+                    claim.get("nombre_analitica"), placeholder
+                ),
+                "codigo_analitica": _event_placeholder(
+                    claim.get("codigo_analitica"), placeholder
+                ),
+                "cliente_nombres": _event_placeholder(client.get("nombres"), placeholder),
+                "cliente_apellidos": _event_placeholder(client.get("apellidos"), placeholder),
+                "cliente_tipo_id": _event_placeholder(client.get("tipo_id"), placeholder),
+                "cliente_flag": _event_placeholder(client.get("flag"), placeholder),
+                "cliente_telefonos": _event_placeholder(client.get("telefonos"), placeholder),
+                "cliente_correos": _event_placeholder(client.get("correos"), placeholder),
+                "cliente_direcciones": _event_placeholder(
+                    client.get("direcciones"), placeholder
+                ),
+                "cliente_accionado": _event_placeholder(client.get("accionado"), placeholder),
+                "colaborador_flag": _event_placeholder(
+                    collaborator.get("flag") if not is_client_involvement else None, placeholder
+                ),
+                "colaborador_nombres": _event_placeholder(
+                    collaborator.get("nombres") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_apellidos": _event_placeholder(
+                    collaborator.get("apellidos") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_division": _event_placeholder(
+                    collaborator.get("division") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_area": _event_placeholder(
+                    collaborator.get("area") if not is_client_involvement else None, placeholder
+                ),
+                "colaborador_servicio": _event_placeholder(
+                    collaborator.get("servicio") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_puesto": _event_placeholder(
+                    collaborator.get("puesto") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_fecha_carta_inmediatez": _event_placeholder(
+                    collaborator.get("fecha_carta_inmediatez")
+                    if not is_client_involvement
+                    else None,
+                    placeholder,
+                ),
+                "colaborador_fecha_carta_renuncia": _event_placeholder(
+                    collaborator.get("fecha_carta_renuncia") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_nombre_agencia": _event_placeholder(
+                    collaborator.get("nombre_agencia") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_codigo_agencia": _event_placeholder(
+                    collaborator.get("codigo_agencia") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_tipo_falta": _event_placeholder(
+                    collaborator.get("tipo_falta") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_tipo_sancion": _event_placeholder(
+                    collaborator.get("tipo_sancion") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "monto_asignado": _event_placeholder(inv.get("monto_asignado"), placeholder),
             }
         )
 
