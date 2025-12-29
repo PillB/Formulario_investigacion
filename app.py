@@ -6002,7 +6002,7 @@ class FraudCaseApp:
                         max_new_tokens=tokens,
                     ),
                 )
-                auto_button.pack(side="left", padx=(COL_PADX // 2, 0))
+                auto_button.grid(row=0, column=6, padx=(COL_PADX // 2, 0), sticky="w")
                 self.register_tooltip(
                     auto_button,
                     "Genera un resumen automático sin PII y sin saltos de línea.",
