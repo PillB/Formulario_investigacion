@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
+from theme_manager import ThemeManager
 from validators import (
     FieldValidator,
     log_event,
@@ -206,6 +207,8 @@ class NormFrame:
             detalle_container.rowconfigure(0, weight=1)
         detalle_text = scrolledtext.ScrolledText(detalle_container, height=4, wrap=tk.WORD)
         detalle_text.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="nsew")
+        if hasattr(detalle_text, "winfo_children"):
+            ThemeManager.apply_to_widget_tree(detalle_text)
         self.badges.claim("norm_detalle", detalle_container, row=0, column=1)
         grid_labeled_widget(
             self.frame,

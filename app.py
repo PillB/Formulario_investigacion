@@ -5591,6 +5591,7 @@ class FraudCaseApp:
             change_notifier=self._log_navigation_change,
             header_tree=self.norm_header_tree,
         )
+        ThemeManager.apply_to_widget_tree(norm.section)
         with suppress(Exception):
             norm.case_id_var.set(self.id_caso_var.get())
         norm.set_refresh_callbacks(
