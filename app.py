@@ -168,8 +168,8 @@ POSITIVE_PHRASES = (
 CONFIRMATION_WAV_B64 = (
     "UklGRiQFAABXQVZFZm10IBAAAAABAAEAgD4AAIA+AAABAAgAZGF0YQAFAACAlai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tKWRfGZUR0FCSllsgZept76+tqiVf2pXSUFBSFZofpOmtb2+uKuZg25aS0JARlNkeo+js7y/uq6ch3JdTUNARFBhdougsLu/u7Cgi3ZhUERAQ01dcoecrrq/vLOjj3pkU0ZAQktaboOZq7i+vbWmk35oVkhBQUlXaoCVqLa+vrepl4FsWUpCQUdUZnyRpbS9v7msm4VwXExDQEVRY3iNorK8v7uvnol0X09EQERPX3SJnq+7v7yyoo14Y1FFQENMXHCFm6y5v720pZF8ZlRHQUJKWWyBl6m3vr62qJWAaldJQUFIVmh+k6a1vb64q5mDblpLQkBGU2R6j6OzvL+6rpyHcl1NQ0BEUGF2i6Cwu7+7sKCLdmFQREBDTV1yh5yuur+8s6OPemRTRkBCS1pug5mruL69taaTfmhWSEFBSVdqgJWotr6+t6mXgWxZSkJBR1RmfJGltL2/uaybhXBcTENARVFjeI2isry/u6+eiXRfT0RARE9fdImer7u/vLKijXhjUUVAQ0xccIWbrLm/vbSlkXxmVEdBQkpZbIGXqbe+vraolX9qV0lBQUhWaH6TprW9vrirmYNuWktCQEZTZHqPo7O8v7qunIdyXU1DQERQYXaLoLC7v7uwoIt2YVBEQENNXXKHnK66v7yzo496ZFNGQEJLWm6Dmau4vr21ppN+aFZIQUFJV2p/lai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tKWRfGZUR0FCSllsgZept76+tqiVgGpXSUFBSFZofpOmtb2+uKuZg25aS0JARlNkeo+js7y/uq6ch3JdTUNARFBhdougsLu/u7Cgi3ZhUERAQ01dcoecrrq/vLOjj3pkU0ZAQktaboOZq7i+vbWmk35oVkhBQUlXaoCVqLa+vrepl4FsWUpCQUdUZnyRpbS9v7msm4VwXExDQEVRY3iNorK8v7uvnol0X09EQERPX3SJnq+7v7yyoo14Y1FFQENMXHCFm6y5v720pZF8ZlRHQUJKWWyBl6m3vr62qJV/aldJQUFIVmh+k6a1vb64q5mDblpLQkBGU2R6j6OzvL+6rpyHcl1NQ0BEUGF2i6Cwu7+7sKCLdmFQREBDTV1yh5yuur+8s6OPemRTRkBCS1pug5mruL69taaTfmhWSEFBSVdqgJWotr6+t6mXgWxZSkJBR1RmfJGltL2/uaybhXBcTENARVFjeI2isry/u6+eiXRfT0RARE9fdImer7u/vLKijXhjUUVAQ0xccIWbrLm/vbSlkXxmVEdBQkpZbIGXqbe+vraolX9qV0lBQUhWaH6TprW9vrirmYNuWktCQEZTZHqPo7O8v7qunIdyXU1DQERQYXaLoLC7v7uwoIt2YVBEQENNXXKHnK66v7yzo496ZFNGQEJLWm6Dmau4vr21ppN+aFZIQUFJV2p/lai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tA=="
 )
-COMMENTARIO_BREVE_MAX_CHARS = 150
-COMMENTARIO_AMPLIO_MAX_CHARS = 750
+COMENTARIO_BREVE_MAX_CHARS = 150
+COMENTARIO_AMPLIO_MAX_CHARS = 750
 
 
 
@@ -1874,8 +1874,8 @@ class FraudCaseApp:
             return entry
 
         comment_limits = {
-            "comentario_breve": (COMMENTARIO_BREVE_MAX_CHARS, False),
-            "comentario_amplio": (COMMENTARIO_AMPLIO_MAX_CHARS, False),
+            "comentario_breve": (COMENTARIO_BREVE_MAX_CHARS, False),
+            "comentario_amplio": (COMENTARIO_AMPLIO_MAX_CHARS, False),
         }
         sections = [
             "antecedentes",
@@ -5849,7 +5849,7 @@ class FraudCaseApp:
                     "Comentario breve sin saltos de línea (máximo 150 caracteres)."
                 ),
                 "height": 6,
-                "max_chars": COMMENTARIO_BREVE_MAX_CHARS,
+                "max_chars": COMENTARIO_BREVE_MAX_CHARS,
                 "allow_newlines": False,
             },
             {
@@ -5859,7 +5859,7 @@ class FraudCaseApp:
                     "Comentario ampliado sin saltos de línea (máximo 750 caracteres)."
                 ),
                 "height": 12,
-                "max_chars": COMMENTARIO_AMPLIO_MAX_CHARS,
+                "max_chars": COMENTARIO_AMPLIO_MAX_CHARS,
                 "allow_newlines": False,
             },
         ]
