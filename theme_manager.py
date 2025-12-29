@@ -600,7 +600,11 @@ class ThemeManager:
             }
             if isinstance(widget, scrolledtext.ScrolledText):
                 try:
-                    widget.configure(background=background, **focus_outline)
+                    widget.configure(
+                        background=input_background,
+                        foreground=input_foreground,
+                        **focus_outline,
+                    )
                 except tk.TclError as exc:
                     logger.warning("No se pudo actualizar el contenedor ScrolledText: %s", exc)
                 if not cls._widget_exists(widget):
@@ -611,6 +615,8 @@ class ThemeManager:
                     handled = cls._configure_text_widget(text_widget, theme, focus_outline)
                 if not handled:
                     handled = cls._force_text_children_refresh(widget, theme, focus_outline)
+                if not handled and isinstance(widget, tk.Text):
+                    handled = cls._configure_text_widget(widget, theme, focus_outline)
                 if not handled:
                     cls._log_missing_text_child(widget)
                     return
