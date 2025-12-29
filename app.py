@@ -125,6 +125,7 @@ from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
 from utils.background_worker import (run_guarded_task,
                                      shutdown_background_workers)
+from utils.auto_redaccion import auto_redact_comment
 from utils.historical_consolidator import append_historical_records
 from utils.mass_import_manager import MassImportManager
 from utils.persistence_manager import (CURRENT_SCHEMA_VERSION,
@@ -1860,6 +1861,55 @@ class FraudCaseApp:
             "comentario_breve": getattr(self, "comentario_breve_text", None),
             "comentario_amplio": getattr(self, "comentario_amplio_text", None),
         }
+
+    def _build_auto_redaccion_narrative(self) -> str:
+        sections = [
+            ("Antecedentes", "antecedentes"),
+            ("Modus operandi", "modus_operandi"),
+            ("Hallazgos", "hallazgos"),
+            ("Descargos", "descargos"),
+            ("Conclusiones", "conclusiones"),
+            ("Recomendaciones", "recomendaciones"),
+        ]
+        widgets = self._analysis_text_widgets()
+        parts = []
+        for label, key in sections:
+            widget = widgets.get(key)
+            if widget is None:
+                continue
+            payload = self._serialize_rich_text_widget(widget)
+            raw_text = payload.get("text", "")
+            cleaned = sanitize_rich_text(raw_text, max_chars=None).strip()
+            if cleaned:
+                parts.append(f"{label}: {cleaned}")
+        return " ".join(parts)
+
+    def _auto_redact_commentary(self, target_key: str, *, max_chars: int, max_new_tokens: int) -> None:
+        widgets = self._analysis_text_widgets()
+        widget = widgets.get(target_key)
+        if widget is None:
+            return
+        try:
+            case_data = self._ensure_case_data(self.gather_data())
+        except Exception as exc:  # pragma: no cover - defensivo ante errores inesperados
+            messagebox.showerror("Auto-redacción", f"No se pudo preparar el caso: {exc}")
+            return
+
+        narrative = self._build_auto_redaccion_narrative()
+        label = "breve" if target_key == "comentario_breve" else "amplio"
+        result = auto_redact_comment(
+            case_data.as_dict(),
+            narrative,
+            target_chars=max_chars,
+            max_new_tokens=max_new_tokens,
+            label=label,
+        )
+        if result.error:
+            log_event("auto_redaccion", result.error, self.logs)
+            messagebox.showerror("Auto-redacción", result.error)
+        self._set_text_content(widget, result.text)
+        self._mark_rich_text_modified(widget)
+        self._log_navigation_change(f"Auto-redactó {label}")
 
     def _normalize_analysis_texts(self, analysis_payload):
         def _build_entry(value, *, max_chars=RICH_TEXT_MAX_CHARS, allow_newlines=True):
@@ -5936,6 +5986,24 @@ class FraudCaseApp:
                 sticky="w",
             )
             self._add_rich_text_toolbar(toolbar, text_widget)
+            if label_text.lower().startswith("comentario"):
+                target_key = "comentario_breve" if "breve" in label_text.lower() else "comentario_amplio"
+                max_chars_target = COMENTARIO_BREVE_MAX_CHARS if target_key == "comentario_breve" else COMENTARIO_AMPLIO_MAX_CHARS
+                max_new_tokens = 72 if target_key == "comentario_breve" else 320
+                auto_button = ttk.Button(
+                    toolbar,
+                    text="Auto-redactar",
+                    command=lambda key=target_key, max_chars=max_chars_target, tokens=max_new_tokens: self._auto_redact_commentary(
+                        key,
+                        max_chars=max_chars,
+                        max_new_tokens=tokens,
+                    ),
+                )
+                auto_button.pack(side="left", padx=(COL_PADX // 2, 0))
+                self.register_tooltip(
+                    auto_button,
+                    "Genera un resumen automático sin PII y sin saltos de línea.",
+                )
             text_widgets.append(text_widget)
 
         (
