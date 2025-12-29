@@ -1254,6 +1254,8 @@ def test_gather_data_serializes_rich_text_analysis():
     app.descargos_text = RichTextWidgetStub()
     app.conclusiones_text = RichTextWidgetStub()
     app.recomendaciones_text = RichTextWidgetStub()
+    app.comentario_breve_text = RichTextWidgetStub("Resumen breve")
+    app.comentario_amplio_text = RichTextWidgetStub("Resumen ampliado")
 
     form_data = app.gather_data()
 
@@ -1269,6 +1271,29 @@ def test_gather_data_serializes_rich_text_analysis():
     assert hallazgos_payload['text'] == "Hallazgos simples"
     assert hallazgos_payload['tags'] == []
     assert hallazgos_payload['images'] == []
+
+    comentario_breve_payload = form_data['analisis']['comentario_breve']
+    assert comentario_breve_payload['text'] == "Resumen breve"
+    comentario_amplio_payload = form_data['analisis']['comentario_amplio']
+    assert comentario_amplio_payload['text'] == "Resumen ampliado"
+
+
+def test_normalize_analysis_texts_removes_newlines_and_truncates_comments():
+    app = FraudCaseApp.__new__(FraudCaseApp)
+    raw_payload = {
+        "comentario_breve": {"text": "Linea 1\nLinea 2" + ("X" * 200)},
+        "comentario_amplio": {"text": "Amplio\nDetalle" + ("Y" * 1000)},
+    }
+
+    normalized = app._normalize_analysis_texts(raw_payload)
+
+    breve_text = normalized["comentario_breve"]["text"]
+    amplio_text = normalized["comentario_amplio"]["text"]
+
+    assert "\n" not in breve_text
+    assert "\n" not in amplio_text
+    assert len(breve_text) == app_module.COMENTARIO_BREVE_MAX_CHARS
+    assert len(amplio_text) == app_module.COMENTARIO_AMPLIO_MAX_CHARS
 
 
 @pytest.mark.parametrize(

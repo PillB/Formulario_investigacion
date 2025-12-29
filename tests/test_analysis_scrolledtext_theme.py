@@ -37,26 +37,33 @@ def test_analysis_scrolledtext_theme_refresh(monkeypatch, messagebox_spy, tmp_pa
         app = FraudCaseApp(root)
         assert isinstance(app.antecedentes_text, scrolledtext.ScrolledText)
 
-        text_area = getattr(app.antecedentes_text, "text", app.antecedentes_text)
+        def _assert_scrolledtext_theme(widget, palette):
+            text_area = getattr(widget, "text", widget)
+            assert widget.cget("background") == palette["background"]
+            assert text_area.cget("background") == palette["input_background"]
+            assert text_area.cget("foreground") == palette["input_foreground"]
+            assert text_area.cget("insertbackground") == palette["accent"]
+            assert text_area.cget("selectbackground") == palette["select_background"]
+            assert text_area.cget("selectforeground") == palette["select_foreground"]
 
         light_palette = ThemeManager.current()
-        assert app.antecedentes_text.cget("background") == light_palette["background"]
-        assert text_area.cget("background") == light_palette["input_background"]
-        assert text_area.cget("foreground") == light_palette["input_foreground"]
-        assert text_area.cget("insertbackground") == light_palette["accent"]
-        assert text_area.cget("selectbackground") == light_palette["select_background"]
-        assert text_area.cget("selectforeground") == light_palette["select_foreground"]
+        for widget in (
+            app.antecedentes_text,
+            app.comentario_breve_text,
+            app.comentario_amplio_text,
+        ):
+            _assert_scrolledtext_theme(widget, light_palette)
 
         ThemeManager.apply("dark")
         ThemeManager.apply_to_widget_tree(app._analysis_group)
 
         dark_palette = ThemeManager.current()
-        assert app.antecedentes_text.cget("background") == dark_palette["background"]
-        assert text_area.cget("background") == dark_palette["input_background"]
-        assert text_area.cget("foreground") == dark_palette["input_foreground"]
-        assert text_area.cget("insertbackground") == dark_palette["accent"]
-        assert text_area.cget("selectbackground") == dark_palette["select_background"]
-        assert text_area.cget("selectforeground") == dark_palette["select_foreground"]
+        for widget in (
+            app.antecedentes_text,
+            app.comentario_breve_text,
+            app.comentario_amplio_text,
+        ):
+            _assert_scrolledtext_theme(widget, dark_palette)
     finally:
         root.destroy()
         ThemeManager._style = previous_style

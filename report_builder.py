@@ -498,6 +498,8 @@ def normalize_analysis_texts(analysis: Mapping[str, Any] | None) -> Dict[str, st
         "descargos",
         "conclusiones",
         "recomendaciones",
+        "comentario_breve",
+        "comentario_amplio",
     ]
     payload = analysis or {}
     normalized = {

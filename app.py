@@ -168,6 +168,8 @@ POSITIVE_PHRASES = (
 CONFIRMATION_WAV_B64 = (
     "UklGRiQFAABXQVZFZm10IBAAAAABAAEAgD4AAIA+AAABAAgAZGF0YQAFAACAlai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tKWRfGZUR0FCSllsgZept76+tqiVf2pXSUFBSFZofpOmtb2+uKuZg25aS0JARlNkeo+js7y/uq6ch3JdTUNARFBhdougsLu/u7Cgi3ZhUERAQ01dcoecrrq/vLOjj3pkU0ZAQktaboOZq7i+vbWmk35oVkhBQUlXaoCVqLa+vrepl4FsWUpCQUdUZnyRpbS9v7msm4VwXExDQEVRY3iNorK8v7uvnol0X09EQERPX3SJnq+7v7yyoo14Y1FFQENMXHCFm6y5v720pZF8ZlRHQUJKWWyBl6m3vr62qJWAaldJQUFIVmh+k6a1vb64q5mDblpLQkBGU2R6j6OzvL+6rpyHcl1NQ0BEUGF2i6Cwu7+7sKCLdmFQREBDTV1yh5yuur+8s6OPemRTRkBCS1pug5mruL69taaTfmhWSEFBSVdqgJWotr6+t6mXgWxZSkJBR1RmfJGltL2/uaybhXBcTENARVFjeI2isry/u6+eiXRfT0RARE9fdImer7u/vLKijXhjUUVAQ0xccIWbrLm/vbSlkXxmVEdBQkpZbIGXqbe+vraolX9qV0lBQUhWaH6TprW9vrirmYNuWktCQEZTZHqPo7O8v7qunIdyXU1DQERQYXaLoLC7v7uwoIt2YVBEQENNXXKHnK66v7yzo496ZFNGQEJLWm6Dmau4vr21ppN+aFZIQUFJV2p/lai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tKWRfGZUR0FCSllsgZept76+tqiVgGpXSUFBSFZofpOmtb2+uKuZg25aS0JARlNkeo+js7y/uq6ch3JdTUNARFBhdougsLu/u7Cgi3ZhUERAQ01dcoecrrq/vLOjj3pkU0ZAQktaboOZq7i+vbWmk35oVkhBQUlXaoCVqLa+vrepl4FsWUpCQUdUZnyRpbS9v7msm4VwXExDQEVRY3iNorK8v7uvnol0X09EQERPX3SJnq+7v7yyoo14Y1FFQENMXHCFm6y5v720pZF8ZlRHQUJKWWyBl6m3vr62qJV/aldJQUFIVmh+k6a1vb64q5mDblpLQkBGU2R6j6OzvL+6rpyHcl1NQ0BEUGF2i6Cwu7+7sKCLdmFQREBDTV1yh5yuur+8s6OPemRTRkBCS1pug5mruL69taaTfmhWSEFBSVdqgJWotr6+t6mXgWxZSkJBR1RmfJGltL2/uaybhXBcTENARVFjeI2isry/u6+eiXRfT0RARE9fdImer7u/vLKijXhjUUVAQ0xccIWbrLm/vbSlkXxmVEdBQkpZbIGXqbe+vraolX9qV0lBQUhWaH6TprW9vrirmYNuWktCQEZTZHqPo7O8v7qunIdyXU1DQERQYXaLoLC7v7uwoIt2YVBEQENNXXKHnK66v7yzo496ZFNGQEJLWm6Dmau4vr21ppN+aFZIQUFJV2p/lai2vr63qZeBbFlKQkFHVGZ8kaW0vb+5rJuFcFxMQ0BFUWN4jaKyvL+7r56JdF9PREBET190iZ6vu7+8sqKNeGNRRUBDTFxwhZusub+9tA=="
 )
+COMENTARIO_BREVE_MAX_CHARS = 150
+COMENTARIO_AMPLIO_MAX_CHARS = 750
 
 
 
@@ -1222,9 +1224,22 @@ class FraudCaseApp:
         self._post_edit_validators.append(validator)
         return validator
 
-    def _register_rich_text_limit(self, widget: tk.Text, label: str) -> None:
+    def _register_rich_text_limit(
+        self,
+        widget: tk.Text,
+        label: str,
+        *,
+        max_chars: int = RICH_TEXT_MAX_CHARS,
+        allow_newlines: bool = True,
+    ) -> None:
         limiter = self._RichTextLimiter(
-            widget, lambda: self._enforce_rich_text_limits(widget, label)
+            widget,
+            lambda: self._enforce_rich_text_limits(
+                widget,
+                label,
+                max_chars=max_chars,
+                allow_newlines=allow_newlines,
+            ),
         )
         self._rich_text_limiters[widget] = limiter
 
@@ -1233,19 +1248,40 @@ class FraudCaseApp:
         if limiter:
             limiter.arm()
 
-    def _enforce_rich_text_limits(self, widget: tk.Text, section_label: str) -> None:
+    def _enforce_rich_text_limits(
+        self,
+        widget: tk.Text,
+        section_label: str,
+        *,
+        max_chars: int = RICH_TEXT_MAX_CHARS,
+        allow_newlines: bool = True,
+    ) -> None:
         raw_text = self._get_text_content(widget)
         cleaned_text = sanitize_rich_text(raw_text, max_chars=None)
-        trimmed_text = sanitize_rich_text(cleaned_text, max_chars=RICH_TEXT_MAX_CHARS)
-        over_limit = len(cleaned_text) > RICH_TEXT_MAX_CHARS
+        newline_found = False
+        normalized_text = cleaned_text
+        if not allow_newlines and "\n" in cleaned_text:
+            newline_found = True
+            normalized_text = " ".join(cleaned_text.splitlines())
+        trimmed_text = sanitize_rich_text(normalized_text, max_chars=max_chars)
+        over_limit = max_chars is not None and max_chars > 0 and len(normalized_text) > max_chars
         if trimmed_text != raw_text:
             self._set_text_content(widget, trimmed_text)
-        if over_limit and not getattr(self, "_suppress_messagebox", False):
-            message = (
-                f"El campo {section_label} supera el máximo de {RICH_TEXT_MAX_CHARS} caracteres."
-            )
+        if (newline_found or over_limit) and not getattr(self, "_suppress_messagebox", False):
+            messages = []
+            if newline_found:
+                messages.append(f"El campo {section_label} no admite saltos de línea.")
+            if over_limit:
+                messages.append(
+                    f"El campo {section_label} supera el máximo de {max_chars} caracteres."
+                )
+            message = "\n".join(messages)
+            if allow_newlines and not newline_found and max_chars == RICH_TEXT_MAX_CHARS:
+                title = "Texto demasiado largo"
+            else:
+                title = "Dato inválido"
             try:
-                messagebox.showerror("Texto demasiado largo", message)
+                messagebox.showerror(title, message)
             except tk.TclError:
                 pass
             else:
@@ -1821,17 +1857,26 @@ class FraudCaseApp:
             "descargos": getattr(self, "descargos_text", None),
             "conclusiones": getattr(self, "conclusiones_text", None),
             "recomendaciones": getattr(self, "recomendaciones_text", None),
+            "comentario_breve": getattr(self, "comentario_breve_text", None),
+            "comentario_amplio": getattr(self, "comentario_amplio_text", None),
         }
 
     def _normalize_analysis_texts(self, analysis_payload):
-        def _build_entry(value):
+        def _build_entry(value, *, max_chars=RICH_TEXT_MAX_CHARS, allow_newlines=True):
             text, tags, images = self._deserialize_rich_text_payload(value)
-            sanitized = sanitize_rich_text(text, RICH_TEXT_MAX_CHARS)
+            sanitized = sanitize_rich_text(text, max_chars=None)
+            if not allow_newlines and "\n" in sanitized:
+                sanitized = " ".join(sanitized.splitlines())
+            sanitized = sanitize_rich_text(sanitized, max_chars)
             entry = {"text": sanitized, "tags": tags}
             if images:
                 entry["images"] = images
             return entry
 
+        comment_limits = {
+            "comentario_breve": (COMENTARIO_BREVE_MAX_CHARS, False),
+            "comentario_amplio": (COMENTARIO_AMPLIO_MAX_CHARS, False),
+        }
         sections = [
             "antecedentes",
             "modus_operandi",
@@ -1839,9 +1884,18 @@ class FraudCaseApp:
             "descargos",
             "conclusiones",
             "recomendaciones",
+            "comentario_breve",
+            "comentario_amplio",
         ]
         payload = analysis_payload or {}
-        normalized = {name: _build_entry(payload.get(name)) for name in sections}
+        normalized = {}
+        for name in sections:
+            max_chars, allow_newlines = comment_limits.get(name, (RICH_TEXT_MAX_CHARS, True))
+            normalized[name] = _build_entry(
+                payload.get(name),
+                max_chars=max_chars,
+                allow_newlines=allow_newlines,
+            )
         for name, value in payload.items():
             if name in normalized:
                 continue
@@ -5752,18 +5806,74 @@ class FraudCaseApp:
         analysis_container.columnconfigure(0, weight=1)
 
         fields = [
-            ("Antecedentes:", "Modificó antecedentes", "Resume los hechos previos y contexto del caso."),
-            ("Modus operandi:", "Modificó modus operandi", "Describe la forma en que se ejecutó el fraude."),
-            ("Hallazgos principales:", "Modificó hallazgos", "Menciona los hallazgos clave de la investigación."),
-            ("Descargos del colaborador:", "Modificó descargos", "Registra los descargos formales del colaborador."),
-            ("Conclusiones:", "Modificó conclusiones", "Escribe las conclusiones generales del informe."),
-            ("Recomendaciones y mejoras:", "Modificó recomendaciones", "Propón acciones correctivas y preventivas."),
+            {
+                "label": "Antecedentes:",
+                "log": "Modificó antecedentes",
+                "tooltip": "Resume los hechos previos y contexto del caso.",
+                "height": 22,
+            },
+            {
+                "label": "Modus operandi:",
+                "log": "Modificó modus operandi",
+                "tooltip": "Describe la forma en que se ejecutó el fraude.",
+                "height": 22,
+            },
+            {
+                "label": "Hallazgos principales:",
+                "log": "Modificó hallazgos",
+                "tooltip": "Menciona los hallazgos clave de la investigación.",
+                "height": 22,
+            },
+            {
+                "label": "Descargos del colaborador:",
+                "log": "Modificó descargos",
+                "tooltip": "Registra los descargos formales del colaborador.",
+                "height": 22,
+            },
+            {
+                "label": "Conclusiones:",
+                "log": "Modificó conclusiones",
+                "tooltip": "Escribe las conclusiones generales del informe.",
+                "height": 22,
+            },
+            {
+                "label": "Recomendaciones y mejoras:",
+                "log": "Modificó recomendaciones",
+                "tooltip": "Propón acciones correctivas y preventivas.",
+                "height": 22,
+            },
+            {
+                "label": "Comentario breve:",
+                "log": "Modificó comentario breve",
+                "tooltip": (
+                    "Comentario breve sin saltos de línea (máximo 150 caracteres)."
+                ),
+                "height": 6,
+                "max_chars": COMENTARIO_BREVE_MAX_CHARS,
+                "allow_newlines": False,
+            },
+            {
+                "label": "Comentario amplio:",
+                "log": "Modificó comentario amplio",
+                "tooltip": (
+                    "Comentario ampliado sin saltos de línea (máximo 750 caracteres)."
+                ),
+                "height": 12,
+                "max_chars": COMENTARIO_AMPLIO_MAX_CHARS,
+                "allow_newlines": False,
+            },
         ]
 
         bold_font, header_font, mono_font = self._get_rich_text_fonts()
 
         text_widgets = []
-        for idx, (label_text, log_message, tooltip) in enumerate(fields):
+        for idx, field in enumerate(fields):
+            label_text = field["label"]
+            log_message = field["log"]
+            tooltip = field["tooltip"]
+            max_chars = field.get("max_chars", RICH_TEXT_MAX_CHARS)
+            allow_newlines = field.get("allow_newlines", True)
+            height = field.get("height", 22)
             section_frame = ttk.Frame(analysis_container)
             section_frame.grid(
                 row=idx,
@@ -5786,7 +5896,7 @@ class FraudCaseApp:
 
             text_widget = scrolledtext.ScrolledText(
                 section_frame,
-                height=22,
+                height=height,
                 width=96,
                 wrap="word",
             )
@@ -5810,7 +5920,12 @@ class FraudCaseApp:
             text_widget.bind(
                 "<FocusOut>", lambda e, message=log_message: self._log_navigation_change(message)
             )
-            self._register_rich_text_limit(text_widget, label_text.rstrip(":"))
+            self._register_rich_text_limit(
+                text_widget,
+                label_text.rstrip(":"),
+                max_chars=max_chars,
+                allow_newlines=allow_newlines,
+            )
             self.register_tooltip(text_widget, tooltip)
             toolbar = ttk.Frame(section_frame)
             toolbar.grid(
@@ -5830,6 +5945,8 @@ class FraudCaseApp:
             self.descargos_text,
             self.conclusiones_text,
             self.recomendaciones_text,
+            self.comentario_breve_text,
+            self.comentario_amplio_text,
         ) = text_widgets
 
         if self._extended_sections_enabled:
@@ -13054,6 +13171,8 @@ class FraudCaseApp:
             "descargos": self._serialize_rich_text_widget(analysis_widgets["descargos"]),
             "conclusiones": self._serialize_rich_text_widget(analysis_widgets["conclusiones"]),
             "recomendaciones": self._serialize_rich_text_widget(analysis_widgets["recomendaciones"]),
+            "comentario_breve": self._serialize_rich_text_widget(analysis_widgets["comentario_breve"]),
+            "comentario_amplio": self._serialize_rich_text_widget(analysis_widgets["comentario_amplio"]),
         }
         data['encabezado'] = self._normalize_mapping_strings(
             getattr(self, '_encabezado_data', {}),
@@ -13381,6 +13500,8 @@ class FraudCaseApp:
             self._set_rich_text_content(analysis_widgets['descargos'], analisis.get('descargos', ''))
             self._set_rich_text_content(analysis_widgets['conclusiones'], analisis.get('conclusiones', ''))
             self._set_rich_text_content(analysis_widgets['recomendaciones'], analisis.get('recomendaciones', ''))
+            self._set_rich_text_content(analysis_widgets['comentario_breve'], analisis.get('comentario_breve', ''))
+            self._set_rich_text_content(analysis_widgets['comentario_amplio'], analisis.get('comentario_amplio', ''))
             self._encabezado_data = self._normalize_mapping_strings(
                 data.get('encabezado', {}),
                 [
@@ -14458,7 +14579,22 @@ class FraudCaseApp:
                 for key, value in analysis_texts.items()
             },
         }
-        write_csv('analisis.csv', [analysis_row], ['id_caso', 'antecedentes', 'modus_operandi', 'hallazgos', 'descargos', 'conclusiones', 'recomendaciones'], historical_name='analisis')
+        write_csv(
+            'analisis.csv',
+            [analysis_row],
+            [
+                'id_caso',
+                'antecedentes',
+                'modus_operandi',
+                'hallazgos',
+                'descargos',
+                'conclusiones',
+                'recomendaciones',
+                'comentario_breve',
+                'comentario_amplio',
+            ],
+            historical_name='analisis',
+        )
         if self.logs:
             write_csv('logs.csv', [normalize_log_row(row) for row in self.logs], LOG_FIELDNAMES, historical_name='logs')
         json_path = folder / f"{report_prefix}_version.json"
@@ -15007,6 +15143,8 @@ class FraudCaseApp:
                     "descargos",
                     "conclusiones",
                     "recomendaciones",
+                    "comentario_breve",
+                    "comentario_amplio",
                 ],
             },
             {
