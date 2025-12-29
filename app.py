@@ -99,7 +99,8 @@ from report_builder import (build_docx, build_event_rows,
                             save_md)
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CONFETTI_ENABLED, CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
-                      ENABLE_EXTENDED_ANALYSIS_SECTIONS,
+                      ENABLE_EXTENDED_ANALYSIS_SECTIONS, EVENTOS_HEADER_CANONICO,
+                      EVENTOS_PLACEHOLDER,
                       ensure_external_drive_dir, EXPORTS_DIR,
                       EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
@@ -224,6 +225,8 @@ def _derive_validation_payload(field_name: str, message: Optional[str], widget):
 
 def _sanitize_csv_value(value):
     sanitized = sanitize_rich_text("" if value is None else value, max_chars=None)
+    if sanitized == EVENTOS_PLACEHOLDER:
+        return sanitized
     if sanitized.startswith(("=", "+", "-", "@")):
         return f"'{sanitized}"
     return sanitized
@@ -14544,7 +14547,8 @@ class FraudCaseApp:
         report_prefix = self._build_report_prefix(data)
         created_files = []
         llave_rows, llave_header = build_llave_tecnica_rows(data)
-        event_rows, event_header = build_event_rows(data)
+        event_rows, _event_header = build_event_rows(data)
+        event_header = list(EVENTOS_HEADER_CANONICO)
         warnings: list[str] = []
         history_targets: list[tuple[str, list[dict[str, object]], list[str]]] = []
         normalized_case_id = self._normalize_identifier(case_id)
@@ -15063,7 +15067,8 @@ class FraudCaseApp:
         """Devuelve los esquemas de exportación basados en el contenido actual."""
 
         llave_rows, llave_header = build_llave_tecnica_rows(data)
-        event_rows, event_header = build_event_rows(data)
+        event_rows, _event_header = build_event_rows(data)
+        event_header = list(EVENTOS_HEADER_CANONICO)
         analisis_data = data.get("analisis") if isinstance(data, Mapping) else {}
         analysis_texts = self._normalize_analysis_texts(analisis_data or {})
         caso = data.get("caso") if isinstance(data, Mapping) else {}

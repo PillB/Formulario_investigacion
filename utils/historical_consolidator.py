@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+import settings
 from validators import sanitize_rich_text
 
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
@@ -21,6 +22,8 @@ SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 def _sanitize_value(value: object) -> str:
     sanitized = sanitize_rich_text("" if value is None else str(value), max_chars=None)
+    if sanitized == settings.EVENTOS_PLACEHOLDER:
+        return sanitized
     if sanitized.startswith(SPREADSHEET_FORMULA_PREFIXES):
         return f"'{sanitized}"
     return sanitized
@@ -34,6 +37,7 @@ def append_historical_records(
     case_id: str,
     *,
     timestamp: datetime | None = None,
+    placeholder: str | None = None,
 ):
     """Adjunta registros a ``h_<tabla>.csv`` con metadatos de caso y hora.
 
@@ -52,13 +56,16 @@ def append_historical_records(
     effective_timestamp = (timestamp or datetime.now()).isoformat()
     full_header = list(header) + ["case_id", "fecactualizacion"]
     should_write_header = not history_path.exists()
+    empty_placeholder = placeholder if placeholder is not None else settings.EVENTOS_PLACEHOLDER
 
     with history_path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=full_header)
         if should_write_header:
             writer.writeheader()
         for row in normalized_rows:
-            sanitized_row = {field: _sanitize_value(row.get(field, "")) for field in header}
+            sanitized_row = {
+                field: _sanitize_value(row.get(field, empty_placeholder)) for field in header
+            }
             sanitized_row["case_id"] = _sanitize_value(case_id)
             sanitized_row["fecactualizacion"] = _sanitize_value(effective_timestamp)
             writer.writerow(sanitized_row)
