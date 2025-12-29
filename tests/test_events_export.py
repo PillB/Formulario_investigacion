@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from app import FraudCaseApp, _sanitize_csv_value
-from report_builder import CaseData, build_report_filename
+from app import _sanitize_csv_value, FraudCaseApp
+from report_builder import build_report_filename, CaseData
+from utils.eventos_schema import EVENTOS_PLACEHOLDER
 
 
 def _build_export_app():
@@ -146,28 +147,36 @@ def test_save_exports_writes_event_rows(tmp_path, with_relations):
     expected_count = 2 if with_relations else 1
     assert len(rows) == expected_count
 
-    collaborator_row = next((row for row in rows if row.get("tipo_involucrado") == "colaborador"), rows[0])
-    assert collaborator_row["id_caso"] == case_id
-    assert collaborator_row["id_producto"] == _sanitize_csv_value("=P-1" if with_relations else "P-EMPTY")
+    collaborator_row = next(
+        (row for row in rows if row.get("tipo_involucrado") == "colaborador"), rows[0]
+    )
+    assert collaborator_row["case_id"] == case_id
+    assert collaborator_row["product_id"] == _sanitize_csv_value(
+        "=P-1" if with_relations else "P-EMPTY"
+    )
+    assert collaborator_row["id_producto"] == _sanitize_csv_value(
+        "=P-1" if with_relations else "P-EMPTY"
+    )
     assert collaborator_row["id_cliente"] == ("CL1" if with_relations else "CL2")
     assert collaborator_row["fecha_ocurrencia"] == "2024-02-01"
     assert collaborator_row["monto_investigado"] == "100.00"
 
     if with_relations:
         assert collaborator_row["id_colaborador"] == _sanitize_csv_value("=COL1")
+        assert collaborator_row["matricula_colaborador_involucrado"] == _sanitize_csv_value("=COL1")
         assert collaborator_row["id_reclamo"] == _sanitize_csv_value("-RC1")
         assert collaborator_row["cliente_telefonos"] == _sanitize_csv_value("=999")
         assert collaborator_row["monto_contingencia"] == "20.00"
         assert collaborator_row["colaborador_tipo_falta"] == "Grave"
         client_row = next(row for row in rows if row.get("tipo_involucrado") == "cliente")
         assert client_row["id_cliente_involucrado"] == "CL1"
-        assert client_row["id_colaborador"] == ""
+        assert client_row["id_colaborador"] == _sanitize_csv_value(EVENTOS_PLACEHOLDER)
     else:
-        assert collaborator_row["id_colaborador"] == ""
-        assert collaborator_row["id_reclamo"] == ""
-        assert collaborator_row["cliente_telefonos"] == ""
-        assert collaborator_row["nombre_analitica"] == ""
-        assert collaborator_row["colaborador_flag"] == ""
+        assert collaborator_row["id_colaborador"] == _sanitize_csv_value(EVENTOS_PLACEHOLDER)
+        assert collaborator_row["id_reclamo"] == _sanitize_csv_value(EVENTOS_PLACEHOLDER)
+        assert collaborator_row["cliente_telefonos"] == _sanitize_csv_value(EVENTOS_PLACEHOLDER)
+        assert collaborator_row["nombre_analitica"] == _sanitize_csv_value(EVENTOS_PLACEHOLDER)
+        assert collaborator_row["colaborador_flag"] == _sanitize_csv_value(EVENTOS_PLACEHOLDER)
 
     history_path = export_dir / "h_eventos.csv"
     assert history_path.exists()

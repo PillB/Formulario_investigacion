@@ -4,8 +4,9 @@ import types
 from datetime import datetime
 from pathlib import Path
 
-import app as app_module
 import pytest
+
+import app as app_module
 import settings
 from app import FraudCaseApp
 from report_builder import CaseData
@@ -108,7 +109,7 @@ def test_append_historical_records_creates_and_appends(tmp_path):
     first_path = append_historical_records(
         "clientes", rows, header, tmp_path, "2024-0001", timestamp=timestamp
     )
-    second_rows = [{"id_cliente": "CL2", "id_caso": "2024-0001"}]
+    second_rows = [{"id_cliente": "CL2"}]
     second_path = append_historical_records(
         "clientes", second_rows, header, tmp_path, "2024-0001", timestamp=timestamp
     )
@@ -126,6 +127,7 @@ def test_append_historical_records_creates_and_appends(tmp_path):
 
     second_columns = data_lines[1].split(",")
     assert second_columns[0] == "CL2"
+    assert second_columns[1] == "'-"
     assert second_columns[2] == "2024-0001"
     assert second_columns[3] == "2024-01-01T12:00:00"
 

@@ -17,6 +17,7 @@ from typing import Iterable, Mapping, Sequence
 from validators import sanitize_rich_text
 
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
+DEFAULT_PLACEHOLDER = "-"
 
 
 def _sanitize_value(value: object) -> str:
@@ -58,7 +59,9 @@ def append_historical_records(
         if should_write_header:
             writer.writeheader()
         for row in normalized_rows:
-            sanitized_row = {field: _sanitize_value(row.get(field, "")) for field in header}
+            sanitized_row = {
+                field: _sanitize_value(row.get(field, DEFAULT_PLACEHOLDER)) for field in header
+            }
             sanitized_row["case_id"] = _sanitize_value(case_id)
             sanitized_row["fecactualizacion"] = _sanitize_value(effective_timestamp)
             writer.writerow(sanitized_row)

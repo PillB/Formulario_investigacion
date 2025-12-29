@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import RGBColor, Pt
+    from docx.shared import Pt, RGBColor
 except ImportError:  # pragma: no cover - se usa el respaldo integrado
     DocxDocument = None
     RGBColor = None
@@ -25,9 +25,11 @@ DOCX_MISSING_MESSAGE = (
 )
 
 import settings
+from report.styling_enhancer import (apply_cell_shading, apply_header_band,
+                                     style_section_heading, style_table,
+                                     style_title)
+from utils.eventos_schema import EVENTOS_HEADER, EVENTOS_PLACEHOLDER
 from validators import parse_decimal_amount, sanitize_rich_text
-from report.styling_enhancer import apply_cell_shading, apply_header_band, style_section_heading, style_table, style_title
-
 
 PLACEHOLDER = "No aplica / Sin información registrada."
 LOGGER = logging.getLogger(__name__)
@@ -171,49 +173,6 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
         "comentario_amplio": analysis_texts.get("comentario_amplio", ""),
     }
 
-    header = list(base_row.keys()) + [
-        "id_producto",
-        "id_cliente",
-        "id_colaborador",
-        "id_cliente_involucrado",
-        "tipo_involucrado",
-        "id_reclamo",
-        "fecha_ocurrencia",
-        "fecha_descubrimiento",
-        "tipo_producto",
-        "tipo_moneda",
-        "monto_investigado",
-        "monto_perdida_fraude",
-        "monto_falla_procesos",
-        "monto_contingencia",
-        "monto_recuperado",
-        "monto_pago_deuda",
-        "nombre_analitica",
-        "codigo_analitica",
-        "cliente_nombres",
-        "cliente_apellidos",
-        "cliente_tipo_id",
-        "cliente_flag",
-        "cliente_telefonos",
-        "cliente_correos",
-        "cliente_direcciones",
-        "cliente_accionado",
-        "colaborador_flag",
-        "colaborador_nombres",
-        "colaborador_apellidos",
-        "colaborador_division",
-        "colaborador_area",
-        "colaborador_servicio",
-        "colaborador_puesto",
-        "colaborador_fecha_carta_inmediatez",
-        "colaborador_fecha_carta_renuncia",
-        "colaborador_nombre_agencia",
-        "colaborador_codigo_agencia",
-        "colaborador_tipo_falta",
-        "colaborador_tipo_sancion",
-        "monto_asignado",
-    ]
-
     productos = case_data.get("productos") if isinstance(case_data, Mapping) else []
     reclamos = case_data.get("reclamos") if isinstance(case_data, Mapping) else []
     involucramientos = case_data.get("involucramientos") if isinstance(case_data, Mapping) else []
@@ -230,6 +189,21 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
         for collaborator in colaboradores
         if isinstance(collaborator, Mapping)
     }
+
+    def _event_value(value: object) -> object:
+        if value in ("", None):
+            return EVENTOS_PLACEHOLDER
+        return value
+
+    def _split_currency_amount(amount: object, currency: str | None) -> tuple[object, object]:
+        if amount in ("", None):
+            return EVENTOS_PLACEHOLDER, EVENTOS_PLACEHOLDER
+        normalized = (currency or "").strip().lower()
+        if normalized in {"soles", "pen", "s/", "s/."}:
+            return amount, EVENTOS_PLACEHOLDER
+        if normalized in {"dolares", "dólares", "usd", "us$", "$"}:
+            return EVENTOS_PLACEHOLDER, amount
+        return EVENTOS_PLACEHOLDER, EVENTOS_PLACEHOLDER
 
     rows: list[dict[str, str]] = []
     for product, inv, claim in _iter_product_combinations(
@@ -249,74 +223,170 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
             else {}
         )
         involved_client_id = inv.get("id_cliente_involucrado", "") if is_client_involvement else ""
-        rows.append(
-            {
-                **base_row,
-                "categoria1": product.get("categoria1", base_row.get("categoria1", "")),
-                "categoria2": product.get("categoria2", base_row.get("categoria2", "")),
-                "modalidad": product.get("modalidad", base_row.get("modalidad", "")),
-                "canal": product.get("canal", base_row.get("canal", "")),
-                "proceso": product.get("proceso", base_row.get("proceso", "")),
-                "id_producto": product.get("id_producto", ""),
-                "id_cliente": product.get("id_cliente", ""),
-                "id_colaborador": inv.get("id_colaborador", "") if not is_client_involvement else "",
-                "id_cliente_involucrado": involved_client_id,
-                "tipo_involucrado": inv_tipo,
-                "id_reclamo": claim.get("id_reclamo", ""),
-                "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
-                "fecha_descubrimiento": product.get("fecha_descubrimiento", ""),
-                "tipo_producto": product.get("tipo_producto", ""),
-                "tipo_moneda": product.get("tipo_moneda", ""),
-                "monto_investigado": product.get("monto_investigado", ""),
-                "monto_perdida_fraude": product.get("monto_perdida_fraude", ""),
-                "monto_falla_procesos": product.get("monto_falla_procesos", ""),
-                "monto_contingencia": product.get("monto_contingencia", ""),
-                "monto_recuperado": product.get("monto_recuperado", ""),
-                "monto_pago_deuda": product.get("monto_pago_deuda", ""),
-                "nombre_analitica": claim.get("nombre_analitica", ""),
-                "codigo_analitica": claim.get("codigo_analitica", ""),
-                "cliente_nombres": client.get("nombres", ""),
-                "cliente_apellidos": client.get("apellidos", ""),
-                "cliente_tipo_id": client.get("tipo_id", ""),
-                "cliente_flag": client.get("flag", ""),
-                "cliente_telefonos": client.get("telefonos", ""),
-                "cliente_correos": client.get("correos", ""),
-                "cliente_direcciones": client.get("direcciones", ""),
-                "cliente_accionado": client.get("accionado", ""),
-                "colaborador_flag": collaborator.get("flag", "") if not is_client_involvement else "",
-                "colaborador_nombres": collaborator.get("nombres", "") if not is_client_involvement else "",
-                "colaborador_apellidos": collaborator.get("apellidos", "") if not is_client_involvement else "",
-                "colaborador_division": collaborator.get("division", "") if not is_client_involvement else "",
-                "colaborador_area": collaborator.get("area", "") if not is_client_involvement else "",
-                "colaborador_servicio": collaborator.get("servicio", "") if not is_client_involvement else "",
-                "colaborador_puesto": collaborator.get("puesto", "") if not is_client_involvement else "",
-                "colaborador_fecha_carta_inmediatez": collaborator.get(
-                    "fecha_carta_inmediatez", ""
-                )
-                if not is_client_involvement
-                else "",
-                "colaborador_fecha_carta_renuncia": collaborator.get(
-                    "fecha_carta_renuncia", ""
-                )
-                if not is_client_involvement
-                else "",
-                "colaborador_nombre_agencia": collaborator.get("nombre_agencia", "")
-                if not is_client_involvement
-                else "",
-                "colaborador_codigo_agencia": collaborator.get("codigo_agencia", "")
-                if not is_client_involvement
-                else "",
-                "colaborador_tipo_falta": collaborator.get("tipo_falta", "")
-                if not is_client_involvement
-                else "",
-                "colaborador_tipo_sancion": collaborator.get("tipo_sancion", "")
-                if not is_client_involvement
-                else "",
-                "monto_asignado": inv.get("monto_asignado", ""),
-            }
+        involved_client = clientes_por_id.get(involved_client_id, {}) if involved_client_id else {}
+        currency = product.get("tipo_moneda", "")
+        monto_falla_soles, monto_falla_dolares = _split_currency_amount(
+            product.get("monto_falla_procesos", ""), currency
         )
+        monto_cont_soles, monto_cont_dolares = _split_currency_amount(
+            product.get("monto_contingencia", ""), currency
+        )
+        monto_recup_soles, monto_recup_dolares = _split_currency_amount(
+            product.get("monto_recuperado", ""), currency
+        )
+        monto_pagado_soles, monto_pagado_dolares = _split_currency_amount(
+            product.get("monto_pago_deuda", ""), currency
+        )
+        row = {
+            "case_id": caso.get("id_caso", ""),
+            "tipo_informe": caso.get("tipo_informe", ""),
+            "categoria_1": product.get("categoria1", base_row.get("categoria1", "")),
+            "categoria_2": product.get("categoria2", base_row.get("categoria2", "")),
+            "modalidad": product.get("modalidad", base_row.get("modalidad", "")),
+            "tipo_de_producto": product.get("tipo_producto", ""),
+            "canal": product.get("canal", base_row.get("canal", "")),
+            "proceso_impactado": product.get("proceso", base_row.get("proceso", "")),
+            "product_id": product.get("id_producto", ""),
+            "cod_operation": product.get("cod_operation", ""),
+            "monto_investigado": product.get("monto_investigado", ""),
+            "tipo_moneda": currency,
+            "tipo_id_cliente_involucrado": involved_client.get("tipo_id", "")
+            if is_client_involvement
+            else "",
+            "client_id_involucrado": involved_client_id,
+            "flag_cliente_involucrado": involved_client.get("flag", "")
+            if is_client_involvement
+            else "",
+            "nombres_cliente_involucrado": involved_client.get("nombres", "")
+            if is_client_involvement
+            else "",
+            "apellidos_cliente_involucrado": involved_client.get("apellidos", "")
+            if is_client_involvement
+            else "",
+            "matricula_colaborador_involucrado": collaborator.get("id_colaborador", "")
+            if not is_client_involvement
+            else "",
+            "apellido_paterno_involucrado": "",
+            "apellido_materno_involucrado": "",
+            "nombres_involucrado": collaborator.get("nombres", "")
+            if not is_client_involvement
+            else involved_client.get("nombres", ""),
+            "division": collaborator.get("division", "") if not is_client_involvement else "",
+            "area": collaborator.get("area", "") if not is_client_involvement else "",
+            "servicio": collaborator.get("servicio", "") if not is_client_involvement else "",
+            "nombre_agencia": collaborator.get("nombre_agencia", "")
+            if not is_client_involvement
+            else "",
+            "codigo_agencia": collaborator.get("codigo_agencia", "")
+            if not is_client_involvement
+            else "",
+            "puesto": collaborator.get("puesto", "") if not is_client_involvement else "",
+            "fecha_cese": (
+                collaborator.get("fecha_cese", "") or collaborator.get("fecha_carta_renuncia", "")
+            )
+            if not is_client_involvement
+            else "",
+            "tipo_de_falta": collaborator.get("tipo_falta", "")
+            if not is_client_involvement
+            else "",
+            "tipo_sancion": collaborator.get("tipo_sancion", "")
+            if not is_client_involvement
+            else "",
+            "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
+            "fecha_descubrimiento": product.get("fecha_descubrimiento", ""),
+            "monto_fraude_interno_soles": "",
+            "monto_fraude_interno_dolares": "",
+            "monto_fraude_externo_soles": "",
+            "monto_fraude_externo_dolares": "",
+            "monto_falla_en_proceso_soles": monto_falla_soles,
+            "monto_falla_en_proceso_dolares": monto_falla_dolares,
+            "monto_contingencia_soles": monto_cont_soles,
+            "monto_contingencia_dolares": monto_cont_dolares,
+            "monto_recuperado_soles": monto_recup_soles,
+            "monto_recuperado_dolares": monto_recup_dolares,
+            "monto_pagado_soles": monto_pagado_soles,
+            "monto_pagado_dolares": monto_pagado_dolares,
+            "comentario_breve": analysis_texts.get("comentario_breve", ""),
+            "comentario_amplio": analysis_texts.get("comentario_amplio", ""),
+            "id_reclamo": claim.get("id_reclamo", ""),
+            "nombre_analitica": claim.get("nombre_analitica", ""),
+            "codigo_analitica": claim.get("codigo_analitica", ""),
+            "telefonos_cliente_relacionado": client.get("telefonos", ""),
+            "correos_cliente_relacionado": client.get("correos", ""),
+            "direcciones_cliente_relacionado": client.get("direcciones", ""),
+            "accionado_cliente_relacionado": client.get("accionado", ""),
+            **base_row,
+            "categoria1": product.get("categoria1", base_row.get("categoria1", "")),
+            "categoria2": product.get("categoria2", base_row.get("categoria2", "")),
+            "modalidad": product.get("modalidad", base_row.get("modalidad", "")),
+            "canal": product.get("canal", base_row.get("canal", "")),
+            "proceso": product.get("proceso", base_row.get("proceso", "")),
+            "id_producto": product.get("id_producto", ""),
+            "id_cliente": product.get("id_cliente", ""),
+            "id_colaborador": inv.get("id_colaborador", "") if not is_client_involvement else "",
+            "id_cliente_involucrado": involved_client_id,
+            "tipo_involucrado": inv_tipo,
+            "id_reclamo": claim.get("id_reclamo", ""),
+            "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
+            "fecha_descubrimiento": product.get("fecha_descubrimiento", ""),
+            "tipo_producto": product.get("tipo_producto", ""),
+            "tipo_moneda": currency,
+            "monto_investigado": product.get("monto_investigado", ""),
+            "monto_perdida_fraude": product.get("monto_perdida_fraude", ""),
+            "monto_falla_procesos": product.get("monto_falla_procesos", ""),
+            "monto_contingencia": product.get("monto_contingencia", ""),
+            "monto_recuperado": product.get("monto_recuperado", ""),
+            "monto_pago_deuda": product.get("monto_pago_deuda", ""),
+            "nombre_analitica": claim.get("nombre_analitica", ""),
+            "codigo_analitica": claim.get("codigo_analitica", ""),
+            "cliente_nombres": client.get("nombres", ""),
+            "cliente_apellidos": client.get("apellidos", ""),
+            "cliente_tipo_id": client.get("tipo_id", ""),
+            "cliente_flag": client.get("flag", ""),
+            "cliente_telefonos": client.get("telefonos", ""),
+            "cliente_correos": client.get("correos", ""),
+            "cliente_direcciones": client.get("direcciones", ""),
+            "cliente_accionado": client.get("accionado", ""),
+            "colaborador_flag": collaborator.get("flag", "") if not is_client_involvement else "",
+            "colaborador_nombres": collaborator.get("nombres", "")
+            if not is_client_involvement
+            else "",
+            "colaborador_apellidos": collaborator.get("apellidos", "")
+            if not is_client_involvement
+            else "",
+            "colaborador_division": collaborator.get("division", "")
+            if not is_client_involvement
+            else "",
+            "colaborador_area": collaborator.get("area", "") if not is_client_involvement else "",
+            "colaborador_servicio": collaborator.get("servicio", "")
+            if not is_client_involvement
+            else "",
+            "colaborador_puesto": collaborator.get("puesto", "") if not is_client_involvement else "",
+            "colaborador_fecha_carta_inmediatez": collaborator.get(
+                "fecha_carta_inmediatez", ""
+            )
+            if not is_client_involvement
+            else "",
+            "colaborador_fecha_carta_renuncia": collaborator.get("fecha_carta_renuncia", "")
+            if not is_client_involvement
+            else "",
+            "colaborador_nombre_agencia": collaborator.get("nombre_agencia", "")
+            if not is_client_involvement
+            else "",
+            "colaborador_codigo_agencia": collaborator.get("codigo_agencia", "")
+            if not is_client_involvement
+            else "",
+            "colaborador_tipo_falta": collaborator.get("tipo_falta", "")
+            if not is_client_involvement
+            else "",
+            "colaborador_tipo_sancion": collaborator.get("tipo_sancion", "")
+            if not is_client_involvement
+            else "",
+            "monto_asignado": inv.get("monto_asignado", ""),
+        }
+        rows.append({field: _event_value(row.get(field)) for field in EVENTOS_HEADER})
 
-    return rows, header
+    return rows, list(EVENTOS_HEADER)
 
 
 @dataclass

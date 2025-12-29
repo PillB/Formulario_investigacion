@@ -87,12 +87,10 @@ from models import (AutofillService, build_detail_catalog_id_index,
                     find_analitica_by_code, format_analitica_option,
                     get_analitica_display_options, iter_massive_csv_rows,
                     normalize_detail_catalog_key, parse_involvement_entries)
-from report.alerta_temprana import (
-    PPTX_AVAILABLE,
-    PPTX_MISSING_MESSAGE,
-    build_alerta_temprana_ppt,
-)
-from report.carta_inmediatez import CartaInmediatezError, CartaInmediatezGenerator
+from report.alerta_temprana import (build_alerta_temprana_ppt, PPTX_AVAILABLE,
+                                    PPTX_MISSING_MESSAGE)
+from report.carta_inmediatez import (CartaInmediatezError,
+                                     CartaInmediatezGenerator)
 from report_builder import (build_docx, build_event_rows,
                             build_llave_tecnica_rows, build_report_filename,
                             CaseData, DOCX_AVAILABLE, DOCX_MISSING_MESSAGE,
@@ -103,10 +101,10 @@ from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       ensure_external_drive_dir, EXPORTS_DIR,
                       EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
-                      PENDING_CONSOLIDATION_FILE,
-                      NORM_ID_ALIASES, PROCESO_LIST, PRODUCT_ID_ALIASES,
-                      RICH_TEXT_MAX_CHARS, RISK_ID_ALIASES, STORE_LOGS_LOCALLY,
-                      TAXONOMIA, TEAM_ID_ALIASES, TEMP_AUTOSAVE_COMPRESS_OLD,
+                      NORM_ID_ALIASES, PENDING_CONSOLIDATION_FILE,
+                      PROCESO_LIST, PRODUCT_ID_ALIASES, RICH_TEXT_MAX_CHARS,
+                      RISK_ID_ALIASES, STORE_LOGS_LOCALLY, TAXONOMIA,
+                      TEAM_ID_ALIASES, TEMP_AUTOSAVE_COMPRESS_OLD,
                       TEMP_AUTOSAVE_DEBOUNCE_SECONDS,
                       TEMP_AUTOSAVE_MAX_AGE_DAYS, TEMP_AUTOSAVE_MAX_PER_CASE,
                       TIPO_FALTA_LIST, TIPO_ID_LIST, TIPO_INFORME_LIST,
@@ -123,19 +121,21 @@ from ui.frames.utils import (build_grid_container, create_scrollable_container,
 from ui.layout import ActionBar
 from ui.main_window import bind_notebook_refresh_handlers
 from ui.tooltips import HoverTooltip
+from utils.auto_redaccion import auto_redact_comment
 from utils.background_worker import (run_guarded_task,
                                      shutdown_background_workers)
-from utils.auto_redaccion import auto_redact_comment
+from utils.eventos_schema import EVENTOS_HEADER
 from utils.historical_consolidator import append_historical_records
 from utils.mass_import_manager import MassImportManager
 from utils.persistence_manager import (CURRENT_SCHEMA_VERSION,
                                        PersistenceError, PersistenceManager,
                                        validate_schema_payload)
 from utils.progress_dialog import ProgressDialog
-from utils.technical_key import EMPTY_PART, build_technical_key
+from utils.technical_key import build_technical_key, EMPTY_PART
 from utils.widget_registry import WidgetIdRegistry
 from validators import (drain_log_queue, FieldValidator, log_event,
                         LOG_FIELDNAMES, normalize_log_row,
+                        normalize_team_member_identifier,
                         normalize_without_accents, parse_decimal_amount,
                         resolve_catalog_product_type, sanitize_rich_text,
                         should_autofill_field, sum_investigation_components,
@@ -144,11 +144,10 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_codigo_analitica, validate_date_text,
                         validate_email_list, validate_money_bounds,
                         validate_multi_selection, validate_norm_id,
-                        validate_phone_list, validate_product_dates,
-                        validate_product_id, validate_reclamo_id,
-                        validate_required_text, validate_risk_id,
-                        validate_team_member_id, validate_process_id,
-                        normalize_team_member_identifier)
+                        validate_phone_list, validate_process_id,
+                        validate_product_dates, validate_product_id,
+                        validate_reclamo_id, validate_required_text,
+                        validate_risk_id, validate_team_member_id)
 
 PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
 if PIL_AVAILABLE:
@@ -14544,7 +14543,8 @@ class FraudCaseApp:
         report_prefix = self._build_report_prefix(data)
         created_files = []
         llave_rows, llave_header = build_llave_tecnica_rows(data)
-        event_rows, event_header = build_event_rows(data)
+        event_rows, _ = build_event_rows(data)
+        event_header = list(EVENTOS_HEADER)
         warnings: list[str] = []
         history_targets: list[tuple[str, list[dict[str, object]], list[str]]] = []
         normalized_case_id = self._normalize_identifier(case_id)
