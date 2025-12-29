@@ -253,7 +253,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
             "product_id": _event_placeholder(product.get("id_producto"), placeholder),
             "cod_operation": placeholder,
             "monto_investigado": _event_placeholder(product.get("monto_investigado"), placeholder),
-            "tipo_monead": _event_placeholder(product.get("tipo_moneda"), placeholder),
+            "tipo_moneda": _event_placeholder(product.get("tipo_moneda"), placeholder),
             "tipo_id_cliente_involucrado": _event_placeholder(
                 involved_client.get("tipo_id"), placeholder
             ),
@@ -300,7 +300,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
             "tipo_de_falta": _event_placeholder(
                 collaborator.get("tipo_falta") if not is_client_involvement else None, placeholder
             ),
-            "tipo_de_sanction": _event_placeholder(
+            "tipo_sancion": _event_placeholder(
                 collaborator.get("tipo_sancion") if not is_client_involvement else None,
                 placeholder,
             ),
@@ -332,7 +332,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
             "nombre_analitica": _event_placeholder(
                 claim.get("nombre_analitica"), placeholder
             ),
-            "codino_analitica": _event_placeholder(
+            "codigo_analitica": _event_placeholder(
                 claim.get("codigo_analitica"), placeholder
             ),
             "telefonos_cliente_relacionado": _event_placeholder(
