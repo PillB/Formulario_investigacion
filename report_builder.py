@@ -149,6 +149,8 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
     caso = case_data.get("caso", {}) if isinstance(case_data, Mapping) else {}
     investigator = caso.get("investigador") if isinstance(caso, Mapping) else {}
     investigator = investigator if isinstance(investigator, Mapping) else {}
+    raw_analysis = case_data.get("analisis", {}) if isinstance(case_data, Mapping) else {}
+    analysis_texts = normalize_analysis_texts(raw_analysis)
     base_row = {
         "id_caso": caso.get("id_caso", ""),
         "tipo_informe": caso.get("tipo_informe", ""),
@@ -165,6 +167,8 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
         or investigator.get("nombre", ""),
         "investigador_cargo": caso.get("investigador_cargo", "")
         or investigator.get("cargo", ""),
+        "comentario_breve": analysis_texts.get("comentario_breve", ""),
+        "comentario_amplio": analysis_texts.get("comentario_amplio", ""),
     }
 
     header = list(base_row.keys()) + [

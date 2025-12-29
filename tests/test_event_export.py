@@ -131,6 +131,8 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
         "matricula_investigador",
         "investigador_nombre",
         "investigador_cargo",
+        "comentario_breve",
+        "comentario_amplio",
         "id_producto",
         "id_cliente",
         "id_colaborador",
@@ -189,6 +191,8 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
         "matricula_investigador": "TM-0001",
         "investigador_nombre": "Lead Name",
         "investigador_cargo": "Lead Role",
+        "comentario_breve": "",
+        "comentario_amplio": "",
     }
 
     assert rows == [
