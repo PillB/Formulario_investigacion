@@ -1,5 +1,5 @@
 %% Diagramas de arquitectura y flujos de artefactos
-%% Actualizado automáticamente el 2025-12-18 04:14:47
+%% Actualizado automáticamente el 2025-12-29 19:51:51
 %%{init: { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif', 'themeVariables': { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif' } } }%%
 
 erDiagram
@@ -180,6 +180,8 @@ erDiagram
     string descargos
     string conclusiones
     string recomendaciones
+    string comentario_breve
+    string comentario_amplio
   }
   LOGS {
     string timestamp
@@ -188,6 +190,9 @@ erDiagram
     string widget_id
     string coords
     string mensaje
+    string old_value
+    string new_value
+    string action_result
   }
 
   CASOS ||--o{ ANALISIS : contiene
