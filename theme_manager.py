@@ -86,6 +86,7 @@ class ThemeManager:
     _use_azure_fallback: bool = False
     _azure_theme_loaded: bool = False
     _missing_text_child_warned: "weakref.WeakSet[scrolledtext.ScrolledText]" = weakref.WeakSet()
+    _combobox_scroll_bound_root: Optional[str] = None
 
     THEMES: Dict[str, Dict[str, str]] = {
         LIGHT_THEME["name"]: LIGHT_THEME,
@@ -108,6 +109,7 @@ class ThemeManager:
         if not cls._base_style_configured:
             cls._configure_base_style(cls._style)
             cls._base_style_configured = True
+        cls._bind_combobox_scroll_prevention(root)
         return cls._style
 
     @classmethod
@@ -239,6 +241,8 @@ class ThemeManager:
         if not cls._base_style_configured:
             cls._configure_base_style(cls._style)
             cls._base_style_configured = True
+        if cls._root is not None:
+            cls._bind_combobox_scroll_prevention(cls._root)
         return cls._style
 
     @staticmethod
@@ -256,6 +260,33 @@ class ThemeManager:
             ttk_style.theme_use(fallback_theme)
         except tk.TclError:
             return
+
+    @classmethod
+    def _bind_combobox_scroll_prevention(cls, root: tk.Misc) -> None:
+        """Avoid scrolling combobox values when the mouse wheel is used."""
+
+        if root is None:
+            return
+        root_name = str(root)
+        if cls._combobox_scroll_bound_root == root_name:
+            return
+        try:
+            windowing_system = root.tk.call("tk", "windowingsystem")
+        except tk.TclError:
+            return
+        sequences: tuple[str, ...]
+        if windowing_system in ("win32", "aqua"):
+            sequences = ("<MouseWheel>",)
+        elif windowing_system == "x11":
+            sequences = ("<Button-4>", "<Button-5>")
+        else:
+            sequences = ()
+        for sequence in sequences:
+            try:
+                root.bind_class("TCombobox", sequence, lambda _event: "break")
+            except tk.TclError:
+                continue
+        cls._combobox_scroll_bound_root = root_name
 
     @classmethod
     def _iter_theme_windows(cls) -> Iterable[tk.Misc]:
