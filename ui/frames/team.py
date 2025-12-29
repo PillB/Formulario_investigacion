@@ -14,6 +14,7 @@ from validators import (FieldValidator, log_event, normalize_team_member_identif
                         validate_team_member_id)
 from ui.frames.utils import (
     build_grid_container,
+    compute_badge_minsize,
     create_collapsible_card,
     create_date_entry,
     ensure_grid_support,
@@ -637,7 +638,9 @@ class TeamMemberFrame:
         container = ttk.Frame(parent)
         ensure_grid_support(container)
         if hasattr(container, "columnconfigure"):
+            badge_minsize = compute_badge_minsize()
             container.columnconfigure(0, weight=1)
+            container.columnconfigure(1, weight=0, minsize=badge_minsize)
 
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")

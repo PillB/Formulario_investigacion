@@ -9,6 +9,7 @@ from settings import CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_INFORME_LIST
 from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import (
     build_required_label,
+    compute_badge_minsize,
     create_date_entry,
     ensure_grid_support,
     grid_and_configure,
@@ -54,12 +55,13 @@ class CaseFrame:
         container = ttk.Frame(parent)
         ensure_grid_support(container)
         if hasattr(container, "columnconfigure"):
+            badge_minsize = compute_badge_minsize()
             container.columnconfigure(0, weight=1)
+            container.columnconfigure(1, weight=0, minsize=badge_minsize)
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), sticky="we")
         badge = self.badges.claim(key, container, row=0, column=1)
         return container, widget, badge
-
 
     def _build_case_fields(self, frame) -> None:
         owner = self.owner

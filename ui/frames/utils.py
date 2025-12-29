@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 import sys
 import tkinter as tk
+from functools import lru_cache
+from tkinter import font as tkfont
 from tkinter import ttk
 from typing import Any, Iterable, Tuple
 
@@ -26,6 +28,24 @@ SUCCESS_BADGE_ICON = "✅"
 PENDING_BADGE_ICON = "⏳"
 WARNING_BADGE_STYLE = "WarningBadge.TLabel"
 WARNING_CONTAINER_STYLE = "WarningBadge.TFrame"
+
+
+@lru_cache(maxsize=1)
+def compute_badge_minsize(
+    sample_text: str | None = None,
+    *,
+    padding: int | None = None,
+    fallback: int = 40,
+) -> int:
+    """Return a stable minsize for badge columns based on representative text."""
+
+    text = sample_text or f"{ALERT_BADGE_ICON}{ALERT_BADGE_ICON}\n{ALERT_BADGE_ICON}{ALERT_BADGE_ICON}"
+    try:
+        base_font = tkfont.nametofont("TkDefaultFont")
+        widest_line = max(base_font.measure(line) for line in text.splitlines() or [text])
+        return widest_line + (COL_PADX if padding is None else padding)
+    except Exception:
+        return fallback
 
 
 def format_warning_preview(message: str, *, max_chars_per_line: int = 15, max_lines: int = 2) -> str:
@@ -1988,4 +2008,3 @@ class ToggleWarningBadge:
 
     def __getattr__(self, item: str):
         return getattr(self._frame, item)
-

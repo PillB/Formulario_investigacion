@@ -20,6 +20,7 @@ from ui.frames.utils import (
     build_grid_container,
     build_required_label,
     build_two_column_form,
+    compute_badge_minsize,
     create_collapsible_card,
     ensure_grid_support,
     grid_labeled_widget,
@@ -534,7 +535,9 @@ class ClientFrame:
         container = ttk.Frame(parent)
         ensure_grid_support(container)
         if hasattr(container, "columnconfigure"):
+            badge_minsize = compute_badge_minsize()
             container.columnconfigure(0, weight=1)
+            container.columnconfigure(1, weight=0, minsize=badge_minsize)
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
         self.badges.claim(key, container, row=0, column=1)
