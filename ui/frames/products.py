@@ -14,6 +14,7 @@ from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import (
     build_grid_container,
+    compute_badge_minsize,
     create_collapsible_card,
     create_date_entry,
     ensure_grid_support,
@@ -957,7 +958,9 @@ class ClaimRow:
         container = ttk.Frame(parent)
         ensure_grid_support(container)
         if hasattr(container, "columnconfigure"):
+            badge_minsize = compute_badge_minsize()
             container.columnconfigure(0, weight=1)
+            container.columnconfigure(1, weight=0, minsize=badge_minsize)
         widget = widget_factory(container)
         widget.grid(row=0, column=0, padx=(0, COL_PADX // 2), pady=ROW_PADY, sticky="we")
         self.badge_manager.claim(
@@ -2056,11 +2059,7 @@ class ProductFrame:
             return 180
 
     def _compute_badge_minsize(self) -> int:
-        try:
-            base_font = tkfont.nametofont("TkDefaultFont")
-            return base_font.measure(f"{WARNING_ICON}{WARNING_ICON}") + COL_PADX
-        except Exception:
-            return 40
+        return compute_badge_minsize(f"{WARNING_ICON}{WARNING_ICON}")
 
     def _wrap_badge_validation(
         self,
