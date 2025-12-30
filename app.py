@@ -4364,6 +4364,8 @@ class FraudCaseApp:
         sanitized = CONTROL_CHAR_PATTERN.sub("", text).strip()
         if not sanitized:
             return ""
+        if sanitized == EVENTOS_PLACEHOLDER:
+            return ""
         if sanitized.startswith(SPREADSHEET_FORMULA_PREFIXES):
             location = []
             if row_number is not None:
