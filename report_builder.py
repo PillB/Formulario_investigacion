@@ -94,7 +94,7 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
         "id_cliente",
         "id_colaborador",
         "id_cliente_involucrado",
-        "tipo_involucrado",
+        "cliente_flag",
         "id_reclamo",
         "fecha_ocurrencia",
     ]
@@ -110,7 +110,7 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
     for product, inv, claim in _iter_product_combinations(
         productos, reclamos_por_producto, involucramientos_por_producto
     ):
-        involucrado_tipo = inv.get("tipo_involucrado", "") if isinstance(inv, Mapping) else ""
+        involucrado_tipo = inv.get("cliente_flag", "") if isinstance(inv, Mapping) else ""
         if not involucrado_tipo and isinstance(inv, Mapping):
             if inv.get("id_cliente_involucrado"):
                 involucrado_tipo = "cliente"
@@ -127,7 +127,7 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
                 "id_cliente_involucrado": inv.get("id_cliente_involucrado", "")
                 if involucrado_tipo == "cliente"
                 else "",
-                "tipo_involucrado": involucrado_tipo,
+                "cliente_flag": involucrado_tipo,
                 "id_reclamo": claim.get("id_reclamo", ""),
                 "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
             }
@@ -212,7 +212,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
         productos, reclamos_por_producto, involucramientos_por_producto
     ):
         client = clientes_por_id.get(product.get("id_cliente", ""), {})
-        inv_tipo = inv.get("tipo_involucrado", "") if isinstance(inv, Mapping) else ""
+        inv_tipo = inv.get("cliente_flag", "") if isinstance(inv, Mapping) else ""
         if not inv_tipo and isinstance(inv, Mapping):
             if inv.get("id_cliente_involucrado"):
                 inv_tipo = "cliente"
@@ -366,7 +366,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 "id_cliente_involucrado": _event_placeholder(
                     involved_client_id if is_client_involvement else None, placeholder
                 ),
-                "tipo_involucrado": _event_placeholder(inv_tipo, placeholder),
+                "cliente_flag": _event_placeholder(inv_tipo, placeholder),
                 "id_reclamo": _event_placeholder(claim.get("id_reclamo"), placeholder),
                 "fecha_ocurrencia": _event_placeholder(product.get("fecha_ocurrencia"), placeholder),
                 "fecha_descubrimiento": _event_placeholder(
@@ -391,7 +391,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 "cliente_nombres": _event_placeholder(client.get("nombres"), placeholder),
                 "cliente_apellidos": _event_placeholder(client.get("apellidos"), placeholder),
                 "cliente_tipo_id": _event_placeholder(client.get("tipo_id"), placeholder),
-                "cliente_flag": _event_placeholder(client.get("flag"), placeholder),
+                "flag_cliente_involucrado": _event_placeholder(client.get("flag"), placeholder),
                 "cliente_telefonos": _event_placeholder(client.get("telefonos"), placeholder),
                 "cliente_correos": _event_placeholder(client.get("correos"), placeholder),
                 "cliente_direcciones": _event_placeholder(

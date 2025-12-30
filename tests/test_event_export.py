@@ -101,7 +101,7 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
                 {
                     "id_producto": "P2",
                     "id_cliente_involucrado": "CL2",
-                    "tipo_involucrado": "cliente",
+                    "cliente_flag": "cliente",
                     "monto_asignado": "15",
                 },
             ],

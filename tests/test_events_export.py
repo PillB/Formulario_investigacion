@@ -106,13 +106,13 @@ def _build_case_payload(case_id: str, *, with_relations: bool) -> CaseData:
             {
                 "id_producto": product_id,
                 "id_colaborador": collaborator_id,
-                "tipo_involucrado": "colaborador",
+                "cliente_flag": "colaborador",
                 "monto_asignado": "50",
             },
             {
                 "id_producto": product_id,
                 "id_cliente_involucrado": client_id,
-                "tipo_involucrado": "cliente",
+                "cliente_flag": "cliente",
                 "monto_asignado": "25",
             },
         ],
@@ -148,7 +148,7 @@ def test_save_exports_writes_event_rows(tmp_path, with_relations):
     assert len(rows) == expected_count
 
     placeholder = settings.EVENTOS_PLACEHOLDER
-    collaborator_row = next((row for row in rows if row.get("tipo_involucrado") == "colaborador"), rows[0])
+    collaborator_row = next((row for row in rows if row.get("cliente_flag") == "colaborador"), rows[0])
     assert collaborator_row["id_caso"] == case_id
     assert collaborator_row["id_producto"] == _sanitize_csv_value("=P-1" if with_relations else "P-EMPTY")
     assert collaborator_row["id_cliente"] == ("CL1" if with_relations else "CL2")
@@ -162,7 +162,7 @@ def test_save_exports_writes_event_rows(tmp_path, with_relations):
         assert collaborator_row["cliente_telefonos"] == _sanitize_csv_value("=999")
         assert collaborator_row["monto_contingencia"] == "20.00"
         assert collaborator_row["colaborador_tipo_falta"] == "Grave"
-        client_row = next(row for row in rows if row.get("tipo_involucrado") == "cliente")
+        client_row = next(row for row in rows if row.get("cliente_flag") == "cliente")
         assert client_row["id_cliente_involucrado"] == "CL1"
         assert client_row["id_colaborador"] == placeholder
     else:

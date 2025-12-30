@@ -162,12 +162,12 @@ def test_import_combined_massive_dataset_hydrates_frames(monkeypatch, messagebox
     expected_team = set()
     expected_client_involvements = set()
     for row in rows:
-        tipo_involucrado = (row.get("tipo_involucrado") or "").strip().lower()
-        if tipo_involucrado == "cliente" and row.get("id_cliente_involucrado"):
+        cliente_flag = (row.get("cliente_flag") or "").strip().lower()
+        if cliente_flag == "cliente" and row.get("id_cliente_involucrado"):
             client_id = row["id_cliente_involucrado"].strip()
             expected_clients.add(client_id)
             expected_client_involvements.add(client_id)
-        if tipo_involucrado == "colaborador" and row.get("id_colaborador"):
+        if cliente_flag == "colaborador" and row.get("id_colaborador"):
             expected_team.add(row["id_colaborador"].strip())
         involvement = row.get("involucramiento") or ""
         for chunk in involvement.split(";"):
@@ -233,7 +233,7 @@ def test_combined_massive_dataset_matches_expected_entities_and_validations():
         if collaborator:
             assert TEAM_MEMBER_ID_PATTERN.fullmatch(collaborator)
             collaborators.add(collaborator)
-        if (row.get("tipo_involucrado") or "").strip().lower() == "cliente":
+        if (row.get("cliente_flag") or "").strip().lower() == "cliente":
             client_id = (row.get("id_cliente_involucrado") or "").strip()
             if client_id:
                 assert validate_client_id("", client_id) is None
