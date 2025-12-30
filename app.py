@@ -707,7 +707,7 @@ class FraudCaseApp:
                 "id_reclamo",
                 "nombre_analitica",
                 "codigo_analitica",
-                "tipo_involucrado",
+                "cliente_flag",
                 "id_colaborador",
                 "id_cliente_involucrado",
                 "monto_asignado",
@@ -8592,7 +8592,7 @@ class FraudCaseApp:
                 "Asignaciones de involucrados",
                 [
                     ("id_producto", "Producto"),
-                    ("tipo_involucrado", "Tipo"),
+                    ("cliente_flag", "Tipo"),
                     ("id_colaborador", "Colaborador"),
                     ("id_cliente_involucrado", "Cliente involucrado"),
                     ("monto_asignado", "Monto asignado"),
@@ -8977,7 +8977,7 @@ class FraudCaseApp:
                 raise ValueError(
                     f"Involucramiento fila {idx}: se esperaban 5 columnas y se recibieron {len(normalized_values)}."
                 )
-            product_id, tipo_involucrado, collaborator_id, client_id, amount_text = normalized_values
+            product_id, cliente_flag, collaborator_id, client_id, amount_text = normalized_values
             tipo_producto = self._resolve_product_type_for_involvement(product_id)
             if tipo_producto:
                 product_message = validate_product_id(tipo_producto, product_id)
@@ -8988,7 +8988,7 @@ class FraudCaseApp:
                 )
             if product_message:
                 raise ValueError(f"Involucramiento fila {idx}: {product_message}")
-            tipo_normalizado = (tipo_involucrado or "colaborador").strip().lower()
+            tipo_normalizado = (cliente_flag or "colaborador").strip().lower()
             if tipo_normalizado not in {"colaborador", "cliente"}:
                 raise ValueError(
                     f"Involucramiento fila {idx}: el tipo de involucrado debe ser colaborador o cliente."
@@ -9389,10 +9389,10 @@ class FraudCaseApp:
                     raise ValueError(
                         f"Involucramiento fila {idx}: se esperaban 5 columnas y se recibieron {len(normalized)}."
                     )
-                product_id, tipo_involucrado, collaborator_id, client_id, amount_text = normalized
+                product_id, cliente_flag, collaborator_id, client_id, amount_text = normalized
                 if not product_id:
                     continue
-                tipo_norm = (tipo_involucrado or "colaborador").lower()
+                tipo_norm = (cliente_flag or "colaborador").lower()
                 if tipo_norm not in {"colaborador", "cliente"}:
                     raise ValueError(
                         f"Involucramiento fila {idx}: el tipo de involucrado debe ser colaborador o cliente."
@@ -9921,7 +9921,7 @@ class FraudCaseApp:
             return [
                 (
                     inv.get("id_producto", ""),
-                    inv.get("tipo_involucrado", ""),
+                    inv.get("cliente_flag", ""),
                     inv.get("id_colaborador", ""),
                     inv.get("id_cliente_involucrado", ""),
                     inv.get("monto_asignado", ""),
@@ -10076,7 +10076,16 @@ class FraudCaseApp:
                     f"Faltan columnas requeridas para {sample_key} ({missing_message}).",
                 )
             return False
-        missing = [header for header in expected_headers if header not in headers]
+        header_set = set(headers)
+        header_aliases = {"cliente_flag": {"tipo_involucrado"}}
+        missing = []
+        for header in expected_headers:
+            if header in header_set:
+                continue
+            alias_set = header_aliases.get(header)
+            if alias_set and header_set.intersection(alias_set):
+                continue
+            missing.append(header)
         if missing:
             log_event(
                 "validacion",
@@ -10132,6 +10141,31 @@ class FraudCaseApp:
                     row[target] = row[source]
                     break
 
+    def _normalize_involvement_flag_aliases(self, row: dict[str, str]) -> None:
+        """Normaliza alias entre cliente_flag y tipo_involucrado."""
+
+        if not isinstance(row, dict):
+            return
+        if not self._has_meaningful_value(row.get("cliente_flag")) and self._has_meaningful_value(row.get("tipo_involucrado")):
+            row["cliente_flag"] = row["tipo_involucrado"]
+        if not self._has_meaningful_value(row.get("tipo_involucrado")) and self._has_meaningful_value(row.get("cliente_flag")):
+            row["tipo_involucrado"] = row["cliente_flag"]
+
+    def _normalize_client_flag_aliases(self, row: dict[str, str]) -> None:
+        """Asegura el flag de cliente en la clave flag_cliente_involucrado."""
+
+        if not isinstance(row, dict):
+            return
+        if self._has_meaningful_value(row.get("flag_cliente_involucrado")):
+            return
+        candidate_keys = ("cliente_flag", "tipo_involucrado")
+        flag_values = {value.lower() for value in FLAG_CLIENTE_LIST if value}
+        for key in candidate_keys:
+            value = (row.get(key) or "").strip()
+            if value and value.lower() in flag_values:
+                row["flag_cliente_involucrado"] = value
+                break
+
     def _normalize_eventos_row_to_combined(self, row: Mapping, header_format: str | None) -> dict[str, str]:
         normalized = self._normalize_eventos_row(row, header_format)
         general_mapping = {
@@ -10148,13 +10182,15 @@ class FraudCaseApp:
             "tipo_falta": ("tipo_de_falta",),
         }
         self._apply_eventos_aliases(normalized, general_mapping)
+        self._normalize_involvement_flag_aliases(normalized)
+        self._normalize_client_flag_aliases(normalized)
         if not self._has_meaningful_value(normalized.get("id_cliente")) and self._has_meaningful_value(normalized.get("id_cliente_involucrado")):
             normalized["id_cliente"] = normalized["id_cliente_involucrado"]
         client_mapping = {
             "nombres": ("cliente_nombres", "nombres_cliente_involucrado"),
             "apellidos": ("cliente_apellidos", "apellidos_cliente_involucrado"),
             "tipo_id": ("cliente_tipo_id", "tipo_id_cliente_involucrado"),
-            "flag": ("cliente_flag", "flag_cliente_involucrado"),
+            "flag": ("flag_cliente_involucrado",),
             "telefonos": ("cliente_telefonos", "telefonos_cliente_relacionado"),
             "correos": ("cliente_correos", "correos_cliente_relacionado"),
             "direcciones": ("cliente_direcciones", "direcciones_cliente_relacionado"),
@@ -10278,6 +10314,7 @@ class FraudCaseApp:
                 else:
                     client_seed = raw_row
                     team_seed = raw_row
+                self._normalize_involvement_flag_aliases(raw_row)
                 client_row, client_found = self._hydrate_row_from_details(client_seed, 'id_cliente', CLIENT_ID_ALIASES)
                 team_row, team_found = self._hydrate_row_from_details(team_seed, 'id_colaborador', TEAM_ID_ALIASES)
                 product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
@@ -10321,7 +10358,7 @@ class FraudCaseApp:
                         cleaned_amount = normalized or cleaned_amount
                     key = (tipo_norm, collab if tipo_norm == 'colaborador' else '', client if tipo_norm == 'cliente' else '')
                     entry = {
-                        'tipo_involucrado': tipo_norm,
+                        'cliente_flag': tipo_norm,
                         'id_colaborador': collab if tipo_norm == 'colaborador' else '',
                         'id_cliente_involucrado': client if tipo_norm == 'cliente' else '',
                         'monto_asignado': cleaned_amount,
@@ -10338,11 +10375,11 @@ class FraudCaseApp:
                             existing['requires_amount'] = entry['requires_amount']
 
                 _append_involvement_entry(
-                    raw_row.get('tipo_involucrado', ''),
+                    raw_row.get('cliente_flag', ''),
                     raw_row.get('id_colaborador', ''),
                     raw_row.get('id_cliente_involucrado', ''),
                     raw_row.get('monto_asignado', ''),
-                    requires_amount=bool(raw_row.get('tipo_involucrado') or raw_row.get('monto_asignado')),
+                    requires_amount=bool(raw_row.get('cliente_flag') or raw_row.get('monto_asignado')),
                 )
                 for collaborator, amount_text in parse_involvement_entries(raw_row.get('involucramiento', '')):
                     _append_involvement_entry("colaborador", collaborator, "", amount_text, requires_amount=True)
@@ -10353,7 +10390,7 @@ class FraudCaseApp:
                 for involvement in involvement_map.values():
                     label_subject = involvement.get('id_colaborador') or involvement.get('id_cliente_involucrado') or 'sin ID'
                     label = (
-                        f"Monto asignado del {involvement.get('tipo_involucrado', 'involucrado')} "
+                        f"Monto asignado del {involvement.get('cliente_flag', 'involucrado')} "
                         f"{label_subject} en el producto {(raw_row.get('id_producto') or 'sin ID')}"
                     )
                     amount_value = involvement.get('monto_asignado', '')
@@ -11921,7 +11958,7 @@ class FraudCaseApp:
                     for involvement in involvements:
                         if not isinstance(involvement, Mapping):
                             continue
-                        tipo_norm = (involvement.get('tipo_involucrado') or 'colaborador').strip().lower()
+                        tipo_norm = (involvement.get('cliente_flag') or 'colaborador').strip().lower()
                         amount_text = (involvement.get('monto_asignado') or '').strip()
                         label_subject = involvement.get('id_colaborador') if tipo_norm == 'colaborador' else involvement.get('id_cliente_involucrado')
                         label = (
@@ -13489,14 +13526,14 @@ class FraudCaseApp:
                 collaborator_assignments = list(prod_data.get('asignaciones') or [])
 
             def _append_involucramiento(inv_payload, tipo_por_defecto):
-                inv_tipo = (inv_payload.get('tipo_involucrado') or tipo_por_defecto).strip() or tipo_por_defecto
+                inv_tipo = (inv_payload.get('cliente_flag') or tipo_por_defecto).strip() or tipo_por_defecto
                 involucs.append(
                     {
                         "id_producto": prod_data['producto']['id_producto'],
                         "id_caso": "",  # se completará al exportar
                         "id_colaborador": inv_payload.get('id_colaborador', '') if inv_tipo == "colaborador" else "",
                         "id_cliente_involucrado": inv_payload.get('id_cliente_involucrado', '') if inv_tipo == "cliente" else "",
-                        "tipo_involucrado": inv_tipo,
+                        "cliente_flag": inv_tipo,
                         "monto_asignado": inv_payload.get('monto_asignado', ''),
                     }
                 )
@@ -13811,7 +13848,7 @@ class FraudCaseApp:
                     continue
                 pframe.clear_involvements()
                 for inv in involvement_map[pid]:
-                    tipo = (inv.get('tipo_involucrado') or '').strip().lower()
+                    tipo = (inv.get('cliente_flag') or '').strip().lower()
                     if tipo == "cliente" or inv.get('id_cliente_involucrado'):
                         assign = pframe.add_client_involvement()
                         assign.client_var.set(inv.get('id_cliente_involucrado', ''))
@@ -14389,7 +14426,6 @@ class FraudCaseApp:
             def _validate_involucrado(
                 inv_idx,
                 inv_payload,
-                tipo_involucrado,
                 identifier,
                 normalized_identifier,
                 known_ids,
@@ -14441,7 +14477,6 @@ class FraudCaseApp:
                 collaborator_entry = _validate_involucrado(
                     inv_idx,
                     inv,
-                    "colaborador",
                     collaborator_id,
                     collaborator_norm,
                     collaborator_ids,
@@ -14455,7 +14490,6 @@ class FraudCaseApp:
                 client_entry = _validate_involucrado(
                     offset + len(collaborator_assignments),
                     inv,
-                    "cliente",
                     client_id,
                     client_norm,
                     client_ids,
@@ -14923,7 +14957,7 @@ class FraudCaseApp:
         write_csv(
             'involucramiento.csv',
             data['involucramientos'],
-            ['id_producto', 'id_caso', 'tipo_involucrado', 'id_colaborador', 'id_cliente_involucrado', 'monto_asignado'],
+            ['id_producto', 'id_caso', 'cliente_flag', 'id_colaborador', 'id_cliente_involucrado', 'monto_asignado'],
             historical_name='involucramiento',
         )
         write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'], historical_name='detalles_riesgo')

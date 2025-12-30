@@ -434,11 +434,11 @@ class DummyProductFrame:
         )
         for item in collaborator_list:
             if isinstance(item, dict):
-                item.setdefault("tipo_involucrado", "colaborador")
+                item.setdefault("cliente_flag", "colaborador")
         client_list = list(asignaciones_clientes or [])
         for item in client_list:
             if isinstance(item, dict):
-                item.setdefault("tipo_involucrado", "cliente")
+                item.setdefault("cliente_flag", "cliente")
 
         base_product = {
             "producto": {
@@ -1156,7 +1156,7 @@ def test_validate_data_normalizes_valid_involvement_amounts():
     asignaciones = app.product_frames[0].get_data()['asignaciones_colaboradores']
     assert asignaciones[0]['monto_asignado'] == '10.50'
     assert asignaciones[1]['monto_asignado'] == '75.00'
-    assert all(item['tipo_involucrado'] == 'colaborador' for item in asignaciones)
+    assert all(item['cliente_flag'] == 'colaborador' for item in asignaciones)
 
 
 def test_validate_data_allows_afectacion_interna_without_involucramientos():
@@ -1231,8 +1231,8 @@ def test_get_form_data_exports_normalized_involucramientos():
     exported_amounts = [row['monto_asignado'] for row in form_data['involucramientos']]
     assert exported_amounts == ['10.50', '75.00', '25.00']
     assert all(amount.strip() and '.' in amount for amount in exported_amounts)
-    assert any(row.get('tipo_involucrado') == 'cliente' for row in form_data['involucramientos'])
-    client_row = next(row for row in form_data['involucramientos'] if row.get('tipo_involucrado') == 'cliente')
+    assert any(row.get('cliente_flag') == 'cliente' for row in form_data['involucramientos'])
+    client_row = next(row for row in form_data['involucramientos'] if row.get('cliente_flag') == 'cliente')
     assert client_row['id_cliente_involucrado'] == '12345678'
 
 

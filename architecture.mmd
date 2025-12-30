@@ -1,5 +1,5 @@
 %% Diagramas de arquitectura y flujos de artefactos
-%% Actualizado automáticamente el 2025-12-29 19:51:51
+%% Actualizado automáticamente el 2025-12-30 04:23:50
 %%{init: { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif', 'themeVariables': { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif' } } }%%
 
 erDiagram
@@ -36,17 +36,67 @@ erDiagram
     string id_cliente
     string id_colaborador
     string id_cliente_involucrado
-    string tipo_involucrado
+    string cliente_flag
     string id_reclamo
     string fecha_ocurrencia
   }
   EVENTOS {
-    string id_caso
+    string case_id
     string tipo_informe
+    string categoria_1
+    string categoria_2
+    string modalidad
+    string tipo_de_producto
+    string canal
+    string proceso_impactado
+    string product_id
+    string cod_operation
+    string monto_investigado
+    string tipo_moneda
+    string tipo_id_cliente_involucrado
+    string client_id_involucrado
+    string flag_cliente_involucrado
+    string nombres_cliente_involucrado
+    string apellidos_cliente_involucrado
+    string matricula_colaborador_involucrado
+    string apellido_paterno_involucrado
+    string apellido_materno_involucrado
+    string nombres_involucrado
+    string division
+    string area
+    string servicio
+    string nombre_agencia
+    string codigo_agencia
+    string puesto
+    string fecha_cese
+    string tipo_de_falta
+    string tipo_sancion
+    string fecha_ocurrencia
+    string fecha_descubrimiento
+    string monto_fraude_interno_soles
+    string monto_fraude_interno_dolares
+    string monto_fraude_externo_soles
+    string monto_fraude_externo_dolares
+    string monto_falla_en_proceso_soles
+    string monto_falla_en_proceso_dolares
+    string monto_contingencia_soles
+    string monto_contingencia_dolares
+    string monto_recuperado_soles
+    string monto_recuperado_dolares
+    string monto_pagado_soles
+    string monto_pagado_dolares
+    string comentario_breve
+    string comentario_amplio
+    string id_reclamo
+    string nombre_analitica
+    string codigo_analitica
+    string telefonos_cliente_relacionado
+    string correos_cliente_relacionado
+    string direcciones_cliente_relacionado
+    string accionado_cliente_relacionado
+    string id_caso
     string categoria1
     string categoria2
-    string modalidad
-    string canal
     string proceso
     string fecha_de_ocurrencia
     string fecha_de_descubrimiento
@@ -58,24 +108,16 @@ erDiagram
     string id_cliente
     string id_colaborador
     string id_cliente_involucrado
-    string tipo_involucrado
-    string id_reclamo
-    string fecha_ocurrencia
-    string fecha_descubrimiento
+    string cliente_flag
     string tipo_producto
-    string tipo_moneda
-    string monto_investigado
     string monto_perdida_fraude
     string monto_falla_procesos
     string monto_contingencia
     string monto_recuperado
     string monto_pago_deuda
-    string nombre_analitica
-    string codigo_analitica
     string cliente_nombres
     string cliente_apellidos
     string cliente_tipo_id
-    string cliente_flag
     string cliente_telefonos
     string cliente_correos
     string cliente_direcciones

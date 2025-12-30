@@ -415,7 +415,7 @@ class BaseInvolvementRow:
         return {
             self.id_field_key: self.id_var.get().strip(),
             "monto_asignado": self.monto_var.get().strip(),
-            "tipo_involucrado": self.involvement_type,
+            "cliente_flag": self.involvement_type,
         }
 
     def clear_values(self):

@@ -42,7 +42,7 @@ def test_llave_tecnica_rows_and_csv(tmp_path):
                 {"id_producto": "=P1", "id_colaborador": "@TM1"},
                 {"id_producto": "=P1", "id_colaborador": "TM-ALT"},
                 {"id_producto": "P2", "id_colaborador": "TM2"},
-                {"id_producto": "P2", "id_cliente_involucrado": "CL-EXT", "tipo_involucrado": "cliente"},
+                {"id_producto": "P2", "id_cliente_involucrado": "CL-EXT", "cliente_flag": "cliente"},
             ],
         }
     )
@@ -67,7 +67,7 @@ def test_llave_tecnica_rows_and_csv(tmp_path):
         "id_cliente",
         "id_colaborador",
         "id_cliente_involucrado",
-        "tipo_involucrado",
+        "cliente_flag",
         "id_reclamo",
         "fecha_ocurrencia",
     ]
@@ -90,12 +90,12 @@ def test_llave_tecnica_rows_and_csv(tmp_path):
     }
 
     assert rows == [
-        {**base_row, "id_producto": "=P1", "id_cliente": "+CLI1", "id_colaborador": "@TM1", "id_cliente_involucrado": "", "tipo_involucrado": "colaborador", "id_reclamo": "-RC1", "fecha_ocurrencia": "2024-01-01"},
-        {**base_row, "id_producto": "=P1", "id_cliente": "+CLI1", "id_colaborador": "@TM1", "id_cliente_involucrado": "", "tipo_involucrado": "colaborador", "id_reclamo": "RC2", "fecha_ocurrencia": "2024-01-01"},
-        {**base_row, "id_producto": "=P1", "id_cliente": "+CLI1", "id_colaborador": "TM-ALT", "id_cliente_involucrado": "", "tipo_involucrado": "colaborador", "id_reclamo": "-RC1", "fecha_ocurrencia": "2024-01-01"},
-        {**base_row, "id_producto": "=P1", "id_cliente": "+CLI1", "id_colaborador": "TM-ALT", "id_cliente_involucrado": "", "tipo_involucrado": "colaborador", "id_reclamo": "RC2", "fecha_ocurrencia": "2024-01-01"},
-        {**base_row, "id_producto": "P2", "id_cliente": "CLI2", "id_colaborador": "TM2", "id_cliente_involucrado": "", "tipo_involucrado": "colaborador", "id_reclamo": "", "fecha_ocurrencia": "2024-02-02"},
-        {**base_row, "id_producto": "P2", "id_cliente": "CLI2", "id_colaborador": "", "id_cliente_involucrado": "CL-EXT", "tipo_involucrado": "cliente", "id_reclamo": "", "fecha_ocurrencia": "2024-02-02"},
+        {**base_row, "id_producto": "=P1", "id_cliente": "+CLI1", "id_colaborador": "@TM1", "id_cliente_involucrado": "", "cliente_flag": "colaborador", "id_reclamo": "-RC1", "fecha_ocurrencia": "2024-01-01"},
+        {**base_row, "id_producto": "=P1", "id_cliente": "+CLI1", "id_colaborador": "@TM1", "id_cliente_involucrado": "", "cliente_flag": "colaborador", "id_reclamo": "RC2", "fecha_ocurrencia": "2024-01-01"},
+        {**base_row, "id_producto": "=P1", "id_cliente": "+CLI1", "id_colaborador": "TM-ALT", "id_cliente_involucrado": "", "cliente_flag": "colaborador", "id_reclamo": "-RC1", "fecha_ocurrencia": "2024-01-01"},
+        {**base_row, "id_producto": "=P1", "id_cliente": "+CLI1", "id_colaborador": "TM-ALT", "id_cliente_involucrado": "", "cliente_flag": "colaborador", "id_reclamo": "RC2", "fecha_ocurrencia": "2024-01-01"},
+        {**base_row, "id_producto": "P2", "id_cliente": "CLI2", "id_colaborador": "TM2", "id_cliente_involucrado": "", "cliente_flag": "colaborador", "id_reclamo": "", "fecha_ocurrencia": "2024-02-02"},
+        {**base_row, "id_producto": "P2", "id_cliente": "CLI2", "id_colaborador": "", "id_cliente_involucrado": "CL-EXT", "cliente_flag": "cliente", "id_reclamo": "", "fecha_ocurrencia": "2024-02-02"},
     ]
 
     csv_path = tmp_path / "caso_llave_tecnica.csv"
