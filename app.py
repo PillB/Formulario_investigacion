@@ -10123,6 +10123,96 @@ class FraudCaseApp:
             normalized[normalized_key] = value
         return normalized
 
+    def _apply_eventos_aliases(self, row: dict[str, str], mapping: Mapping[str, Iterable[str]], *, overwrite: bool = False) -> None:
+        for target, sources in mapping.items():
+            if not overwrite and self._has_meaningful_value(row.get(target)):
+                continue
+            for source in sources:
+                if self._has_meaningful_value(row.get(source)):
+                    row[target] = row[source]
+                    break
+
+    def _normalize_eventos_row_to_combined(self, row: Mapping, header_format: str | None) -> dict[str, str]:
+        normalized = self._normalize_eventos_row(row, header_format)
+        general_mapping = {
+            "id_caso": ("case_id",),
+            "id_producto": ("product_id",),
+            "id_cliente_involucrado": ("client_id_involucrado",),
+            "id_colaborador": ("matricula_colaborador_involucrado",),
+            "tipo_producto": ("tipo_de_producto",),
+            "proceso": ("proceso_impactado",),
+            "categoria1": ("categoria_1",),
+            "categoria2": ("categoria_2",),
+            "fecha_ocurrencia": ("fecha_de_ocurrencia",),
+            "fecha_descubrimiento": ("fecha_de_descubrimiento",),
+            "tipo_falta": ("tipo_de_falta",),
+        }
+        self._apply_eventos_aliases(normalized, general_mapping)
+        if not self._has_meaningful_value(normalized.get("id_cliente")) and self._has_meaningful_value(normalized.get("id_cliente_involucrado")):
+            normalized["id_cliente"] = normalized["id_cliente_involucrado"]
+        client_mapping = {
+            "nombres": ("cliente_nombres", "nombres_cliente_involucrado"),
+            "apellidos": ("cliente_apellidos", "apellidos_cliente_involucrado"),
+            "tipo_id": ("cliente_tipo_id", "tipo_id_cliente_involucrado"),
+            "flag": ("cliente_flag", "flag_cliente_involucrado"),
+            "telefonos": ("cliente_telefonos", "telefonos_cliente_relacionado"),
+            "correos": ("cliente_correos", "correos_cliente_relacionado"),
+            "direcciones": ("cliente_direcciones", "direcciones_cliente_relacionado"),
+            "accionado": ("cliente_accionado", "accionado_cliente_relacionado"),
+        }
+        self._apply_eventos_aliases(normalized, client_mapping)
+        return normalized
+
+    def _build_eventos_team_row(self, row: Mapping) -> dict[str, str]:
+        normalized = dict(row)
+        team_mapping = {
+            "nombres": ("colaborador_nombres", "nombres_involucrado"),
+            "apellidos": ("colaborador_apellidos",),
+            "division": ("colaborador_division", "division"),
+            "area": ("colaborador_area", "area"),
+            "servicio": ("colaborador_servicio", "servicio"),
+            "puesto": ("colaborador_puesto", "puesto"),
+            "nombre_agencia": ("colaborador_nombre_agencia", "nombre_agencia"),
+            "codigo_agencia": ("colaborador_codigo_agencia", "codigo_agencia"),
+            "tipo_falta": ("colaborador_tipo_falta", "tipo_falta", "tipo_de_falta"),
+            "tipo_sancion": ("colaborador_tipo_sancion", "tipo_sancion"),
+            "fecha_carta_inmediatez": ("colaborador_fecha_carta_inmediatez",),
+            "fecha_carta_renuncia": ("colaborador_fecha_carta_renuncia",),
+            "flag_colaborador": ("colaborador_flag",),
+        }
+        self._apply_eventos_aliases(normalized, team_mapping, overwrite=True)
+        if not self._has_meaningful_value(normalized.get("apellidos")):
+            paternal = normalized.get("apellido_paterno_involucrado")
+            maternal = normalized.get("apellido_materno_involucrado")
+            combined = " ".join(
+                part for part in (paternal, maternal) if self._has_meaningful_value(part)
+            ).strip()
+            if combined:
+                normalized["apellidos"] = combined
+        return normalized
+
+    def _detect_eventos_row_format(self, row: Mapping) -> str | None:
+        if not isinstance(row, Mapping):
+            return None
+        normalized_keys = {self._normalize_eventos_header(str(key)) for key in row if key}
+        canonical_keys = {
+            "case_id",
+            "product_id",
+            "tipo_de_producto",
+            "client_id_involucrado",
+            "matricula_colaborador_involucrado",
+            "proceso_impactado",
+            "categoria_1",
+            "categoria_2",
+        }
+        if normalized_keys & canonical_keys:
+            return "canonical"
+        if "id_caso" in normalized_keys and (
+            "id_producto" in normalized_keys or "tipo_producto" in normalized_keys
+        ):
+            return "legacy"
+        return None
+
     def is_eventos_format(self, headers: Iterable[str]) -> tuple[str | None, list[str], list[str]]:
         normalized_headers = [self._normalize_eventos_header(header) for header in headers if header]
         normalized_set = set(normalized_headers)
@@ -10180,10 +10270,16 @@ class FraudCaseApp:
             prepared_rows = []
             for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 raw_row = self._sanitize_import_row(row, row_number=index)
-                if header_format in {"legacy", "canonical"}:
-                    raw_row = self._normalize_eventos_row(raw_row, header_format)
-                client_row, client_found = self._hydrate_row_from_details(raw_row, 'id_cliente', CLIENT_ID_ALIASES)
-                team_row, team_found = self._hydrate_row_from_details(raw_row, 'id_colaborador', TEAM_ID_ALIASES)
+                row_format = header_format or self._detect_eventos_row_format(raw_row)
+                if row_format in {"legacy", "canonical"}:
+                    raw_row = self._normalize_eventos_row_to_combined(raw_row, row_format)
+                    client_seed = raw_row
+                    team_seed = self._build_eventos_team_row(raw_row)
+                else:
+                    client_seed = raw_row
+                    team_seed = raw_row
+                client_row, client_found = self._hydrate_row_from_details(client_seed, 'id_cliente', CLIENT_ID_ALIASES)
+                team_row, team_found = self._hydrate_row_from_details(team_seed, 'id_colaborador', TEAM_ID_ALIASES)
                 product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
                 collaborator_id = (team_row.get('id_colaborador') or '').strip()
                 involvement_map: dict[tuple[str, str, str], dict[str, str]] = {}
@@ -10277,6 +10373,7 @@ class FraudCaseApp:
                 prepared_rows.append(
                     {
                         'raw_row': raw_row,
+                        'eventos_format': row_format,
                         'client_row': client_row,
                         'client_found': client_found,
                         'team_row': team_row,
@@ -11644,6 +11741,89 @@ class FraudCaseApp:
 
         self._run_import_batches(entries, "productos", process_chunk, finalize)
 
+    def _apply_eventos_case_row(self, row: Mapping) -> None:
+        self._ensure_case_vars()
+        case_id = (row.get("id_caso") or "").strip()
+        if case_id:
+            case_message = validate_case_id(case_id)
+            if case_message:
+                raise ValueError(case_message)
+            self.id_caso_var.set(case_id)
+        tipo_informe = (row.get("tipo_informe") or "").strip()
+        if tipo_informe:
+            self._set_case_dropdown_value(
+                self.tipo_informe_var,
+                tipo_informe,
+                TIPO_INFORME_LIST,
+                "tipo_cb",
+            )
+        cat1 = (row.get("categoria1") or "").strip()
+        cat2 = (row.get("categoria2") or "").strip()
+        modalidad = (row.get("modalidad") or "").strip()
+        if cat1 and cat1 in TAXONOMIA:
+            self.cat_caso1_var.set(cat1)
+            if hasattr(self, "case_cat2_cb"):
+                self.on_case_cat1_change()
+            if cat2 and cat2 in TAXONOMIA.get(cat1, {}):
+                self.cat_caso2_var.set(cat2)
+                if hasattr(self, "case_mod_cb"):
+                    self.on_case_cat2_change()
+                if modalidad and modalidad in TAXONOMIA.get(cat1, {}).get(cat2, []):
+                    self.mod_caso_var.set(modalidad)
+        canal = (row.get("canal") or "").strip()
+        if canal:
+            self._set_case_dropdown_value(
+                self.canal_caso_var,
+                canal,
+                CANAL_LIST,
+                "canal_cb",
+            )
+        proceso = (row.get("proceso") or "").strip()
+        if proceso:
+            self._set_case_dropdown_value(
+                self.proceso_caso_var,
+                proceso,
+                PROCESO_LIST,
+                "proc_cb",
+            )
+        centro_costos = (row.get("centro_costos") or row.get("centro_costo") or "").strip()
+        if centro_costos:
+            self.centro_costo_caso_var.set(centro_costos)
+        fecha_ocurrencia = (row.get("fecha_ocurrencia") or "").strip()
+        fecha_descubrimiento = (row.get("fecha_descubrimiento") or "").strip()
+        if fecha_ocurrencia:
+            occ_message = validate_date_text(
+                fecha_ocurrencia,
+                "La fecha de ocurrencia del caso",
+                allow_blank=False,
+                enforce_max_today=True,
+                must_be_before=(
+                    fecha_descubrimiento,
+                    "la fecha de descubrimiento del caso",
+                )
+                if fecha_descubrimiento
+                else None,
+            )
+            if occ_message:
+                raise ValueError(occ_message)
+            self.fecha_caso_var.set(fecha_ocurrencia)
+        if fecha_descubrimiento:
+            desc_message = validate_date_text(
+                fecha_descubrimiento,
+                "La fecha de descubrimiento del caso",
+                allow_blank=False,
+                enforce_max_today=True,
+                must_be_after=(
+                    fecha_ocurrencia,
+                    "la fecha de ocurrencia del caso",
+                )
+                if fecha_ocurrencia
+                else None,
+            )
+            if desc_message:
+                raise ValueError(desc_message)
+            self.fecha_descubrimiento_caso_var.set(fecha_descubrimiento)
+
     def _apply_combined_import_payload(self, entries, *, manager=None, file_path=""):
         manager = manager or self.mass_import_manager
         created_records = 0
@@ -11652,10 +11832,16 @@ class FraudCaseApp:
         missing_team = []
         missing_products = []
         warnings: list[str] = []
+        eventos_case_applied = False
 
         def process_chunk(chunk):
-            nonlocal created_records, changes_detected
+            nonlocal created_records, changes_detected, eventos_case_applied
             for entry in chunk:
+                if entry.get("eventos_format") and not eventos_case_applied:
+                    raw_row = entry.get("raw_row", {}) or {}
+                    self._apply_eventos_case_row(raw_row)
+                    eventos_case_applied = True
+                    changes_detected = True
                 client_row = dict(entry.get('client_row') or {})
                 client_found = entry.get('client_found', False)
                 client_id = (client_row.get('id_cliente') or '').strip()
