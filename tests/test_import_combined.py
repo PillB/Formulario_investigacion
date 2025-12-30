@@ -3,8 +3,16 @@ import pytest
 import types
 
 import app as app_module
-from settings import (CRITICIDAD_LIST, FLAG_CLIENTE_LIST, TIPO_ID_LIST,
-                      TIPO_SANCION_LIST)
+from settings import (
+    CANAL_LIST,
+    CRITICIDAD_LIST,
+    FLAG_CLIENTE_LIST,
+    PROCESO_LIST,
+    TAXONOMIA,
+    TIPO_ID_LIST,
+    TIPO_INFORME_LIST,
+    TIPO_SANCION_LIST,
+)
 from tests.app_factory import build_import_app
 from tests.stubs import ClientFrameStub, ProductFrameStub, TeamFrameStub
 
@@ -88,6 +96,52 @@ def test_import_combined_creates_entities_and_prevents_duplicates(monkeypatch, m
 
     assert sum(1 for frame in app.team_frames if frame.id_var.get() == 'T12345') == 1
     assert len(app.product_frames) == 1
+
+
+def test_import_combined_eventos_populates_case_client_product(monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+    cat1 = list(TAXONOMIA.keys())[0]
+    cat2 = list(TAXONOMIA[cat1].keys())[0]
+    modalidad = TAXONOMIA[cat1][cat2][0]
+    eventos_rows = [
+        {
+            'case_id': '2025-0002',
+            'tipo_informe': TIPO_INFORME_LIST[0],
+            'categoria_1': cat1,
+            'categoria_2': cat2,
+            'modalidad': modalidad,
+            'canal': CANAL_LIST[0],
+            'proceso_impactado': PROCESO_LIST[0],
+            'product_id': 'PRD-EVT',
+            'tipo_de_producto': 'Crédito personal',
+            'monto_investigado': '500.00',
+            'tipo_moneda': 'Soles',
+            'client_id_involucrado': 'CLI-EVT',
+            'tipo_id_cliente_involucrado': TIPO_ID_LIST[0],
+            'flag_cliente_involucrado': FLAG_CLIENTE_LIST[0],
+            'nombres_cliente_involucrado': 'Ada',
+            'apellidos_cliente_involucrado': 'Lovelace',
+            'fecha_ocurrencia': '2024-02-01',
+            'fecha_descubrimiento': '2024-02-05',
+        }
+    ]
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter(eventos_rows),
+    )
+
+    app.import_combined(filename="dummy.csv")
+
+    assert app.id_caso_var.get() == '2025-0002'
+    assert app.tipo_informe_var.get() == TIPO_INFORME_LIST[0]
+    assert app.fecha_caso_var.get() == '2024-02-01'
+    assert app.fecha_descubrimiento_caso_var.get() == '2024-02-05'
+    assert app._find_client_frame('CLI-EVT') is not None
+    product_frame = app._find_product_frame('PRD-EVT')
+    assert product_frame is not None
+    assert product_frame.populated_rows[0]['tipo_producto'] == 'Crédito personal'
+    assert messagebox_spy.errors == []
 
 
 def test_import_combined_reuses_client_frame_for_multiple_products(monkeypatch, messagebox_spy):
