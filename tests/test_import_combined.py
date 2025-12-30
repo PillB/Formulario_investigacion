@@ -15,6 +15,7 @@ from settings import (
 )
 from tests.app_factory import build_import_app
 from tests.stubs import ClientFrameStub, ProductFrameStub, TeamFrameStub
+from validators import validate_codigo_analitica, validate_reclamo_id
 
 
 def test_import_combined_creates_entities_and_prevents_duplicates(monkeypatch, messagebox_spy):
@@ -141,6 +142,91 @@ def test_import_combined_eventos_populates_case_client_product(monkeypatch, mess
     product_frame = app._find_product_frame('PRD-EVT')
     assert product_frame is not None
     assert product_frame.populated_rows[0]['tipo_producto'] == 'Crédito personal'
+    assert messagebox_spy.errors == []
+
+
+def test_import_combined_eventos_groups_by_product_and_claims(monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+    cat1 = list(TAXONOMIA.keys())[0]
+    cat2 = list(TAXONOMIA[cat1].keys())[0]
+    modalidad = TAXONOMIA[cat1][cat2][0]
+    eventos_rows = [
+        {
+            'case_id': '2025-0003',
+            'tipo_informe': TIPO_INFORME_LIST[0],
+            'categoria_1': cat1,
+            'categoria_2': cat2,
+            'modalidad': modalidad,
+            'canal': CANAL_LIST[0],
+            'proceso_impactado': PROCESO_LIST[0],
+            'product_id': 'PRD-GRP',
+            'tipo_de_producto': 'Crédito personal',
+            'monto_investigado': '500.00',
+            'tipo_moneda': 'Soles',
+            'client_id_involucrado': 'CLI-1',
+            'flag_cliente_involucrado': FLAG_CLIENTE_LIST[0],
+            'matricula_colaborador_involucrado': 't12345',
+            'colaborador_flag': 'Involucrado',
+            'fecha_ocurrencia': '2024-03-01',
+            'fecha_descubrimiento': '2024-03-05',
+            'id_reclamo': 'C12345678',
+            'nombre_analitica': 'Analitica 1',
+            'codigo_analitica': '4300000001',
+        },
+        {
+            'case_id': '2025-0003',
+            'tipo_informe': TIPO_INFORME_LIST[0],
+            'categoria_1': cat1,
+            'categoria_2': cat2,
+            'modalidad': modalidad,
+            'canal': CANAL_LIST[0],
+            'proceso_impactado': PROCESO_LIST[0],
+            'product_id': 'PRD-GRP',
+            'tipo_de_producto': 'Crédito personal',
+            'monto_investigado': '500.00',
+            'tipo_moneda': 'Soles',
+            'client_id_involucrado': 'CLI-2',
+            'flag_cliente_involucrado': FLAG_CLIENTE_LIST[0],
+            'matricula_colaborador_involucrado': 'T12345',
+            'colaborador_flag': 'Involucrado',
+            'fecha_ocurrencia': '2024-03-01',
+            'fecha_descubrimiento': '2024-03-05',
+            'id_reclamo': 'C87654321',
+            'nombre_analitica': 'Analitica 2',
+            'codigo_analitica': '4500000002',
+        },
+    ]
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter(eventos_rows),
+    )
+
+    app.import_combined(filename="dummy.csv")
+
+    product_frame = app._find_product_frame('PRD-GRP')
+    assert product_frame is not None
+    assert [frame.id_var.get() for frame in app.product_frames if frame.id_var.get()] == ['PRD-GRP']
+
+    client_ids = {
+        inv.client_var.get()
+        for inv in product_frame.client_involvements
+        if inv.client_var.get()
+    }
+    collaborator_ids = {
+        inv.team_var.get()
+        for inv in product_frame.involvements
+        if inv.team_var.get()
+    }
+    assert client_ids == {'CLI-1', 'CLI-2'}
+    assert collaborator_ids == {'T12345'}
+
+    claims = {claim.data.get('id_reclamo'): claim.data for claim in product_frame.claims}
+    assert set(claims) == {'C12345678', 'C87654321'}
+    for claim_id, payload in claims.items():
+        assert validate_reclamo_id(claim_id) is None
+        assert validate_codigo_analitica(payload.get('codigo_analitica', '')) is None
+        assert payload.get('nombre_analitica')
     assert messagebox_spy.errors == []
 
 

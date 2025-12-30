@@ -10268,6 +10268,67 @@ class FraudCaseApp:
 
         def worker(progress_callback, cancel_event):
             prepared_rows = []
+            grouped_eventos: dict[str, dict[str, object]] = {}
+            seen_technical_keys: set[tuple[str, str, str, str, str, str]] = set()
+
+            def _merge_payload(target: dict[str, str], source: Mapping | None) -> None:
+                if not source:
+                    return
+                for key, value in source.items():
+                    if not self._has_meaningful_value(target.get(key)) and self._has_meaningful_value(value):
+                        target[key] = value
+
+            def _normalize_collaborator_id(value: str) -> str:
+                return normalize_team_member_identifier(value or "").strip()
+
+            def _is_involucrado(value: str) -> bool:
+                return (value or "").strip().lower() == "involucrado"
+
+            def _build_technical_key(
+                raw_row: Mapping,
+                product_id: str,
+                client_id: str,
+                collaborator_id: str,
+                claim_id: str,
+            ) -> tuple[str, str, str, str, str, str]:
+                case_id = (raw_row.get("id_caso") or raw_row.get("case_id") or "").strip()
+                occurrence_date = (raw_row.get("fecha_ocurrencia") or raw_row.get("fecha_de_ocurrencia") or "").strip()
+                return build_technical_key(
+                    case_id,
+                    product_id,
+                    client_id,
+                    collaborator_id,
+                    occurrence_date,
+                    claim_id,
+                )
+
+            def _register_claim(
+                claims: list[dict[str, str]],
+                claim_keys: set[tuple[str, str, str]],
+                claim_payload: dict[str, str],
+                row_index: int,
+            ) -> None:
+                if not any(self._has_meaningful_value(value) for value in claim_payload.values()):
+                    return
+                claim_id = claim_payload.get("id_reclamo", "")
+                if self._has_meaningful_value(claim_id):
+                    message = validate_reclamo_id(claim_id)
+                    if message:
+                        raise ValueError(f"Reclamo fila {row_index}: {message}")
+                code = claim_payload.get("codigo_analitica", "")
+                if self._has_meaningful_value(code):
+                    message = validate_codigo_analitica(code)
+                    if message:
+                        raise ValueError(f"Reclamo fila {row_index}: {message}")
+                claim_key = (
+                    claim_payload.get("id_reclamo", ""),
+                    claim_payload.get("nombre_analitica", ""),
+                    claim_payload.get("codigo_analitica", ""),
+                )
+                if claim_key in claim_keys:
+                    return
+                claim_keys.add(claim_key)
+                claims.append(claim_payload)
             for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 raw_row = self._sanitize_import_row(row, row_number=index)
                 row_format = header_format or self._detect_eventos_row_format(raw_row)
@@ -10281,7 +10342,12 @@ class FraudCaseApp:
                 client_row, client_found = self._hydrate_row_from_details(client_seed, 'id_cliente', CLIENT_ID_ALIASES)
                 team_row, team_found = self._hydrate_row_from_details(team_seed, 'id_colaborador', TEAM_ID_ALIASES)
                 product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
+                if raw_row.get("id_colaborador"):
+                    raw_row["id_colaborador"] = _normalize_collaborator_id(raw_row.get("id_colaborador", ""))
+                if team_row.get("id_colaborador"):
+                    team_row["id_colaborador"] = _normalize_collaborator_id(team_row.get("id_colaborador", ""))
                 collaborator_id = (team_row.get('id_colaborador') or '').strip()
+                product_id = (product_row.get("id_producto") or raw_row.get("id_producto") or "").strip()
                 involvement_map: dict[tuple[str, str, str], dict[str, str]] = {}
 
                 def _resolve_client_tipo(client_identifier: str) -> str:
@@ -10289,7 +10355,7 @@ class FraudCaseApp:
 
                 def _append_involvement_entry(tipo: str, collab: str, client: str, amount_text: str, *, requires_amount: bool = False):
                     tipo_norm = (tipo or "colaborador").strip().lower()
-                    collab = (collab or "").strip()
+                    collab = _normalize_collaborator_id(collab or "")
                     client = (client or "").strip()
                     if tipo_norm not in {"colaborador", "cliente"}:
                         return
@@ -10337,6 +10403,27 @@ class FraudCaseApp:
                         else:
                             existing['requires_amount'] = entry['requires_amount']
 
+                claim_payload = {
+                    "id_reclamo": (raw_row.get("id_reclamo") or "").strip(),
+                    "nombre_analitica": (raw_row.get("nombre_analitica") or "").strip(),
+                    "codigo_analitica": (raw_row.get("codigo_analitica") or "").strip(),
+                }
+                skip_duplicate = False
+                key_client_id = (raw_row.get("id_cliente") or raw_row.get("id_cliente_involucrado") or "").strip()
+                key_collab_id = (raw_row.get("id_colaborador") or "").strip()
+                if product_id:
+                    technical_key = _build_technical_key(
+                        raw_row,
+                        product_id,
+                        key_client_id,
+                        key_collab_id,
+                        claim_payload.get("id_reclamo", ""),
+                    )
+                    if technical_key in seen_technical_keys:
+                        skip_duplicate = True
+                    else:
+                        seen_technical_keys.add(technical_key)
+
                 _append_involvement_entry(
                     raw_row.get('tipo_involucrado', ''),
                     raw_row.get('id_colaborador', ''),
@@ -10344,17 +10431,84 @@ class FraudCaseApp:
                     raw_row.get('monto_asignado', ''),
                     requires_amount=bool(raw_row.get('tipo_involucrado') or raw_row.get('monto_asignado')),
                 )
+                if row_format in {"legacy", "canonical"}:
+                    _append_involvement_entry(
+                        "cliente",
+                        "",
+                        raw_row.get("id_cliente_involucrado", ""),
+                        raw_row.get("monto_asignado", ""),
+                    )
+                    _append_involvement_entry(
+                        "colaborador",
+                        raw_row.get("id_colaborador", ""),
+                        "",
+                        raw_row.get("monto_asignado", ""),
+                    )
                 for collaborator, amount_text in parse_involvement_entries(raw_row.get('involucramiento', '')):
                     _append_involvement_entry("colaborador", collaborator, "", amount_text, requires_amount=True)
                 if not involvement_map and collaborator_id and raw_row.get('monto_asignado'):
                     _append_involvement_entry("colaborador", collaborator_id, "", raw_row.get('monto_asignado', ''), requires_amount=True)
+                if product_id:
+                    client_flag = raw_row.get("flag") or raw_row.get("flag_cliente", "")
+                    if key_client_id and _is_involucrado(client_flag):
+                        _append_involvement_entry("cliente", "", key_client_id, "")
+                    collab_flag = (
+                        team_row.get("flag_colaborador")
+                        or raw_row.get("flag_colaborador")
+                        or raw_row.get("colaborador_flag", "")
+                    )
+                    if collaborator_id and _is_involucrado(collab_flag):
+                        _append_involvement_entry("colaborador", collaborator_id, "", "")
+
+                if row_format in {"legacy", "canonical"} and product_id:
+                    group = grouped_eventos.setdefault(
+                        product_id,
+                        {
+                            "raw_row": dict(raw_row),
+                            "eventos_format": row_format,
+                            "client_row": dict(client_row),
+                            "client_found": client_found,
+                            "team_row": dict(team_row),
+                            "team_found": team_found,
+                            "product_row": dict(product_row),
+                            "product_found": product_found,
+                            "involvement_map": involvement_map,
+                            "claims": [],
+                            "claim_keys": set(),
+                        },
+                    )
+                    _merge_payload(group["raw_row"], raw_row)
+                    _merge_payload(group["client_row"], client_row)
+                    _merge_payload(group["team_row"], team_row)
+                    _merge_payload(group["product_row"], product_row)
+                    group["client_found"] = group["client_found"] or client_found
+                    group["team_found"] = group["team_found"] or team_found
+                    group["product_found"] = group["product_found"] or product_found
+                    group_involvements = group["involvement_map"]
+                    for inv_key, inv_value in involvement_map.items():
+                        existing = group_involvements.get(inv_key)
+                        if not existing:
+                            group_involvements[inv_key] = inv_value
+                            continue
+                        existing["requires_amount"] = existing.get("requires_amount", False) or inv_value.get(
+                            "requires_amount", False
+                        )
+                        if (
+                            not (existing.get("monto_asignado") or "")
+                            and (inv_value.get("monto_asignado") or "")
+                        ):
+                            existing["monto_asignado"] = inv_value.get("monto_asignado", "")
+                    if not skip_duplicate:
+                        _register_claim(group["claims"], group["claim_keys"], claim_payload, index)
+                    grouped_eventos[product_id] = group
+                    continue
 
                 involvement_list: list[dict[str, str]] = []
                 for involvement in involvement_map.values():
                     label_subject = involvement.get('id_colaborador') or involvement.get('id_cliente_involucrado') or 'sin ID'
                     label = (
                         f"Monto asignado del {involvement.get('tipo_involucrado', 'involucrado')} "
-                        f"{label_subject} en el producto {(raw_row.get('id_producto') or 'sin ID')}"
+                        f"{label_subject} en el producto {(product_id or 'sin ID')}"
                     )
                     amount_value = involvement.get('monto_asignado', '')
                     requires_amount = bool(involvement.get('requires_amount'))
@@ -10370,6 +10524,11 @@ class FraudCaseApp:
                     involvement.pop('requires_amount', None)
                     involvement_list.append(involvement)
 
+                claims: list[dict[str, str]] = []
+                claim_keys: set[tuple[str, str, str]] = set()
+                if not skip_duplicate:
+                    _register_claim(claims, claim_keys, claim_payload, index)
+
                 prepared_rows.append(
                     {
                         'raw_row': raw_row,
@@ -10381,6 +10540,43 @@ class FraudCaseApp:
                         'product_row': product_row,
                         'product_found': product_found,
                         'involvements': involvement_list,
+                        'claims': claims,
+                    }
+                )
+            for group in grouped_eventos.values():
+                involvement_list: list[dict[str, str]] = []
+                involvement_map = group["involvement_map"]
+                for involvement in involvement_map.values():
+                    label_subject = involvement.get('id_colaborador') or involvement.get('id_cliente_involucrado') or 'sin ID'
+                    label = (
+                        f"Monto asignado del {involvement.get('tipo_involucrado', 'involucrado')} "
+                        f"{label_subject} en el producto {(group['product_row'].get('id_producto') or 'sin ID')}"
+                    )
+                    amount_value = involvement.get('monto_asignado', '')
+                    requires_amount = bool(involvement.get('requires_amount'))
+                    if amount_value or requires_amount:
+                        msg, _amount, normalized_amount = validate_money_bounds(
+                            amount_value,
+                            label,
+                            allow_blank=not requires_amount,
+                        )
+                        if msg:
+                            raise ValueError(msg)
+                        involvement['monto_asignado'] = normalized_amount or amount_value
+                    involvement.pop('requires_amount', None)
+                    involvement_list.append(involvement)
+                prepared_rows.append(
+                    {
+                        'raw_row': group["raw_row"],
+                        'eventos_format': group["eventos_format"],
+                        'client_row': group["client_row"],
+                        'client_found': group["client_found"],
+                        'team_row': group["team_row"],
+                        'team_found': group["team_found"],
+                        'product_row': group["product_row"],
+                        'product_found': group["product_found"],
+                        'involvements': involvement_list,
+                        'claims': group["claims"],
                     }
                 )
             return prepared_rows
@@ -10493,6 +10689,8 @@ class FraudCaseApp:
                 value = value.strip()
             if value:
                 canonical_id = str(value).strip()
+                if id_column == "id_colaborador":
+                    canonical_id = normalize_team_member_identifier(canonical_id)
                 hydrated[id_column] = canonical_id
                 break
         found = False
@@ -10511,7 +10709,10 @@ class FraudCaseApp:
         if value is None:
             return False
         if isinstance(value, str):
-            return bool(value.strip())
+            stripped = value.strip()
+            if stripped == EVENTOS_PLACEHOLDER:
+                return False
+            return bool(stripped)
         return True
 
     def _merge_payload_with_frame(self, payload, field_sources):
@@ -11833,12 +12034,46 @@ class FraudCaseApp:
         missing_products = []
         warnings: list[str] = []
         eventos_case_applied = False
+        seen_technical_keys: set[tuple[str, str, str, str, str, str]] = set()
+
+        def _should_skip_technical_key(
+            entry: Mapping,
+            product_id: str,
+            client_id: str,
+            collaborator_id: str,
+            claim_id: str,
+        ) -> bool:
+            raw_row = entry.get("raw_row", {}) if isinstance(entry, Mapping) else {}
+            case_id = ""
+            if isinstance(raw_row, Mapping):
+                case_id = (raw_row.get("id_caso") or raw_row.get("case_id") or "").strip()
+                occurrence_date = (raw_row.get("fecha_ocurrencia") or raw_row.get("fecha_de_ocurrencia") or "").strip()
+            else:
+                occurrence_date = ""
+            if not case_id:
+                case_var = getattr(self, "id_caso_var", None)
+                if case_var and hasattr(case_var, "get"):
+                    case_id = (case_var.get() or "").strip()
+            normalized_client = (client_id or "").strip()
+            normalized_collab = normalize_team_member_identifier(collaborator_id or "").strip()
+            key = build_technical_key(
+                case_id,
+                product_id,
+                normalized_client,
+                normalized_collab,
+                occurrence_date,
+                claim_id or "",
+            )
+            if key in seen_technical_keys:
+                return True
+            seen_technical_keys.add(key)
+            return False
 
         def process_chunk(chunk):
             nonlocal created_records, changes_detected, eventos_case_applied
             for entry in chunk:
+                raw_row = entry.get("raw_row", {}) or {}
                 if entry.get("eventos_format") and not eventos_case_applied:
-                    raw_row = entry.get("raw_row", {}) or {}
                     self._apply_eventos_case_row(raw_row)
                     eventos_case_applied = True
                     changes_detected = True
@@ -11848,7 +12083,6 @@ class FraudCaseApp:
                 if client_id:
                     if not client_row.get('flag') and client_row.get('flag_cliente'):
                         client_row['flag'] = client_row.get('flag_cliente')
-                    raw_row = entry.get('raw_row', {}) or {}
                     for source_key, target_key in (
                         ('nombres_cliente', 'nombres'),
                         ('apellidos_cliente', 'apellidos'),
@@ -11940,6 +12174,9 @@ class FraudCaseApp:
                             client_id = (involvement.get('id_cliente_involucrado') or '').strip()
                             if not client_id:
                                 continue
+                            skip_duplicate = _should_skip_technical_key(entry, product_id, client_id, "", "")
+                            if skip_duplicate and not amount_value:
+                                continue
                             client_details, client_found = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
                             self._ensure_client_exists(client_id, client_details)
                             if not client_found and 'id_cliente' in self.detail_catalogs:
@@ -11972,6 +12209,9 @@ class FraudCaseApp:
                             collab_id = (involvement.get('id_colaborador') or '').strip()
                             if not collab_id:
                                 continue
+                            skip_duplicate = _should_skip_technical_key(entry, product_id, "", collab_id, "")
+                            if skip_duplicate and not amount_value:
+                                continue
                             collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
                             _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
                             if created_team:
@@ -11995,6 +12235,36 @@ class FraudCaseApp:
                             target_row = inv_row
 
                         target_row.monto_var.set(amount_value)
+                        changes_detected = True
+                claims = entry.get("claims") or []
+                if product_frame and claims:
+                    for claim in claims:
+                        if not isinstance(claim, Mapping):
+                            continue
+                        claim_id = (claim.get("id_reclamo") or "").strip()
+                        if not claim_id and not any(claim.values()):
+                            continue
+                        if _should_skip_technical_key(
+                            entry,
+                            product_id,
+                            (product_row.get("id_cliente") or "").strip(),
+                            (raw_row.get("id_colaborador") or "").strip(),
+                            claim_id,
+                        ):
+                            continue
+                        target_claim = (
+                            product_frame.find_claim_by_id(claim_id) if claim_id else None
+                        )
+                        if not target_claim:
+                            target_claim = product_frame.obtain_claim_slot()
+                        target_claim.set_data(
+                            {
+                                "id_reclamo": claim_id,
+                                "nombre_analitica": (claim.get("nombre_analitica") or "").strip(),
+                                "codigo_analitica": (claim.get("codigo_analitica") or "").strip(),
+                            }
+                        )
+                        self._sync_product_lookup_claim_fields(product_frame, product_id)
                         changes_detected = True
 
         def finalize():

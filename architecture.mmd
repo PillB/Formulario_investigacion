@@ -1,5 +1,5 @@
 %% Diagramas de arquitectura y flujos de artefactos
-%% Actualizado automáticamente el 2025-12-29 19:51:51
+%% Actualizado automáticamente el 2025-12-30 05:01:13
 %%{init: { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif', 'themeVariables': { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif' } } }%%
 
 erDiagram
@@ -41,12 +41,62 @@ erDiagram
     string fecha_ocurrencia
   }
   EVENTOS {
-    string id_caso
+    string case_id
     string tipo_informe
+    string categoria_1
+    string categoria_2
+    string modalidad
+    string tipo_de_producto
+    string canal
+    string proceso_impactado
+    string product_id
+    string cod_operation
+    string monto_investigado
+    string tipo_moneda
+    string tipo_id_cliente_involucrado
+    string client_id_involucrado
+    string flag_cliente_involucrado
+    string nombres_cliente_involucrado
+    string apellidos_cliente_involucrado
+    string matricula_colaborador_involucrado
+    string apellido_paterno_involucrado
+    string apellido_materno_involucrado
+    string nombres_involucrado
+    string division
+    string area
+    string servicio
+    string nombre_agencia
+    string codigo_agencia
+    string puesto
+    string fecha_cese
+    string tipo_de_falta
+    string tipo_sancion
+    string fecha_ocurrencia
+    string fecha_descubrimiento
+    string monto_fraude_interno_soles
+    string monto_fraude_interno_dolares
+    string monto_fraude_externo_soles
+    string monto_fraude_externo_dolares
+    string monto_falla_en_proceso_soles
+    string monto_falla_en_proceso_dolares
+    string monto_contingencia_soles
+    string monto_contingencia_dolares
+    string monto_recuperado_soles
+    string monto_recuperado_dolares
+    string monto_pagado_soles
+    string monto_pagado_dolares
+    string comentario_breve
+    string comentario_amplio
+    string id_reclamo
+    string nombre_analitica
+    string codigo_analitica
+    string telefonos_cliente_relacionado
+    string correos_cliente_relacionado
+    string direcciones_cliente_relacionado
+    string accionado_cliente_relacionado
+    string id_caso
     string categoria1
     string categoria2
-    string modalidad
-    string canal
     string proceso
     string fecha_de_ocurrencia
     string fecha_de_descubrimiento
@@ -59,19 +109,12 @@ erDiagram
     string id_colaborador
     string id_cliente_involucrado
     string tipo_involucrado
-    string id_reclamo
-    string fecha_ocurrencia
-    string fecha_descubrimiento
     string tipo_producto
-    string tipo_moneda
-    string monto_investigado
     string monto_perdida_fraude
     string monto_falla_procesos
     string monto_contingencia
     string monto_recuperado
     string monto_pago_deuda
-    string nombre_analitica
-    string codigo_analitica
     string cliente_nombres
     string cliente_apellidos
     string cliente_tipo_id
@@ -151,10 +194,16 @@ erDiagram
     string nombre_analitica
     string codigo_analitica
   }
-  INVOLUCRAMIENTO {
+  INVOLUCRAMIENTO_COLABORADOR {
     string id_producto
     string id_caso
     string id_colaborador
+    string monto_asignado
+  }
+  INVOLUCRAMIENTO_CLIENTE {
+    string id_producto
+    string id_caso
+    string id_cliente_involucrado
     string monto_asignado
   }
   DETALLES_RIESGO {
@@ -201,7 +250,8 @@ erDiagram
   CASOS ||--o{ DETALLES_NORMA : contiene
   CASOS ||--o{ DETALLES_RIESGO : contiene
   CASOS ||--o{ EVENTOS : contiene
-  CASOS ||--o{ INVOLUCRAMIENTO : contiene
+  CASOS ||--o{ INVOLUCRAMIENTO_COLABORADOR : contiene
+  CASOS ||--o{ INVOLUCRAMIENTO_CLIENTE : contiene
   CASOS ||--o{ LLAVE_TECNICA : contiene
   CASOS ||--o{ PRODUCTOS : contiene
   CASOS ||--o{ PRODUCTO_RECLAMO : contiene
@@ -209,9 +259,11 @@ erDiagram
   CLIENTES ||--o{ LLAVE_TECNICA : id_cliente
   CLIENTES ||--o{ PRODUCTOS : id_cliente
   COLABORADORES ||--o{ EVENTOS : id_colaborador
-  COLABORADORES ||--o{ INVOLUCRAMIENTO : id_colaborador
+  COLABORADORES ||--o{ INVOLUCRAMIENTO_COLABORADOR : id_colaborador
   COLABORADORES ||--o{ LLAVE_TECNICA : id_colaborador
   PRODUCTOS ||--o{ EVENTOS : id_producto
-  PRODUCTOS ||--o{ INVOLUCRAMIENTO : id_producto
+  PRODUCTOS ||--o{ INVOLUCRAMIENTO_COLABORADOR : id_producto
+  PRODUCTOS ||--o{ INVOLUCRAMIENTO_CLIENTE : id_producto
+  CLIENTES ||--o{ INVOLUCRAMIENTO_CLIENTE : id_cliente_involucrado
   PRODUCTOS ||--o{ LLAVE_TECNICA : id_producto
   PRODUCTOS ||--o{ PRODUCTO_RECLAMO : id_producto
