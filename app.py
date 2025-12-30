@@ -715,6 +715,26 @@ class FraudCaseApp:
             "expected_keyword": "combinado",
         },
     }
+    _EVENTOS_HEADER_ALIASES = {
+        "case_id": "id_caso",
+        "id_caso": "case_id",
+        "product_id": "id_producto",
+        "id_producto": "product_id",
+        "client_id_involucrado": "id_cliente_involucrado",
+        "id_cliente_involucrado": "client_id_involucrado",
+        "matricula_colaborador_involucrado": "id_colaborador",
+        "id_colaborador": "matricula_colaborador_involucrado",
+    }
+    _EVENTOS_IMPORT_RENAMES = {
+        "case_id": "id_caso",
+        "product_id": "id_producto",
+        "client_id_involucrado": "id_cliente_involucrado",
+        "matricula_colaborador_involucrado": "id_colaborador",
+        "tipo_de_producto": "tipo_producto",
+        "categoria_1": "categoria1",
+        "categoria_2": "categoria2",
+        "proceso_impactado": "proceso",
+    }
     _external_drive_path: Optional[Path] = None
     _external_log_file_initialized: bool = False
     _extended_sections_enabled: bool = ENABLE_EXTENDED_ANALYSIS_SECTIONS
@@ -10026,14 +10046,33 @@ class FraudCaseApp:
                 self.logs,
             )
             return True
-        try:
-            with open(filename, newline="", encoding="utf-8-sig") as handle:
-                reader = csv.DictReader(line for line in handle if line.strip())
-                headers = reader.fieldnames or []
-        except Exception as exc:  # pragma: no cover - errores de IO poco frecuentes
-            log_event("validacion", f"No se pudo leer {filename} para validar encabezados: {exc}", self.logs)
+        headers = self._read_csv_headers(filename)
+        if headers is None:
+            return False
+        if sample_key == "combinado":
+            # Según el Design document CM.pdf, los CSV de eventos deben respetar
+            # formatos de fechas/IDs/moneda bien definidos; por ello validamos que
+            # los encabezados correspondan al formato legacy o canónico antes de
+            # aplicar las validaciones de contenido asociadas.
+            format_name, legacy_missing, canonical_missing = self.is_eventos_format(headers)
+            if format_name:
+                return True
+            missing_detail = []
+            if legacy_missing:
+                missing_detail.append(f"legacy: {', '.join(legacy_missing)}")
+            if canonical_missing:
+                missing_detail.append(f"canónico: {', '.join(canonical_missing)}")
+            missing_message = "; ".join(missing_detail)
+            log_event(
+                "validacion",
+                f"CSV de {sample_key} con columnas faltantes ({missing_message})",
+                self.logs,
+            )
             if not getattr(self, "_suppress_messagebox", False):
-                messagebox.showerror("CSV inválido", f"No se pudo leer el archivo: {exc}")
+                messagebox.showerror(
+                    "CSV inválido",
+                    f"Faltan columnas requeridas para {sample_key} ({missing_message}).",
+                )
             return False
         missing = [header for header in expected_headers if header not in headers]
         if missing:
@@ -10049,6 +10088,62 @@ class FraudCaseApp:
                 )
             return False
         return True
+
+    def _read_csv_headers(self, filename: str, *, show_error: bool = True) -> Optional[list[str]]:
+        try:
+            with open(filename, newline="", encoding="utf-8-sig") as handle:
+                reader = csv.DictReader(line for line in handle if line.strip())
+                return list(reader.fieldnames or [])
+        except Exception as exc:  # pragma: no cover - errores de IO poco frecuentes
+            log_event("validacion", f"No se pudo leer {filename} para validar encabezados: {exc}", self.logs)
+            if show_error and not getattr(self, "_suppress_messagebox", False):
+                messagebox.showerror("CSV inválido", f"No se pudo leer el archivo: {exc}")
+            return None
+
+    @classmethod
+    def _normalize_eventos_header(cls, header: str) -> str:
+        return cls._sanitize_text(header).strip().lower()
+
+    def _normalize_eventos_row(self, row: Mapping, header_format: str | None) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        if not isinstance(row, Mapping):
+            return normalized
+        for key, value in row.items():
+            if key is None:
+                continue
+            normalized_key = self._normalize_eventos_header(str(key))
+            if header_format in {"legacy", "canonical"}:
+                normalized_key = self._EVENTOS_IMPORT_RENAMES.get(normalized_key, normalized_key)
+            existing = normalized.get(normalized_key)
+            if self._has_meaningful_value(existing):
+                if not self._has_meaningful_value(value):
+                    continue
+            normalized[normalized_key] = value
+        return normalized
+
+    def is_eventos_format(self, headers: Iterable[str]) -> tuple[str | None, list[str], list[str]]:
+        normalized_headers = [self._normalize_eventos_header(header) for header in headers if header]
+        normalized_set = set(normalized_headers)
+        legacy_headers = [self._normalize_eventos_header(header) for header in self._get_import_config("combinado").get("expected_headers", ())]
+        canonical_headers = [self._normalize_eventos_header(header) for header in EVENTOS_HEADER_CANONICO]
+
+        legacy_missing = self._missing_eventos_headers(normalized_set, legacy_headers)
+        canonical_missing = self._missing_eventos_headers(normalized_set, canonical_headers)
+        if not legacy_missing:
+            return "legacy", legacy_missing, canonical_missing
+        if not canonical_missing:
+            return "canonical", legacy_missing, canonical_missing
+        return None, legacy_missing, canonical_missing
+
+    @classmethod
+    def _missing_eventos_headers(cls, headers: set[str], expected: Iterable[str]) -> list[str]:
+        missing: list[str] = []
+        for header in expected:
+            alias = cls._EVENTOS_HEADER_ALIASES.get(header)
+            if header in headers or (alias and alias in headers):
+                continue
+            missing.append(header)
+        return missing
 
     def _count_massive_rows(self, filename: str) -> int:
         try:
@@ -10074,10 +10169,17 @@ class FraudCaseApp:
             yield index, row
 
     def _build_combined_worker(self, filename: str):
+        header_format = None
+        headers = self._read_csv_headers(filename, show_error=False)
+        if headers:
+            header_format, _, _ = self.is_eventos_format(headers)
+
         def worker(progress_callback, cancel_event):
             prepared_rows = []
             for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
                 raw_row = self._sanitize_import_row(row, row_number=index)
+                if header_format in {"legacy", "canonical"}:
+                    raw_row = self._normalize_eventos_row(raw_row, header_format)
                 client_row, client_found = self._hydrate_row_from_details(raw_row, 'id_cliente', CLIENT_ID_ALIASES)
                 team_row, team_found = self._hydrate_row_from_details(raw_row, 'id_colaborador', TEAM_ID_ALIASES)
                 product_row, product_found = self._hydrate_row_from_details(raw_row, 'id_producto', PRODUCT_ID_ALIASES)
