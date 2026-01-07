@@ -10762,6 +10762,13 @@ class FraudCaseApp:
                             and (inv_value.get("monto_asignado") or "")
                         ):
                             existing["monto_asignado"] = inv_value.get("monto_asignado", "")
+                        incoming_detail = inv_value.get("detail_payload")
+                        if incoming_detail:
+                            existing_detail = existing.get("detail_payload")
+                            if not existing_detail:
+                                existing["detail_payload"] = dict(incoming_detail)
+                            else:
+                                _merge_payload(existing_detail, incoming_detail)
                     if not skip_duplicate:
                         _register_claim(group["claims"], group["claim_keys"], claim_payload, index)
                     grouped_eventos[product_id] = group
@@ -11887,10 +11894,13 @@ class FraudCaseApp:
         if not frame:
             frame = self._obtain_client_slot_for_import()
             created = True
-        if created and row_data:
+        if row_data:
             payload = dict(row_data)
             payload['id_cliente'] = client_id
-            self._populate_client_frame_from_row(frame, payload)
+            if created:
+                self._populate_client_frame_from_row(frame, payload)
+            else:
+                self._populate_client_frame_from_row(frame, payload, preserve_existing=True)
         elif created:
             frame.id_var.set(client_id)
         if created:
@@ -11911,10 +11921,13 @@ class FraudCaseApp:
         if not frame:
             frame = self._obtain_team_slot_for_import()
             created = True
-        if created and row_data:
+        if row_data:
             payload = dict(row_data)
             payload['id_colaborador'] = collaborator_id
-            self._populate_team_frame_from_row(frame, payload)
+            if created:
+                self._populate_team_frame_from_row(frame, payload)
+            else:
+                self._populate_team_frame_from_row(frame, payload, preserve_existing=True)
         return frame, created
 
     @staticmethod
@@ -12507,7 +12520,11 @@ class FraudCaseApp:
                                 continue
                             client_details, client_found = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
                             merged_payload = _merge_detail_payload(detail_payload, client_details)
-                            self._ensure_client_exists(client_id, merged_payload)
+                            _client_frame, created_client = self._ensure_client_exists(client_id, merged_payload)
+                            if created_client:
+                                created_records += 1
+                                changes_detected = True
+                            changes_detected = changes_detected or created_client
                             if not client_found and 'id_cliente' in self.detail_catalogs:
                                 missing_clients.append(client_id)
                             inv_row = next(

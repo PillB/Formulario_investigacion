@@ -12,6 +12,7 @@ from settings import (
     TAXONOMIA,
     TIPO_ID_LIST,
     TIPO_INFORME_LIST,
+    TIPO_SANCION_LIST,
 )
 from report_builder import CaseData, build_event_rows
 from tests.app_factory import build_import_app
@@ -219,4 +220,89 @@ def test_combined_export_import_restores_involved_details(tmp_path, monkeypatch,
     assert team_frame.puesto_var.get() == "Analista"
     assert team_frame.nombre_agencia_var.get() == "Agencia Centro"
     assert team_frame.codigo_agencia_var.get() == "123456"
+    assert messagebox_spy.errors == []
+
+
+def test_combined_import_eventos_restores_missing_involved_details(tmp_path, monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+    app.import_status_var = DummyVar("")
+    cat1 = list(TAXONOMIA.keys())[0]
+    cat2 = list(TAXONOMIA[cat1].keys())[0]
+    modalidad = TAXONOMIA[cat1][cat2][0]
+    row = {header: EVENTOS_PLACEHOLDER for header in EVENTOS_HEADER_CANONICO}
+    row.update(
+        {
+            "case_id": "2025-0012",
+            "tipo_informe": TIPO_INFORME_LIST[0],
+            "categoria_1": cat1,
+            "categoria_2": cat2,
+            "modalidad": modalidad,
+            "canal": CANAL_LIST[0],
+            "proceso_impactado": PROCESO_LIST[0],
+            "product_id": "PRD-900",
+            "tipo_de_producto": "Crédito personal",
+            "monto_investigado": "100.00",
+            "tipo_moneda": "Soles",
+            "tipo_id_cliente_involucrado": TIPO_ID_LIST[0],
+            "client_id_involucrado": "12345678",
+            "flag_cliente_involucrado": FLAG_CLIENTE_LIST[0],
+            "nombres_cliente_involucrado": "Marta",
+            "apellidos_cliente_involucrado": "Luna",
+            "telefonos_cliente_relacionado": "999111222",
+            "correos_cliente_relacionado": "marta@example.com",
+            "direcciones_cliente_relacionado": "Calle 456",
+            "accionado_cliente_relacionado": "Fiscalía",
+            "matricula_colaborador_involucrado": "T99999",
+            "apellido_paterno_involucrado": "Rojas",
+            "apellido_materno_involucrado": "Diaz",
+            "nombres_involucrado": "Carlos",
+            "division": "Division Z",
+            "area": "Area Comercial",
+            "servicio": "Operaciones",
+            "puesto": "Analista",
+            "nombre_agencia": "Agencia Norte",
+            "codigo_agencia": "654321",
+            "fecha_cese": "2024-01-05",
+            "tipo_de_falta": "Falta leve",
+            "tipo_sancion": TIPO_SANCION_LIST[0],
+            "fecha_ocurrencia": "2024-01-01",
+            "fecha_descubrimiento": "2024-01-02",
+        }
+    )
+    file_path = _write_eventos_csv(tmp_path, EVENTOS_HEADER_CANONICO, row)
+
+    worker = app._build_combined_worker(str(file_path))
+    payload = worker(lambda *_args: None, Event())
+
+    app._apply_combined_import_payload(
+        payload,
+        manager=app.mass_import_manager,
+        file_path=str(file_path),
+    )
+
+    involved_client = app._find_client_frame("12345678")
+    assert involved_client is not None
+    client_payload = involved_client.populated_rows[0]
+    assert client_payload["nombres"] == "Marta"
+    assert client_payload["apellidos"] == "Luna"
+    assert client_payload["tipo_id"] == TIPO_ID_LIST[0]
+    assert client_payload["flag"] == FLAG_CLIENTE_LIST[0]
+    assert client_payload["telefonos"] == "999111222"
+    assert client_payload["correos"] == "marta@example.com"
+    assert client_payload["direcciones"] == "Calle 456"
+    assert client_payload["accionado"] == "Fiscalía"
+
+    team_frame = app._find_team_frame("T99999")
+    assert team_frame is not None
+    assert team_frame.nombres_var.get() == "Carlos"
+    assert team_frame.apellidos_var.get() == "Rojas Diaz"
+    assert team_frame.division_var.get() == "Division Z"
+    assert team_frame.area_var.get() == "Area Comercial"
+    assert team_frame.servicio_var.get() == "Operaciones"
+    assert team_frame.puesto_var.get() == "Analista"
+    assert team_frame.nombre_agencia_var.get() == "Agencia Norte"
+    assert team_frame.codigo_agencia_var.get() == "654321"
+    assert team_frame.tipo_falta_var.get() == "Falta leve"
+    assert team_frame.tipo_sancion_var.get() == TIPO_SANCION_LIST[0]
+    assert team_frame.fecha_carta_renuncia_var.get() == "2024-01-05"
     assert messagebox_spy.errors == []
