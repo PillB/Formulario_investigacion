@@ -10456,6 +10456,8 @@ class FraudCaseApp:
                 if not isinstance(row_data, Mapping):
                     return None
                 nombres = row_data.get("nombres_involucrado")
+                if not self._has_meaningful_value(nombres):
+                    nombres = row_data.get("colaborador_nombres")
                 if self._has_meaningful_value(nombres):
                     payload["nombres"] = str(nombres).strip()
                 paternal = row_data.get("apellido_paterno_involucrado")
@@ -10465,17 +10467,28 @@ class FraudCaseApp:
                 ]
                 if apellido_parts:
                     payload["apellidos"] = " ".join(part.strip() for part in apellido_parts)
+                else:
+                    apellidos = row_data.get("colaborador_apellidos")
+                    if self._has_meaningful_value(apellidos):
+                        payload["apellidos"] = str(apellidos).strip()
                 for key, sources in (
-                    ("division", ("division",)),
-                    ("area", ("area",)),
-                    ("servicio", ("servicio",)),
-                    ("puesto", ("puesto",)),
-                    ("nombre_agencia", ("nombre_agencia",)),
-                    ("codigo_agencia", ("codigo_agencia",)),
-                    ("tipo_falta", ("tipo_de_falta", "tipo_falta")),
-                    ("tipo_sancion", ("tipo_sancion",)),
-                    ("fecha_carta_renuncia", ("fecha_carta_renuncia", "fecha_cese")),
-                    ("flag_colaborador", ("flag_colaborador",)),
+                    ("division", ("division", "colaborador_division")),
+                    ("area", ("area", "colaborador_area")),
+                    ("servicio", ("servicio", "colaborador_servicio")),
+                    ("puesto", ("puesto", "colaborador_puesto")),
+                    ("nombre_agencia", ("nombre_agencia", "colaborador_nombre_agencia")),
+                    ("codigo_agencia", ("codigo_agencia", "colaborador_codigo_agencia")),
+                    ("tipo_falta", ("tipo_de_falta", "tipo_falta", "colaborador_tipo_falta")),
+                    ("tipo_sancion", ("tipo_sancion", "colaborador_tipo_sancion")),
+                    (
+                        "fecha_carta_renuncia",
+                        (
+                            "fecha_carta_renuncia",
+                            "fecha_cese",
+                            "colaborador_fecha_carta_renuncia",
+                        ),
+                    ),
+                    ("flag_colaborador", ("flag_colaborador", "colaborador_flag")),
                 ):
                     for source in sources:
                         value = row_data.get(source)
