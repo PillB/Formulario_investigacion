@@ -2,6 +2,7 @@
 flowchart LR
     form[Formulario de investigación<br/>(Tabs y campos)]
     eventos[(eventos.csv)]
+    analisis_csv[(analisis.csv)]
 
     %% Caso
     subgraph caso[Tab Caso]
@@ -88,6 +89,12 @@ flowchart LR
 
     %% Análisis
     subgraph analisis[Tab Análisis]
+        anal_antecedentes["Antecedentes → antecedentes"]
+        anal_modus_operandi["Modus operandi → modus_operandi"]
+        anal_hallazgos["Hallazgos → hallazgos"]
+        anal_descargos["Descargos → descargos"]
+        anal_conclusiones["Conclusiones → conclusiones"]
+        anal_recomendaciones["Recomendaciones → recomendaciones"]
         anal_comentario_breve["Comentario breve → comentario_breve"]
         anal_comentario_amplio["Comentario amplio → comentario_amplio"]
     end
@@ -169,6 +176,12 @@ flowchart LR
 
     anal_comentario_breve --> eventos
     anal_comentario_amplio --> eventos
+    anal_antecedentes --> analisis_csv
+    anal_modus_operandi --> analisis_csv
+    anal_hallazgos --> analisis_csv
+    anal_descargos --> analisis_csv
+    anal_conclusiones --> analisis_csv
+    anal_recomendaciones --> analisis_csv
 
     %% Importación circular desde eventos.csv
     eventos --> caso_id
@@ -238,3 +251,9 @@ flowchart LR
 
     eventos --> anal_comentario_breve
     eventos --> anal_comentario_amplio
+    analisis_csv --> anal_antecedentes
+    analisis_csv --> anal_modus_operandi
+    analisis_csv --> anal_hallazgos
+    analisis_csv --> anal_descargos
+    analisis_csv --> anal_conclusiones
+    analisis_csv --> anal_recomendaciones
