@@ -12091,90 +12091,122 @@ class FraudCaseApp:
 
     def _apply_eventos_case_row(self, row: Mapping) -> None:
         self._ensure_case_vars()
-        case_id = (row.get("id_caso") or "").strip()
-        if case_id:
-            case_message = validate_case_id(case_id)
-            if case_message:
-                raise ValueError(case_message)
-            self.id_caso_var.set(case_id)
-        tipo_informe = (row.get("tipo_informe") or "").strip()
-        if tipo_informe:
-            self._set_case_dropdown_value(
-                self.tipo_informe_var,
-                tipo_informe,
-                TIPO_INFORME_LIST,
-                "tipo_cb",
-            )
-        cat1 = (row.get("categoria1") or "").strip()
-        cat2 = (row.get("categoria2") or "").strip()
-        modalidad = (row.get("modalidad") or "").strip()
-        if cat1 and cat1 in TAXONOMIA:
-            self.cat_caso1_var.set(cat1)
-            if hasattr(self, "case_cat2_cb"):
-                self.on_case_cat1_change()
-            if cat2 and cat2 in TAXONOMIA.get(cat1, {}):
-                self.cat_caso2_var.set(cat2)
-                if hasattr(self, "case_mod_cb"):
-                    self.on_case_cat2_change()
-                if modalidad and modalidad in TAXONOMIA.get(cat1, {}).get(cat2, []):
-                    self.mod_caso_var.set(modalidad)
-        canal = (row.get("canal") or "").strip()
-        if canal:
-            self._set_case_dropdown_value(
-                self.canal_caso_var,
-                canal,
-                CANAL_LIST,
-                "canal_cb",
-            )
-        proceso = (row.get("proceso") or "").strip()
-        if proceso:
-            self._set_case_dropdown_value(
-                self.proceso_caso_var,
-                proceso,
-                PROCESO_LIST,
-                "proc_cb",
-            )
-        centro_costos = (row.get("centro_costos") or row.get("centro_costo") or "").strip()
-        if centro_costos:
-            self.centro_costo_caso_var.set(centro_costos)
-        fecha_ocurrencia = (
-            row.get("fecha_de_ocurrencia") or row.get("fecha_ocurrencia") or ""
-        ).strip()
-        fecha_descubrimiento = (
-            row.get("fecha_de_descubrimiento") or row.get("fecha_descubrimiento") or ""
-        ).strip()
-        if fecha_ocurrencia:
-            occ_message = validate_date_text(
-                fecha_ocurrencia,
-                "La fecha de ocurrencia del caso",
-                allow_blank=False,
-                enforce_max_today=True,
-                must_be_before=(
-                    fecha_descubrimiento,
-                    "la fecha de descubrimiento del caso",
+        self._ensure_investigator_vars()
+        validators = list(getattr(self, "_field_validators", []) or [])
+        previous_suppression = getattr(self, "_suppress_post_edit_validation", False)
+        for validator in validators:
+            validator.suspend()
+        self._suppress_post_edit_validation = True
+        try:
+            case_id = (row.get("id_caso") or "").strip()
+            if self._has_meaningful_value(case_id):
+                case_message = validate_case_id(case_id)
+                if case_message:
+                    raise ValueError(case_message)
+                self.id_caso_var.set(case_id)
+            tipo_informe = (row.get("tipo_informe") or "").strip()
+            if self._has_meaningful_value(tipo_informe):
+                self._set_case_dropdown_value(
+                    self.tipo_informe_var,
+                    tipo_informe,
+                    TIPO_INFORME_LIST,
+                    "tipo_cb",
                 )
-                if fecha_descubrimiento
-                else None,
-            )
-            if occ_message:
-                raise ValueError(occ_message)
-            self.fecha_caso_var.set(fecha_ocurrencia)
-        if fecha_descubrimiento:
-            desc_message = validate_date_text(
-                fecha_descubrimiento,
-                "La fecha de descubrimiento del caso",
-                allow_blank=False,
-                enforce_max_today=True,
-                must_be_after=(
+            cat1 = (row.get("categoria1") or "").strip()
+            cat2 = (row.get("categoria2") or "").strip()
+            modalidad = (row.get("modalidad") or "").strip()
+            if self._has_meaningful_value(cat1) and cat1 in TAXONOMIA:
+                self.cat_caso1_var.set(cat1)
+                if hasattr(self, "case_cat2_cb"):
+                    self.on_case_cat1_change()
+                if self._has_meaningful_value(cat2) and cat2 in TAXONOMIA.get(cat1, {}):
+                    self.cat_caso2_var.set(cat2)
+                    if hasattr(self, "case_mod_cb"):
+                        self.on_case_cat2_change()
+                    if self._has_meaningful_value(modalidad) and modalidad in TAXONOMIA.get(cat1, {}).get(cat2, []):
+                        self.mod_caso_var.set(modalidad)
+            canal = (row.get("canal") or "").strip()
+            if self._has_meaningful_value(canal):
+                self._set_case_dropdown_value(
+                    self.canal_caso_var,
+                    canal,
+                    CANAL_LIST,
+                    "canal_cb",
+                )
+            proceso = (row.get("proceso") or "").strip()
+            if self._has_meaningful_value(proceso):
+                self._set_case_dropdown_value(
+                    self.proceso_caso_var,
+                    proceso,
+                    PROCESO_LIST,
+                    "proc_cb",
+                )
+            centro_costos = (row.get("centro_costos") or row.get("centro_costo") or "").strip()
+            if self._has_meaningful_value(centro_costos):
+                self.centro_costo_caso_var.set(centro_costos)
+            fecha_ocurrencia = (
+                row.get("fecha_de_ocurrencia") or row.get("fecha_ocurrencia") or ""
+            ).strip()
+            fecha_descubrimiento = (
+                row.get("fecha_de_descubrimiento") or row.get("fecha_descubrimiento") or ""
+            ).strip()
+            if self._has_meaningful_value(fecha_ocurrencia):
+                occ_message = validate_date_text(
                     fecha_ocurrencia,
-                    "la fecha de ocurrencia del caso",
+                    "La fecha de ocurrencia del caso",
+                    allow_blank=False,
+                    enforce_max_today=True,
+                    must_be_before=(
+                        fecha_descubrimiento,
+                        "la fecha de descubrimiento del caso",
+                    )
+                    if fecha_descubrimiento
+                    else None,
                 )
-                if fecha_ocurrencia
-                else None,
-            )
-            if desc_message:
-                raise ValueError(desc_message)
-            self.fecha_descubrimiento_caso_var.set(fecha_descubrimiento)
+                if occ_message:
+                    raise ValueError(occ_message)
+                self.fecha_caso_var.set(fecha_ocurrencia)
+            if self._has_meaningful_value(fecha_descubrimiento):
+                desc_message = validate_date_text(
+                    fecha_descubrimiento,
+                    "La fecha de descubrimiento del caso",
+                    allow_blank=False,
+                    enforce_max_today=True,
+                    must_be_after=(
+                        fecha_ocurrencia,
+                        "la fecha de ocurrencia del caso",
+                    )
+                    if fecha_ocurrencia
+                    else None,
+                )
+                if desc_message:
+                    raise ValueError(desc_message)
+                self.fecha_descubrimiento_caso_var.set(fecha_descubrimiento)
+            matricula_investigador = (row.get("matricula_investigador") or "").strip()
+            if self._has_meaningful_value(matricula_investigador):
+                self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
+            investigador_nombre = (row.get("investigador_nombre") or "").strip()
+            if self._has_meaningful_value(investigador_nombre):
+                self.investigator_nombre_var.set(investigador_nombre)
+            investigador_cargo = (row.get("investigador_cargo") or "").strip()
+            if self._has_meaningful_value(investigador_cargo):
+                self.investigator_cargo_var.set(investigador_cargo)
+            comentario_breve = row.get("comentario_breve")
+            if self._has_meaningful_value(comentario_breve):
+                self._set_rich_text_content(
+                    getattr(self, "comentario_breve_text", None),
+                    comentario_breve,
+                )
+            comentario_amplio = row.get("comentario_amplio")
+            if self._has_meaningful_value(comentario_amplio):
+                self._set_rich_text_content(
+                    getattr(self, "comentario_amplio_text", None),
+                    comentario_amplio,
+                )
+        finally:
+            self._suppress_post_edit_validation = previous_suppression
+            for validator in validators:
+                validator.resume()
 
     def _apply_combined_import_payload(self, entries, *, manager=None, file_path=""):
         manager = manager or self.mass_import_manager
