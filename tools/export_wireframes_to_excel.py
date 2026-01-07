@@ -208,8 +208,9 @@ MASSIVE_FILES: Sequence[tuple[str, str]] = (
     ("colaboradores_masivos.csv", "Colaboradores masivos"),
     ("productos_masivos.csv", "Productos masivos"),
     ("datos_combinados_masivos.csv", "Archivo combinado masivo"),
-    ("normas_masivas.csv", "Normas masivas"),
     ("riesgos_masivos.csv", "Riesgos masivos"),
+    ("normas_masivas.csv", "Normas masivas"),
+    ("reclamos_masivos.csv", "Reclamos masivos"),
 )
 
 EMPTY_CASE_DATA: Mapping[str, object] = {

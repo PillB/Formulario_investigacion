@@ -120,12 +120,12 @@ SKETCH_LAYOUTS: Dict[str, Dict[str, List[str]]] = {
             "Barra de progreso",
         ],
         "Importar datos masivos": [
-            "Botones CSV: clientes, colaboradores, productos, normas, riesgos, estado",
+            "Botones CSV: clientes, colaboradores, productos, combinado, riesgos, normas, reclamos, estado",
             "Barra de progreso de importación",
         ],
         "Guardado y recuperación": [
-            "Guardar y enviar (valida + exporta)",
-            "Cargar archivo",
+            "Guardar ahora (valida + exporta)",
+            "Cargar archivo…",
             "Recuperar último autosave",
             "Historial de recuperación",
         ],
