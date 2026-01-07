@@ -2516,11 +2516,11 @@ class ProductFrame:
         label.grid(row=row, column=0, columnspan=6, padx=COL_PADX, pady=ROW_PADY, sticky="we")
         tooltip_text = (
             "Si el sistema marca un duplicado, ajusta cualquiera de los campos de la "
-            "clave técnica (caso, producto, cliente, colaborador, fecha de ocurrencia "
-            "o reclamo) hasta que la combinación sea única y vuelve a editar un campo "
-            "para revalidar. Puedes validar con cliente, con colaborador o con ambos; "
-            "si falta alguno, la clave mostrará un guion en su lugar para indicar que "
-            "ese componente está vacío."
+            "clave técnica (caso, producto, ID de cliente, ID de team member, fecha de "
+            "ocurrencia o reclamo) hasta que la combinación sea única y vuelve a editar "
+            "un campo para revalidar. La llave requiere el ID de cliente del producto "
+            "y el ID del colaborador involucrado; si falta alguno, la clave mostrará "
+            "un guion para indicar que ese componente está vacío."
         )
         self.tooltip_register(label, tooltip_text)
         self.duplicate_status_label = label
@@ -2530,35 +2530,29 @@ class ProductFrame:
         placeholder = "-"
         case_id = (case_var.get().strip() if case_var else "") or placeholder
         product_id = self.id_var.get().strip() or placeholder
-        client_id = self.client_var.get().strip() or placeholder
-        involucrado_tipo, involucrado_id = self._get_primary_involucrado()
-        collaborator_id = involucrado_id or placeholder
-        if involucrado_tipo:
-            collaborator_id = f"{involucrado_tipo}: {collaborator_id}"
-        occ_date = self.fecha_oc_var.get().strip()
-        desc_date = self.fecha_desc_var.get().strip()
-        date_block = f"{occ_date or placeholder} / {desc_date or placeholder}"
+        client_id, collaborator_id = self._get_primary_involucrado()
+        client_id = client_id or placeholder
+        collaborator_id = collaborator_id or placeholder
+        occ_date = self.fecha_oc_var.get().strip() or placeholder
         claim_id = self._get_primary_claim_id() or placeholder
         tuple_parts = (
             case_id,
             product_id,
             client_id,
             collaborator_id,
-            date_block,
+            occ_date,
             claim_id,
         )
         return f"({', '.join(tuple_parts)})"
 
     def _get_primary_involucrado(self) -> tuple[str, str]:
+        client_id = self.client_var.get().strip()
+        collaborator_id = ""
         for inv in self.involvements:
             collaborator_id = (inv.team_var.get() if hasattr(inv, "team_var") else "").strip()
             if collaborator_id:
-                return ("colaborador", collaborator_id)
-        for inv in self.client_involvements:
-            client_id = (inv.client_var.get() if hasattr(inv, "client_var") else "").strip()
-            if client_id:
-                return ("cliente", client_id)
-        return ("", "")
+                break
+        return (client_id, collaborator_id)
 
     def _get_primary_claim_id(self) -> str:
         for claim in self.claims:
