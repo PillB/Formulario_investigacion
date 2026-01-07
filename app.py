@@ -12198,6 +12198,12 @@ class FraudCaseApp:
         for validator in validators:
             validator.suspend()
         self._suppress_post_edit_validation = True
+
+        def _pick_eventos_date(primary_key: str, fallback_key: str) -> str:
+            if primary_key in row:
+                return (row.get(primary_key) or "").strip()
+            return (row.get(fallback_key) or "").strip()
+
         try:
             case_id = (row.get("id_caso") or "").strip()
             if self._has_meaningful_value(case_id):
@@ -12245,12 +12251,11 @@ class FraudCaseApp:
             centro_costos = (row.get("centro_costos") or row.get("centro_costo") or "").strip()
             if self._has_meaningful_value(centro_costos):
                 self.centro_costo_caso_var.set(centro_costos)
-            fecha_ocurrencia = (
-                row.get("fecha_de_ocurrencia") or row.get("fecha_ocurrencia") or ""
-            ).strip()
-            fecha_descubrimiento = (
-                row.get("fecha_de_descubrimiento") or row.get("fecha_descubrimiento") or ""
-            ).strip()
+            fecha_ocurrencia = _pick_eventos_date("fecha_de_ocurrencia", "fecha_ocurrencia")
+            fecha_descubrimiento = _pick_eventos_date(
+                "fecha_de_descubrimiento",
+                "fecha_descubrimiento",
+            )
             if self._has_meaningful_value(fecha_ocurrencia):
                 occ_message = validate_date_text(
                     fecha_ocurrencia,

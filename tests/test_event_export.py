@@ -200,6 +200,47 @@ def test_event_round_trip_prefers_case_dates_over_product_dates(monkeypatch):
     assert app.fecha_descubrimiento_caso_var.get() == "2024-01-03"
 
 
+def test_event_round_trip_preserves_case_dates_when_product_differs(monkeypatch):
+    case_data = CaseData.from_mapping(
+        {
+            "caso": {
+                "id_caso": "2024-2101",
+                "fecha_de_ocurrencia": "2024-03-05",
+                "fecha_de_descubrimiento": "2024-03-07",
+            },
+            "productos": [
+                {
+                    "id_producto": "P-CASE-2",
+                    "id_cliente": "CL-CASE-2",
+                    "fecha_ocurrencia": "2024-04-10",
+                    "fecha_descubrimiento": "2024-04-12",
+                }
+            ],
+            "clientes": [],
+            "colaboradores": [],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {},
+            "encabezado": {},
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+
+    rows, _header = build_event_rows(case_data)
+    app = build_import_app(monkeypatch)
+    normalized = app._normalize_eventos_row(rows[0], "canonical")
+
+    app._apply_eventos_case_row(normalized)
+
+    assert app.fecha_caso_var.get() == "2024-03-05"
+    assert app.fecha_descubrimiento_caso_var.get() == "2024-03-07"
+
+
 def test_event_round_trip_restores_investigator_and_comments(monkeypatch):
     case_data = CaseData.from_mapping(
         {
