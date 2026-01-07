@@ -119,9 +119,15 @@ flowchart LR
     form --> involucramientos
     form --> analisis
 
+    %% Relaciones con el subgrafo de multiplicación de filas
+    productos -.-> producto_uno
+    reclamos -.-> reclamos_n
+    involucramientos -.-> involucramientos_n
+
     %% Exportación circular hacia eventos.csv
     note_eventos -.-> eventos
     combinacion_eventos -.-> eventos
+    combinacion_eventos -.-> filas_eventos
     filas_eventos --> eventos
     caso_id --> eventos
     caso_tipo --> eventos
