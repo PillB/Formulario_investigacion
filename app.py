@@ -14281,6 +14281,7 @@ class FraudCaseApp:
         self._suppress_case_header_sync = True
         previous_suppression = getattr(self, "_suppress_post_edit_validation", False)
         self._suppress_post_edit_validation = True
+        post_load_amount_refresh: list[object] = []
         try:
             # Limpiar primero sin confirmar ni sobrescribir el autosave
             self._clear_case_state(save_autosave=False)
@@ -14411,8 +14412,8 @@ class FraudCaseApp:
                 refresh_amounts = getattr(
                     pframe, "_refresh_amount_validation_after_programmatic_update", None
                 )
-                if callable(refresh_amounts) and not self._suppress_post_edit_validation:
-                    refresh_amounts()
+                if callable(refresh_amounts):
+                    post_load_amount_refresh.append(refresh_amounts)
                 pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
                 if hasattr(pframe, "on_id_change"):
                     pframe.on_id_change(preserve_existing=True, silent=True)
@@ -14504,12 +14505,14 @@ class FraudCaseApp:
             )
             self._sync_extended_sections_to_ui()
             self._rebuild_frame_id_indexes()
-            if not self._suppress_post_edit_validation:
-                self._run_duplicate_check_post_load()
             self._schedule_summary_refresh(data=data)
         finally:
             self._suppress_post_edit_validation = previous_suppression
             self._suppress_case_header_sync = False
+            if not previous_suppression:
+                for refresh_amounts in post_load_amount_refresh:
+                    refresh_amounts()
+                self._run_duplicate_check_post_load()
 
     # ---------------------------------------------------------------------
     # Validación de reglas de negocio
