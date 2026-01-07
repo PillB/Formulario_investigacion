@@ -11,7 +11,7 @@ flowchart LR
         producto_uno["Producto (1)"]
         reclamos_n["Reclamos (N)"]
         involucramientos_n["Involucramientos (N)"]
-        filas_eventos["Filas en eventos.csv (1 × N × N)"]
+        filas_eventos["Filas en eventos.csv (N)"]
         producto_uno --> reclamos_n --> involucramientos_n --> filas_eventos
     end
 
@@ -122,7 +122,6 @@ flowchart LR
     %% Exportación circular hacia eventos.csv
     note_eventos -.-> eventos
     combinacion_eventos -.-> eventos
-    combinacion_eventos -.-> filas_eventos
     filas_eventos --> eventos
     caso_id --> eventos
     caso_tipo --> eventos
