@@ -88,7 +88,7 @@ SKETCH_LAYOUTS: Dict[str, Dict[str, List[str]]] = {
         "__title__": "Normas",
         "Tabla de normas": [
             "Botón Añadir norma",
-            "Columnas: ID, Vigencia, Descripción",
+            "Columnas: ID, Acápite/Inciso, Vigencia, Descripción, Detalle",
         ],
         "Detalle": [
             "Acordeones con notas y archivos",
@@ -146,7 +146,7 @@ SKETCH_LAYOUTS: Dict[str, Dict[str, List[str]]] = {
             "Colaboradores",
             "Asignaciones por colaborador",
             "Productos y riesgos",
-            "Reclamos y normas",
+            "Reclamos y normas (incluye acápite e inciso)",
         ],
     },
 }
