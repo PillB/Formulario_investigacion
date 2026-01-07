@@ -139,7 +139,11 @@ def _event_placeholder(value: object, placeholder: str) -> str:
     if value is None:
         return placeholder
     text = str(value)
-    return text if text.strip() else placeholder
+    if not text.strip():
+        return placeholder
+    if text == placeholder:
+        return f"\\{placeholder}"
+    return text
 
 
 def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict[str, str]], list[str]]:
