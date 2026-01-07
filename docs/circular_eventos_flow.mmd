@@ -102,14 +102,19 @@ flowchart LR
 
     %% Análisis
     subgraph analisis[Tab Análisis]
-        anal_antecedentes["Antecedentes → antecedentes"]
-        anal_modus_operandi["Modus operandi → modus_operandi"]
-        anal_hallazgos["Hallazgos → hallazgos"]
-        anal_descargos["Descargos → descargos"]
-        anal_conclusiones["Conclusiones → conclusiones"]
-        anal_recomendaciones["Recomendaciones → recomendaciones"]
+        anal_antecedentes["Antecedentes → antecedentes<br/>(solo analisis.csv)"]
+        anal_modus_operandi["Modus operandi → modus_operandi<br/>(solo analisis.csv)"]
+        anal_hallazgos["Hallazgos → hallazgos<br/>(solo analisis.csv)"]
+        anal_descargos["Descargos → descargos<br/>(solo analisis.csv)"]
+        anal_conclusiones["Conclusiones → conclusiones<br/>(solo analisis.csv)"]
+        anal_recomendaciones["Recomendaciones → recomendaciones<br/>(solo analisis.csv)"]
         anal_comentario_breve["Comentario breve → comentario_breve"]
         anal_comentario_amplio["Comentario amplio → comentario_amplio"]
+    end
+
+    %% Leyenda
+    subgraph leyenda[Leyenda]
+        leyenda_eventos["Solo comentarios breve/amplio se exportan en eventos.csv"]
     end
 
     %% Formulario agrupado
