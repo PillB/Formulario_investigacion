@@ -248,3 +248,51 @@ def test_event_round_trip_restores_investigator_and_comments(monkeypatch):
     assert app.investigator_cargo_var.get() == "Analista"
     assert app.comentario_breve_text.text == "Breve desde eventos"
     assert app.comentario_amplio_text.text == "Amplio desde eventos"
+
+
+def test_event_export_import_keeps_literal_dash(tmp_path, monkeypatch):
+    case_data = CaseData.from_mapping(
+        {
+            "caso": {
+                "id_caso": "2024-4001",
+                "fecha_de_ocurrencia": "2024-01-01",
+                "fecha_de_descubrimiento": "2024-01-02",
+            },
+            "productos": [
+                {
+                    "id_producto": "P-DASH",
+                    "id_cliente": "CL-DASH",
+                    "fecha_ocurrencia": "2024-01-05",
+                    "fecha_descubrimiento": "2024-01-06",
+                }
+            ],
+            "clientes": [],
+            "colaboradores": [],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {
+                "comentario_breve": "-",
+            },
+            "encabezado": {},
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+
+    rows, header = build_event_rows(case_data)
+    csv_path = tmp_path / "caso_eventos_dash.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=header)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: _sanitize_csv_value(row.get(field, "")) for field in header})
+
+    parsed = list(csv.DictReader(csv_path.open("r", newline="", encoding="utf-8")))
+    app = build_import_app(monkeypatch)
+    sanitized = app._sanitize_import_row(parsed[0], row_number=1)
+
+    assert sanitized["comentario_breve"] == "-"

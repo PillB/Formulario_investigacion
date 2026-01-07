@@ -346,6 +346,8 @@ def _sanitize_csv_value(value):
     sanitized = sanitize_rich_text("" if value is None else value, max_chars=None)
     if sanitized == EVENTOS_PLACEHOLDER:
         return sanitized
+    if sanitized == "-":
+        return sanitized
     if sanitized.startswith(("=", "+", "-", "@")):
         return f"'{sanitized}"
     return sanitized
@@ -4604,6 +4606,10 @@ class FraudCaseApp:
             return ""
         if sanitized == EVENTOS_PLACEHOLDER:
             return ""
+        if sanitized.startswith("\\") and sanitized[1:] == EVENTOS_PLACEHOLDER:
+            return EVENTOS_PLACEHOLDER
+        if sanitized == "-":
+            return sanitized
         if sanitized.startswith(SPREADSHEET_FORMULA_PREFIXES):
             location = []
             if row_number is not None:

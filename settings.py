@@ -173,7 +173,7 @@ TIPO_SANCION_LIST = [
 TIPO_MONEDA_LIST = ["Soles", "Dólares", "No aplica"]
 CRITICIDAD_LIST = ["Bajo", "Moderado", "Relevante", "Alto", "Crítico"]
 
-EVENTOS_PLACEHOLDER = "-"
+EVENTOS_PLACEHOLDER = "<SIN_DATO>"
 EVENTOS_HEADER_CANONICO_START = [
     "case_id",
     "tipo_informe",
