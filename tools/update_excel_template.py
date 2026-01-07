@@ -737,6 +737,18 @@ SHEET_HEADERS: dict[str, Sequence[str]] = {
 DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
     (
         "CASOS",
+        "tipo_informe",
+    ): "Tipo de informe del caso. Campo validado contra settings.TIPO_INFORME_LIST.",
+    (
+        "CASOS",
+        "canal",
+    ): "Canal del caso. Campo validado contra settings.CANAL_LIST.",
+    (
+        "CASOS",
+        "proceso",
+    ): "Proceso impactado del caso. Campo validado contra settings.PROCESO_LIST.",
+    (
+        "CASOS",
         "categoria1",
     ): (
         "Categoría de riesgo de fraude nivel 1 del caso. Fuente: catálogo interno "
@@ -760,6 +772,74 @@ DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
         "categoría 1 o categoría 2."
     ),
     (
+        "CLIENTES",
+        "tipo_id",
+    ): "Tipo de identificación del cliente. Campo validado contra settings.TIPO_ID_LIST.",
+    (
+        "CLIENTES",
+        "flag",
+    ): "Flag del cliente. Campo validado contra settings.FLAG_CLIENTE_LIST.",
+    (
+        "CLIENTES",
+        "accionado",
+    ): (
+        "Accionado del cliente. Selección múltiple validada contra settings.ACCIONADO_OPTIONS."
+    ),
+    (
+        "COLABORADORES",
+        "flag",
+    ): "Flag del colaborador. Campo validado contra settings.FLAG_COLABORADOR_LIST.",
+    (
+        "COLABORADORES",
+        "division",
+    ): (
+        "División del colaborador. Catálogo jerárquico desde models.static_team_catalog "
+        "y team_details.csv vía models.catalog_service.CatalogService."
+    ),
+    (
+        "COLABORADORES",
+        "area",
+    ): (
+        "Área del colaborador. Catálogo jerárquico desde models.static_team_catalog "
+        "y team_details.csv vía models.catalog_service.CatalogService."
+    ),
+    (
+        "COLABORADORES",
+        "servicio",
+    ): (
+        "Servicio del colaborador. Catálogo jerárquico desde models.static_team_catalog "
+        "y team_details.csv vía models.catalog_service.CatalogService."
+    ),
+    (
+        "COLABORADORES",
+        "puesto",
+    ): (
+        "Puesto del colaborador. Catálogo jerárquico desde models.static_team_catalog "
+        "y team_details.csv vía models.catalog_service.CatalogService."
+    ),
+    (
+        "COLABORADORES",
+        "nombre_agencia",
+    ): (
+        "Nombre de agencia del colaborador. Catálogo desde models.static_team_catalog.AGENCY_CATALOG "
+        "y team_details.csv vía models.catalog_service.CatalogService."
+    ),
+    (
+        "COLABORADORES",
+        "codigo_agencia",
+    ): (
+        "Código de agencia del colaborador. Catálogo desde models.static_team_catalog.AGENCY_CATALOG "
+        "y team_details.csv vía models.catalog_service.CatalogService."
+    ),
+    (
+        "COLABORADORES",
+        "tipo_falta",
+    ): "Tipo de falta del colaborador. Campo validado contra settings.TIPO_FALTA_LIST.",
+    (
+        "COLABORADORES",
+        "tipo_sancion",
+    ): "Tipo de sanción del colaborador. Campo validado contra settings.TIPO_SANCION_LIST.",
+    (
         "PRODUCTOS",
         "categoria1",
     ): (
@@ -782,6 +862,22 @@ DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
         "(no CSV). La lista se refresca al cambiar categoría 1 o categoría 2."
     ),
     (
+        "PRODUCTOS",
+        "canal",
+    ): "Canal del producto. Campo validado contra settings.CANAL_LIST.",
+    (
+        "PRODUCTOS",
+        "proceso",
+    ): "Proceso del producto. Campo validado contra settings.PROCESO_LIST.",
+    (
+        "PRODUCTOS",
+        "tipo_moneda",
+    ): "Tipo de moneda del producto. Campo validado contra settings.TIPO_MONEDA_LIST.",
+    (
+        "PRODUCTOS",
+        "tipo_producto",
+    ): "Tipo de producto. Campo validado contra settings.TIPO_PRODUCTO_LIST.",
+    (
         "DETALLES_RIESGO",
         "id_riesgo",
     ): (
@@ -802,8 +898,8 @@ DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
         "DETALLES_RIESGO",
         "criticidad",
     ): (
-        "Nivel de criticidad residual (Bajo, Moderado, Relevante, Alto, Crítico; "
-        "autocompletado desde risk_details.csv)."
+        "Nivel de criticidad residual (Bajo, Moderado, Relevante, Alto, Crítico). "
+        "Campo validado contra settings.CRITICIDAD_LIST y autocompletado desde risk_details.csv."
     ),
     (
         "DETALLES_RIESGO",
@@ -827,15 +923,17 @@ DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
         "PRODUCTO_RECLAMO",
         "nombre_analitica",
     ): (
-        "Nombre de la cuenta analítica utilizada para registrar el reclamo "
-        "(autocompletado desde claim_details.csv)."
+        "Nombre de la cuenta analítica utilizada para registrar el reclamo. "
+        "Campo validado contra models.analitica_catalog.ANALITICA_CATALOG y "
+        "autocompletado desde claim_details.csv."
     ),
     (
         "PRODUCTO_RECLAMO",
         "codigo_analitica",
     ): (
-        "Código de la cuenta analítica (10 dígitos, inicia con 43, 45, 46 o 56; "
-        "autocompletado desde claim_details.csv)."
+        "Código de la cuenta analítica (10 dígitos, inicia con 43, 45, 46 o 56). "
+        "Campo validado contra models.analitica_catalog.ANALITICA_CATALOG y "
+        "autocompletado desde claim_details.csv."
     ),
 }
 
@@ -864,6 +962,136 @@ DETAIL_CATALOG_ROWS: Sequence[tuple[str, str, str, str]] = (
         "claim_details.csv",
         "Autocompleta nombre y código de analítica asociados al reclamo.",
         "ui/frames/products.py",
+    ),
+)
+
+LIST_CATALOG_HEADERS: Sequence[str] = (
+    "Hoja",
+    "Campo",
+    "Catálogo/Lista",
+    "Origen",
+    "Descripción",
+)
+
+LIST_CATALOG_ROWS: Sequence[tuple[str, str, str, str, str]] = (
+    (
+        "CASOS",
+        "tipo_informe",
+        "TIPO_INFORME_LIST",
+        "settings.TIPO_INFORME_LIST",
+        "Lista estática validada en el formulario de caso.",
+    ),
+    (
+        "CASOS",
+        "canal",
+        "CANAL_LIST",
+        "settings.CANAL_LIST",
+        "Lista estática validada en el formulario de caso.",
+    ),
+    (
+        "CASOS",
+        "proceso",
+        "PROCESO_LIST",
+        "settings.PROCESO_LIST",
+        "Lista estática validada en el formulario de caso.",
+    ),
+    (
+        "CLIENTES",
+        "tipo_id",
+        "TIPO_ID_LIST",
+        "settings.TIPO_ID_LIST",
+        "Lista estática para el tipo de identificación del cliente.",
+    ),
+    (
+        "CLIENTES",
+        "flag",
+        "FLAG_CLIENTE_LIST",
+        "settings.FLAG_CLIENTE_LIST",
+        "Lista estática validada para el flag del cliente.",
+    ),
+    (
+        "CLIENTES",
+        "accionado",
+        "ACCIONADO_OPTIONS",
+        "settings.ACCIONADO_OPTIONS",
+        "Lista de selección múltiple para el campo Accionado.",
+    ),
+    (
+        "COLABORADORES",
+        "flag",
+        "FLAG_COLABORADOR_LIST",
+        "settings.FLAG_COLABORADOR_LIST",
+        "Lista estática validada para el flag del colaborador.",
+    ),
+    (
+        "COLABORADORES",
+        "division/area/servicio/puesto",
+        "TEAM_HIERARCHY_CATALOG",
+        "models.static_team_catalog.TEAM_HIERARCHY_CATALOG + team_details.csv (CatalogService)",
+        "Jerarquía en cascada; se complementa con team_details.csv vía CatalogService.",
+    ),
+    (
+        "COLABORADORES",
+        "nombre_agencia/codigo_agencia",
+        "AGENCY_CATALOG",
+        "models.static_team_catalog.AGENCY_CATALOG + team_details.csv (CatalogService)",
+        "Catálogo de agencias asociado a división/área.",
+    ),
+    (
+        "COLABORADORES",
+        "tipo_falta",
+        "TIPO_FALTA_LIST",
+        "settings.TIPO_FALTA_LIST",
+        "Lista estática validada para el tipo de falta.",
+    ),
+    (
+        "COLABORADORES",
+        "tipo_sancion",
+        "TIPO_SANCION_LIST",
+        "settings.TIPO_SANCION_LIST",
+        "Lista estática validada para el tipo de sanción.",
+    ),
+    (
+        "PRODUCTOS",
+        "canal",
+        "CANAL_LIST",
+        "settings.CANAL_LIST",
+        "Lista estática validada para el canal del producto.",
+    ),
+    (
+        "PRODUCTOS",
+        "proceso",
+        "PROCESO_LIST",
+        "settings.PROCESO_LIST",
+        "Lista estática validada para el proceso del producto.",
+    ),
+    (
+        "PRODUCTOS",
+        "tipo_moneda",
+        "TIPO_MONEDA_LIST",
+        "settings.TIPO_MONEDA_LIST",
+        "Lista estática validada para el tipo de moneda.",
+    ),
+    (
+        "PRODUCTOS",
+        "tipo_producto",
+        "TIPO_PRODUCTO_LIST",
+        "settings.TIPO_PRODUCTO_LIST",
+        "Lista estática validada para el tipo de producto.",
+    ),
+    (
+        "PRODUCTO_RECLAMO",
+        "nombre_analitica/codigo_analitica",
+        "ANALITICA_CATALOG",
+        "models.analitica_catalog.ANALITICA_CATALOG",
+        "Catálogo código ↔ nombre usado para validar analítica contable.",
+    ),
+    (
+        "DETALLES_RIESGO",
+        "criticidad",
+        "CRITICIDAD_LIST",
+        "settings.CRITICIDAD_LIST",
+        "Lista estática validada para la criticidad del riesgo.",
     ),
 )
 
@@ -945,6 +1173,15 @@ def _update_detail_catalog_sheet(workbook) -> None:
     _rewrite_rows(sheet, DETAIL_CATALOG_ROWS)
 
 
+def _update_list_catalog_sheet(workbook) -> None:
+    if "CATALOGOS_LISTAS" in workbook.sheetnames:
+        sheet = workbook["CATALOGOS_LISTAS"]
+    else:
+        sheet = workbook.create_sheet(title="CATALOGOS_LISTAS")
+    _set_header_row(sheet, LIST_CATALOG_HEADERS)
+    _rewrite_rows(sheet, LIST_CATALOG_ROWS)
+
+
 def _update_summary_sheet(workbook) -> None:
     summary_config = FraudCaseApp.build_summary_table_config()
     if "RESUMEN" in workbook.sheetnames:
@@ -985,6 +1222,7 @@ def update_template(path: Path) -> None:
     _update_validation_panel_sheet(workbook)
     _update_external_drive_sheet(workbook)
     _update_detail_catalog_sheet(workbook)
+    _update_list_catalog_sheet(workbook)
     _update_summary_sheet(workbook)
 
     workbook.save(path)
