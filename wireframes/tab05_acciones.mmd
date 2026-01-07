@@ -19,15 +19,17 @@ flowchart TB
         btn_clientes["Botón 'Cargar clientes'"]
         btn_colabs["Botón 'Cargar colaboradores'"]
         btn_productos["Botón 'Cargar productos'"]
+        btn_combo["Botón 'Cargar combinado'"]
         btn_normas["Botón 'Cargar normas'"]
         btn_riesgos["Botón 'Cargar riesgos'"]
+        btn_reclamos["Botón 'Cargar reclamos'"]
         estado_import["Etiqueta de estado de importación"]
         barra_import["Barra de progreso indeterminada"]
     end
     tab --> importacion
 
-    subgraph acciones["Guardar, exportar y respaldar"]
-        guardar["Botón 'Guardar y enviar' (valida + CSV/JSON/MD/DOCX/h_*.csv)"]
+    subgraph acciones["Guardar, cargar y reportes"]
+        guardar["Botón 'Guardar ahora' (valida + CSV/JSON/MD/DOCX/h_*.csv)"]
         cargar["Botón 'Cargar archivo…'"]
         autosave["Botón 'Recuperar último autosave'"]
         historial["Botón 'Historial de recuperación'"]

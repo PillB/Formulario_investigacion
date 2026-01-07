@@ -8,7 +8,7 @@ Estos artefactos documentan la estructura y los rótulos visibles de la aplicaci
 - `tab02_riesgos.mmd`: vista de la pestaña "Riesgos" con tabla encabezado y acordeones por riesgo (ID riesgo, Criticidad, Líder, Exposición residual, Descripción, Planes de acción).
 - `tab03_normas.mmd`: vista de la pestaña "Normas" con tabla de resumen y acordeones (ID de norma, Fecha de vigencia, Descripción).
 - `tab04_analisis.mmd`: pestaña "Análisis y narrativas" con textos enriquecidos (Antecedentes, Modus operandi, Hallazgos principales, Descargos del colaborador, Conclusiones, Recomendaciones y mejoras) y las secciones extendidas activables (Encabezado extendido, Recomendaciones categorizadas, Investigador principal, Operaciones, Anexos).
-- `tab05_acciones.mmd`: pestaña "Acciones" con controles de sonido y tema, grupo "Catálogos de detalle" (estado, Cargar catálogos, Iniciar sin catálogos, barra de progreso) y grupo "Importar datos masivos (CSV)" (botones para clientes, colaboradores, productos, normas, riesgos, estado y barra de progreso).
+- `tab05_acciones.mmd`: pestaña "Acciones" con controles de sonido y tema, grupo "Catálogos de detalle" (estado, Cargar catálogos, Iniciar sin catálogos, barra de progreso) y grupo "Importar datos masivos (CSV)" (botones para clientes, colaboradores, productos, combinado, riesgos, normas, reclamos, estado y barra de progreso).
 - `tab06_resumen.mmd`: pestaña "Resumen" con tablas compactas para Clientes, Colaboradores, Asignaciones por colaborador, Productos, Riesgos, Reclamos y Normas.
 - `generate_wireframes.py`: script para producir las imágenes PNG, el PDF `wireframes.pdf`, tablas CSV auxiliares y un registro de ejecución basado en los archivos `.mmd`.
 
