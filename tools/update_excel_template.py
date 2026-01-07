@@ -8,14 +8,9 @@ from typing import Iterable, Sequence
 
 from openpyxl import load_workbook
 
-NORMAS_COLUMNS: Sequence[str] = (
-    "id_norma",
-    "id_caso",
-    "descripcion",
-    "fecha_vigencia",
-    "acapite_inciso",
-    "detalle_norma",
-)
+from app import EXPORT_HEADERS, FraudCaseApp
+
+NORMAS_COLUMNS: Sequence[str] = tuple(EXPORT_HEADERS["detalles_norma.csv"])
 
 NORMAS_DESCRIPTIONS: dict[str, tuple[str, str]] = {
     "id_norma": ("Clave primaria", "Identificador de la norma transgredida (formato XXXX.XXX.XX.XX)."),
@@ -47,6 +42,18 @@ NORMAS_VALIDATIONS: Sequence[tuple[str, str, str, str]] = (
         "Campo requerido; detalle narrativo de la transgresión.",
     ),
 )
+
+SHEET_HEADERS: dict[str, Sequence[str]] = {
+    "CASOS": EXPORT_HEADERS["casos.csv"],
+    "CLIENTES": EXPORT_HEADERS["clientes.csv"],
+    "COLABORADORES": EXPORT_HEADERS["colaboradores.csv"],
+    "PRODUCTOS": EXPORT_HEADERS["productos.csv"],
+    "PRODUCTO_RECLAMO": EXPORT_HEADERS["producto_reclamo.csv"],
+    "INVOLUCRAMIENTO": EXPORT_HEADERS["involucramiento.csv"],
+    "DETALLES_RIESGO": EXPORT_HEADERS["detalles_riesgo.csv"],
+    "DETALLES_NORMA": EXPORT_HEADERS["detalles_norma.csv"],
+    "ANALISIS": EXPORT_HEADERS["analisis.csv"],
+}
 
 
 def _set_header_row(sheet, columns: Sequence[str]) -> None:
@@ -95,14 +102,36 @@ def _update_validation_sheet(workbook, rows: Sequence[tuple[str, str, str, str]]
     _rewrite_rows(sheet, [*existing_rows, *rows])
 
 
+def _update_summary_sheet(workbook) -> None:
+    summary_config = FraudCaseApp.build_summary_table_config()
+    if "RESUMEN" in workbook.sheetnames:
+        sheet = workbook["RESUMEN"]
+    else:
+        sheet = workbook.create_sheet(title="RESUMEN")
+    if sheet.max_row:
+        sheet.delete_rows(1, sheet.max_row)
+    row_idx = 1
+    for _key, title, columns in summary_config:
+        sheet.cell(row=row_idx, column=1, value=title)
+        row_idx += 1
+        for col_idx, (_field, label) in enumerate(columns, start=1):
+            sheet.cell(row=row_idx, column=col_idx, value=label)
+        row_idx += 2
+
+
 def update_template(path: Path) -> None:
     workbook = load_workbook(path)
-    normas_sheet = workbook["DETALLES_NORMA"]
-    _set_header_row(normas_sheet, NORMAS_COLUMNS)
+    for sheet_name, headers in SHEET_HEADERS.items():
+        if sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+        else:
+            sheet = workbook.create_sheet(title=sheet_name)
+        _set_header_row(sheet, headers)
 
     description_sheet = workbook["DESCRIPCION_COLUMNAS"]
     _update_description_sheet(description_sheet)
     _update_validation_sheet(workbook, NORMAS_VALIDATIONS)
+    _update_summary_sheet(workbook)
 
     workbook.save(path)
 

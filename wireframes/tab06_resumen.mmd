@@ -4,12 +4,12 @@ flowchart TB
     tab --> intro
 
     subgraph tablas["Tablas compactas"]
-        clientes["Clientes registrados\nColumnas: ID, Nombres, Apellidos, Tipo ID, Flag, Teléfonos, Correos, Direcciones, Accionado"]
-        colaboradores["Colaboradores involucrados\nColumnas: ID, Nombres, Apellidos, División, Área, Servicio, Puesto, Tipo sanción, Carta inmediatez, Carta renuncia"]
-        involucramientos["Asignaciones por colaborador\nColumnas: Producto, Colaborador, Monto asignado"]
-        productos["Productos investigados\nColumnas: ID Producto, Cliente, Tipo, Categoría 1/2, Modalidad, Canal, Proceso, Fechas, Moneda, Montos (investigado/pérdida/falla/contingencia/recuperado/pago)"]
-        riesgos["Riesgos registrados\nColumnas: ID Riesgo, Líder, Descripción, Criticidad, Exposición, Planes de acción"]
-        reclamos["Reclamos asociados\nColumnas: ID Reclamo, Producto, Analítica, Código analítica"]
+        clientes["Clientes registrados\nColumnas: ID Cliente, Nombres, Apellidos, Tipo ID, Flag, Teléfonos, Correos, Direcciones, Accionado"]
+        colaboradores["Colaboradores involucrados\nColumnas: ID, Nombres, Apellidos, Flag, División, Área, Servicio, Puesto, Carta inmediatez, Carta renuncia, Nombre agencia, Código agencia, Tipo falta, Tipo sanción"]
+        involucramientos["Asignaciones por colaborador\nColumnas: Producto, Tipo involucrado, Colaborador, Cliente involucrado, Monto asignado"]
+        productos["Productos investigados\nColumnas: ID Producto, Cliente, Tipo, Categoría 1, Categoría 2, Modalidad, Canal, Proceso, Fecha ocurrencia, Fecha descubrimiento, Monto investigado, Moneda, Pérdida, Falla procesos, Contingencia, Recuperado, Pago deuda, ID Reclamo, Analítica, Código analítica"]
+        riesgos["Riesgos registrados\nColumnas: ID Riesgo, ID Caso, Líder, Descripción, Criticidad, Exposición residual, Planes de acción"]
+        reclamos["Reclamos asociados\nColumnas: ID Reclamo, ID Caso, ID Producto, Analítica, Código analítica"]
         normas["Normas transgredidas\nColumnas: ID Norma, ID Caso, Descripción, Vigencia, Acápite/Inciso, Detalle de norma"]
     end
     tab --> tablas
