@@ -113,3 +113,27 @@ def test_llave_tecnica_rows_and_csv(tmp_path):
     assert parsed_rows[0]["id_colaborador"] == "'@TM1"
     assert parsed_rows[0]["id_reclamo"] == "'-RC1"
     assert parsed_rows[-1]["id_reclamo"] == ""
+
+
+def test_llave_tecnica_inherits_case_date_when_product_blank():
+    case_data = CaseData.from_mapping(
+        {
+            "caso": {
+                "id_caso": "2024-0002",
+                "fecha_de_ocurrencia": "2024-02-15",
+                "fecha_de_descubrimiento": "2024-02-16",
+            },
+            "productos": [
+                {
+                    "id_producto": "P-EMPTY",
+                    "id_cliente": "CLI-EMPTY",
+                }
+            ],
+            "reclamos": [],
+            "involucramientos": [],
+        }
+    )
+
+    rows, _header = build_llave_tecnica_rows(case_data)
+
+    assert rows[0]["fecha_ocurrencia"] == "2024-02-15"

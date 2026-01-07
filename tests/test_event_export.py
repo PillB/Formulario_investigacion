@@ -241,6 +241,41 @@ def test_event_round_trip_preserves_case_dates_when_product_differs(monkeypatch)
     assert app.fecha_descubrimiento_caso_var.get() == "2024-03-07"
 
 
+def test_event_rows_inherit_case_dates_when_product_missing():
+    case_data = CaseData.from_mapping(
+        {
+            "caso": {
+                "id_caso": "2024-3001",
+                "fecha_de_ocurrencia": "2024-05-01",
+                "fecha_de_descubrimiento": "2024-05-02",
+            },
+            "productos": [
+                {
+                    "id_producto": "P-INHERIT",
+                    "id_cliente": "CL-INHERIT",
+                }
+            ],
+            "clientes": [],
+            "colaboradores": [],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {},
+            "encabezado": {},
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+
+    rows, _header = build_event_rows(case_data)
+
+    assert rows[0]["fecha_ocurrencia"] == "2024-05-01"
+    assert rows[0]["fecha_descubrimiento"] == "2024-05-02"
+
+
 def test_event_round_trip_restores_investigator_and_comments(monkeypatch):
     case_data = CaseData.from_mapping(
         {
