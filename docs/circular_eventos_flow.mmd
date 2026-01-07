@@ -4,6 +4,8 @@ flowchart LR
     eventos[(eventos.csv)]
     analisis_csv[(analisis.csv)]
     note_eventos["Cada fila de `eventos.csv` representa la combinación Producto × Reclamo × Involucramiento del caso"]
+    note_mapeo_eventos["Columnas canónicas/legacy salen de report_builder.build_event_rows<br/>(settings.EVENTOS_HEADER_CANONICO/LEGACY)."]
+    note_fechas_producto["Si un producto no tiene fechas, puede heredar las del caso<br/>(fecha_de_ocurrencia / fecha_de_descubrimiento)."]
     combinacion_eventos["Combinación Producto×Reclamo×Involucramiento (report_builder.build_event_rows)"]
 
     %% Impacto en número de filas
@@ -73,8 +75,8 @@ flowchart LR
         prod_canal["Canal → canal"]
         prod_proceso["Proceso → proceso_impactado / proceso"]
         prod_tipo["Tipo de producto → tipo_de_producto / tipo_producto"]
-        prod_fecha_oc["Fecha de ocurrencia (producto) → fecha_ocurrencia / fecha_de_ocurrencia"]
-        prod_fecha_desc["Fecha de descubrimiento (producto) → fecha_descubrimiento / fecha_de_descubrimiento"]
+        prod_fecha_oc["Fecha de ocurrencia (producto) → fecha_ocurrencia"]
+        prod_fecha_desc["Fecha de descubrimiento (producto) → fecha_descubrimiento"]
         prod_monto_inv["Monto investigado → monto_investigado"]
         prod_moneda["Moneda → tipo_moneda"]
         prod_monto_perdida["Monto pérdida fraude → monto_fraude_interno_soles / monto_perdida_fraude"]
@@ -127,6 +129,9 @@ flowchart LR
     %% Exportación circular hacia eventos.csv
     note_eventos -.-> eventos
     combinacion_eventos -.-> eventos
+    note_mapeo_eventos -.-> combinacion_eventos
+    note_fechas_producto -.-> prod_fecha_oc
+    note_fechas_producto -.-> prod_fecha_desc
     combinacion_eventos -.-> filas_eventos
     filas_eventos --> eventos
     caso_id --> eventos

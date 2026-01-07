@@ -71,6 +71,8 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
     caso = case_data.get("caso", {}) if isinstance(case_data, Mapping) else {}
     investigator = caso.get("investigador") if isinstance(caso, Mapping) else {}
     investigator = investigator if isinstance(investigator, Mapping) else {}
+    case_occurrence = caso.get("fecha_de_ocurrencia")
+    case_discovery = caso.get("fecha_de_descubrimiento")
     base_row = {
         "id_caso": caso.get("id_caso", ""),
         "tipo_informe": caso.get("tipo_informe", ""),
@@ -79,8 +81,8 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
         "modalidad": caso.get("modalidad", ""),
         "canal": caso.get("canal", ""),
         "proceso": caso.get("proceso", ""),
-        "fecha_de_ocurrencia": caso.get("fecha_de_ocurrencia", ""),
-        "fecha_de_descubrimiento": caso.get("fecha_de_descubrimiento", ""),
+        "fecha_de_ocurrencia": case_occurrence or "",
+        "fecha_de_descubrimiento": case_discovery or "",
         "centro_costos": caso.get("centro_costos", "") or caso.get("centro_costo", ""),
         "matricula_investigador": caso.get("matricula_investigador", ""),
         "investigador_nombre": caso.get("investigador_nombre", "")
@@ -116,6 +118,11 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
                 involucrado_tipo = "cliente"
             elif inv.get("id_colaborador"):
                 involucrado_tipo = "colaborador"
+        product_occurrence, _product_discovery = _resolve_product_dates(
+            product,
+            case_occurrence,
+            case_discovery,
+        )
         rows.append(
             {
                 **base_row,
@@ -129,7 +136,7 @@ def build_llave_tecnica_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[l
                 else "",
                 "tipo_involucrado": involucrado_tipo,
                 "id_reclamo": claim.get("id_reclamo", ""),
-                "fecha_ocurrencia": product.get("fecha_ocurrencia", ""),
+                "fecha_ocurrencia": product_occurrence or "",
             }
         )
     return rows, header
@@ -144,6 +151,24 @@ def _event_placeholder(value: object, placeholder: str) -> str:
     if text == placeholder:
         return f"\\{placeholder}"
     return text
+
+
+def _has_meaningful_value(value: object) -> bool:
+    if value is None:
+        return False
+    return bool(str(value).strip())
+
+
+def _resolve_product_dates(
+    product: Mapping[str, Any],
+    case_occurrence: object,
+    case_discovery: object,
+) -> tuple[object, object]:
+    product_occurrence = product.get("fecha_ocurrencia")
+    product_discovery = product.get("fecha_descubrimiento")
+    if not (_has_meaningful_value(product_occurrence) or _has_meaningful_value(product_discovery)):
+        return case_occurrence, case_discovery
+    return product_occurrence, product_discovery
 
 
 def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict[str, str]], list[str]]:
@@ -163,6 +188,8 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
     raw_analysis = case_data.get("analisis", {}) if isinstance(case_data, Mapping) else {}
     analysis_texts = normalize_analysis_texts(raw_analysis)
     placeholder = settings.EVENTOS_PLACEHOLDER
+    case_occurrence = caso.get("fecha_de_ocurrencia")
+    case_discovery = caso.get("fecha_de_descubrimiento")
     base_row = {
         "id_caso": _event_placeholder(caso.get("id_caso"), placeholder),
         "tipo_informe": _event_placeholder(caso.get("tipo_informe"), placeholder),
@@ -171,8 +198,8 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
         "modalidad": _event_placeholder(caso.get("modalidad"), placeholder),
         "canal": _event_placeholder(caso.get("canal"), placeholder),
         "proceso": _event_placeholder(caso.get("proceso"), placeholder),
-        "fecha_de_ocurrencia": _event_placeholder(caso.get("fecha_de_ocurrencia"), placeholder),
-        "fecha_de_descubrimiento": _event_placeholder(caso.get("fecha_de_descubrimiento"), placeholder),
+        "fecha_de_ocurrencia": _event_placeholder(case_occurrence, placeholder),
+        "fecha_de_descubrimiento": _event_placeholder(case_discovery, placeholder),
         "centro_costos": _event_placeholder(
             caso.get("centro_costos") or caso.get("centro_costo"), placeholder
         ),
@@ -235,6 +262,11 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
         modalidad = product.get("modalidad") or base_row.get("modalidad")
         canal = product.get("canal") or base_row.get("canal")
         proceso = product.get("proceso") or base_row.get("proceso")
+        product_occurrence, product_discovery = _resolve_product_dates(
+            product,
+            case_occurrence,
+            case_discovery,
+        )
         fecha_cese = collaborator.get("fecha_carta_renuncia") if not is_client_involvement else None
         telefono_relacionado = client.get("telefonos")
         correos_relacionado = client.get("correos")
@@ -308,10 +340,8 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 collaborator.get("tipo_sancion") if not is_client_involvement else None,
                 placeholder,
             ),
-            "fecha_ocurrencia": _event_placeholder(product.get("fecha_ocurrencia"), placeholder),
-            "fecha_descubrimiento": _event_placeholder(
-                product.get("fecha_descubrimiento"), placeholder
-            ),
+            "fecha_ocurrencia": _event_placeholder(product_occurrence, placeholder),
+            "fecha_descubrimiento": _event_placeholder(product_discovery, placeholder),
             "monto_fraude_interno_soles": _event_placeholder(monto_perdida_fraude, placeholder),
             "monto_fraude_interno_dolares": placeholder,
             "monto_fraude_externo_soles": placeholder,
@@ -372,10 +402,8 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 ),
                 "tipo_involucrado": _event_placeholder(inv_tipo, placeholder),
                 "id_reclamo": _event_placeholder(claim.get("id_reclamo"), placeholder),
-                "fecha_ocurrencia": _event_placeholder(product.get("fecha_ocurrencia"), placeholder),
-                "fecha_descubrimiento": _event_placeholder(
-                    product.get("fecha_descubrimiento"), placeholder
-                ),
+                "fecha_ocurrencia": _event_placeholder(product_occurrence, placeholder),
+                "fecha_descubrimiento": _event_placeholder(product_discovery, placeholder),
                 "tipo_producto": _event_placeholder(product.get("tipo_producto"), placeholder),
                 "tipo_moneda": _event_placeholder(product.get("tipo_moneda"), placeholder),
                 "monto_investigado": _event_placeholder(
