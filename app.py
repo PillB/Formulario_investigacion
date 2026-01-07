@@ -10425,6 +10425,59 @@ class FraudCaseApp:
                     if not self._has_meaningful_value(target.get(key)) and self._has_meaningful_value(value):
                         target[key] = value
 
+            def _build_client_involvement_payload(row_data: Mapping) -> dict[str, str] | None:
+                payload: dict[str, str] = {}
+                if not isinstance(row_data, Mapping):
+                    return None
+                mapping = {
+                    "nombres": "nombres_cliente_involucrado",
+                    "apellidos": "apellidos_cliente_involucrado",
+                    "tipo_id": "tipo_id_cliente_involucrado",
+                    "flag": "flag_cliente_involucrado",
+                    "telefonos": "telefonos_cliente_relacionado",
+                    "correos": "correos_cliente_relacionado",
+                    "direcciones": "direcciones_cliente_relacionado",
+                    "accionado": "accionado_cliente_relacionado",
+                }
+                for target_key, source_key in mapping.items():
+                    value = row_data.get(source_key)
+                    if self._has_meaningful_value(value):
+                        payload[target_key] = str(value).strip()
+                return payload or None
+
+            def _build_collab_involvement_payload(row_data: Mapping) -> dict[str, str] | None:
+                payload: dict[str, str] = {}
+                if not isinstance(row_data, Mapping):
+                    return None
+                nombres = row_data.get("nombres_involucrado")
+                if self._has_meaningful_value(nombres):
+                    payload["nombres"] = str(nombres).strip()
+                paternal = row_data.get("apellido_paterno_involucrado")
+                maternal = row_data.get("apellido_materno_involucrado")
+                apellido_parts = [
+                    part for part in (paternal, maternal) if self._has_meaningful_value(part)
+                ]
+                if apellido_parts:
+                    payload["apellidos"] = " ".join(part.strip() for part in apellido_parts)
+                for key, sources in (
+                    ("division", ("division",)),
+                    ("area", ("area",)),
+                    ("servicio", ("servicio",)),
+                    ("puesto", ("puesto",)),
+                    ("nombre_agencia", ("nombre_agencia",)),
+                    ("codigo_agencia", ("codigo_agencia",)),
+                    ("tipo_falta", ("tipo_de_falta", "tipo_falta")),
+                    ("tipo_sancion", ("tipo_sancion",)),
+                    ("fecha_carta_renuncia", ("fecha_carta_renuncia", "fecha_cese")),
+                    ("flag_colaborador", ("flag_colaborador",)),
+                ):
+                    for source in sources:
+                        value = row_data.get(source)
+                        if self._has_meaningful_value(value):
+                            payload[key] = str(value).strip()
+                            break
+                return payload or None
+
             def _normalize_collaborator_id(value: str) -> str:
                 return normalize_team_member_identifier(value or "").strip()
 
@@ -10500,7 +10553,15 @@ class FraudCaseApp:
                 def _resolve_client_tipo(client_identifier: str) -> str:
                     return self._resolve_client_type_for_involvement(client_identifier)
 
-                def _append_involvement_entry(tipo: str, collab: str, client: str, amount_text: str, *, requires_amount: bool = False):
+                def _append_involvement_entry(
+                    tipo: str,
+                    collab: str,
+                    client: str,
+                    amount_text: str,
+                    *,
+                    requires_amount: bool = False,
+                    detail_payload: Mapping | None = None,
+                ):
                     tipo_norm = (tipo or "colaborador").strip().lower()
                     collab = _normalize_collaborator_id(collab or "")
                     client = (client or "").strip()
@@ -10540,6 +10601,8 @@ class FraudCaseApp:
                         'monto_asignado': cleaned_amount,
                         'requires_amount': requires_amount,
                     }
+                    if detail_payload:
+                        entry['detail_payload'] = dict(detail_payload)
                     existing = involvement_map.get(key)
                     if not existing:
                         involvement_map[key] = entry
@@ -10549,6 +10612,12 @@ class FraudCaseApp:
                             existing.update({**entry, 'monto_asignado': cleaned_amount, 'requires_amount': entry['requires_amount']})
                         else:
                             existing['requires_amount'] = entry['requires_amount']
+                        if detail_payload:
+                            existing_detail = existing.get('detail_payload')
+                            if not existing_detail:
+                                existing['detail_payload'] = dict(detail_payload)
+                            else:
+                                _merge_payload(existing_detail, detail_payload)
 
                 claim_payload = {
                     "id_reclamo": (raw_row.get("id_reclamo") or "").strip(),
@@ -10571,12 +10640,17 @@ class FraudCaseApp:
                     else:
                         seen_technical_keys.add(technical_key)
 
+                client_involvement_payload = _build_client_involvement_payload(raw_row)
+                collab_involvement_payload = _build_collab_involvement_payload(raw_row)
                 _append_involvement_entry(
                     raw_row.get('tipo_involucrado', ''),
                     raw_row.get('id_colaborador', ''),
                     raw_row.get('id_cliente_involucrado', ''),
                     raw_row.get('monto_asignado', ''),
                     requires_amount=bool(raw_row.get('tipo_involucrado') or raw_row.get('monto_asignado')),
+                    detail_payload=client_involvement_payload
+                    if (raw_row.get('tipo_involucrado', '') or '').strip().lower() == "cliente"
+                    else collab_involvement_payload,
                 )
                 if row_format in {"legacy", "canonical"}:
                     _append_involvement_entry(
@@ -10584,12 +10658,14 @@ class FraudCaseApp:
                         "",
                         raw_row.get("id_cliente_involucrado", ""),
                         raw_row.get("monto_asignado", ""),
+                        detail_payload=client_involvement_payload,
                     )
                     _append_involvement_entry(
                         "colaborador",
                         raw_row.get("id_colaborador", ""),
                         "",
                         raw_row.get("monto_asignado", ""),
+                        detail_payload=collab_involvement_payload,
                     )
                 for collaborator, amount_text in parse_involvement_entries(raw_row.get('involucramiento', '')):
                     _append_involvement_entry("colaborador", collaborator, "", amount_text, requires_amount=True)
@@ -10598,14 +10674,20 @@ class FraudCaseApp:
                 if product_id:
                     client_flag = raw_row.get("flag") or raw_row.get("flag_cliente", "")
                     if key_client_id and _is_involucrado(client_flag):
-                        _append_involvement_entry("cliente", "", key_client_id, "")
+                        _append_involvement_entry("cliente", "", key_client_id, "", detail_payload=client_involvement_payload)
                     collab_flag = (
                         team_row.get("flag_colaborador")
                         or raw_row.get("flag_colaborador")
                         or raw_row.get("colaborador_flag", "")
                     )
                     if collaborator_id and _is_involucrado(collab_flag):
-                        _append_involvement_entry("colaborador", collaborator_id, "", "")
+                        _append_involvement_entry(
+                            "colaborador",
+                            collaborator_id,
+                            "",
+                            "",
+                            detail_payload=collab_involvement_payload,
+                        )
 
                 if row_format in {"legacy", "canonical"} and product_id:
                     group = grouped_eventos.setdefault(
@@ -12252,6 +12334,15 @@ class FraudCaseApp:
             seen_technical_keys.add(key)
             return False
 
+        def _merge_detail_payload(base: Mapping | None, extra: Mapping | None) -> dict[str, str]:
+            merged = dict(base or {})
+            if not extra:
+                return merged
+            for key, value in extra.items():
+                if not self._has_meaningful_value(merged.get(key)) and self._has_meaningful_value(value):
+                    merged[key] = value
+            return merged
+
         def process_chunk(chunk):
             nonlocal created_records, changes_detected, eventos_case_applied
             for entry in chunk:
@@ -12340,6 +12431,7 @@ class FraudCaseApp:
                             continue
                         tipo_norm = (involvement.get('tipo_involucrado') or 'colaborador').strip().lower()
                         amount_text = (involvement.get('monto_asignado') or '').strip()
+                        detail_payload = involvement.get('detail_payload') or {}
                         label_subject = involvement.get('id_colaborador') if tipo_norm == 'colaborador' else involvement.get('id_cliente_involucrado')
                         label = (
                             f"Monto asignado del {tipo_norm} {(label_subject or '').strip() or 'sin ID'} "
@@ -12361,7 +12453,8 @@ class FraudCaseApp:
                             if skip_duplicate and not amount_value:
                                 continue
                             client_details, client_found = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
-                            self._ensure_client_exists(client_id, client_details)
+                            merged_payload = _merge_detail_payload(client_details, detail_payload)
+                            self._ensure_client_exists(client_id, merged_payload or client_details)
                             if not client_found and 'id_cliente' in self.detail_catalogs:
                                 missing_clients.append(client_id)
                             inv_row = next(
@@ -12396,7 +12489,8 @@ class FraudCaseApp:
                             if skip_duplicate and not amount_value:
                                 continue
                             collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
-                            _, created_team = self._ensure_team_member_exists(collab_id, collab_details)
+                            merged_payload = _merge_detail_payload(collab_details, detail_payload)
+                            _, created_team = self._ensure_team_member_exists(collab_id, merged_payload or collab_details)
                             if created_team:
                                 created_records += 1
                                 changes_detected = True
