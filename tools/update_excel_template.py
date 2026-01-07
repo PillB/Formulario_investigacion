@@ -75,6 +75,16 @@ PANEL_VALIDATION_ROWS: Sequence[tuple[str, str, str, str, str]] = (
         ),
     ),
     (
+        "Catálogo interno TAXONOMIA",
+        "Categoría nivel 1 / Categoría nivel 2 / Modalidad",
+        "Caso y participantes / Productos",
+        (
+            "Catálogo interno (no CSV) con jerarquía nivel 1 → nivel 2 → modalidad. "
+            "Las listas se refrescan al cambiar Cat.1/Cat.2."
+        ),
+        "settings.TAXONOMIA + refresco en app.py y ui/frames/case.py.",
+    ),
+    (
         "Formato de número de caso",
         "Número de caso",
         "Caso y participantes",
@@ -706,6 +716,55 @@ SHEET_HEADERS: dict[str, Sequence[str]] = {
     "ANALISIS": EXPORT_HEADERS["analisis.csv"],
 }
 
+TAXONOMIA_DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
+    (
+        "CASOS",
+        "categoria1",
+    ): (
+        "Categoría de riesgo de fraude nivel 1 del caso. Fuente: catálogo interno "
+        "TAXONOMIA (no CSV). Al cambiar esta categoría se actualizan las listas de "
+        "categoría 2 y modalidad."
+    ),
+    (
+        "CASOS",
+        "categoria2",
+    ): (
+        "Categoría de riesgo de fraude nivel 2 del caso, dependiente de la categoría 1. "
+        "Fuente: catálogo interno TAXONOMIA (no CSV). La lista se refresca al cambiar "
+        "la categoría 1."
+    ),
+    (
+        "CASOS",
+        "modalidad",
+    ): (
+        "Modalidad de fraude (nivel 3) dependiente de las categorías 1 y 2. "
+        "Fuente: catálogo interno TAXONOMIA (no CSV). La lista se refresca al cambiar "
+        "categoría 1 o categoría 2."
+    ),
+    (
+        "PRODUCTOS",
+        "categoria1",
+    ): (
+        "Categoría nivel 1 asociada al producto (puede heredarse del caso o modificarse). "
+        "Fuente: catálogo interno TAXONOMIA (no CSV). Al cambiar esta categoría se "
+        "actualizan las listas de categoría 2 y modalidad."
+    ),
+    (
+        "PRODUCTOS",
+        "categoria2",
+    ): (
+        "Categoría nivel 2 del producto, dependiente de categoria1. Fuente: catálogo interno "
+        "TAXONOMIA (no CSV). La lista se refresca al cambiar la categoría 1."
+    ),
+    (
+        "PRODUCTOS",
+        "modalidad",
+    ): (
+        "Modalidad de fraude (nivel 3) del producto. Fuente: catálogo interno TAXONOMIA "
+        "(no CSV). La lista se refresca al cambiar categoría 1 o categoría 2."
+    ),
+}
+
 
 def _set_header_row(sheet, columns: Sequence[str]) -> None:
     for idx, name in enumerate(columns, start=1):
@@ -724,11 +783,15 @@ def _rewrite_rows(sheet, rows: Iterable[Sequence[str]]) -> None:
 
 
 def _update_description_sheet(sheet) -> None:
-    existing_rows = [
-        row
-        for row in sheet.iter_rows(min_row=2, values_only=True)
-        if row and row[0] != "DETALLES_NORMA"
-    ]
+    existing_rows = []
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        if not row or row[0] == "DETALLES_NORMA":
+            continue
+        hoja, columna, tipo, descripcion, *_ = row
+        updated = TAXONOMIA_DESCRIPTION_UPDATES.get((hoja, columna))
+        if updated:
+            descripcion = updated
+        existing_rows.append((hoja, columna, tipo, descripcion))
     normas_rows = [
         ("DETALLES_NORMA", col, *NORMAS_DESCRIPTIONS[col]) for col in NORMAS_COLUMNS
     ]
