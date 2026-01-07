@@ -166,9 +166,17 @@ def _resolve_product_dates(
 ) -> tuple[object, object]:
     product_occurrence = product.get("fecha_ocurrencia")
     product_discovery = product.get("fecha_descubrimiento")
-    if not (_has_meaningful_value(product_occurrence) or _has_meaningful_value(product_discovery)):
-        return case_occurrence, case_discovery
-    return product_occurrence, product_discovery
+    resolved_occurrence = (
+        product_occurrence
+        if _has_meaningful_value(product_occurrence)
+        else case_occurrence
+    )
+    resolved_discovery = (
+        product_discovery
+        if _has_meaningful_value(product_discovery)
+        else case_discovery
+    )
+    return resolved_occurrence, resolved_discovery
 
 
 def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict[str, str]], list[str]]:
