@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 from tkinter import font as tkfont
 
-from settings import (CANAL_LIST, PROCESO_LIST, TAXONOMIA, TIPO_MONEDA_LIST,
-                      TIPO_PRODUCTO_LIST)
+from settings import (CANAL_LIST, CLAIM_DETAILS_FILE, PROCESO_LIST, TAXONOMIA,
+                      TIPO_MONEDA_LIST, TIPO_PRODUCTO_LIST)
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
 from ui.frames.utils import (
@@ -812,7 +813,8 @@ class ClaimRow:
                     "Reclamo no encontrado",
                     (
                         f"El ID {rid} no existe en los catálogos de detalle. "
-                        "Verifica el código o actualiza claim_details.csv."
+                        "Verifica el código o actualiza "
+                        f"{Path(CLAIM_DETAILS_FILE).name}."
                     ),
                 )
                 self._last_missing_lookup_id = rid

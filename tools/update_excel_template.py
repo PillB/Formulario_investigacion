@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from app import EXPORT_HEADERS, FraudCaseApp
 from settings import EXTERNAL_DRIVE_DIR, EXTERNAL_LOGS_FILE
@@ -963,7 +963,12 @@ def _update_summary_sheet(workbook) -> None:
 
 
 def update_template(path: Path) -> None:
-    workbook = load_workbook(path)
+    if path.exists():
+        workbook = load_workbook(path)
+    else:
+        workbook = Workbook()
+        default_sheet = workbook.active
+        default_sheet.title = next(iter(SHEET_HEADERS))
     for sheet_name, headers in SHEET_HEADERS.items():
         if sheet_name in workbook.sheetnames:
             sheet = workbook[sheet_name]
@@ -971,7 +976,10 @@ def update_template(path: Path) -> None:
             sheet = workbook.create_sheet(title=sheet_name)
         _set_header_row(sheet, headers)
 
-    description_sheet = workbook["DESCRIPCION_COLUMNAS"]
+    if "DESCRIPCION_COLUMNAS" in workbook.sheetnames:
+        description_sheet = workbook["DESCRIPCION_COLUMNAS"]
+    else:
+        description_sheet = workbook.create_sheet(title="DESCRIPCION_COLUMNAS")
     _update_description_sheet(description_sheet)
     _update_validation_sheet(workbook, NORMAS_VALIDATIONS)
     _update_validation_panel_sheet(workbook)

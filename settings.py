@@ -317,6 +317,7 @@ def ensure_external_drive_dir() -> Path:
 TEAM_DETAILS_FILE = os.path.join(BASE_DIR, "team_details.csv")
 CLIENT_DETAILS_FILE = os.path.join(BASE_DIR, "client_details.csv")
 PRODUCT_DETAILS_FILE = os.path.join(BASE_DIR, "productos_masivos.csv")
+CLAIM_DETAILS_FILE = os.path.join(BASE_DIR, "claim_details.csv")
 AUTOSAVE_FILE = os.path.join(BASE_DIR, "autosave.json")
 LOGS_FILE = os.path.join(BASE_DIR, "logs.csv")
 MASSIVE_SAMPLE_FILES = {
@@ -360,6 +361,7 @@ __all__ = [
     "BASE_DIR",
     "CANAL_LIST",
     "CLAIM_ID_ALIASES",
+    "CLAIM_DETAILS_FILE",
     "CLIENT_DETAILS_FILE",
     "CLIENT_ID_ALIASES",
     "CRITICIDAD_LIST",

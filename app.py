@@ -282,6 +282,15 @@ EXPORT_HEADERS = {
         "comentario_amplio",
     ],
 }
+_DETAIL_CATALOG_FILES = (
+    "client_details.csv",
+    "product_details.csv",
+    "team_details.csv",
+    "process_details.csv",
+    "risk_details.csv",
+    "norm_details.csv",
+    "claim_details.csv",
+)
 
 
 
@@ -1403,9 +1412,10 @@ class FraudCaseApp:
             self._show_missing_catalog_hint()
 
     def _missing_catalog_message(self) -> str:
+        detail_files = ", ".join(_DETAIL_CATALOG_FILES)
         return (
-            "No se encontraron catálogos de detalle. Coloca los archivos *_details.csv (client_details.csv, "
-            "product_details.csv, team_details.csv, norm_details.csv) en la carpeta base junto al programa. "
+            "No se encontraron catálogos de detalle. Coloca los archivos *_details.csv "
+            f"({detail_files}) en la carpeta base junto al programa. "
             "Cada CSV debe incluir una columna principal id_* y los encabezados específicos del catálogo."
         )
 
