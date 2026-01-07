@@ -173,6 +173,116 @@ CONFIRMATION_WAV_B64 = (
 COMENTARIO_BREVE_MAX_CHARS = 150
 COMENTARIO_AMPLIO_MAX_CHARS = 750
 
+EXPORT_HEADERS = {
+    "casos.csv": [
+        "id_caso",
+        "tipo_informe",
+        "categoria1",
+        "categoria2",
+        "modalidad",
+        "canal",
+        "proceso",
+        "fecha_de_ocurrencia",
+        "fecha_de_descubrimiento",
+        "centro_costos",
+        "matricula_investigador",
+        "investigador_nombre",
+        "investigador_cargo",
+    ],
+    "clientes.csv": [
+        "id_cliente",
+        "id_caso",
+        "nombres",
+        "apellidos",
+        "tipo_id",
+        "flag",
+        "telefonos",
+        "correos",
+        "direcciones",
+        "accionado",
+    ],
+    "colaboradores.csv": [
+        "id_colaborador",
+        "id_caso",
+        "flag",
+        "nombres",
+        "apellidos",
+        "division",
+        "area",
+        "servicio",
+        "puesto",
+        "fecha_carta_inmediatez",
+        "fecha_carta_renuncia",
+        "nombre_agencia",
+        "codigo_agencia",
+        "tipo_falta",
+        "tipo_sancion",
+    ],
+    "productos.csv": [
+        "id_producto",
+        "id_caso",
+        "id_cliente",
+        "categoria1",
+        "categoria2",
+        "modalidad",
+        "canal",
+        "proceso",
+        "fecha_ocurrencia",
+        "fecha_descubrimiento",
+        "monto_investigado",
+        "tipo_moneda",
+        "monto_perdida_fraude",
+        "monto_falla_procesos",
+        "monto_contingencia",
+        "monto_recuperado",
+        "monto_pago_deuda",
+        "tipo_producto",
+    ],
+    "producto_reclamo.csv": [
+        "id_reclamo",
+        "id_caso",
+        "id_producto",
+        "nombre_analitica",
+        "codigo_analitica",
+    ],
+    "involucramiento.csv": [
+        "id_producto",
+        "id_caso",
+        "tipo_involucrado",
+        "id_colaborador",
+        "id_cliente_involucrado",
+        "monto_asignado",
+    ],
+    "detalles_riesgo.csv": [
+        "id_riesgo",
+        "id_caso",
+        "lider",
+        "descripcion",
+        "criticidad",
+        "exposicion_residual",
+        "planes_accion",
+    ],
+    "detalles_norma.csv": [
+        "id_norma",
+        "id_caso",
+        "descripcion",
+        "fecha_vigencia",
+        "acapite_inciso",
+        "detalle_norma",
+    ],
+    "analisis.csv": [
+        "id_caso",
+        "antecedentes",
+        "modus_operandi",
+        "hallazgos",
+        "descargos",
+        "conclusiones",
+        "recomendaciones",
+        "comentario_breve",
+        "comentario_amplio",
+    ],
+}
+
 
 
 def _extract_widget_value(widget) -> str | None:
@@ -741,6 +851,124 @@ class FraudCaseApp:
     _validation_panel: Optional[ValidationPanel] = None
     AUTOSAVE_CYCLE_INTERVAL_MS = 300_000
     AUTOSAVE_CYCLE_LIMIT = 10
+
+    @classmethod
+    def build_summary_table_config(cls):
+        product_header_labels = {
+            "id_producto": "ID Producto",
+            "id_cliente": "Cliente",
+            "tipo_producto": "Tipo",
+            "categoria1": "Categoría 1",
+            "categoria2": "Categoría 2",
+            "modalidad": "Modalidad",
+            "canal": "Canal",
+            "proceso": "Proceso",
+            "fecha_ocurrencia": "Fecha ocurrencia",
+            "fecha_descubrimiento": "Fecha descubrimiento",
+            "monto_investigado": "Monto investigado",
+            "tipo_moneda": "Moneda",
+            "monto_perdida_fraude": "Pérdida",
+            "monto_falla_procesos": "Falla procesos",
+            "monto_contingencia": "Contingencia",
+            "monto_recuperado": "Recuperado",
+            "monto_pago_deuda": "Pago deuda",
+            "id_reclamo": "ID Reclamo",
+            "nombre_analitica": "Analítica",
+            "codigo_analitica": "Código analítica",
+        }
+        product_columns = [
+            (field, product_header_labels.get(field, field))
+            for field in cls.IMPORT_CONFIG["productos"]["expected_headers"]
+        ]
+        claim_header_labels = {
+            "id_reclamo": "ID Reclamo",
+            "id_caso": "ID Caso",
+            "id_producto": "ID Producto",
+            "nombre_analitica": "Analítica",
+            "codigo_analitica": "Código analítica",
+        }
+        claim_columns = [
+            (field, claim_header_labels.get(field, field))
+            for field in cls.IMPORT_CONFIG["reclamos"]["expected_headers"]
+        ]
+        risk_header_labels = {
+            "id_riesgo": "ID Riesgo",
+            "id_caso": "ID Caso",
+            "lider": "Líder",
+            "descripcion": "Descripción",
+            "criticidad": "Criticidad",
+            "exposicion_residual": "Exposición residual",
+            "planes_accion": "Planes de acción",
+        }
+        risk_columns = [
+            (field, risk_header_labels.get(field, field))
+            for field in cls.IMPORT_CONFIG["riesgos"]["expected_headers"]
+        ]
+        norm_header_labels = {
+            "id_norma": "ID Norma",
+            "id_caso": "ID Caso",
+            "descripcion": "Descripción",
+            "fecha_vigencia": "Vigencia",
+            "acapite_inciso": "Acápite/Inciso",
+            "detalle_norma": "Detalle de norma",
+        }
+        norm_columns = [
+            (field, norm_header_labels.get(field, field))
+            for field in cls.IMPORT_CONFIG["normas"]["expected_headers"]
+        ]
+        return [
+            (
+                "clientes",
+                "Clientes registrados",
+                [
+                    ("id_cliente", "ID Cliente"),
+                    ("nombres", "Nombres"),
+                    ("apellidos", "Apellidos"),
+                    ("tipo_id", "Tipo ID"),
+                    ("flag", "Flag"),
+                    ("telefonos", "Teléfonos"),
+                    ("correos", "Correos"),
+                    ("direcciones", "Direcciones"),
+                    ("accionado", "Accionado"),
+                ],
+            ),
+            (
+                "colaboradores",
+                "Colaboradores involucrados",
+                list(cls.COLLABORATOR_SUMMARY_COLUMNS),
+            ),
+            (
+                "involucramientos",
+                "Asignaciones de involucrados",
+                [
+                    ("id_producto", "Producto"),
+                    ("tipo_involucrado", "Tipo"),
+                    ("id_colaborador", "Colaborador"),
+                    ("id_cliente_involucrado", "Cliente involucrado"),
+                    ("monto_asignado", "Monto asignado"),
+                ],
+            ),
+            (
+                "productos",
+                "Productos investigados",
+                product_columns,
+            ),
+            (
+                "riesgos",
+                "Riesgos registrados",
+                risk_columns,
+            ),
+            (
+                "reclamos",
+                "Reclamos asociados",
+                claim_columns,
+            ),
+            (
+                "normas",
+                "Normas transgredidas",
+                norm_columns,
+            ),
+        ]
 
     """Clase que encapsula la aplicación de gestión de casos de fraude."""
 
@@ -8504,121 +8732,7 @@ class FraudCaseApp:
         )
         self.summary_intro_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
 
-        product_header_labels = {
-            "id_producto": "ID Producto",
-            "id_cliente": "Cliente",
-            "tipo_producto": "Tipo",
-            "categoria1": "Categoría 1",
-            "categoria2": "Categoría 2",
-            "modalidad": "Modalidad",
-            "canal": "Canal",
-            "proceso": "Proceso",
-            "fecha_ocurrencia": "Fecha ocurrencia",
-            "fecha_descubrimiento": "Fecha descubrimiento",
-            "monto_investigado": "Monto investigado",
-            "tipo_moneda": "Moneda",
-            "monto_perdida_fraude": "Pérdida",
-            "monto_falla_procesos": "Falla procesos",
-            "monto_contingencia": "Contingencia",
-            "monto_recuperado": "Recuperado",
-            "monto_pago_deuda": "Pago deuda",
-            "id_reclamo": "ID Reclamo",
-            "nombre_analitica": "Analítica",
-            "codigo_analitica": "Código analítica",
-        }
-        product_columns = [
-            (field, product_header_labels.get(field, field))
-            for field in self.IMPORT_CONFIG["productos"]["expected_headers"]
-        ]
-        claim_header_labels = {
-            "id_reclamo": "ID Reclamo",
-            "id_caso": "ID Caso",
-            "id_producto": "ID Producto",
-            "nombre_analitica": "Analítica",
-            "codigo_analitica": "Código analítica",
-        }
-        claim_columns = [
-            (field, claim_header_labels.get(field, field))
-            for field in self.IMPORT_CONFIG["reclamos"]["expected_headers"]
-        ]
-        risk_header_labels = {
-            "id_riesgo": "ID Riesgo",
-            "id_caso": "ID Caso",
-            "lider": "Líder",
-            "descripcion": "Descripción",
-            "criticidad": "Criticidad",
-            "exposicion_residual": "Exposición residual",
-            "planes_accion": "Planes de acción",
-        }
-        risk_columns = [
-            (field, risk_header_labels.get(field, field))
-            for field in self.IMPORT_CONFIG["riesgos"]["expected_headers"]
-        ]
-        norm_header_labels = {
-            "id_norma": "ID Norma",
-            "id_caso": "ID Caso",
-            "descripcion": "Descripción",
-            "fecha_vigencia": "Vigencia",
-            "acapite_inciso": "Acápite/Inciso",
-            "detalle_norma": "Detalle de norma",
-        }
-        norm_columns = [
-            (field, norm_header_labels.get(field, field))
-            for field in self.IMPORT_CONFIG["normas"]["expected_headers"]
-        ]
-        config = [
-            (
-                "clientes",
-                "Clientes registrados",
-                [
-                    ("id", "ID"),
-                    ("nombres", "Nombres"),
-                    ("apellidos", "Apellidos"),
-                    ("tipo", "Tipo ID"),
-                    ("flag", "Flag"),
-                    ("telefonos", "Teléfonos"),
-                    ("correos", "Correos"),
-                    ("direcciones", "Direcciones"),
-                    ("accionado", "Accionado"),
-                ],
-            ),
-            (
-                "colaboradores",
-                "Colaboradores involucrados",
-                list(self.COLLABORATOR_SUMMARY_COLUMNS),
-            ),
-            (
-                "involucramientos",
-                "Asignaciones de involucrados",
-                [
-                    ("id_producto", "Producto"),
-                    ("tipo_involucrado", "Tipo"),
-                    ("id_colaborador", "Colaborador"),
-                    ("id_cliente_involucrado", "Cliente involucrado"),
-                    ("monto_asignado", "Monto asignado"),
-                ],
-            ),
-            (
-                "productos",
-                "Productos investigados",
-                product_columns,
-            ),
-            (
-                "riesgos",
-                "Riesgos registrados",
-                risk_columns,
-            ),
-            (
-                "reclamos",
-                "Reclamos asociados",
-                claim_columns,
-            ),
-            (
-                "normas",
-                "Normas transgredidas",
-                norm_columns,
-            ),
-        ]
+        config = self.build_summary_table_config()
 
         self.summary_tables.clear()
         self.summary_config = {key: columns for key, _, columns in config}
@@ -8716,6 +8830,8 @@ class FraudCaseApp:
         allowed_counts = expected_columns
         if key == "productos":
             allowed_counts = {expected_columns, expected_columns - 3}
+        if key == "clientes":
+            allowed_counts = {expected_columns, 7}
         if key == "involucramientos":
             allowed_counts = {expected_columns, 3}
         try:
@@ -8804,21 +8920,48 @@ class FraudCaseApp:
     def _transform_clipboard_clients(self, rows):
         sanitized = []
         for idx, values in enumerate(rows, start=1):
-            client_data = {
-                "id_cliente": values[0].strip(),
-                "tipo_id": values[1].strip(),
-                "flag": values[2].strip(),
-                "telefonos": values[3].strip(),
-                "correos": values[4].strip(),
-                "direcciones": values[5].strip(),
-                "accionado": values[6].strip(),
-            }
+            is_legacy = len(values) == 7
+            if is_legacy:
+                client_data = {
+                    "id_cliente": values[0].strip(),
+                    "nombres": "",
+                    "apellidos": "",
+                    "tipo_id": values[1].strip(),
+                    "flag": values[2].strip(),
+                    "telefonos": values[3].strip(),
+                    "correos": values[4].strip(),
+                    "direcciones": values[5].strip(),
+                    "accionado": values[6].strip(),
+                }
+            else:
+                client_data = {
+                    "id_cliente": values[0].strip(),
+                    "nombres": values[1].strip(),
+                    "apellidos": values[2].strip(),
+                    "tipo_id": values[3].strip(),
+                    "flag": values[4].strip(),
+                    "telefonos": values[5].strip(),
+                    "correos": values[6].strip(),
+                    "direcciones": values[7].strip(),
+                    "accionado": values[8].strip(),
+                }
             tipo_id = client_data["tipo_id"]
             if tipo_id and tipo_id not in TIPO_ID_LIST:
                 raise ValueError(
                     f"Cliente fila {idx}: el tipo de ID '{tipo_id}' no está en el catálogo CM."
                     " Corrige la hoja de Excel antes de volver a intentarlo."
                 )
+            if not is_legacy:
+                nombres_message = validate_required_text(
+                    client_data["nombres"], "los nombres del cliente"
+                )
+                if nombres_message:
+                    raise ValueError(f"Cliente fila {idx}: {nombres_message}")
+                apellidos_message = validate_required_text(
+                    client_data["apellidos"], "los apellidos del cliente"
+                )
+                if apellidos_message:
+                    raise ValueError(f"Cliente fila {idx}: {apellidos_message}")
             flag_value = client_data["flag"]
             if flag_value and flag_value not in FLAG_CLIENTE_LIST:
                 raise ValueError(
@@ -8847,6 +8990,8 @@ class FraudCaseApp:
             sanitized.append(
                 (
                     client_data["id_cliente"],
+                    client_data["nombres"],
+                    client_data["apellidos"],
                     client_data["tipo_id"],
                     client_data["flag"],
                     client_data["telefonos"],
@@ -15131,76 +15276,50 @@ class FraudCaseApp:
         write_csv(
             'casos.csv',
             [data['caso']],
-            [
-                'id_caso',
-                'tipo_informe',
-                'categoria1',
-                'categoria2',
-                'modalidad',
-                'canal',
-                'proceso',
-                'fecha_de_ocurrencia',
-                'fecha_de_descubrimiento',
-                'centro_costos',
-                'matricula_investigador',
-                'investigador_nombre',
-                'investigador_cargo',
-            ],
+            EXPORT_HEADERS["casos.csv"],
         )
         write_csv('llave_tecnica.csv', llave_rows, llave_header, historical_name='llave_tecnica')
         write_csv('eventos.csv', event_rows, event_header, historical_name='eventos')
         write_csv(
             'clientes.csv',
             data['clientes'],
-            [
-                'id_cliente',
-                'id_caso',
-                'nombres',
-                'apellidos',
-                'tipo_id',
-                'flag',
-                'telefonos',
-                'correos',
-                'direcciones',
-                'accionado',
-            ],
+            EXPORT_HEADERS["clientes.csv"],
             historical_name='clientes',
         )
         write_csv(
             'colaboradores.csv',
             data['colaboradores'],
-            [
-                'id_colaborador',
-                'id_caso',
-                'flag',
-                'nombres',
-                'apellidos',
-                'division',
-                'area',
-                'servicio',
-                'puesto',
-                'fecha_carta_inmediatez',
-                'fecha_carta_renuncia',
-                'nombre_agencia',
-                'codigo_agencia',
-                'tipo_falta',
-                'tipo_sancion',
-            ],
+            EXPORT_HEADERS["colaboradores.csv"],
             historical_name='colaboradores',
         )
-        write_csv('productos.csv', data['productos'], ['id_producto', 'id_caso', 'id_cliente', 'categoria1', 'categoria2', 'modalidad', 'canal', 'proceso', 'fecha_ocurrencia', 'fecha_descubrimiento', 'monto_investigado', 'tipo_moneda', 'monto_perdida_fraude', 'monto_falla_procesos', 'monto_contingencia', 'monto_recuperado', 'monto_pago_deuda', 'tipo_producto'], historical_name='productos')
-        write_csv('producto_reclamo.csv', data['reclamos'], ['id_reclamo', 'id_caso', 'id_producto', 'nombre_analitica', 'codigo_analitica'], historical_name='producto_reclamo')
+        write_csv(
+            'productos.csv',
+            data['productos'],
+            EXPORT_HEADERS["productos.csv"],
+            historical_name='productos',
+        )
+        write_csv(
+            'producto_reclamo.csv',
+            data['reclamos'],
+            EXPORT_HEADERS["producto_reclamo.csv"],
+            historical_name='producto_reclamo',
+        )
         write_csv(
             'involucramiento.csv',
             data['involucramientos'],
-            ['id_producto', 'id_caso', 'tipo_involucrado', 'id_colaborador', 'id_cliente_involucrado', 'monto_asignado'],
+            EXPORT_HEADERS["involucramiento.csv"],
             historical_name='involucramiento',
         )
-        write_csv('detalles_riesgo.csv', data['riesgos'], ['id_riesgo', 'id_caso', 'lider', 'descripcion', 'criticidad', 'exposicion_residual', 'planes_accion'], historical_name='detalles_riesgo')
+        write_csv(
+            'detalles_riesgo.csv',
+            data['riesgos'],
+            EXPORT_HEADERS["detalles_riesgo.csv"],
+            historical_name='detalles_riesgo',
+        )
         write_csv(
             'detalles_norma.csv',
             data['normas'],
-            ['id_norma', 'id_caso', 'descripcion', 'fecha_vigencia', 'acapite_inciso', 'detalle_norma'],
+            EXPORT_HEADERS["detalles_norma.csv"],
             historical_name='detalles_norma',
         )
         analysis_texts = self._normalize_analysis_texts(data['analisis'])
@@ -15214,17 +15333,7 @@ class FraudCaseApp:
         write_csv(
             'analisis.csv',
             [analysis_row],
-            [
-                'id_caso',
-                'antecedentes',
-                'modus_operandi',
-                'hallazgos',
-                'descargos',
-                'conclusiones',
-                'recomendaciones',
-                'comentario_breve',
-                'comentario_amplio',
-            ],
+            EXPORT_HEADERS["analisis.csv"],
             historical_name='analisis',
         )
         if self.logs:
