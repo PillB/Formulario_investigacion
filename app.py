@@ -10333,6 +10333,8 @@ class FraudCaseApp:
             "fecha_carta_renuncia": ("colaborador_fecha_carta_renuncia",),
             "flag_colaborador": ("colaborador_flag",),
         }
+        for target_key in team_mapping:
+            normalized[target_key] = ""
         self._apply_eventos_aliases(normalized, team_mapping, overwrite=True)
         if not self._has_meaningful_value(normalized.get("apellidos")):
             paternal = normalized.get("apellido_paterno_involucrado")
@@ -10687,9 +10689,23 @@ class FraudCaseApp:
                         detail_payload=collab_involvement_payload,
                     )
                 for collaborator, amount_text in parse_involvement_entries(raw_row.get('involucramiento', '')):
-                    _append_involvement_entry("colaborador", collaborator, "", amount_text, requires_amount=True)
+                    _append_involvement_entry(
+                        "colaborador",
+                        collaborator,
+                        "",
+                        amount_text,
+                        requires_amount=True,
+                        detail_payload=collab_involvement_payload,
+                    )
                 if not involvement_map and collaborator_id and raw_row.get('monto_asignado'):
-                    _append_involvement_entry("colaborador", collaborator_id, "", raw_row.get('monto_asignado', ''), requires_amount=True)
+                    _append_involvement_entry(
+                        "colaborador",
+                        collaborator_id,
+                        "",
+                        raw_row.get('monto_asignado', ''),
+                        requires_amount=True,
+                        detail_payload=collab_involvement_payload,
+                    )
                 if product_id:
                     client_flag = raw_row.get("flag") or raw_row.get("flag_cliente", "")
                     if key_client_id and _is_involucrado(client_flag):
@@ -12477,8 +12493,8 @@ class FraudCaseApp:
                             if skip_duplicate and not amount_value:
                                 continue
                             client_details, client_found = self._hydrate_row_from_details({'id_cliente': client_id}, 'id_cliente', CLIENT_ID_ALIASES)
-                            merged_payload = _merge_detail_payload(client_details, detail_payload)
-                            self._ensure_client_exists(client_id, merged_payload or client_details)
+                            merged_payload = _merge_detail_payload(detail_payload, client_details)
+                            self._ensure_client_exists(client_id, merged_payload)
                             if not client_found and 'id_cliente' in self.detail_catalogs:
                                 missing_clients.append(client_id)
                             inv_row = next(
@@ -12513,8 +12529,8 @@ class FraudCaseApp:
                             if skip_duplicate and not amount_value:
                                 continue
                             collab_details, collab_found = self._hydrate_row_from_details({'id_colaborador': collab_id}, 'id_colaborador', TEAM_ID_ALIASES)
-                            merged_payload = _merge_detail_payload(collab_details, detail_payload)
-                            _, created_team = self._ensure_team_member_exists(collab_id, merged_payload or collab_details)
+                            merged_payload = _merge_detail_payload(detail_payload, collab_details)
+                            _, created_team = self._ensure_team_member_exists(collab_id, merged_payload)
                             if created_team:
                                 created_records += 1
                                 changes_detected = True
