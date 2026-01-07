@@ -248,6 +248,7 @@ class WidgetRecord:
     control_kind: str
     state: str | None
     sticky: str | None
+    tooltip: str | None
     section_path: tuple[str, ...]
     x: int
     y: int
@@ -372,7 +373,11 @@ def _measure_widget(widget, origin_x: int, origin_y: int) -> tuple[int, int, int
 
 
 def _iter_widget_records(
-    root_widget, origin_x: int, origin_y: int, section_stack: tuple[str, ...]
+    root_widget,
+    origin_x: int,
+    origin_y: int,
+    section_stack: tuple[str, ...],
+    tooltip_map: Mapping[object, str],
 ) -> Iterator[WidgetRecord]:
     for child in root_widget.winfo_children():
         try:
@@ -385,7 +390,7 @@ def _iter_widget_records(
         if isinstance(child, (ttk.LabelFrame, tk.LabelFrame)):
             text = _widget_text(child)
             next_stack = (*section_stack, text) if text else section_stack
-            yield from _iter_widget_records(child, origin_x, origin_y, next_stack)
+            yield from _iter_widget_records(child, origin_x, origin_y, next_stack, tooltip_map)
             continue
 
         text = _widget_text(child) or _infer_label_for_widget(child)
@@ -407,7 +412,7 @@ def _iter_widget_records(
             ),
         )
         if not is_relevant:
-            yield from _iter_widget_records(child, origin_x, origin_y, section_stack)
+            yield from _iter_widget_records(child, origin_x, origin_y, section_stack, tooltip_map)
             continue
 
         x, y, width, height = _measure_widget(child, origin_x, origin_y)
@@ -421,6 +426,7 @@ def _iter_widget_records(
             control_kind=_control_kind(child, text),
             state=_resolve_state(child),
             sticky=grid_info.get("sticky"),
+            tooltip=tooltip_map.get(child),
             section_path=section_stack,
             x=x,
             y=y,
@@ -432,7 +438,7 @@ def _iter_widget_records(
             grid_colspan=int(grid_info.get("columnspan", 1)) if grid_info else None,
         )
         yield record
-        yield from _iter_widget_records(child, origin_x, origin_y, section_stack)
+        yield from _iter_widget_records(child, origin_x, origin_y, section_stack, tooltip_map)
 
 
 def _normalize_to_cells(record: WidgetRecord, *, row_offset: int) -> tuple[int, int, int, int]:
@@ -478,6 +484,8 @@ def _place_records(sheet, records: Iterable[WidgetRecord], *, row_offset: int) -
         comment_lines.append(
             f"Grid(row={record.grid_row}, col={record.grid_column}, rowspan={record.grid_rowspan}, colspan={record.grid_colspan}, sticky={record.sticky})"
         )
+        if record.tooltip:
+            comment_lines.append(f"Descripción: {record.tooltip}")
         normalized_label = _normalize_label(record.label)
         validation = COMMENTARY_VALIDATIONS.get(normalized_label)
         if validation and record.widget_type in {"ScrolledText", "Text"}:
@@ -728,6 +736,12 @@ def _add_validation_sheet(workbook) -> None:
             "auto_redaccion",
             COMMENTARY_VALIDATIONS["comentario amplio"]["auto_redaccion"],
         ),
+        (
+            "Caso y participantes",
+            "ID Proceso",
+            "validate_process_id",
+            "Formato BPID-XXXXXX o BPID-RNF-XXXXXX.",
+        ),
     ]
     for row_idx, row in enumerate(rows, start=2):
         for col_idx, value in enumerate(row, start=1):
@@ -754,8 +768,20 @@ def _build_app() -> FraudCaseApp:
     return FraudCaseApp(root)
 
 
+def _build_tooltip_map(app: FraudCaseApp) -> dict[object, str]:
+    tooltip_map: dict[object, str] = {}
+    for tip in getattr(app, "_hover_tooltips", []) or []:
+        widget = getattr(tip, "widget", None)
+        text = getattr(tip, "text", None)
+        if widget is None or not text:
+            continue
+        tooltip_map[widget] = str(text)
+    return tooltip_map
+
+
 def _collect_tab_records(app: FraudCaseApp) -> dict[str, list[WidgetRecord]]:
     records: dict[str, list[WidgetRecord]] = {}
+    tooltip_map = _build_tooltip_map(app)
     for tab_id in app.notebook.tabs():
         title = app.notebook.tab(tab_id, "text")
         tab_widget = app.notebook.nametowidget(tab_id)
@@ -765,7 +791,9 @@ def _collect_tab_records(app: FraudCaseApp) -> dict[str, list[WidgetRecord]]:
             pass
         app.root.update_idletasks()
         origin_x, origin_y = tab_widget.winfo_rootx(), tab_widget.winfo_rooty()
-        tab_records = list(_iter_widget_records(tab_widget, origin_x, origin_y, (title,)))
+        tab_records = list(
+            _iter_widget_records(tab_widget, origin_x, origin_y, (title,), tooltip_map)
+        )
         records[title] = tab_records
     return records
 
