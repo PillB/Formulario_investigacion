@@ -3,6 +3,7 @@ import csv
 import settings
 from app import _sanitize_csv_value
 from report_builder import CaseData, build_event_rows
+from tests.app_factory import build_import_app
 
 
 def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
@@ -154,3 +155,44 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
     assert parsed[0]["id_colaborador"] == "'=COL1"
     assert parsed[0]["cliente_telefonos"] == "'=999"
     assert parsed[-1]["id_colaborador"] == settings.EVENTOS_PLACEHOLDER
+
+
+def test_event_round_trip_prefers_case_dates_over_product_dates(monkeypatch):
+    case_data = CaseData.from_mapping(
+        {
+            "caso": {
+                "id_caso": "2024-2001",
+                "fecha_de_ocurrencia": "2024-01-01",
+                "fecha_de_descubrimiento": "2024-01-03",
+            },
+            "productos": [
+                {
+                    "id_producto": "P-CASE",
+                    "id_cliente": "CL-CASE",
+                    "fecha_ocurrencia": "2024-02-01",
+                    "fecha_descubrimiento": "2024-02-02",
+                }
+            ],
+            "clientes": [],
+            "colaboradores": [],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {},
+            "encabezado": {},
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+
+    rows, _header = build_event_rows(case_data)
+    app = build_import_app(monkeypatch)
+    normalized = app._normalize_eventos_row(rows[0], "canonical")
+
+    app._apply_eventos_case_row(normalized)
+
+    assert app.fecha_caso_var.get() == "2024-01-01"
+    assert app.fecha_descubrimiento_caso_var.get() == "2024-01-03"
