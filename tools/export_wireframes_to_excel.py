@@ -35,8 +35,11 @@ from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter, range_boundaries
 
-from app import FraudCaseApp
-from models.catalogs import iter_massive_csv_rows
+from app import (
+    COMENTARIO_AMPLIO_MAX_CHARS,
+    COMENTARIO_BREVE_MAX_CHARS,
+    FraudCaseApp,
+)
 from report_builder import build_event_rows, build_llave_tecnica_rows, build_report_filename
 from validators import LOG_FIELDNAMES, normalize_log_row
 from validation_badge.validation_badge import (
@@ -71,6 +74,8 @@ ANALYSIS_HEADERS: Sequence[str] = (
     "descargos",
     "conclusiones",
     "recomendaciones",
+    "comentario_breve",
+    "comentario_amplio",
 )
 
 EXPORT_HEADER_MAP: Sequence[tuple[str, Sequence[str] | None]] = (
@@ -216,6 +221,25 @@ EMPTY_CASE_DATA: Mapping[str, object] = {
     "colaboradores": [],
 }
 
+COMMENTARY_VALIDATIONS: Mapping[str, Mapping[str, object]] = {
+    "comentario breve": {
+        "max_chars": COMENTARIO_BREVE_MAX_CHARS,
+        "allow_newlines": False,
+        "auto_redaccion": (
+            "Auto-redactar: resumen automático sin PII y sin saltos de línea "
+            "(max_new_tokens=72)."
+        ),
+    },
+    "comentario amplio": {
+        "max_chars": COMENTARIO_AMPLIO_MAX_CHARS,
+        "allow_newlines": False,
+        "auto_redaccion": (
+            "Auto-redactar: resumen automático sin PII y sin saltos de línea "
+            "(max_new_tokens=320)."
+        ),
+    },
+}
+
 
 @dataclass
 class WidgetRecord:
@@ -241,6 +265,10 @@ def _safe_grid_info(widget) -> dict:
         return info or {}
     except Exception:
         return {}
+
+
+def _normalize_label(label: str) -> str:
+    return label.strip().rstrip(":").lower()
 
 
 def _widget_text(widget) -> str:
@@ -450,6 +478,16 @@ def _place_records(sheet, records: Iterable[WidgetRecord], *, row_offset: int) -
         comment_lines.append(
             f"Grid(row={record.grid_row}, col={record.grid_column}, rowspan={record.grid_rowspan}, colspan={record.grid_colspan}, sticky={record.sticky})"
         )
+        normalized_label = _normalize_label(record.label)
+        validation = COMMENTARY_VALIDATIONS.get(normalized_label)
+        if validation and record.widget_type in {"ScrolledText", "Text"}:
+            comment_lines.append(
+                "Validaciones: max_chars="
+                f"{validation['max_chars']}, allow_newlines={validation['allow_newlines']}"
+            )
+            auto_note = validation.get("auto_redaccion")
+            if auto_note:
+                comment_lines.append(f"Acción: {auto_note}")
         cell.comment = Comment("\n".join(comment_lines), "wireframe")
         if row_span > 1 or col_span > 1:
             target = f"{get_column_letter(col)}{row}:{get_column_letter(col + col_span - 1)}{row + row_span - 1}"
@@ -648,11 +686,60 @@ def _add_logs_sheet(workbook) -> None:
     )
 
 
+def _add_validation_sheet(workbook) -> None:
+    sheet = workbook.create_sheet(title="VALIDACIONES")
+    headers = ("Hoja", "Campo", "Validador", "Regla")
+    for idx, header in enumerate(headers, start=1):
+        sheet.cell(row=1, column=idx, value=header).font = Font(bold=True)
+    rows = [
+        (
+            "Análisis y narrativas",
+            "Comentario breve",
+            "max_chars",
+            str(COMENTARIO_BREVE_MAX_CHARS),
+        ),
+        (
+            "Análisis y narrativas",
+            "Comentario breve",
+            "allow_newlines",
+            "False (sin saltos de línea)",
+        ),
+        (
+            "Análisis y narrativas",
+            "Comentario breve",
+            "auto_redaccion",
+            COMMENTARY_VALIDATIONS["comentario breve"]["auto_redaccion"],
+        ),
+        (
+            "Análisis y narrativas",
+            "Comentario amplio",
+            "max_chars",
+            str(COMENTARIO_AMPLIO_MAX_CHARS),
+        ),
+        (
+            "Análisis y narrativas",
+            "Comentario amplio",
+            "allow_newlines",
+            "False (sin saltos de línea)",
+        ),
+        (
+            "Análisis y narrativas",
+            "Comentario amplio",
+            "auto_redaccion",
+            COMMENTARY_VALIDATIONS["comentario amplio"]["auto_redaccion"],
+        ),
+    ]
+    for row_idx, row in enumerate(rows, start=2):
+        for col_idx, value in enumerate(row, start=1):
+            sheet.cell(row=row_idx, column=col_idx, value=value)
+
+
 def _add_supporting_sheets(workbook, base_dir: Path | None = None) -> None:
     base = base_dir or REPO_ROOT
     _add_docx_md_sheet(workbook)
     _add_csv_exports_sheet(workbook, base)
     _add_logs_sheet(workbook)
+    _add_validation_sheet(workbook)
 
 
 def _build_app() -> FraudCaseApp:
