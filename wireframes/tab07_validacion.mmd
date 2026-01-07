@@ -1,0 +1,18 @@
+flowchart TB
+    panel["Panel de validación (lateral)"]
+    header["Encabezado\nTítulo + contador de issues + botón colapsar/expandir"]
+    table["Tabla de validaciones\nColumnas: Estado, Detalle, Origen"]
+    action["Botón: Corregir ahora\nNavega al campo seleccionado"]
+    collapsed["Modo colapsado\nBadge con contador + botón expandir"]
+
+    panel --> header
+    panel --> table
+    panel --> action
+    panel --> collapsed
+
+    subgraph estado["Severidad"]
+        ok["✅ OK"]
+        warn["⚠️ Advertencia/Error"]
+    end
+
+    table --> estado
