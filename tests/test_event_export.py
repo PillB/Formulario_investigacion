@@ -1,9 +1,11 @@
 import csv
+from collections import defaultdict
 
 import settings
 from app import _sanitize_csv_value
 from report_builder import CaseData, build_event_rows
 from tests.app_factory import build_import_app
+from tests.stubs import RichTextWidgetStub
 
 
 def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
@@ -196,3 +198,53 @@ def test_event_round_trip_prefers_case_dates_over_product_dates(monkeypatch):
 
     assert app.fecha_caso_var.get() == "2024-01-01"
     assert app.fecha_descubrimiento_caso_var.get() == "2024-01-03"
+
+
+def test_event_round_trip_restores_investigator_and_comments(monkeypatch):
+    case_data = CaseData.from_mapping(
+        {
+            "caso": {
+                "id_caso": "2024-3001",
+                "matricula_investigador": "T12345",
+                "investigador_nombre": "Investigador Uno",
+                "investigador_cargo": "Analista",
+            },
+            "clientes": [],
+            "colaboradores": [],
+            "productos": [
+                {
+                    "id_producto": "P-01",
+                    "id_cliente": "CL-01",
+                }
+            ],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {
+                "comentario_breve": {"text": "Breve desde eventos"},
+                "comentario_amplio": {"text": "Amplio desde eventos"},
+            },
+            "encabezado": {},
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+
+    rows, _header = build_event_rows(case_data)
+    app = build_import_app(monkeypatch)
+    app.comentario_breve_text = RichTextWidgetStub()
+    app.comentario_amplio_text = RichTextWidgetStub()
+    app._rich_text_images = defaultdict(list)
+    app._rich_text_image_sources = {}
+    normalized = app._normalize_eventos_row(rows[0], "canonical")
+
+    app._apply_eventos_case_row(normalized)
+
+    assert app.investigator_id_var.get() == "T12345"
+    assert app.investigator_nombre_var.get() == "Investigador Uno"
+    assert app.investigator_cargo_var.get() == "Analista"
+    assert app.comentario_breve_text.text == "Breve desde eventos"
+    assert app.comentario_amplio_text.text == "Amplio desde eventos"
