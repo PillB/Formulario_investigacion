@@ -353,6 +353,91 @@ def test_import_combined_hydrates_and_reports_missing_ids(monkeypatch, messagebo
     assert set(reported.get('colaboradores', [])) == {'T11111', 'T99999'}
 
 
+def test_import_combined_round_trip_restores_involved_details(monkeypatch, messagebox_spy):
+    app = build_import_app(monkeypatch)
+    rows = [
+        {
+            'id_cliente': 'CLI-BASE',
+            'tipo_id': TIPO_ID_LIST[0],
+            'flag_cliente': FLAG_CLIENTE_LIST[0],
+            'id_producto': 'PRD-RT',
+            'tipo_producto': 'Crédito personal',
+            'monto_investigado': '100.00',
+            'tipo_involucrado': 'cliente',
+            'id_cliente_involucrado': 'CLI-INV',
+            'nombres_cliente_involucrado': 'Ana',
+            'apellidos_cliente_involucrado': 'Pérez',
+            'tipo_id_cliente_involucrado': TIPO_ID_LIST[0],
+            'flag_cliente_involucrado': FLAG_CLIENTE_LIST[0],
+            'telefonos_cliente_relacionado': '999888777',
+            'correos_cliente_relacionado': 'ana@example.com',
+            'direcciones_cliente_relacionado': 'Calle 123',
+            'accionado_cliente_relacionado': 'Fiscalía',
+            'monto_asignado': '50.00',
+        },
+        {
+            'id_cliente': 'CLI-BASE',
+            'tipo_id': TIPO_ID_LIST[0],
+            'flag_cliente': FLAG_CLIENTE_LIST[0],
+            'id_producto': 'PRD-RT',
+            'tipo_producto': 'Crédito personal',
+            'monto_investigado': '100.00',
+            'tipo_involucrado': 'colaborador',
+            'id_colaborador': 'T54321',
+            'nombres': 'Luis',
+            'apellidos': 'Gomez Diaz',
+            'division': 'Division X',
+            'area': 'Area Comercial',
+            'servicio': 'Ventas',
+            'puesto': 'Analista',
+            'nombre_agencia': 'Agencia Centro',
+            'codigo_agencia': '123456',
+            'tipo_sancion': TIPO_SANCION_LIST[0],
+            'monto_asignado': '25.00',
+        },
+    ]
+    monkeypatch.setattr(
+        app_module,
+        "iter_massive_csv_rows",
+        lambda _filename: iter(rows),
+    )
+
+    app.import_combined(filename="dummy.csv")
+
+    involved_client = app._find_client_frame('CLI-INV')
+    assert involved_client is not None
+    client_payload = involved_client.populated_rows[0]
+    assert client_payload['nombres'] == 'Ana'
+    assert client_payload['apellidos'] == 'Pérez'
+    assert client_payload['tipo_id'] == TIPO_ID_LIST[0]
+    assert client_payload['flag'] == FLAG_CLIENTE_LIST[0]
+    assert client_payload['telefonos'] == '999888777'
+    assert client_payload['correos'] == 'ana@example.com'
+    assert client_payload['direcciones'] == 'Calle 123'
+    assert client_payload['accionado'] == 'Fiscalía'
+
+    team_frame = app._find_team_frame('T54321')
+    assert team_frame is not None
+    assert team_frame.nombres_var.get() == 'Luis'
+    assert team_frame.apellidos_var.get() == 'Gomez Diaz'
+
+    product_frame = app._find_product_frame('PRD-RT')
+    assert product_frame is not None
+    client_involvements = {
+        inv.client_var.get()
+        for inv in product_frame.client_involvements
+        if inv.client_var.get()
+    }
+    team_involvements = {
+        inv.team_var.get()
+        for inv in product_frame.involvements
+        if inv.team_var.get()
+    }
+    assert client_involvements == {'CLI-BASE', 'CLI-INV'}
+    assert team_involvements == {'T54321'}
+    assert messagebox_spy.errors == []
+
+
 @pytest.mark.parametrize(
     "row_overrides,expected_fragment",
     [
