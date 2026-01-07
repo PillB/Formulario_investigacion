@@ -8927,34 +8927,43 @@ class FraudCaseApp:
             raise ValueError("Esta tabla no admite pegado desde portapapeles.")
         return handler(rows)
 
+    def _normalize_client_row_values(self, values, idx=None):
+        field_order = list(self.IMPORT_CONFIG["clientes"]["expected_headers"])
+        legacy_fields = (
+            "id_cliente",
+            "tipo_id",
+            "flag",
+            "telefonos",
+            "correos",
+            "direcciones",
+            "accionado",
+        )
+        if len(values) == len(field_order):
+            client_data = {
+                field: (values[pos] or "").strip()
+                for pos, field in enumerate(field_order)
+            }
+            is_legacy = False
+        elif len(values) == len(legacy_fields):
+            client_data = {
+                field: (values[pos] or "").strip()
+                for pos, field in enumerate(legacy_fields)
+            }
+            client_data["nombres"] = ""
+            client_data["apellidos"] = ""
+            is_legacy = True
+        else:
+            row_label = f" fila {idx}" if idx is not None else ""
+            expected = f"{len(field_order)} o {len(legacy_fields)}"
+            raise ValueError(
+                f"Cliente{row_label}: se esperaban {expected} columnas y se recibieron {len(values)}."
+            )
+        return client_data, is_legacy, field_order
+
     def _transform_clipboard_clients(self, rows):
         sanitized = []
         for idx, values in enumerate(rows, start=1):
-            is_legacy = len(values) == 7
-            if is_legacy:
-                client_data = {
-                    "id_cliente": values[0].strip(),
-                    "nombres": "",
-                    "apellidos": "",
-                    "tipo_id": values[1].strip(),
-                    "flag": values[2].strip(),
-                    "telefonos": values[3].strip(),
-                    "correos": values[4].strip(),
-                    "direcciones": values[5].strip(),
-                    "accionado": values[6].strip(),
-                }
-            else:
-                client_data = {
-                    "id_cliente": values[0].strip(),
-                    "nombres": values[1].strip(),
-                    "apellidos": values[2].strip(),
-                    "tipo_id": values[3].strip(),
-                    "flag": values[4].strip(),
-                    "telefonos": values[5].strip(),
-                    "correos": values[6].strip(),
-                    "direcciones": values[7].strip(),
-                    "accionado": values[8].strip(),
-                }
+            client_data, is_legacy, field_order = self._normalize_client_row_values(values, idx)
             tipo_id = client_data["tipo_id"]
             if tipo_id and tipo_id not in TIPO_ID_LIST:
                 raise ValueError(
@@ -8998,17 +9007,7 @@ class FraudCaseApp:
             if email_message:
                 raise ValueError(f"Cliente fila {idx}: {email_message}")
             sanitized.append(
-                (
-                    client_data["id_cliente"],
-                    client_data["nombres"],
-                    client_data["apellidos"],
-                    client_data["tipo_id"],
-                    client_data["flag"],
-                    client_data["telefonos"],
-                    client_data["correos"],
-                    client_data["direcciones"],
-                    client_data["accionado"],
-                )
+                tuple(client_data.get(field, "") for field in field_order)
             )
         return sanitized
 
@@ -9444,15 +9443,8 @@ class FraudCaseApp:
         missing_ids = []
         if section_key == "clientes":
             for idx, values in enumerate(rows, start=1):
-                payload = {
-                    "id_cliente": (values[0] or "").strip(),
-                    "tipo_id": (values[1] or "").strip(),
-                    "flag": (values[2] or "").strip(),
-                    "telefonos": (values[3] or "").strip(),
-                    "correos": (values[4] or "").strip(),
-                    "direcciones": (values[5] or "").strip(),
-                    "accionado": (values[6] or "").strip(),
-                }
+                client_data, _is_legacy, field_order = self._normalize_client_row_values(values, idx)
+                payload = {field: client_data.get(field, "") for field in field_order}
                 hydrated, found = self._hydrate_row_from_details(payload, 'id_cliente', CLIENT_ID_ALIASES)
                 client_id = (hydrated.get('id_cliente') or '').strip()
                 if not client_id:
