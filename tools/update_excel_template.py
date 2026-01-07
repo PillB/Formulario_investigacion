@@ -9,6 +9,7 @@ from typing import Iterable, Sequence
 from openpyxl import load_workbook
 
 from app import EXPORT_HEADERS, FraudCaseApp
+from settings import EXTERNAL_DRIVE_DIR, EXTERNAL_LOGS_FILE
 
 NORMAS_COLUMNS: Sequence[str] = tuple(EXPORT_HEADERS["detalles_norma.csv"])
 
@@ -616,6 +617,83 @@ PANEL_VALIDATION_ROWS: Sequence[tuple[str, str, str, str, str]] = (
     ),
 )
 
+EXTERNAL_DRIVE_HEADERS: Sequence[str] = ("Ubicación", "Archivo/Patrón", "Reglas de copia")
+EXTERNAL_DRIVE_ROWS: Sequence[tuple[str, str, str]] = (
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}",
+        Path(EXTERNAL_LOGS_FILE).name,
+        (
+            "Se escribe al vaciar la cola de logs si la unidad externa está disponible. "
+            "app._flush_log_queue_to_disk usa _resolve_external_log_target para anexar."
+        ),
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        (
+            "<prefijo>_casos.csv, _clientes.csv, _colaboradores.csv, _productos.csv, "
+            "_producto_reclamo.csv, _involucramiento.csv, _detalles_riesgo.csv, "
+            "_detalles_norma.csv, _llave_tecnica.csv, _eventos.csv, _analisis.csv, _logs.csv"
+        ),
+        (
+            "Se copian al usar Guardar y enviar. _perform_save_exports construye los CSV y "
+            "_mirror_exports_to_external_drive los duplica (se omite autosave.json)."
+        ),
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        "<prefijo>_version.json",
+        "Se copia junto con los CSV al usar Guardar y enviar.",
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        "<nombre_informe>.md",
+        (
+            "Se duplica al exportar Guardar y enviar (save_md) y al usar Generar informe Markdown."
+        ),
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        "<nombre_informe>.docx",
+        (
+            "Se duplica al exportar Guardar y enviar y al usar Generar informe Word, "
+            "solo si python-docx está disponible."
+        ),
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        "<nombre_informe>.pptx",
+        (
+            "Se duplica al usar Generar alerta temprana (PPTX), "
+            "solo si python-pptx está disponible."
+        ),
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        "architecture.mmd",
+        "Se copia junto con las exportaciones cuando se actualiza el diagrama.",
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        "h_<tabla>.csv",
+        (
+            "Se copia junto con las exportaciones; si falla la copia o no hay unidad externa, "
+            "se registra en pending_consolidation.txt para reintento en el siguiente inicio."
+        ),
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        "<id_caso>_temp_<YYYYMMDD_HHMMSS>.json",
+        (
+            "Se escribe al guardar versiones temporales (save_temp_version) cuando hay unidad externa."
+        ),
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}",
+        "h_cartas_inmediatez.csv",
+        "Se actualiza al generar cartas de inmediatez si la unidad externa está disponible.",
+    ),
+)
+
 SHEET_HEADERS: dict[str, Sequence[str]] = {
     "CASOS": EXPORT_HEADERS["casos.csv"],
     "CLIENTES": EXPORT_HEADERS["clientes.csv"],
@@ -684,6 +762,15 @@ def _update_validation_panel_sheet(workbook) -> None:
     _rewrite_rows(sheet, PANEL_VALIDATION_ROWS)
 
 
+def _update_external_drive_sheet(workbook) -> None:
+    if "Logs/External Drive" in workbook.sheetnames:
+        sheet = workbook["Logs/External Drive"]
+    else:
+        sheet = workbook.create_sheet(title="Logs/External Drive")
+    _set_header_row(sheet, EXTERNAL_DRIVE_HEADERS)
+    _rewrite_rows(sheet, EXTERNAL_DRIVE_ROWS)
+
+
 def _update_summary_sheet(workbook) -> None:
     summary_config = FraudCaseApp.build_summary_table_config()
     if "RESUMEN" in workbook.sheetnames:
@@ -714,6 +801,7 @@ def update_template(path: Path) -> None:
     _update_description_sheet(description_sheet)
     _update_validation_sheet(workbook, NORMAS_VALIDATIONS)
     _update_validation_panel_sheet(workbook)
+    _update_external_drive_sheet(workbook)
     _update_summary_sheet(workbook)
 
     workbook.save(path)
