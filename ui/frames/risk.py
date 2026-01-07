@@ -333,7 +333,7 @@ class RiskFrame:
             label_sticky="nsew",
         )
 
-        risk_id_label = ttk.Label(self.frame, text="ID riesgo (catálogo o nuevo):")
+        risk_id_label = ttk.Label(self.frame, text="ID riesgo (modo catálogo o nuevo):")
         id_row = ttk.Frame(self.frame)
         ensure_grid_support(id_row)
         if hasattr(id_row, "columnconfigure"):
@@ -357,13 +357,15 @@ class RiskFrame:
         self.tooltip_register(
             id_entry,
             (
-                "Selecciona un riesgo catalogado para autopoblar campos o marca "
-                "'Agregar riesgo nuevo' para capturar un ID libre sin buscar en el catálogo."
+                "Usa el modo catálogo (checkbox desactivado) para seleccionar un ID y "
+                "autopoblar campos desde el catálogo. Activa 'Agregar riesgo nuevo' "
+                "para registrar un ID libre sin búsqueda."
             ),
         )
         self.tooltip_register(
             toggle_btn,
-            "Activa para registrar un riesgo nuevo sin búsqueda de catálogo; desactiva para usar el catálogo.",
+            "Activa para registrar un riesgo nuevo sin búsqueda de catálogo; desactiva para "
+            "usar el catálogo y sugerencias.",
         )
         self._bind_identifier_triggers(id_entry)
         grid_labeled_widget(

@@ -6,7 +6,9 @@ flowchart TB
     tab --> add_btn
 
     subgraph risk_card["Acordeón Riesgo N"]
-        id_riesgo["ID riesgo [Entry]"]
+        id_row["Fila ID riesgo"]
+        id_riesgo["ID riesgo (modo catálogo o nuevo) [Entry]"]
+        new_risk_toggle["Check 'Agregar riesgo nuevo'"]
         criticidad["Criticidad [Combobox]"]
         lider["Líder [Entry]"]
         exposicion["Exposición residual (US$) [Entry]"]
@@ -15,3 +17,13 @@ flowchart TB
         remove_btn["Botón 'Eliminar riesgo'"]
     end
     tab --> risk_card
+    id_row --> id_riesgo
+    id_row --> new_risk_toggle
+
+    subgraph catalog_modal["Modal 'Sugerencias de riesgos' (RiskCatalogModal)"]
+        catalog_search["Filtro por ID/Descripción/Líder/Criticidad [Entry]"]
+        catalog_table["Tabla: ID, Descripción, Criticidad, Líder, Exposición"]
+        catalog_use["Botón 'Usar riesgo'"]
+        catalog_close["Botón 'Cerrar'"]
+    end
+    id_riesgo --> catalog_modal
