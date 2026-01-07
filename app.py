@@ -12220,6 +12220,17 @@ class FraudCaseApp:
                 return (row.get(primary_key) or "").strip()
             return (row.get(fallback_key) or "").strip()
 
+        def _resolve_eventos_value(key: str):
+            if key not in row:
+                return None
+            value = row.get(key)
+            if isinstance(value, str):
+                stripped = value.strip()
+                if stripped == EVENTOS_PLACEHOLDER:
+                    return ""
+                return stripped
+            return "" if value is None else value
+
         try:
             case_id = (row.get("id_caso") or "").strip()
             if self._has_meaningful_value(case_id):
@@ -12304,23 +12315,25 @@ class FraudCaseApp:
                 if desc_message:
                     raise ValueError(desc_message)
                 self.fecha_descubrimiento_caso_var.set(fecha_descubrimiento)
-            matricula_investigador = (row.get("matricula_investigador") or "").strip()
-            if self._has_meaningful_value(matricula_investigador):
-                self.investigator_id_var.set(self._normalize_identifier(matricula_investigador))
-            investigador_nombre = (row.get("investigador_nombre") or "").strip()
-            if self._has_meaningful_value(investigador_nombre):
+            matricula_investigador = _resolve_eventos_value("matricula_investigador")
+            if matricula_investigador is not None:
+                self.investigator_id_var.set(
+                    self._normalize_identifier(matricula_investigador)
+                )
+            investigador_nombre = _resolve_eventos_value("investigador_nombre")
+            if investigador_nombre is not None:
                 self.investigator_nombre_var.set(investigador_nombre)
-            investigador_cargo = (row.get("investigador_cargo") or "").strip()
-            if self._has_meaningful_value(investigador_cargo):
+            investigador_cargo = _resolve_eventos_value("investigador_cargo")
+            if investigador_cargo is not None:
                 self.investigator_cargo_var.set(investigador_cargo)
-            comentario_breve = row.get("comentario_breve")
-            if self._has_meaningful_value(comentario_breve):
+            comentario_breve = _resolve_eventos_value("comentario_breve")
+            if comentario_breve is not None:
                 self._set_rich_text_content(
                     getattr(self, "comentario_breve_text", None),
                     comentario_breve,
                 )
-            comentario_amplio = row.get("comentario_amplio")
-            if self._has_meaningful_value(comentario_amplio):
+            comentario_amplio = _resolve_eventos_value("comentario_amplio")
+            if comentario_amplio is not None:
                 self._set_rich_text_content(
                     getattr(self, "comentario_amplio_text", None),
                     comentario_amplio,
@@ -14249,6 +14262,8 @@ class FraudCaseApp:
         data = dataset.as_dict()
         self._ensure_case_vars()
         self._suppress_case_header_sync = True
+        previous_suppression = getattr(self, "_suppress_post_edit_validation", False)
+        self._suppress_post_edit_validation = True
         try:
             # Limpiar primero sin confirmar ni sobrescribir el autosave
             self._clear_case_state(save_autosave=False)
@@ -14379,7 +14394,7 @@ class FraudCaseApp:
                 refresh_amounts = getattr(
                     pframe, "_refresh_amount_validation_after_programmatic_update", None
                 )
-                if callable(refresh_amounts):
+                if callable(refresh_amounts) and not self._suppress_post_edit_validation:
                     refresh_amounts()
                 pframe.set_claims_from_data(claims_map.get(pframe.id_var.get().strip(), []))
                 if hasattr(pframe, "on_id_change"):
@@ -14472,9 +14487,11 @@ class FraudCaseApp:
             )
             self._sync_extended_sections_to_ui()
             self._rebuild_frame_id_indexes()
-            self._run_duplicate_check_post_load()
+            if not self._suppress_post_edit_validation:
+                self._run_duplicate_check_post_load()
             self._schedule_summary_refresh(data=data)
         finally:
+            self._suppress_post_edit_validation = previous_suppression
             self._suppress_case_header_sync = False
 
     # ---------------------------------------------------------------------
