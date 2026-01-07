@@ -6,6 +6,15 @@ flowchart LR
     note_eventos["Cada fila de `eventos.csv` representa la combinación Producto × Reclamo × Involucramiento del caso"]
     combinacion_eventos["Combinación Producto×Reclamo×Involucramiento (report_builder.build_event_rows)"]
 
+    %% Impacto en número de filas
+    subgraph impacto_filas[Multiplicación de filas en eventos.csv]
+        producto_uno["Producto (1)"]
+        reclamos_n["Reclamos (N)"]
+        involucramientos_n["Involucramientos (N)"]
+        filas_eventos["Filas en eventos.csv (1 × N × N)"]
+        producto_uno --> reclamos_n --> involucramientos_n --> filas_eventos
+    end
+
     %% Caso
     subgraph caso[Tab Caso]
         caso_id["Número de caso → case_id / id_caso"]
@@ -113,6 +122,8 @@ flowchart LR
     %% Exportación circular hacia eventos.csv
     note_eventos -.-> eventos
     combinacion_eventos -.-> eventos
+    combinacion_eventos -.-> filas_eventos
+    filas_eventos --> eventos
     caso_id --> eventos
     caso_tipo --> eventos
     caso_cat1 --> eventos
