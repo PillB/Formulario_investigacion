@@ -12137,8 +12137,12 @@ class FraudCaseApp:
         centro_costos = (row.get("centro_costos") or row.get("centro_costo") or "").strip()
         if centro_costos:
             self.centro_costo_caso_var.set(centro_costos)
-        fecha_ocurrencia = (row.get("fecha_ocurrencia") or "").strip()
-        fecha_descubrimiento = (row.get("fecha_descubrimiento") or "").strip()
+        fecha_ocurrencia = (
+            row.get("fecha_de_ocurrencia") or row.get("fecha_ocurrencia") or ""
+        ).strip()
+        fecha_descubrimiento = (
+            row.get("fecha_de_descubrimiento") or row.get("fecha_descubrimiento") or ""
+        ).strip()
         if fecha_ocurrencia:
             occ_message = validate_date_text(
                 fecha_ocurrencia,
