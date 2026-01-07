@@ -1,0 +1,337 @@
+%% Diagrama de flujo circular: formulario -> eventos.csv -> formulario
+flowchart LR
+    form[Formulario de investigación\n(Tabs y campos)]
+    eventos[(eventos.csv)]
+
+    %% Caso
+    subgraph caso[Tab Caso]
+        caso_id["Número de caso (AAAA-XXXX)"]
+        caso_tipo["Tipo de informe"]
+        caso_cat1["Categoría 1"]
+        caso_cat2["Categoría 2"]
+        caso_modalidad["Modalidad"]
+        caso_canal["Canal"]
+        caso_proc_id["ID de proceso"]
+        caso_proc_btn["Botón: Seleccionar proceso"]
+        caso_proceso["Proceso impactado"]
+        caso_costos["Centro de costos"]
+        caso_fecha_oc["Fecha de ocurrencia"]
+        caso_fecha_desc["Fecha de descubrimiento"]
+        caso_invest_id["Matrícula investigador"]
+        caso_invest_nombre["Investigador: nombre"]
+        caso_invest_puesto["Investigador: puesto"]
+    end
+
+    %% Clientes
+    subgraph clientes[Tab Clientes]
+        cliente_afectacion["Afectación interna (check)"]
+        cliente_tipo_id["Tipo de ID"]
+        cliente_id["ID del cliente"]
+        cliente_nombres["Nombres"]
+        cliente_apellidos["Apellidos"]
+        cliente_flag["Flag"]
+        cliente_accionado["Accionado (listbox múltiple)"]
+        cliente_tel["Teléfonos"]
+        cliente_correo["Correos"]
+        cliente_direccion["Direcciones"]
+        cliente_eliminar["Botón: Eliminar cliente"]
+    end
+
+    %% Colaboradores
+    subgraph colaboradores[Tab Colaboradores]
+        colab_id["ID colaborador"]
+        colab_nombres["Nombres"]
+        colab_apellidos["Apellidos"]
+        colab_flag["Flag"]
+        colab_division["División"]
+        colab_area["Área"]
+        colab_servicio["Servicio"]
+        colab_puesto["Puesto"]
+        colab_fecha_inm["Fecha carta inmediatez"]
+        colab_fecha_ren["Fecha carta renuncia"]
+        colab_agencia_nombre["Nombre agencia"]
+        colab_agencia_codigo["Código agencia"]
+        colab_tipo_falta["Tipo de falta"]
+        colab_tipo_sancion["Tipo de sanción"]
+        colab_eliminar["Botón: Eliminar colaborador"]
+    end
+
+    %% Productos
+    subgraph productos[Tab Productos]
+        prod_id["ID del producto"]
+        prod_cliente["Cliente (selector)"]
+        prod_cat1["Categoría 1"]
+        prod_cat2["Categoría 2"]
+        prod_modalidad["Modalidad"]
+        prod_canal["Canal"]
+        prod_proceso["Proceso"]
+        prod_tipo["Tipo de producto"]
+        prod_fecha_oc["Fecha de ocurrencia"]
+        prod_fecha_desc["Fecha de descubrimiento"]
+        prod_monto_inv["Monto investigado"]
+        prod_moneda["Moneda"]
+        prod_monto_perdida["Monto pérdida fraude"]
+        prod_monto_falla["Monto falla procesos"]
+        prod_monto_cont["Monto contingencia"]
+        prod_monto_rec["Monto recuperado"]
+        prod_monto_pago["Monto pago deuda"]
+        prod_add_reclamo["Botón: Añadir reclamo"]
+        prod_add_invol_colab["Botón: Añadir involucrado"]
+        prod_add_invol_cliente["Botón: Añadir cliente involucrado"]
+        prod_eliminar["Botón: Eliminar producto"]
+    end
+
+    %% Reclamos
+    subgraph reclamos[Sección Reclamos]
+        reclamo_id["ID reclamo"]
+        reclamo_codigo["Código analítica"]
+        reclamo_nombre["Nombre analítica"]
+        reclamo_eliminar["Botón: Eliminar reclamo"]
+    end
+
+    %% Involucramientos
+    subgraph involucramientos[Sección Involucramientos]
+        invol_colab["Colaborador involucrado"]
+        invol_cliente["Cliente involucrado"]
+        invol_monto["Monto asignado"]
+        invol_eliminar["Botón: Eliminar involucramiento"]
+    end
+
+    %% Análisis
+    subgraph analisis[Tab Análisis]
+        anal_antecedentes["Antecedentes"]
+        anal_modus["Modus operandi"]
+        anal_hallazgos["Hallazgos"]
+        anal_descargos["Descargos"]
+        anal_conclusiones["Conclusiones"]
+        anal_recomendaciones["Recomendaciones"]
+        anal_comentario_breve["Comentario breve"]
+        anal_comentario_amplio["Comentario amplio"]
+    end
+
+    %% Acciones
+    subgraph acciones[Tab Acciones]
+        acc_catalogos["Botón: Cargar catálogos"]
+        acc_sin_catalogos["Botón: Iniciar sin catálogos"]
+        acc_import_clientes["Botón: Cargar clientes"]
+        acc_import_colabs["Botón: Cargar colaboradores"]
+        acc_import_productos["Botón: Cargar productos"]
+        acc_import_combinado["Botón: Cargar combinado"]
+        acc_import_riesgos["Botón: Cargar riesgos"]
+        acc_import_normas["Botón: Cargar normas"]
+        acc_import_reclamos["Botón: Cargar reclamos"]
+        acc_guardar["Botón: Guardar ahora"]
+        acc_cargar["Botón: Cargar archivo"]
+        acc_autosave["Botón: Recuperar autosave"]
+        acc_historial["Botón: Historial de recuperación"]
+    end
+
+    %% Formulario agrupado
+    form --> caso
+    form --> clientes
+    form --> colaboradores
+    form --> productos
+    form --> reclamos
+    form --> involucramientos
+    form --> analisis
+    form --> acciones
+
+    %% Exportación circular hacia eventos.csv
+    caso_id --> eventos
+    caso_tipo --> eventos
+    caso_cat1 --> eventos
+    caso_cat2 --> eventos
+    caso_modalidad --> eventos
+    caso_canal --> eventos
+    caso_proc_id --> eventos
+    caso_proc_btn --> eventos
+    caso_proceso --> eventos
+    caso_costos --> eventos
+    caso_fecha_oc --> eventos
+    caso_fecha_desc --> eventos
+    caso_invest_id --> eventos
+    caso_invest_nombre --> eventos
+    caso_invest_puesto --> eventos
+
+    cliente_afectacion --> eventos
+    cliente_tipo_id --> eventos
+    cliente_id --> eventos
+    cliente_nombres --> eventos
+    cliente_apellidos --> eventos
+    cliente_flag --> eventos
+    cliente_accionado --> eventos
+    cliente_tel --> eventos
+    cliente_correo --> eventos
+    cliente_direccion --> eventos
+    cliente_eliminar --> eventos
+
+    colab_id --> eventos
+    colab_nombres --> eventos
+    colab_apellidos --> eventos
+    colab_flag --> eventos
+    colab_division --> eventos
+    colab_area --> eventos
+    colab_servicio --> eventos
+    colab_puesto --> eventos
+    colab_fecha_inm --> eventos
+    colab_fecha_ren --> eventos
+    colab_agencia_nombre --> eventos
+    colab_agencia_codigo --> eventos
+    colab_tipo_falta --> eventos
+    colab_tipo_sancion --> eventos
+    colab_eliminar --> eventos
+
+    prod_id --> eventos
+    prod_cliente --> eventos
+    prod_cat1 --> eventos
+    prod_cat2 --> eventos
+    prod_modalidad --> eventos
+    prod_canal --> eventos
+    prod_proceso --> eventos
+    prod_tipo --> eventos
+    prod_fecha_oc --> eventos
+    prod_fecha_desc --> eventos
+    prod_monto_inv --> eventos
+    prod_moneda --> eventos
+    prod_monto_perdida --> eventos
+    prod_monto_falla --> eventos
+    prod_monto_cont --> eventos
+    prod_monto_rec --> eventos
+    prod_monto_pago --> eventos
+    prod_add_reclamo --> eventos
+    prod_add_invol_colab --> eventos
+    prod_add_invol_cliente --> eventos
+    prod_eliminar --> eventos
+
+    reclamo_id --> eventos
+    reclamo_codigo --> eventos
+    reclamo_nombre --> eventos
+    reclamo_eliminar --> eventos
+
+    invol_colab --> eventos
+    invol_cliente --> eventos
+    invol_monto --> eventos
+    invol_eliminar --> eventos
+
+    anal_antecedentes --> eventos
+    anal_modus --> eventos
+    anal_hallazgos --> eventos
+    anal_descargos --> eventos
+    anal_conclusiones --> eventos
+    anal_recomendaciones --> eventos
+    anal_comentario_breve --> eventos
+    anal_comentario_amplio --> eventos
+
+    acc_catalogos --> eventos
+    acc_sin_catalogos --> eventos
+    acc_import_clientes --> eventos
+    acc_import_colabs --> eventos
+    acc_import_productos --> eventos
+    acc_import_combinado --> eventos
+    acc_import_riesgos --> eventos
+    acc_import_normas --> eventos
+    acc_import_reclamos --> eventos
+    acc_guardar --> eventos
+    acc_cargar --> eventos
+    acc_autosave --> eventos
+    acc_historial --> eventos
+
+    %% Importación circular desde eventos.csv
+    eventos --> caso_id
+    eventos --> caso_tipo
+    eventos --> caso_cat1
+    eventos --> caso_cat2
+    eventos --> caso_modalidad
+    eventos --> caso_canal
+    eventos --> caso_proc_id
+    eventos --> caso_proc_btn
+    eventos --> caso_proceso
+    eventos --> caso_costos
+    eventos --> caso_fecha_oc
+    eventos --> caso_fecha_desc
+    eventos --> caso_invest_id
+    eventos --> caso_invest_nombre
+    eventos --> caso_invest_puesto
+
+    eventos --> cliente_afectacion
+    eventos --> cliente_tipo_id
+    eventos --> cliente_id
+    eventos --> cliente_nombres
+    eventos --> cliente_apellidos
+    eventos --> cliente_flag
+    eventos --> cliente_accionado
+    eventos --> cliente_tel
+    eventos --> cliente_correo
+    eventos --> cliente_direccion
+    eventos --> cliente_eliminar
+
+    eventos --> colab_id
+    eventos --> colab_nombres
+    eventos --> colab_apellidos
+    eventos --> colab_flag
+    eventos --> colab_division
+    eventos --> colab_area
+    eventos --> colab_servicio
+    eventos --> colab_puesto
+    eventos --> colab_fecha_inm
+    eventos --> colab_fecha_ren
+    eventos --> colab_agencia_nombre
+    eventos --> colab_agencia_codigo
+    eventos --> colab_tipo_falta
+    eventos --> colab_tipo_sancion
+    eventos --> colab_eliminar
+
+    eventos --> prod_id
+    eventos --> prod_cliente
+    eventos --> prod_cat1
+    eventos --> prod_cat2
+    eventos --> prod_modalidad
+    eventos --> prod_canal
+    eventos --> prod_proceso
+    eventos --> prod_tipo
+    eventos --> prod_fecha_oc
+    eventos --> prod_fecha_desc
+    eventos --> prod_monto_inv
+    eventos --> prod_moneda
+    eventos --> prod_monto_perdida
+    eventos --> prod_monto_falla
+    eventos --> prod_monto_cont
+    eventos --> prod_monto_rec
+    eventos --> prod_monto_pago
+    eventos --> prod_add_reclamo
+    eventos --> prod_add_invol_colab
+    eventos --> prod_add_invol_cliente
+    eventos --> prod_eliminar
+
+    eventos --> reclamo_id
+    eventos --> reclamo_codigo
+    eventos --> reclamo_nombre
+    eventos --> reclamo_eliminar
+
+    eventos --> invol_colab
+    eventos --> invol_cliente
+    eventos --> invol_monto
+    eventos --> invol_eliminar
+
+    eventos --> anal_antecedentes
+    eventos --> anal_modus
+    eventos --> anal_hallazgos
+    eventos --> anal_descargos
+    eventos --> anal_conclusiones
+    eventos --> anal_recomendaciones
+    eventos --> anal_comentario_breve
+    eventos --> anal_comentario_amplio
+
+    eventos --> acc_catalogos
+    eventos --> acc_sin_catalogos
+    eventos --> acc_import_clientes
+    eventos --> acc_import_colabs
+    eventos --> acc_import_productos
+    eventos --> acc_import_combinado
+    eventos --> acc_import_riesgos
+    eventos --> acc_import_normas
+    eventos --> acc_import_reclamos
+    eventos --> acc_guardar
+    eventos --> acc_cargar
+    eventos --> acc_autosave
+    eventos --> acc_historial
