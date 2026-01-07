@@ -291,6 +291,64 @@ def test_event_round_trip_restores_investigator_and_comments(monkeypatch):
     assert app.comentario_amplio_text.text == "Amplio desde eventos"
 
 
+def test_event_round_trip_csv_preserves_investigator_and_comments(tmp_path, monkeypatch):
+    case_data = CaseData.from_mapping(
+        {
+            "caso": {
+                "id_caso": "2024-3501",
+                "matricula_investigador": "T98765",
+                "investigador_nombre": "Investigador CSV",
+                "investigador_cargo": "Coordinador",
+            },
+            "clientes": [],
+            "colaboradores": [],
+            "productos": [
+                {
+                    "id_producto": "P-CSV",
+                    "id_cliente": "CL-CSV",
+                }
+            ],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {
+                "comentario_breve": {"text": "Breve CSV"},
+                "comentario_amplio": {"text": "Amplio CSV"},
+            },
+            "encabezado": {},
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+
+    rows, header = build_event_rows(case_data)
+    csv_path = tmp_path / "caso_eventos_roundtrip.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=header)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: _sanitize_csv_value(row.get(field, "")) for field in header})
+
+    parsed = list(csv.DictReader(csv_path.open("r", newline="", encoding="utf-8")))
+    app = build_import_app(monkeypatch)
+    app.comentario_breve_text = RichTextWidgetStub()
+    app.comentario_amplio_text = RichTextWidgetStub()
+    app._rich_text_images = defaultdict(list)
+    app._rich_text_image_sources = {}
+    normalized = app._normalize_eventos_row(parsed[0], "canonical")
+
+    app._apply_eventos_case_row(normalized)
+
+    assert app.investigator_id_var.get() == "T98765"
+    assert app.investigator_nombre_var.get() == "Investigador CSV"
+    assert app.investigator_cargo_var.get() == "Coordinador"
+    assert app.comentario_breve_text.text == "Breve CSV"
+    assert app.comentario_amplio_text.text == "Amplio CSV"
+
+
 def test_event_export_import_keeps_literal_dash(tmp_path, monkeypatch):
     case_data = CaseData.from_mapping(
         {
