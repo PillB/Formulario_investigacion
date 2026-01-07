@@ -53,6 +53,7 @@ La aplicación intenta cargar el último `autosave.json`. Para comenzar de cero,
 - **`ui/`**: widgets y pestañas (caso/participantes, riesgos, normas, análisis, acciones, resumen).
 - **`models/`**: modelos y helpers de persistencia.
 - **`validators.py`**: reglas de formato, montos y fechas.
+- **`docs/circular_eventos_flow.mmd`**: diagrama del flujo circular formulario ↔ `eventos.csv`.
 - **`exports/`** (generado): CSV, JSON, Markdown, Word y PPT de alerta temprana; históricos `h_*.csv` anexados en cada guardado.
 - **`external drive/<id_caso>/`** (generado): espejo automático de los artefactos exportados, autosaves, logs y consolidación histórica; si falta la unidad se registra `pending_consolidation.txt` para reaplicar.
 
