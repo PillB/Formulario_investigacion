@@ -14,12 +14,30 @@ from settings import EXTERNAL_DRIVE_DIR, EXTERNAL_LOGS_FILE
 NORMAS_COLUMNS: Sequence[str] = tuple(EXPORT_HEADERS["detalles_norma.csv"])
 
 NORMAS_DESCRIPTIONS: dict[str, tuple[str, str]] = {
-    "id_norma": ("Clave primaria", "Identificador de la norma transgredida (formato XXXX.XXX.XX.XX)."),
+    "id_norma": (
+        "Clave primaria",
+        (
+            "Identificador de la norma transgredida (formato XXXX.XXX.XX.XX). "
+            "Cuando coincide con un catálogo, permite autopoblar los campos desde norm_details.csv."
+        ),
+    ),
     "id_caso": ("Clave foránea", "Identificador del caso; referencia CASOS.id_caso."),
-    "descripcion": ("Atributo", "Descripción de la norma transgredida."),
-    "fecha_vigencia": ("Atributo", "Fecha de vigencia de la norma (YYYY-MM-DD)."),
-    "acapite_inciso": ("Atributo", "Referencia del acápite o inciso aplicable."),
-    "detalle_norma": ("Atributo", "Amplía la explicación de la transgresión."),
+    "descripcion": (
+        "Atributo",
+        "Descripción de la norma transgredida (autocompletado desde norm_details.csv).",
+    ),
+    "fecha_vigencia": (
+        "Atributo",
+        "Fecha de vigencia de la norma (YYYY-MM-DD; autocompletada desde norm_details.csv).",
+    ),
+    "acapite_inciso": (
+        "Atributo",
+        "Referencia del acápite o inciso aplicable (autocompletado desde norm_details.csv).",
+    ),
+    "detalle_norma": (
+        "Atributo",
+        "Amplía la explicación de la transgresión (autocompletado desde norm_details.csv).",
+    ),
 }
 
 NORMAS_VALIDATIONS: Sequence[tuple[str, str, str, str]] = (
@@ -716,7 +734,7 @@ SHEET_HEADERS: dict[str, Sequence[str]] = {
     "ANALISIS": EXPORT_HEADERS["analisis.csv"],
 }
 
-TAXONOMIA_DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
+DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
     (
         "CASOS",
         "categoria1",
@@ -763,7 +781,91 @@ TAXONOMIA_DESCRIPTION_UPDATES: dict[tuple[str, str], str] = {
         "Modalidad de fraude (nivel 3) del producto. Fuente: catálogo interno TAXONOMIA "
         "(no CSV). La lista se refresca al cambiar categoría 1 o categoría 2."
     ),
+    (
+        "DETALLES_RIESGO",
+        "id_riesgo",
+    ): (
+        "Identificador del riesgo (formato RSK-XXXXXX). Al ingresar un ID del catálogo, "
+        "se autocompletan los campos desde risk_details.csv."
+    ),
+    (
+        "DETALLES_RIESGO",
+        "lider",
+    ): (
+        "Tribu o área encargada del riesgo identificado (autocompletado desde risk_details.csv)."
+    ),
+    (
+        "DETALLES_RIESGO",
+        "descripcion",
+    ): "Descripción del riesgo identificado (autocompletado desde risk_details.csv).",
+    (
+        "DETALLES_RIESGO",
+        "criticidad",
+    ): (
+        "Nivel de criticidad residual (Bajo, Moderado, Relevante, Alto, Crítico; "
+        "autocompletado desde risk_details.csv)."
+    ),
+    (
+        "DETALLES_RIESGO",
+        "exposicion_residual",
+    ): "Nivel de exposición residual en dólares (US$; autocompletado desde risk_details.csv).",
+    (
+        "DETALLES_RIESGO",
+        "planes_accion",
+    ): (
+        "Identificadores de planes de acción asociados al riesgo (separados por punto y coma; "
+        "autocompletado desde risk_details.csv)."
+    ),
+    (
+        "PRODUCTO_RECLAMO",
+        "id_reclamo",
+    ): (
+        "Identificador del reclamo (C seguido de 8 dígitos). "
+        "Al ingresar un ID existente se autocompletan los datos desde claim_details.csv."
+    ),
+    (
+        "PRODUCTO_RECLAMO",
+        "nombre_analitica",
+    ): (
+        "Nombre de la cuenta analítica utilizada para registrar el reclamo "
+        "(autocompletado desde claim_details.csv)."
+    ),
+    (
+        "PRODUCTO_RECLAMO",
+        "codigo_analitica",
+    ): (
+        "Código de la cuenta analítica (10 dígitos, inicia con 43, 45, 46 o 56; "
+        "autocompletado desde claim_details.csv)."
+    ),
 }
+
+DETAIL_CATALOG_HEADERS: Sequence[str] = (
+    "Tipo",
+    "Archivo",
+    "Descripción",
+    "Referencia en UI",
+)
+
+DETAIL_CATALOG_ROWS: Sequence[tuple[str, str, str, str]] = (
+    (
+        "Catálogo de detalle",
+        "risk_details.csv",
+        "Autocompleta líder, descripción, criticidad, exposición residual y planes de acción.",
+        "ui/frames/risk.py",
+    ),
+    (
+        "Catálogo de detalle",
+        "norm_details.csv",
+        "Autocompleta descripción, fecha de vigencia, acápite/inciso y detalle de norma.",
+        "ui/frames/norm.py",
+    ),
+    (
+        "Catálogo de detalle",
+        "claim_details.csv",
+        "Autocompleta nombre y código de analítica asociados al reclamo.",
+        "ui/frames/products.py",
+    ),
+)
 
 
 def _set_header_row(sheet, columns: Sequence[str]) -> None:
@@ -788,7 +890,7 @@ def _update_description_sheet(sheet) -> None:
         if not row or row[0] == "DETALLES_NORMA":
             continue
         hoja, columna, tipo, descripcion, *_ = row
-        updated = TAXONOMIA_DESCRIPTION_UPDATES.get((hoja, columna))
+        updated = DESCRIPTION_UPDATES.get((hoja, columna))
         if updated:
             descripcion = updated
         existing_rows.append((hoja, columna, tipo, descripcion))
@@ -834,6 +936,15 @@ def _update_external_drive_sheet(workbook) -> None:
     _rewrite_rows(sheet, EXTERNAL_DRIVE_ROWS)
 
 
+def _update_detail_catalog_sheet(workbook) -> None:
+    if "CATALOGOS_VALIDACIONES" in workbook.sheetnames:
+        sheet = workbook["CATALOGOS_VALIDACIONES"]
+    else:
+        sheet = workbook.create_sheet(title="CATALOGOS_VALIDACIONES")
+    _set_header_row(sheet, DETAIL_CATALOG_HEADERS)
+    _rewrite_rows(sheet, DETAIL_CATALOG_ROWS)
+
+
 def _update_summary_sheet(workbook) -> None:
     summary_config = FraudCaseApp.build_summary_table_config()
     if "RESUMEN" in workbook.sheetnames:
@@ -865,6 +976,7 @@ def update_template(path: Path) -> None:
     _update_validation_sheet(workbook, NORMAS_VALIDATIONS)
     _update_validation_panel_sheet(workbook)
     _update_external_drive_sheet(workbook)
+    _update_detail_catalog_sheet(workbook)
     _update_summary_sheet(workbook)
 
     workbook.save(path)
