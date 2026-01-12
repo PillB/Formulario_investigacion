@@ -5,9 +5,11 @@ from __future__ import annotations
 import csv
 import os
 import re
-from typing import Dict, Iterable, Iterator, List, Tuple
+from typing import Dict, Iterable, Iterator, List, Sequence, Tuple
 
 from settings import BASE_DIR, DETAIL_LOOKUP_ALIASES
+
+CSV_IMPORT_ENCODINGS: tuple[str, ...] = ("utf-8-sig", "utf-8", "cp1252", "latin-1")
 
 
 def normalize_detail_catalog_key(key: str) -> str:
@@ -76,22 +78,21 @@ def load_detail_catalogs(base_dir: str | os.PathLike = BASE_DIR) -> Dict[str, Di
         path = os.path.join(base_dir, filename)
         entity_name = filename[:-len("_details.csv")].lower()
         try:
-            with open(path, newline='', encoding="utf-8-sig") as file_handle:
-                reader = csv.DictReader(line for line in file_handle if line.strip())
-                key_field, canonical_id_field = _resolve_id_fields(entity_name, reader.fieldnames or [])
-                if not key_field:
-                    continue
-                for row in reader:
-                    key = (row.get(key_field) or "").strip()
-                    if not key:
-                        continue
-                    cleaned_row = {(k or ""): (v or "").strip() for k, v in row.items()}
-                    canonical_id_field = canonical_id_field or key_field
-                    if canonical_id_field and canonical_id_field not in cleaned_row:
-                        cleaned_row[canonical_id_field] = key
-                    catalogs.setdefault(entity_name, {})[key] = cleaned_row
+            rows, fieldnames, _encoding = _read_csv_rows_with_fallback(path)
         except (FileNotFoundError, OSError):
             continue
+        key_field, canonical_id_field = _resolve_id_fields(entity_name, fieldnames)
+        if not key_field:
+            continue
+        for row in rows:
+            key = (row.get(key_field) or "").strip()
+            if not key:
+                continue
+            cleaned_row = {(k or ""): (v or "").strip() for k, v in row.items()}
+            canonical_id_field = canonical_id_field or key_field
+            if canonical_id_field and canonical_id_field not in cleaned_row:
+                cleaned_row[canonical_id_field] = key
+            catalogs.setdefault(entity_name, {})[key] = cleaned_row
     return catalogs
 
 
@@ -126,19 +127,52 @@ def build_detail_catalog_id_index(
 def iter_massive_csv_rows(filename: str) -> Iterator[Dict[str, str]]:
     """Itera sobre los CSV masivos eliminando filas vacías y espacios extra."""
 
-    with open(filename, newline='', encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(line for line in handle if line.strip())
-        for row in reader:
-            cleaned: Dict[str, str] = {}
-            for key, value in row.items():
-                if key is None:
-                    continue
-                key = key.strip()
-                if isinstance(value, str):
-                    value = value.strip()
-                cleaned[key] = value
-            if cleaned:
-                yield cleaned
+    rows, _fieldnames, _encoding = _read_csv_rows_with_fallback(filename)
+    for row in rows:
+        cleaned: Dict[str, str] = {}
+        for key, value in row.items():
+            if key is None:
+                continue
+            key = key.strip()
+            if isinstance(value, str):
+                value = value.strip()
+            cleaned[key] = value
+        if cleaned:
+            yield cleaned
+
+
+def read_csv_headers_with_fallback(
+    filename: str | os.PathLike,
+    *,
+    encodings: Sequence[str] | None = None,
+) -> list[str]:
+    """Lee encabezados CSV intentando múltiples codificaciones."""
+
+    encodings = tuple(encodings or CSV_IMPORT_ENCODINGS)
+    errors: list[str] = []
+    for encoding in encodings:
+        try:
+            with open(filename, newline="", encoding=encoding) as handle:
+                reader = csv.DictReader(line for line in handle if line.strip())
+                return list(reader.fieldnames or [])
+        except UnicodeDecodeError as exc:
+            errors.append(f"{encoding}: {exc}")
+            continue
+    error_message = (
+        "No se pudo leer el archivo con las codificaciones "
+        f"{', '.join(encodings)}. Detalles: {'; '.join(errors)}"
+    )
+    raise ValueError(error_message)
+
+
+def read_csv_rows_with_fallback(
+    filename: str | os.PathLike,
+    *,
+    encodings: Sequence[str] | None = None,
+) -> tuple[list[dict[str, str]], list[str], str]:
+    """Lee todas las filas CSV asegurando codificación compatible."""
+
+    return _read_csv_rows_with_fallback(filename, encodings=encodings)
 
 
 def parse_involvement_entries(raw_value: str | Iterable[str]) -> List[Tuple[str, str]]:
@@ -166,8 +200,35 @@ def parse_involvement_entries(raw_value: str | Iterable[str]) -> List[Tuple[str,
 
 __all__ = [
     "build_detail_catalog_id_index",
+    "CSV_IMPORT_ENCODINGS",
     "iter_massive_csv_rows",
     "load_detail_catalogs",
     "normalize_detail_catalog_key",
     "parse_involvement_entries",
+    "read_csv_headers_with_fallback",
+    "read_csv_rows_with_fallback",
 ]
+
+
+def _read_csv_rows_with_fallback(
+    filename: str | os.PathLike,
+    *,
+    encodings: Sequence[str] | None = None,
+) -> tuple[list[dict[str, str]], list[str], str]:
+    encodings = tuple(encodings or CSV_IMPORT_ENCODINGS)
+    errors: list[str] = []
+    for encoding in encodings:
+        try:
+            with open(filename, newline="", encoding=encoding) as handle:
+                reader = csv.DictReader(line for line in handle if line.strip())
+                rows = list(reader)
+                fieldnames = list(reader.fieldnames or [])
+            return rows, fieldnames, encoding
+        except UnicodeDecodeError as exc:
+            errors.append(f"{encoding}: {exc}")
+            continue
+    error_message = (
+        "No se pudo leer el archivo con las codificaciones "
+        f"{', '.join(encodings)}. Detalles: {'; '.join(errors)}"
+    )
+    raise ValueError(error_message)
