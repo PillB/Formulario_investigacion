@@ -86,7 +86,8 @@ from models import (AutofillService, build_detail_catalog_id_index,
                     CatalogService, extract_code_from_display,
                     find_analitica_by_code, format_analitica_option,
                     get_analitica_display_options, iter_massive_csv_rows,
-                    normalize_detail_catalog_key, parse_involvement_entries)
+                    normalize_detail_catalog_key, parse_involvement_entries,
+                    read_csv_headers_with_fallback)
 from report.alerta_temprana import (
     PPTX_AVAILABLE,
     PPTX_MISSING_MESSAGE,
@@ -10246,9 +10247,7 @@ class FraudCaseApp:
 
     def _read_csv_headers(self, filename: str, *, show_error: bool = True) -> Optional[list[str]]:
         try:
-            with open(filename, newline="", encoding="utf-8-sig") as handle:
-                reader = csv.DictReader(line for line in handle if line.strip())
-                return list(reader.fieldnames or [])
+            return read_csv_headers_with_fallback(filename)
         except Exception as exc:  # pragma: no cover - errores de IO poco frecuentes
             log_event("validacion", f"No se pudo leer {filename} para validar encabezados: {exc}", self.logs)
             if show_error and not getattr(self, "_suppress_messagebox", False):

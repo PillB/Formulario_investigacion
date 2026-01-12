@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import os
 from datetime import datetime, date
 from pathlib import Path
@@ -16,8 +15,9 @@ except Exception:  # pragma: no cover - evita fallar si no está instalado
 from settings import BASE_DIR, DETAIL_LOOKUP_ALIASES
 from validators import normalize_team_member_identifier, normalize_without_accents
 
-from .catalogs import (build_detail_catalog_id_index, load_detail_catalogs,
-                       normalize_detail_catalog_key)
+from .catalogs import (CSV_IMPORT_ENCODINGS, build_detail_catalog_id_index,
+                       load_detail_catalogs, normalize_detail_catalog_key,
+                       read_csv_rows_with_fallback)
 from .static_team_catalog import TEAM_HIERARCHY_CATALOG, build_team_catalog_rows
 
 
@@ -96,17 +96,17 @@ class CatalogService:
 
     def _iter_rows(self, path: Path) -> Iterable[Dict[str, str]]:
         if pd is not None:
-            try:
-                dataframe = pd.read_csv(path, dtype=str)
-                for row in dataframe.fillna("").to_dict("records"):
-                    yield self._clean_row(row.items())
-                return
-            except Exception:
-                pass
-        with open(path, newline="", encoding="utf-8-sig") as handle:
-            reader = csv.DictReader(line for line in handle if line.strip())
-            for row in reader:
-                yield self._clean_row(row.items())
+            for encoding in CSV_IMPORT_ENCODINGS:
+                try:
+                    dataframe = pd.read_csv(path, dtype=str, encoding=encoding)
+                    for row in dataframe.fillna("").to_dict("records"):
+                        yield self._clean_row(row.items())
+                    return
+                except Exception:
+                    continue
+        rows, _fieldnames, _encoding = read_csv_rows_with_fallback(path)
+        for row in rows:
+            yield self._clean_row(row.items())
 
     @staticmethod
     def _clean_row(items: Iterable[Tuple[str, str]]) -> Dict[str, str]:
@@ -469,4 +469,3 @@ class TeamHierarchyCatalog:
         scope = (self._normalize(division), self._normalize(area))
         normalized_code = (code or "").strip()
         return self._agencies_by_code.get(scope, {}).get(normalized_code)
-
