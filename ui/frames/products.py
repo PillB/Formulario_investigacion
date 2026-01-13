@@ -20,6 +20,7 @@ from ui.frames.utils import (
     create_date_entry,
     ensure_grid_support,
     grid_section,
+    record_import_issue,
     refresh_dynamic_rows,
 )
 from ui.layout import CollapsibleSection
@@ -809,14 +810,25 @@ class ClaimRow:
         data = lookup.get(rid)
         if not data:
             if from_focus and not silent and lookup and self._last_missing_lookup_id != rid:
-                messagebox.showerror(
-                    "Reclamo no encontrado",
-                    (
-                        f"El ID {rid} no existe en los catálogos de detalle. "
-                        "Verifica el código o actualiza "
-                        f"{Path(CLAIM_DETAILS_FILE).name}."
+                issue_registered = record_import_issue(
+                    getattr(self.product_frame, "owner", None),
+                    "ID de reclamo no encontrado en catálogo de detalle",
+                    identifier=rid,
+                    detail=(
+                        "El ID no existe en los catálogos de detalle. "
+                        f"Verifica el código o actualiza {Path(CLAIM_DETAILS_FILE).name}."
                     ),
+                    source="reclamos",
                 )
+                if not issue_registered:
+                    messagebox.showerror(
+                        "Reclamo no encontrado",
+                        (
+                            f"El ID {rid} no existe en los catálogos de detalle. "
+                            "Verifica el código o actualiza "
+                            f"{Path(CLAIM_DETAILS_FILE).name}."
+                        ),
+                    )
                 self._last_missing_lookup_id = rid
             self._refresh_claim_summary()
             return
@@ -3203,13 +3215,24 @@ class ProductFrame:
         data = self.product_lookup.get(pid)
         if not data:
             if from_focus and not silent and self.product_lookup and self._last_missing_lookup_id != pid:
-                messagebox.showerror(
-                    "Producto no encontrado",
-                    (
-                        f"El ID {pid} no existe en los catálogos de detalle. "
+                issue_registered = record_import_issue(
+                    self.owner,
+                    "ID de producto no encontrado en catálogo de detalle",
+                    identifier=pid,
+                    detail=(
+                        "El ID no existe en los catálogos de detalle. "
                         "Verifica el código o actualiza product_details.csv."
                     ),
+                    source="productos",
                 )
+                if not issue_registered:
+                    messagebox.showerror(
+                        "Producto no encontrado",
+                        (
+                            f"El ID {pid} no existe en los catálogos de detalle. "
+                            "Verifica el código o actualiza product_details.csv."
+                        ),
+                    )
                 self._last_missing_lookup_id = pid
             if silent:
                 self._schedule_product_summary_refresh()

@@ -19,6 +19,7 @@ from ui.frames.utils import (
     create_date_entry,
     ensure_grid_support,
     grid_section,
+    record_import_issue,
 )
 from theme_manager import ThemeManager
 from ui.config import COL_PADX, ROW_PADY
@@ -1445,16 +1446,27 @@ class TeamMemberFrame:
         log_event("validacion", f"ID de colaborador {cid} no encontrado en team_details.csv", self.logs)
         if self._last_missing_lookup_id == cid:
             return
-        try:
-            messagebox.showerror(
-                "Colaborador no encontrado",
-                (
-                    f"El ID {cid} no existe en el catálogo team_details.csv. "
-                    "Verifica el código o actualiza el archivo maestro."
-                ),
-            )
-        except tk.TclError:
-            pass
+        issue_registered = record_import_issue(
+            self.owner,
+            "ID de colaborador no encontrado en catálogo de detalle",
+            identifier=cid,
+            detail=(
+                "El ID no existe en el catálogo team_details.csv. "
+                "Verifica el código o actualiza el archivo maestro."
+            ),
+            source="colaboradores",
+        )
+        if not issue_registered:
+            try:
+                messagebox.showerror(
+                    "Colaborador no encontrado",
+                    (
+                        f"El ID {cid} no existe en el catálogo team_details.csv. "
+                        "Verifica el código o actualiza el archivo maestro."
+                    ),
+                )
+            except tk.TclError:
+                pass
         self._last_missing_lookup_id = cid
 
     def _notify_id_change(self, new_id):
