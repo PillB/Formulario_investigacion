@@ -3660,8 +3660,67 @@ class ProductFrame:
                 return
 
     def _handle_client_focus_out(self):
+        client_id = self.client_var.get().strip()
+        self._ensure_owner_client_involvement(client_id)
+        self._ensure_owner_client_flag(client_id)
         self.log_change(f"Producto {self.idx+1}: seleccionó cliente")
         self.trigger_duplicate_check()
+
+    def _ensure_owner_client_involvement(self, client_id: str):
+        if not client_id:
+            return None
+        existing = self._find_client_involvement_by_id(client_id)
+        if existing:
+            return existing
+        row = self.add_client_involvement()
+        self._assign_client_involvement_row(row, client_id)
+        return row
+
+    def _find_client_involvement_by_id(self, client_id: str):
+        normalized = client_id.strip()
+        if not normalized:
+            return None
+        for row in self.client_involvements:
+            if row.client_var.get().strip() == normalized:
+                return row
+        return None
+
+    def _assign_client_involvement_row(self, row, client_id: str) -> None:
+        if row is None or not client_id:
+            return
+
+        def _set_owner():
+            row.client_var.set(client_id)
+            try:
+                row.client_cb.set(client_id)
+            except Exception:
+                pass
+
+        if row.selector_validator:
+            row.selector_validator.suppress_during(_set_owner)
+        else:
+            _set_owner()
+        row._notify_summary_change()
+
+    def _ensure_owner_client_flag(self, client_id: str) -> None:
+        if not client_id or not self.owner:
+            return
+        client_frame = None
+        finder = getattr(self.owner, "_find_client_frame", None)
+        if callable(finder):
+            client_frame = finder(client_id)
+        if client_frame is None:
+            for frame in getattr(self.owner, "client_frames", []):
+                if getattr(frame, "id_var", None) and frame.id_var.get().strip() == client_id:
+                    client_frame = frame
+                    break
+        if client_frame is None:
+            return
+        flag_var = getattr(client_frame, "flag_var", None)
+        if flag_var is None:
+            return
+        if not (flag_var.get() or "").strip():
+            flag_var.set("Afectado")
 
     def _schedule_product_summary_refresh(self):
         if hasattr(self, 'schedule_summary_refresh'):
