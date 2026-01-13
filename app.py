@@ -15695,6 +15695,44 @@ class FraudCaseApp:
         llave_rows, llave_header = build_llave_tecnica_rows(data)
         event_rows, _event_header = build_event_rows(data)
         event_header = list(EVENTOS_HEADER_CANONICO)
+        # Nota: las reglas de validación siguen el Design document CM.pdf; este bloque sólo ajusta exportaciones.
+        amount_field_names = {
+            "monto_investigado",
+            "monto_perdida_fraude",
+            "monto_falla_procesos",
+            "monto_contingencia",
+            "monto_recuperado",
+            "monto_pago_deuda",
+            "monto_fraude_interno_soles",
+            "monto_fraude_interno_dolares",
+            "monto_fraude_externo_soles",
+            "monto_fraude_externo_dolares",
+            "monto_falla_en_proceso_soles",
+            "monto_falla_en_proceso_dolares",
+            "monto_contingencia_soles",
+            "monto_contingencia_dolares",
+            "monto_recuperado_soles",
+            "monto_recuperado_dolares",
+            "monto_pagado_soles",
+            "monto_pagado_dolares",
+        }
+        eventos_amount_fields = {
+            field for field in event_header if field in amount_field_names
+        }
+        eventos_lhcl_rows = []
+        seen_products: set[str] = set()
+        for row in event_rows:
+            product_id = row.get("product_id") or row.get("id_producto") or ""
+            product_key = str(product_id)
+            if product_key not in seen_products:
+                seen_products.add(product_key)
+                eventos_lhcl_rows.append(row)
+                continue
+            sanitized_row = dict(row)
+            for field in eventos_amount_fields:
+                if field in sanitized_row:
+                    sanitized_row[field] = EVENTOS_PLACEHOLDER
+            eventos_lhcl_rows.append(sanitized_row)
         warnings: list[str] = []
         history_targets: list[tuple[str, list[dict[str, object]], list[str]]] = []
         normalized_case_id = self._normalize_identifier(case_id)
@@ -15721,6 +15759,12 @@ class FraudCaseApp:
         )
         write_csv('llave_tecnica.csv', llave_rows, llave_header, historical_name='llave_tecnica')
         write_csv('eventos.csv', event_rows, event_header, historical_name='eventos')
+        write_csv(
+            'eventos_lhcl.csv',
+            eventos_lhcl_rows,
+            event_header,
+            historical_name='eventos_lhcl',
+        )
         write_csv(
             'clientes.csv',
             data['clientes'],
