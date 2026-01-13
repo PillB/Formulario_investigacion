@@ -2874,8 +2874,14 @@ class ProductFrame:
         )
         log_event("nudges", f"Producto {self.idx+1}: modal de reclamo requerido", self.logs)
 
+    def _claim_has_all_required_fields(self, data: dict) -> bool:
+        required_fields = ("id_reclamo", "nombre_analitica", "codigo_analitica")
+        return all(data.get(field) for field in required_fields)
+
     def _has_complete_claim(self) -> bool:
-        return any(all(data.values()) for data in (claim.get_data() for claim in self.claims))
+        return any(
+            self._claim_has_all_required_fields(claim.get_data()) for claim in self.claims
+        )
 
     def _apply_inline_claim_feedback(self):
         previous_modal_setting = FieldValidator.modal_notifications_enabled
@@ -2979,8 +2985,11 @@ class ProductFrame:
         complete_claim_found = False
         for idx, claim in enumerate(self.claims, start=1):
             data = claim.get_data()
-            has_any_value = any(data.values())
-            has_all_values = all(data.values())
+            has_any_value = any(
+                data.get(field)
+                for field in ("id_reclamo", "nombre_analitica", "codigo_analitica")
+            )
+            has_all_values = self._claim_has_all_required_fields(data)
             if has_any_value and not has_all_values:
                 claim_label = data.get('id_reclamo') or f"reclamo {idx}"
                 errors.append(
