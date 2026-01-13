@@ -15465,15 +15465,22 @@ class FraudCaseApp:
                 errors.append(f"ID de riesgo duplicado: {rid}")
             if rid:
                 risk_ids.add(rid)
-            criticidad_value = (rd.get('criticidad') or '').strip()
-            if not criticidad_value:
-                errors.append(
-                    f"Riesgo {idx}: Debe seleccionar la criticidad del riesgo."
-                )
-            elif criticidad_value not in CRITICIDAD_LIST:
-                errors.append(
-                    f"Riesgo {idx}: La criticidad '{criticidad_value}' no está en el catálogo CM."
-                )
+            try:
+                is_catalog_mode = r.is_catalog_mode()
+            except Exception:
+                new_risk_var = getattr(r, "new_risk_var", None)
+                is_catalog_mode = not bool(new_risk_var.get()) if new_risk_var else True
+            if is_catalog_mode:
+                # Criticidad solo se exige en modo catálogo según el Design document CM.
+                criticidad_value = (rd.get('criticidad') or '').strip()
+                if not criticidad_value:
+                    errors.append(
+                        f"Riesgo {idx}: Debe seleccionar la criticidad del riesgo."
+                    )
+                elif criticidad_value not in CRITICIDAD_LIST:
+                    errors.append(
+                        f"Riesgo {idx}: La criticidad '{criticidad_value}' no está en el catálogo CM."
+                    )
             # Exposición
             message, exposure_decimal, normalized_text = validate_money_bounds(
                 rd['exposicion_residual'],
