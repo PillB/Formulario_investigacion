@@ -1189,6 +1189,7 @@ class ProductFrame:
         self._afectacion_interna_var = None
         self._afectacion_trace_token = None
         self._internal_state_ready = False
+        self._claim_requirement_focus_snapshot: dict[tk.StringVar, str] = {}
 
         self.id_var = tk.StringVar()
         self.client_var = tk.StringVar()
@@ -2646,10 +2647,19 @@ class ProductFrame:
         self._refresh_badges()
 
     def _register_claim_requirement_triggers(self, cont_entry, falla_entry, perdida_entry):
-        for entry in (cont_entry, falla_entry, perdida_entry):
+        for entry, var in (
+            (cont_entry, self.monto_cont_var),
+            (falla_entry, self.monto_falla_var),
+            (perdida_entry, self.monto_perdida_var),
+        ):
+            entry.bind(
+                "<FocusIn>",
+                lambda _e, tracked_var=var: self._capture_claim_requirement_focus(tracked_var),
+                add="+",
+            )
             entry.bind(
                 "<FocusOut>",
-                lambda _e: self._handle_claim_requirement_change(source_is_user=True),
+                lambda _e, tracked_var=var: self._handle_claim_requirement_focus_out(tracked_var),
                 add="+",
             )
         for var in (self.monto_cont_var, self.monto_falla_var, self.monto_perdida_var):
@@ -2657,6 +2667,16 @@ class ProductFrame:
             if callable(trace_add):
                 trace_add("write", lambda *_: self._handle_claim_requirement_change())
         self._handle_claim_requirement_change(initial=True)
+
+    def _capture_claim_requirement_focus(self, var: tk.StringVar) -> None:
+        self._claim_requirement_focus_snapshot[var] = var.get()
+
+    def _handle_claim_requirement_focus_out(self, var: tk.StringVar) -> None:
+        previous = self._claim_requirement_focus_snapshot.get(var)
+        current = var.get()
+        changed = previous is None or previous != current
+        self._handle_claim_requirement_change(source_is_user=changed)
+        self._claim_requirement_focus_snapshot[var] = current
 
     def _build_claim_guidance_banner(self, row: int):
         frame = ttk.Frame(self.frame)
@@ -2874,8 +2894,20 @@ class ProductFrame:
         )
         log_event("nudges", f"Producto {self.idx+1}: modal de reclamo requerido", self.logs)
 
+    def _claim_has_all_required_fields(self, data: dict) -> bool:
+        return all(data.get(field) for field in self._claim_required_fields())
+
+    def _claim_has_any_required_fields(self, data: dict) -> bool:
+        return any(data.get(field) for field in self._claim_required_fields())
+
+    @staticmethod
+    def _claim_required_fields() -> tuple[str, str, str]:
+        return ("id_reclamo", "nombre_analitica", "codigo_analitica")
+
     def _has_complete_claim(self) -> bool:
-        return any(all(data.values()) for data in (claim.get_data() for claim in self.claims))
+        return any(
+            self._claim_has_all_required_fields(claim.get_data()) for claim in self.claims
+        )
 
     def _apply_inline_claim_feedback(self):
         previous_modal_setting = FieldValidator.modal_notifications_enabled
@@ -2973,21 +3005,24 @@ class ProductFrame:
         return any(not claim.is_empty() for claim in self.claims)
 
     def claim_requirement_errors(self):
-        if not self.claim_fields_required:
+        if not self._claim_fields_required():
             return []
         errors = []
+        partial_errors = []
         complete_claim_found = False
         for idx, claim in enumerate(self.claims, start=1):
             data = claim.get_data()
-            has_any_value = any(data.values())
-            has_all_values = all(data.values())
+            has_any_value = self._claim_has_any_required_fields(data)
+            has_all_values = self._claim_has_all_required_fields(data)
             if has_any_value and not has_all_values:
                 claim_label = data.get('id_reclamo') or f"reclamo {idx}"
-                errors.append(
+                partial_errors.append(
                     f"{self._get_product_label()}: El {claim_label} debe tener ID, nombre y código de analítica."
                 )
             if has_all_values:
                 complete_claim_found = True
+        if not complete_claim_found:
+            errors.extend(partial_errors)
         if not complete_claim_found:
             errors.append(
                 f"Debe ingresar al menos un reclamo completo en {self._get_product_label()} porque hay montos de pérdida, falla o contingencia."
