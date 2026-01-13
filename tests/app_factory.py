@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import types
+from collections import Counter
 from pathlib import Path
 
 from app import FraudCaseApp
@@ -34,6 +35,13 @@ def build_import_app(monkeypatch, messagebox_spy=None):
     del messagebox_spy  # Sólo está para mantener la firma uniforme.
     app = FraudCaseApp.__new__(FraudCaseApp)
     app._suppress_messagebox = True
+    app._consolidate_import_feedback = False
+    app._import_feedback_active = False
+    app._import_feedback_records = []
+    app._import_feedback_counts = Counter()
+    app._import_feedback_previous_flag = False
+    app._import_feedback_context = {}
+    app._import_feedback_log_path = Path(BASE_DIR) / "logs" / "carga" / "log_errores_carga.csv"
     app.logs = []
     app.mass_import_manager = MassImportManager(Path(BASE_DIR) / "logs")
     app.id_caso_var = DummyVar("2024-0001")

@@ -25,6 +25,7 @@ from ui.frames.utils import (
     ensure_grid_support,
     grid_labeled_widget,
     grid_section,
+    record_import_issue,
 )
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
@@ -742,13 +743,24 @@ class ClientFrame:
             self._log_change(f"Autopoblado datos del cliente {cid}")
         elif from_focus and not silent and self.client_lookup:
             if self._last_missing_lookup_id != cid:
-                messagebox.showerror(
-                    "Cliente no encontrado",
-                    (
-                        f"El ID {cid} no existe en los catálogos de detalle. "
+                issue_registered = record_import_issue(
+                    self.owner,
+                    "ID de cliente no encontrado en catálogo de detalle",
+                    identifier=cid,
+                    detail=(
+                        "El ID no existe en los catálogos de detalle. "
                         "Verifica el documento o actualiza client_details.csv."
                     ),
+                    source="clientes",
                 )
+                if not issue_registered:
+                    messagebox.showerror(
+                        "Cliente no encontrado",
+                        (
+                            f"El ID {cid} no existe en los catálogos de detalle. "
+                            "Verifica el documento o actualiza client_details.csv."
+                        ),
+                    )
                 self._last_missing_lookup_id = cid
         self.schedule_summary_refresh('clientes')
 

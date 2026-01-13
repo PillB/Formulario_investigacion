@@ -22,6 +22,7 @@ from ui.frames.utils import (
     ensure_grid_support,
     grid_labeled_widget,
     grid_section,
+    record_import_issue,
 )
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
@@ -240,6 +241,7 @@ class RiskFrame:
         remove_callback,
         logs,
         tooltip_register,
+        owner=None,
         change_notifier=None,
         default_risk_id: str | None = None,
         header_tree=None,
@@ -248,6 +250,7 @@ class RiskFrame:
         modal_factory=None,
     ):
         self.parent = parent
+        self.owner = owner
         self.idx = idx
         self.remove_callback = remove_callback
         self.logs = logs
@@ -745,13 +748,24 @@ class RiskFrame:
                 and self.risk_lookup
                 and self._last_missing_lookup_id != rid
             ):
-                messagebox.showerror(
-                    "Riesgo no encontrado",
-                    (
-                        f"El ID {rid} no existe en los catálogos de detalle. "
+                issue_registered = record_import_issue(
+                    self.owner,
+                    "ID de riesgo no encontrado en catálogo de detalle",
+                    identifier=rid,
+                    detail=(
+                        "El ID no existe en los catálogos de detalle. "
                         "Verifica el código o actualiza risk_details.csv."
                     ),
+                    source="riesgos",
                 )
+                if not issue_registered:
+                    messagebox.showerror(
+                        "Riesgo no encontrado",
+                        (
+                            f"El ID {rid} no existe en los catálogos de detalle. "
+                            "Verifica el código o actualiza risk_details.csv."
+                        ),
+                    )
                 self._last_missing_lookup_id = rid
             else:
                 self._last_missing_lookup_id = None

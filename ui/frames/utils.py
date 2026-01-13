@@ -30,6 +30,25 @@ WARNING_BADGE_STYLE = "WarningBadge.TLabel"
 WARNING_CONTAINER_STYLE = "WarningBadge.TFrame"
 
 
+def record_import_issue(
+    owner,
+    issue: str,
+    *,
+    identifier: str = "",
+    detail: str = "",
+    source: str = "",
+) -> bool:
+    handler = getattr(owner, "_register_import_issue", None)
+    if callable(handler):
+        return handler(
+            issue,
+            identifier=identifier,
+            detail=detail,
+            source=source,
+        )
+    return False
+
+
 @lru_cache(maxsize=1)
 def compute_badge_minsize(
     sample_text: str | None = None,

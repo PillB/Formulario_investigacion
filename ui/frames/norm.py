@@ -22,6 +22,7 @@ from ui.frames.utils import (
     ensure_grid_support,
     grid_labeled_widget,
     grid_section,
+    record_import_issue,
 )
 from ui.config import COL_PADX, ROW_PADY
 from ui.layout import CollapsibleSection
@@ -46,10 +47,12 @@ class NormFrame:
         remove_callback,
         logs,
         tooltip_register,
+        owner=None,
         change_notifier=None,
         header_tree=None,
     ):
         self.parent = parent
+        self.owner = owner
         self.idx = idx
         self.remove_callback = remove_callback
         self.logs = logs
@@ -547,13 +550,24 @@ class NormFrame:
                 and self.norm_lookup
                 and self._last_missing_lookup_id != norm_id
             ):
-                messagebox.showerror(
-                    "Norma no encontrada",
-                    (
-                        f"El ID {norm_id} no existe en los catálogos de detalle. "
+                issue_registered = record_import_issue(
+                    self.owner,
+                    "ID de norma no encontrado en catálogo de detalle",
+                    identifier=norm_id,
+                    detail=(
+                        "El ID no existe en los catálogos de detalle. "
                         "Verifica el código o actualiza norm_details.csv."
                     ),
+                    source="normas",
                 )
+                if not issue_registered:
+                    messagebox.showerror(
+                        "Norma no encontrada",
+                        (
+                            f"El ID {norm_id} no existe en los catálogos de detalle. "
+                            "Verifica el código o actualiza norm_details.csv."
+                        ),
+                    )
                 self._last_missing_lookup_id = norm_id
             else:
                 self._last_missing_lookup_id = None
