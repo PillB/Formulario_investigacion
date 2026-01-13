@@ -2978,9 +2978,20 @@ class ProductFrame:
     def claims_have_content(self):
         return any(not claim.is_empty() for claim in self.claims)
 
+    def _sync_claims_for_validation(self) -> None:
+        for claim in self.claims:
+            claim.on_id_change(preserve_existing=True, silent=True)
+            if claim.code_var.get().strip():
+                claim._sync_analitica_pair(
+                    source="code", silent=True, preserve_existing=True
+                )
+            elif claim.name_var.get().strip():
+                claim._sync_analitica_pair(source="name", silent=True)
+
     def claim_requirement_errors(self):
-        if not self.claim_fields_required:
+        if not self._claim_fields_required():
             return []
+        self._sync_claims_for_validation()
         errors = []
         complete_claim_found = False
         for idx, claim in enumerate(self.claims, start=1):
