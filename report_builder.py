@@ -348,6 +348,8 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 collaborator.get("tipo_sancion") if not is_client_involvement else None,
                 placeholder,
             ),
+            "fecha_ocurrencia_caso": _event_placeholder(case_occurrence, placeholder),
+            "fecha_descubrimiento_caso": _event_placeholder(case_discovery, placeholder),
             "fecha_ocurrencia": _event_placeholder(product_occurrence, placeholder),
             "fecha_descubrimiento": _event_placeholder(product_discovery, placeholder),
             "monto_fraude_interno_soles": _event_placeholder(monto_perdida_fraude, placeholder),

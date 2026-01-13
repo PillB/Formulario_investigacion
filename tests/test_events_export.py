@@ -152,6 +152,8 @@ def test_save_exports_writes_event_rows(tmp_path, with_relations):
     assert collaborator_row["id_caso"] == case_id
     assert collaborator_row["id_producto"] == _sanitize_csv_value("=P-1" if with_relations else "P-EMPTY")
     assert collaborator_row["id_cliente"] == ("CL1" if with_relations else "CL2")
+    assert collaborator_row["fecha_ocurrencia_caso"] == "2024-01-10"
+    assert collaborator_row["fecha_descubrimiento_caso"] == "2024-01-11"
     assert collaborator_row["fecha_ocurrencia"] == "2024-02-01"
     assert collaborator_row["monto_investigado"] == "100.00"
     assert collaborator_row["cod_operation"] == placeholder

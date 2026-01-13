@@ -47,3 +47,17 @@ def test_normalize_eventos_row_maps_canonical_aliases(monkeypatch, header, expec
     normalized = app._normalize_eventos_row({header: "value"}, "canonical")
 
     assert normalized[expected_key] == "value"
+
+
+def test_normalize_eventos_row_maps_case_date_aliases(monkeypatch):
+    app = build_import_app(monkeypatch)
+    normalized = app._normalize_eventos_row(
+        {
+            "fecha_de_ocurrencia": "2024-01-01",
+            "fecha_de_descubrimiento": "2024-01-02",
+        },
+        "legacy",
+    )
+
+    assert normalized["fecha_ocurrencia_caso"] == "2024-01-01"
+    assert normalized["fecha_descubrimiento_caso"] == "2024-01-02"

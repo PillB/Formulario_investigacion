@@ -855,6 +855,8 @@ class FraudCaseApp:
         "id_cliente_involucrado": "client_id_involucrado",
         "matricula_colaborador_involucrado": "id_colaborador",
         "id_colaborador": "matricula_colaborador_involucrado",
+        "fecha_ocurrencia_caso": "fecha_ocurrencia",
+        "fecha_descubrimiento_caso": "fecha_descubrimiento",
     }
     _EVENTOS_IMPORT_RENAMES = {
         "case_id": "id_caso",
@@ -865,6 +867,8 @@ class FraudCaseApp:
         "categoria_1": "categoria1",
         "categoria_2": "categoria2",
         "proceso_impactado": "proceso",
+        "fecha_de_ocurrencia": "fecha_ocurrencia_caso",
+        "fecha_de_descubrimiento": "fecha_descubrimiento_caso",
     }
     _external_drive_path: Optional[Path] = None
     _external_log_file_initialized: bool = False
@@ -10347,11 +10351,19 @@ class FraudCaseApp:
             "proceso": ("proceso_impactado",),
             "categoria1": ("categoria_1",),
             "categoria2": ("categoria_2",),
-            "fecha_ocurrencia": ("fecha_de_ocurrencia",),
-            "fecha_descubrimiento": ("fecha_de_descubrimiento",),
+            "fecha_ocurrencia_caso": ("fecha_de_ocurrencia", "fecha_ocurrencia"),
+            "fecha_descubrimiento_caso": ("fecha_de_descubrimiento", "fecha_descubrimiento"),
             "tipo_falta": ("tipo_de_falta",),
         }
         self._apply_eventos_aliases(normalized, general_mapping)
+        if not self._has_meaningful_value(normalized.get("fecha_ocurrencia")) and self._has_meaningful_value(
+            normalized.get("fecha_ocurrencia_caso")
+        ):
+            normalized["fecha_ocurrencia"] = normalized["fecha_ocurrencia_caso"]
+        if not self._has_meaningful_value(normalized.get("fecha_descubrimiento")) and self._has_meaningful_value(
+            normalized.get("fecha_descubrimiento_caso")
+        ):
+            normalized["fecha_descubrimiento"] = normalized["fecha_descubrimiento_caso"]
         if not self._has_meaningful_value(normalized.get("id_cliente")) and self._has_meaningful_value(normalized.get("id_cliente_involucrado")):
             normalized["id_cliente"] = normalized["id_cliente_involucrado"]
         client_mapping = {
@@ -10564,7 +10576,12 @@ class FraudCaseApp:
                 claim_id: str,
             ) -> tuple[str, str, str, str, str, str]:
                 case_id = (raw_row.get("id_caso") or raw_row.get("case_id") or "").strip()
-                occurrence_date = (raw_row.get("fecha_ocurrencia") or raw_row.get("fecha_de_ocurrencia") or "").strip()
+                occurrence_date = (
+                    raw_row.get("fecha_ocurrencia")
+                    or raw_row.get("fecha_ocurrencia_caso")
+                    or raw_row.get("fecha_de_ocurrencia")
+                    or ""
+                ).strip()
                 return build_technical_key(
                     case_id,
                     product_id,
@@ -12411,10 +12428,11 @@ class FraudCaseApp:
             validator.suspend()
         self._suppress_post_edit_validation = True
 
-        def _pick_eventos_date(primary_key: str, fallback_key: str) -> str:
-            if primary_key in row:
-                return (row.get(primary_key) or "").strip()
-            return (row.get(fallback_key) or "").strip()
+        def _pick_eventos_date(*keys: str) -> str:
+            for key in keys:
+                if key in row:
+                    return (row.get(key) or "").strip()
+            return ""
 
         def _resolve_eventos_value(key: str):
             if key not in row:
@@ -12474,8 +12492,13 @@ class FraudCaseApp:
             centro_costos = (row.get("centro_costos") or row.get("centro_costo") or "").strip()
             if self._has_meaningful_value(centro_costos):
                 self.centro_costo_caso_var.set(centro_costos)
-            fecha_ocurrencia = _pick_eventos_date("fecha_de_ocurrencia", "fecha_ocurrencia")
+            fecha_ocurrencia = _pick_eventos_date(
+                "fecha_ocurrencia_caso",
+                "fecha_de_ocurrencia",
+                "fecha_ocurrencia",
+            )
             fecha_descubrimiento = _pick_eventos_date(
+                "fecha_descubrimiento_caso",
                 "fecha_de_descubrimiento",
                 "fecha_descubrimiento",
             )
@@ -12562,7 +12585,12 @@ class FraudCaseApp:
             case_id = ""
             if isinstance(raw_row, Mapping):
                 case_id = (raw_row.get("id_caso") or raw_row.get("case_id") or "").strip()
-                occurrence_date = (raw_row.get("fecha_ocurrencia") or raw_row.get("fecha_de_ocurrencia") or "").strip()
+                occurrence_date = (
+                    raw_row.get("fecha_ocurrencia")
+                    or raw_row.get("fecha_ocurrencia_caso")
+                    or raw_row.get("fecha_de_ocurrencia")
+                    or ""
+                ).strip()
             else:
                 occurrence_date = ""
             if not case_id:
