@@ -135,6 +135,8 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
     assert colaborador_row["nombres_involucrado"] == "Juan"
     assert colaborador_row["telefonos_cliente_relacionado"] == "=999"
     assert colaborador_row["id_caso"] == "2024-1001"
+    assert colaborador_row["fecha_ocurrencia_caso"] == "2024-01-01"
+    assert colaborador_row["fecha_descubrimiento_caso"] == "2024-01-02"
     assert colaborador_row["cliente_telefonos"] == "=999"
     assert colaborador_row["codigo_analitica"] == "4300000001"
 
