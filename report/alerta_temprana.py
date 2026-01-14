@@ -30,7 +30,7 @@ PPTX_MISSING_MESSAGE = (
     "La dependencia opcional 'python-pptx' no está instalada. "
     "Ejecuta 'pip install python-pptx' para habilitar la alerta temprana en PPT."
 )
-PLACEHOLDER = "No aplica / Sin información registrada."
+PLACEHOLDER = "-"
 DEFAULT_MODEL = "PlanTL-GOB-ES/flan-t5-base-spanish"
 MAX_SECTION_CHARS = 600
 
@@ -326,7 +326,7 @@ def _add_section_panel(slide, left, top, width, height, title: str, body: str, *
     header_frame.clear()
     header_para = header_frame.paragraphs[0]
     header_para.text = title
-    header_para.font.size = Pt(16)
+    header_para.font.size = Pt(11)
     header_para.font.bold = True
     header_para.font.color.rgb = RGBColor(32, 45, 71)
 
@@ -340,7 +340,7 @@ def _add_section_panel(slide, left, top, width, height, title: str, body: str, *
     frame.word_wrap = True
     para = frame.paragraphs[0]
     para.text = body
-    para.font.size = Pt(12)
+    para.font.size = Pt(11)
     para.alignment = PP_ALIGN.LEFT
     para.line_spacing = 1.15
     return panel
@@ -359,13 +359,13 @@ def _add_masthead(slide, slide_width, caso: Mapping[str, object]):
     left_frame.clear()
     title_para = left_frame.paragraphs[0]
     title_para.text = "Alerta temprana · Reporte/Informe de Alertas Tempranas por Casos de Fraude"
-    title_para.font.size = Pt(20)
+    title_para.font.size = Pt(11)
     title_para.font.bold = True
     title_para.font.color.rgb = RGBColor(255, 255, 255)
 
     case_line = left_frame.add_paragraph()
     case_line.text = f"Caso: {_safe_text(caso.get('titulo') or caso.get('resumen'), _default_case_title(caso))}"
-    case_line.font.size = Pt(14)
+    case_line.font.size = Pt(11)
     case_line.font.color.rgb = RGBColor(214, 225, 240)
 
     right_box_width = int(slide_width * 0.32)
@@ -374,14 +374,14 @@ def _add_masthead(slide, slide_width, caso: Mapping[str, object]):
     right_frame.clear()
     code_para = right_frame.paragraphs[0]
     code_para.text = f"Código: {_safe_text(caso.get('id_caso'), 'BCP-0XX')}"
-    code_para.font.size = Pt(14)
+    code_para.font.size = Pt(11)
     code_para.font.bold = True
     code_para.font.color.rgb = RGBColor(255, 255, 255)
     code_para.alignment = PP_ALIGN.RIGHT
 
     issuer_para = right_frame.add_paragraph()
     issuer_para.text = f"Emitido por: {_safe_text(caso.get('investigador_nombre') or (caso.get('investigador') or {}).get('nombre'), 'Equipo de investigación')}"
-    issuer_para.font.size = Pt(13)
+    issuer_para.font.size = Pt(11)
     issuer_para.font.color.rgb = RGBColor(214, 225, 240)
     issuer_para.alignment = PP_ALIGN.RIGHT
     return masthead
