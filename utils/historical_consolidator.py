@@ -38,12 +38,14 @@ def append_historical_records(
     *,
     timestamp: datetime | None = None,
     placeholder: str | None = None,
+    encoding: str = "utf-8",
 ):
     """Adjunta registros a ``h_<tabla>.csv`` con metadatos de caso y hora.
 
     Crea el archivo con encabezados si aún no existe y añade las columnas
     ``case_id`` y ``fecactualizacion`` a cada fila antes de escribirla.
     Devuelve la ruta escrita o ``None`` cuando no hay filas de entrada.
+    La codificación se controla con ``encoding``.
     """
 
     normalized_rows = list(rows or [])
@@ -58,7 +60,7 @@ def append_historical_records(
     should_write_header = not history_path.exists()
     empty_placeholder = placeholder if placeholder is not None else settings.EVENTOS_PLACEHOLDER
 
-    with history_path.open("a", newline="", encoding="utf-8") as handle:
+    with history_path.open("a", newline="", encoding=encoding) as handle:
         writer = csv.DictWriter(handle, fieldnames=full_header)
         if should_write_header:
             writer.writeheader()
