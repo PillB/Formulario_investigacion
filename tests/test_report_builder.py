@@ -172,7 +172,7 @@ def test_hallazgos_table_uses_placeholders_with_products(sample_case_data):
 
     assert "Cliente Uno" not in md
     assert "Totales" not in md
-    assert "| 1 | No aplica / Sin información registrada. |" in md
+    assert f"| 1 | {report_builder.PLACEHOLDER} |" in md
 
 
 def test_md_handles_rich_text_analysis_payload(sample_case_data):

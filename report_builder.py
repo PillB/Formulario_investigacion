@@ -29,7 +29,7 @@ from validators import parse_decimal_amount, sanitize_rich_text
 from report.styling_enhancer import apply_cell_shading, apply_header_band, style_section_heading, style_table, style_title
 
 
-PLACEHOLDER = "No aplica / Sin información registrada."
+PLACEHOLDER = "-"
 LOGGER = logging.getLogger(__name__)
 
 
