@@ -5,11 +5,13 @@ from __future__ import annotations
 import csv
 import os
 import re
+from datetime import date, datetime
 from typing import Dict, Iterable, Iterator, List, Sequence, Tuple
 
 from settings import BASE_DIR, DETAIL_LOOKUP_ALIASES
 
 CSV_IMPORT_ENCODINGS: tuple[str, ...] = ("utf-8-sig", "utf-8", "cp1252", "latin-1")
+EXCEL_IMPORT_EXTENSIONS: tuple[str, ...] = (".xlsx", ".xls")
 
 
 def normalize_detail_catalog_key(key: str) -> str:
@@ -141,6 +143,29 @@ def iter_massive_csv_rows(filename: str) -> Iterator[Dict[str, str]]:
             yield cleaned
 
 
+def iter_massive_rows(filename: str | os.PathLike) -> Iterator[Dict[str, str]]:
+    """Itera sobre archivos masivos CSV o Excel normalizando valores como texto."""
+
+    filename = os.fspath(filename)
+    if _is_excel_file(filename):
+        yield from _iter_excel_rows(filename)
+        return
+    yield from iter_massive_csv_rows(filename)
+
+
+def read_import_headers(
+    filename: str | os.PathLike,
+    *,
+    encodings: Sequence[str] | None = None,
+) -> list[str]:
+    """Lee encabezados desde CSV o Excel usando la misma lógica de importación."""
+
+    filename = os.fspath(filename)
+    if _is_excel_file(filename):
+        return _read_excel_headers(filename)
+    return read_csv_headers_with_fallback(filename, encodings=encodings)
+
+
 def read_csv_headers_with_fallback(
     filename: str | os.PathLike,
     *,
@@ -201,10 +226,13 @@ def parse_involvement_entries(raw_value: str | Iterable[str]) -> List[Tuple[str,
 __all__ = [
     "build_detail_catalog_id_index",
     "CSV_IMPORT_ENCODINGS",
+    "EXCEL_IMPORT_EXTENSIONS",
     "iter_massive_csv_rows",
+    "iter_massive_rows",
     "load_detail_catalogs",
     "normalize_detail_catalog_key",
     "parse_involvement_entries",
+    "read_import_headers",
     "read_csv_headers_with_fallback",
     "read_csv_rows_with_fallback",
 ]
@@ -232,3 +260,75 @@ def _read_csv_rows_with_fallback(
         f"{', '.join(encodings)}. Detalles: {'; '.join(errors)}"
     )
     raise ValueError(error_message)
+
+
+def _is_excel_file(filename: str) -> bool:
+    return os.path.splitext(filename.lower())[1] in EXCEL_IMPORT_EXTENSIONS
+
+
+def _excel_cell_to_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%d")
+    return str(value)
+
+
+def _iter_excel_rows(filename: str) -> Iterator[Dict[str, str]]:
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:  # pragma: no cover - dependencias de entorno
+        raise ValueError("openpyxl es requerido para importar archivos Excel.") from exc
+
+    workbook = load_workbook(filename, read_only=True, data_only=True)
+    try:
+        worksheet = workbook.active
+        rows = worksheet.iter_rows(values_only=True)
+        try:
+            header_row = next(rows)
+        except StopIteration:
+            return
+        headers = [
+            (str(cell).strip() if cell is not None else "")
+            for cell in header_row
+        ]
+        for row in rows:
+            cleaned: Dict[str, str] = {}
+            for idx, value in enumerate(row or ()):
+                if idx >= len(headers):
+                    continue
+                header = headers[idx]
+                if not header:
+                    continue
+                cell_text = _excel_cell_to_text(value)
+                if isinstance(cell_text, str):
+                    cell_text = cell_text.strip()
+                cleaned[header] = cell_text
+            if cleaned:
+                yield cleaned
+    finally:
+        workbook.close()
+
+
+def _read_excel_headers(filename: str) -> list[str]:
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:  # pragma: no cover - dependencias de entorno
+        raise ValueError("openpyxl es requerido para importar archivos Excel.") from exc
+
+    workbook = load_workbook(filename, read_only=True, data_only=True)
+    try:
+        worksheet = workbook.active
+        rows = worksheet.iter_rows(values_only=True)
+        try:
+            header_row = next(rows)
+        except StopIteration:
+            return []
+        return [
+            (str(cell).strip() if cell is not None else "")
+            for cell in header_row
+        ]
+    finally:
+        workbook.close()

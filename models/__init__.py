@@ -13,10 +13,11 @@ from .analitica_catalog import (
 )
 from .catalog_service import CatalogService, TeamHierarchyCatalog
 from .autofill_service import AutofillResult, AutofillService
-from .catalogs import (CSV_IMPORT_ENCODINGS, build_detail_catalog_id_index,
-                       iter_massive_csv_rows, load_detail_catalogs,
+from .catalogs import (CSV_IMPORT_ENCODINGS, EXCEL_IMPORT_EXTENSIONS,
+                       build_detail_catalog_id_index, iter_massive_csv_rows,
+                       iter_massive_rows, load_detail_catalogs,
                        normalize_detail_catalog_key, parse_involvement_entries,
-                       read_csv_headers_with_fallback,
+                       read_csv_headers_with_fallback, read_import_headers,
                        read_csv_rows_with_fallback)
 
 __all__ = [
@@ -34,11 +35,14 @@ __all__ = [
     "get_analitica_names",
     "TeamHierarchyCatalog",
     "CSV_IMPORT_ENCODINGS",
+    "EXCEL_IMPORT_EXTENSIONS",
     "build_detail_catalog_id_index",
     "iter_massive_csv_rows",
+    "iter_massive_rows",
     "load_detail_catalogs",
     "normalize_detail_catalog_key",
     "parse_involvement_entries",
+    "read_import_headers",
     "read_csv_headers_with_fallback",
     "read_csv_rows_with_fallback",
 ]
