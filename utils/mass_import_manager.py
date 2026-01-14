@@ -81,7 +81,7 @@ class MassImportManager:
         if click_log:
             logger("navegacion", click_log)
 
-        file_path = filename or app._select_csv_file(sample_key, dialog_title or f"Seleccionar CSV de {task_label}")
+        file_path = filename or app._select_import_file(sample_key, dialog_title or f"Seleccionar archivo de {task_label}")
         if not file_path:
             return
         if not app._validate_import_headers(file_path, sample_key):

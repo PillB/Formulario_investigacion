@@ -85,9 +85,9 @@ from inheritance_service import InheritanceService
 from models import (AutofillService, build_detail_catalog_id_index,
                     CatalogService, extract_code_from_display,
                     find_analitica_by_code, format_analitica_option,
-                    get_analitica_display_options, iter_massive_csv_rows,
+                    get_analitica_display_options, iter_massive_rows,
                     normalize_detail_catalog_key, parse_involvement_entries,
-                    read_csv_headers_with_fallback)
+                    read_import_headers)
 from report.alerta_temprana import (
     PPTX_AVAILABLE,
     PPTX_MISSING_MESSAGE,
@@ -151,6 +151,9 @@ from validators import (drain_log_queue, FieldValidator, log_event,
                         validate_required_text, validate_risk_id,
                         validate_team_member_id, validate_process_id,
                         normalize_team_member_identifier)
+
+# Compatibilidad con pruebas y API histórica que esperaban iter_massive_csv_rows.
+iter_massive_csv_rows = iter_massive_rows
 
 PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
 if PIL_AVAILABLE:
@@ -704,6 +707,17 @@ class FraudCaseApp:
         "detail",
         "source",
     )
+    IMPORT_DATE_FIELDS = {
+        "fecha_ocurrencia",
+        "fecha_descubrimiento",
+        "fecha_vigencia",
+        "fecha_carta_inmediatez",
+        "fecha_carta_renuncia",
+        "fecha_ocurrencia_caso",
+        "fecha_descubrimiento_caso",
+        "fecha_de_ocurrencia",
+        "fecha_de_descubrimiento",
+    }
     CLIENT_ACTION_BUTTONS: tuple[tuple[str, str], ...] = (("Agregar cliente", "add"),)
     EXPORT_ENCODING_OPTIONS = ("utf-8", "latin-1")
     PRODUCT_ACTION_BUTTONS: tuple[tuple[str, str], ...] = (
@@ -713,7 +727,7 @@ class FraudCaseApp:
     COLLABORATOR_SUMMARY_COLUMNS: tuple[tuple[str, str], ...] = TeamMemberFrame.SUMMARY_COLUMNS
     IMPORT_CONFIG = {
         "clientes": {
-            "title": "Seleccionar CSV de clientes",
+            "title": "Seleccionar archivo de clientes",
             "initialfile": Path(MASSIVE_SAMPLE_FILES.get("clientes", "")).name,
             "expected_headers": (
                 "id_cliente",
@@ -729,7 +743,7 @@ class FraudCaseApp:
             "expected_keyword": "cliente",
         },
         "colaboradores": {
-            "title": "Seleccionar CSV de colaboradores",
+            "title": "Seleccionar archivo de colaboradores",
             "initialfile": Path(MASSIVE_SAMPLE_FILES.get("colaboradores", "")).name,
             "expected_headers": (
                 "id_colaborador",
@@ -750,7 +764,7 @@ class FraudCaseApp:
             "expected_keyword": "colaborador",
         },
         "productos": {
-            "title": "Seleccionar CSV de productos",
+            "title": "Seleccionar archivo de productos",
             "initialfile": Path(MASSIVE_SAMPLE_FILES.get("productos", "")).name,
             "expected_headers": (
                 "id_producto",
@@ -777,7 +791,7 @@ class FraudCaseApp:
             "expected_keyword": "producto",
         },
         "riesgos": {
-            "title": "Seleccionar CSV de riesgos",
+            "title": "Seleccionar archivo de riesgos",
             "initialfile": Path(MASSIVE_SAMPLE_FILES.get("riesgos", "")).name,
             "expected_headers": (
                 "id_riesgo",
@@ -791,7 +805,7 @@ class FraudCaseApp:
             "expected_keyword": "riesgo",
         },
         "normas": {
-            "title": "Seleccionar CSV de normas",
+            "title": "Seleccionar archivo de normas",
             "initialfile": Path(MASSIVE_SAMPLE_FILES.get("normas", "")).name,
             "expected_headers": (
                 "id_norma",
@@ -804,7 +818,7 @@ class FraudCaseApp:
             "expected_keyword": "norma",
         },
         "reclamos": {
-            "title": "Seleccionar CSV de reclamos",
+            "title": "Seleccionar archivo de reclamos",
             "initialfile": Path(MASSIVE_SAMPLE_FILES.get("reclamos", "")).name,
             "expected_headers": (
                 "id_reclamo",
@@ -816,7 +830,7 @@ class FraudCaseApp:
             "expected_keyword": "reclamo",
         },
         "combinado": {
-            "title": "Seleccionar CSV combinado",
+            "title": "Seleccionar archivo combinado",
             "initialfile": Path(MASSIVE_SAMPLE_FILES.get("combinado", "")).name,
             "expected_headers": (
                 "id_producto",
@@ -2286,7 +2300,7 @@ class FraudCaseApp:
             ui_callback=lambda payload, file_path: self._apply_combined_import_payload(payload, manager=manager, file_path=file_path),
             error_prefix="No se pudo importar el CSV combinado",
             filename=filename,
-            dialog_title="Seleccionar CSV combinado",
+            dialog_title="Seleccionar archivo combinado",
             click_log="Usuario pulsó importar datos combinados",
             start_log="Inició importación de datos combinados",
             log_handler=lambda category, message: log_event(category, message, self.logs),
@@ -2305,7 +2319,7 @@ class FraudCaseApp:
             ui_callback=lambda payload, file_path: self._apply_risk_import_payload(payload, manager=manager, file_path=file_path),
             error_prefix="No se pudo importar riesgos",
             filename=filename,
-            dialog_title="Seleccionar CSV de riesgos",
+            dialog_title="Seleccionar archivo de riesgos",
             click_log="Usuario pulsó importar riesgos",
             start_log="Inició importación de riesgos",
             log_handler=lambda category, message: log_event(category, message, self.logs),
@@ -2324,7 +2338,7 @@ class FraudCaseApp:
             ui_callback=lambda payload, file_path: self._apply_norm_import_payload(payload, manager=manager, file_path=file_path),
             error_prefix="No se pudo importar normas",
             filename=filename,
-            dialog_title="Seleccionar CSV de normas",
+            dialog_title="Seleccionar archivo de normas",
             click_log="Usuario pulsó importar normas",
             start_log="Inició importación de normas",
             log_handler=lambda category, message: log_event(category, message, self.logs),
@@ -2343,7 +2357,7 @@ class FraudCaseApp:
             ui_callback=lambda payload, file_path: self._apply_claim_import_payload(payload, manager=manager, file_path=file_path),
             error_prefix="No se pudo importar reclamos",
             filename=filename,
-            dialog_title="Seleccionar CSV de reclamos",
+            dialog_title="Seleccionar archivo de reclamos",
             click_log="Usuario pulsó importar reclamos",
             start_log="Inició importación de reclamos",
             log_handler=lambda category, message: log_event(category, message, self.logs),
@@ -4668,6 +4682,32 @@ class FraudCaseApp:
         return sanitized
 
     @classmethod
+    def _normalize_import_date(cls, value: str, column_name: str | None = None, row_number: int | None = None) -> str:
+        """Normaliza fechas DD/MM/YYYY a YYYY-MM-DD para importaciones masivas."""
+
+        text = (value or "").strip()
+        if not text:
+            return ""
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", text):
+            return text
+        if "/" in text:
+            try:
+                parsed = datetime.strptime(text, "%d/%m/%Y")
+            except ValueError as exc:
+                location = []
+                if row_number is not None:
+                    location.append(f"fila {row_number}")
+                if column_name:
+                    location.append(f"columna '{column_name}'")
+                location_hint = f" en {' y '.join(location)}" if location else ""
+                raise ValueError(
+                    "La fecha debe tener formato YYYY-MM-DD o DD/MM/YYYY"
+                    f"{location_hint}. Valor recibido: '{text}'."
+                ) from exc
+            return parsed.strftime("%Y-%m-%d")
+        return text
+
+    @classmethod
     def _sanitize_import_row(cls, row, row_number: int | None = None) -> dict[str, str]:
         """Aplica saneamiento consistente a cada celda de una fila importada."""
 
@@ -4678,7 +4718,10 @@ class FraudCaseApp:
             if key is None:
                 continue
             normalized_key = cls._sanitize_text(key)
-            sanitized[normalized_key] = cls._sanitize_import_value(value, normalized_key, row_number)
+            sanitized_value = cls._sanitize_import_value(value, normalized_key, row_number)
+            if normalized_key in cls.IMPORT_DATE_FIELDS:
+                sanitized_value = cls._normalize_import_date(sanitized_value, normalized_key, row_number)
+            sanitized[normalized_key] = sanitized_value
         return sanitized
 
     def _notify_taxonomy_warning(self, message):
@@ -7804,7 +7847,7 @@ class FraudCaseApp:
         self.catalog_progress.grid_remove()
         self._catalog_progress_visible = False
 
-        import_group = ttk.LabelFrame(inner_frame, text="Importar datos masivos (CSV)")
+        import_group = ttk.LabelFrame(inner_frame, text="Importar datos masivos (CSV/Excel)")
         import_group.grid(row=1, column=1, sticky="nsew", padx=COL_PADX, pady=ROW_PADY)
         import_group.columnconfigure(0, weight=0)
         import_group.columnconfigure(1, weight=1)
@@ -10240,19 +10283,23 @@ class FraudCaseApp:
         self._apply_treeview_theme(tree)
 
     # ---------------------------------------------------------------------
-    # Importación desde CSV
+    # Importación desde archivos masivos
 
     def _get_import_config(self, sample_key):
         return self.IMPORT_CONFIG.get(sample_key, {})
 
-    def _select_csv_file(self, sample_key, dialog_title):
-        """Obtiene un CSV desde diálogo y registra cancelaciones explícitas."""
+    def _select_import_file(self, sample_key, dialog_title):
+        """Obtiene un archivo masivo desde diálogo y registra cancelaciones explícitas."""
 
         filename = None
         config = self._get_import_config(sample_key)
         dialog_options = {
-            "title": dialog_title or config.get("title") or "Seleccionar CSV",
-            "filetypes": [("CSV Files", "*.csv")],
+            "title": dialog_title or config.get("title") or "Seleccionar archivo",
+            "filetypes": [
+                ("Archivos CSV/Excel", "*.csv *.xlsx *.xls"),
+                ("CSV", "*.csv"),
+                ("Excel", "*.xlsx *.xls"),
+            ],
         }
         initialfile = config.get("initialfile")
         if initialfile:
@@ -10263,7 +10310,7 @@ class FraudCaseApp:
         except tk.TclError:
             filename = None
         if not filename:
-            message = f"Importación cancelada: no se seleccionó un archivo CSV para {sample_key}."
+            message = f"Importación cancelada: no se seleccionó un archivo para {sample_key}."
             log_event("cancelado", message, self.logs)
             if not getattr(self, "_suppress_messagebox", False):
                 messagebox.showinfo("Importación cancelada", message)
@@ -10298,7 +10345,7 @@ class FraudCaseApp:
                 self.logs,
             )
             return True
-        headers = self._read_csv_headers(filename)
+        headers = self._read_import_headers(filename)
         if headers is None:
             return False
         if sample_key == "combinado":
@@ -10322,7 +10369,7 @@ class FraudCaseApp:
             )
             if not getattr(self, "_suppress_messagebox", False):
                 messagebox.showerror(
-                    "CSV inválido",
+                    "Archivo inválido",
                     f"Faltan columnas requeridas para {sample_key} ({missing_message}).",
                 )
             return False
@@ -10335,19 +10382,19 @@ class FraudCaseApp:
             )
             if not getattr(self, "_suppress_messagebox", False):
                 messagebox.showerror(
-                    "CSV inválido",
+                    "Archivo inválido",
                     f"Faltan columnas requeridas para {sample_key}: {', '.join(missing)}",
                 )
             return False
         return True
 
-    def _read_csv_headers(self, filename: str, *, show_error: bool = True) -> Optional[list[str]]:
+    def _read_import_headers(self, filename: str, *, show_error: bool = True) -> Optional[list[str]]:
         try:
-            return read_csv_headers_with_fallback(filename)
+            return read_import_headers(filename)
         except Exception as exc:  # pragma: no cover - errores de IO poco frecuentes
             log_event("validacion", f"No se pudo leer {filename} para validar encabezados: {exc}", self.logs)
             if show_error and not getattr(self, "_suppress_messagebox", False):
-                messagebox.showerror("CSV inválido", f"No se pudo leer el archivo: {exc}")
+                messagebox.showerror("Archivo inválido", f"No se pudo leer el archivo: {exc}")
             return None
 
     @classmethod
@@ -10520,7 +10567,7 @@ class FraudCaseApp:
 
     def _build_combined_worker(self, filename: str):
         header_format = None
-        headers = self._read_csv_headers(filename, show_error=False)
+        headers = self._read_import_headers(filename, show_error=False)
         if headers:
             header_format, _, _ = self.is_eventos_format(headers)
 
@@ -10999,7 +11046,8 @@ class FraudCaseApp:
         def worker(progress_callback, cancel_event):
             payload = []
             for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                hydrated, found = self._hydrate_row_from_details(row, 'id_cliente', CLIENT_ID_ALIASES)
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, found = self._hydrate_row_from_details(sanitized_row, 'id_cliente', CLIENT_ID_ALIASES)
                 id_cliente = (hydrated.get('id_cliente') or '').strip()
                 if not id_cliente:
                     continue
@@ -11012,7 +11060,8 @@ class FraudCaseApp:
         def worker(progress_callback, cancel_event):
             payload = []
             for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                hydrated, found = self._hydrate_row_from_details(row, 'id_colaborador', TEAM_ID_ALIASES)
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, found = self._hydrate_row_from_details(sanitized_row, 'id_colaborador', TEAM_ID_ALIASES)
                 collaborator_id = (hydrated.get('id_colaborador') or '').strip()
                 if not collaborator_id:
                     continue
@@ -11025,7 +11074,8 @@ class FraudCaseApp:
         def worker(progress_callback, cancel_event):
             payload = []
             for index, row in self._iter_rows_with_progress(filename, progress_callback, cancel_event):
-                hydrated, found = self._hydrate_row_from_details(row, 'id_producto', PRODUCT_ID_ALIASES)
+                sanitized_row = self._sanitize_import_row(row, row_number=index)
+                hydrated, found = self._hydrate_row_from_details(sanitized_row, 'id_producto', PRODUCT_ID_ALIASES)
                 product_id = (hydrated.get('id_producto') or '').strip()
                 if not product_id:
                     continue
@@ -13193,7 +13243,7 @@ class FraudCaseApp:
             ui_callback=lambda payload, file_path: self._apply_client_import_payload(payload, manager=manager, file_path=file_path),
             error_prefix="No se pudo importar clientes",
             filename=filename,
-            dialog_title="Seleccionar CSV de clientes",
+            dialog_title="Seleccionar archivo de clientes",
             click_log="Usuario pulsó importar clientes",
             start_log="Inició importación de clientes",
             log_handler=lambda category, message: log_event(category, message, self.logs),
@@ -13212,7 +13262,7 @@ class FraudCaseApp:
             ui_callback=lambda payload, file_path: self._apply_team_import_payload(payload, manager=manager, file_path=file_path),
             error_prefix="No se pudo importar colaboradores",
             filename=filename,
-            dialog_title="Seleccionar CSV de colaboradores",
+            dialog_title="Seleccionar archivo de colaboradores",
             click_log="Usuario pulsó importar colaboradores",
             start_log="Inició importación de colaboradores",
             log_handler=lambda category, message: log_event(category, message, self.logs),
@@ -13231,7 +13281,7 @@ class FraudCaseApp:
             ui_callback=lambda payload, file_path: self._apply_product_import_payload(payload, manager=manager, file_path=file_path),
             error_prefix="No se pudo importar productos",
             filename=filename,
-            dialog_title="Seleccionar CSV de productos",
+            dialog_title="Seleccionar archivo de productos",
             click_log="Usuario pulsó importar productos",
             start_log="Inició importación de productos",
             log_handler=lambda category, message: log_event(category, message, self.logs),
