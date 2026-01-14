@@ -705,6 +705,7 @@ class FraudCaseApp:
         "source",
     )
     CLIENT_ACTION_BUTTONS: tuple[tuple[str, str], ...] = (("Agregar cliente", "add"),)
+    EXPORT_ENCODING_OPTIONS = ("utf-8", "latin-1")
     PRODUCT_ACTION_BUTTONS: tuple[tuple[str, str], ...] = (
         ("Crear producto nuevo (vacío)", "add_empty"),
         ("Crear producto heredando del caso", "inherit_case"),
@@ -1138,6 +1139,9 @@ class FraudCaseApp:
         self._update_theme_toggle_label()
         self.sound_enabled_var = tk.BooleanVar(
             value=bool(self._user_settings.get("sound_enabled", True))
+        )
+        self.export_encoding_var = tk.StringVar(
+            value=self._normalize_export_encoding(self._user_settings.get("export_encoding"))
         )
         self.afectacion_interna_var = tk.BooleanVar(value=False)
         self._last_afectacion_interna_state = False
@@ -1621,17 +1625,24 @@ class FraudCaseApp:
         *,
         timestamp: datetime | None = None,
         base_dir: Path | None = None,
+        encoding: str | None = None,
     ) -> None:
         unique_files = sorted({Path(name).name for name in history_files if name})
         if not unique_files:
             return
         manifest_path = self._get_pending_manifest_path()
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        normalized_encoding = (
+            self._normalize_export_encoding(encoding)
+            if encoding
+            else self._get_export_encoding()
+        )
         entry = {
             "case_id": case_id,
             "history_files": unique_files,
             "timestamp": (timestamp or datetime.now()).isoformat(),
             "base_dir": str(base_dir or EXPORTS_DIR),
+            "encoding": normalized_encoding,
         }
         try:
             with manifest_path.open("a", encoding="utf-8") as handle:
@@ -1678,7 +1689,12 @@ class FraudCaseApp:
             log_event("validacion", f"No se pudo actualizar el manifiesto de consolidación: {exc}", self.logs)
 
     def _load_history_rows_for_entry(
-        self, case_id: str, history_file: str, base_dir: Path
+        self,
+        case_id: str,
+        history_file: str,
+        base_dir: Path,
+        *,
+        encoding: str = "utf-8",
     ) -> tuple[list[dict[str, object]], list[str]]:
         base_dir = Path(base_dir)
         table_name = history_file.removeprefix("h_")
@@ -1698,7 +1714,7 @@ class FraudCaseApp:
         candidates = preferred or candidates
         for csv_path in candidates:
             try:
-                with csv_path.open(newline="", encoding="utf-8") as handle:
+                with csv_path.open(newline="", encoding=encoding) as handle:
                     reader = csv.DictReader(handle)
                     header = reader.fieldnames or []
                     rows = []
@@ -1718,6 +1734,7 @@ class FraudCaseApp:
         history_files = entry.get("history_files") or []
         if not history_files:
             return True
+        encoding = self._normalize_export_encoding(entry.get("encoding"))
         timestamp_text = entry.get("timestamp")
         try:
             timestamp = datetime.fromisoformat(timestamp_text) if timestamp_text else datetime.now()
@@ -1733,7 +1750,12 @@ class FraudCaseApp:
             return False
         success = True
         for history_file in history_files:
-            rows, header = self._load_history_rows_for_entry(case_id, str(history_file), base_dir)
+            rows, header = self._load_history_rows_for_entry(
+                case_id,
+                str(history_file),
+                base_dir,
+                encoding=encoding,
+            )
             if not header:
                 continue
             table_name = str(history_file)
@@ -1749,6 +1771,7 @@ class FraudCaseApp:
                     case_folder,
                     case_id,
                     timestamp=timestamp,
+                    encoding=encoding,
                 )
             except OSError as exc:
                 log_event("validacion", f"No se pudo consolidar {history_file} para {case_id}: {exc}", self.logs)
@@ -7998,6 +8021,23 @@ class FraudCaseApp:
         self.btn_carta_inmediatez = carta_button
         self.btn_clear_form = clear_button
 
+        export_encoding_frame = ttk.Frame(action_group)
+        export_encoding_frame.grid(row=3, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
+        ttk.Label(export_encoding_frame, text="Codificación de exportación:").pack(side="left")
+        export_encoding_selector = ttk.Combobox(
+            export_encoding_frame,
+            textvariable=self.export_encoding_var,
+            values=list(self.EXPORT_ENCODING_OPTIONS),
+            state="readonly",
+            width=12,
+        )
+        export_encoding_selector.pack(side="left", padx=(6, 0))
+        export_encoding_selector.bind("<<ComboboxSelected>>", self._update_export_encoding)
+        self.register_tooltip(
+            export_encoding_selector,
+            "Selecciona la codificación de los CSV exportados (UTF-8 recomendado).",
+        )
+
         docx_tooltip = (
             "Genera el informe principal en Word utilizando los datos validados."
             if self._docx_available
@@ -8063,7 +8103,7 @@ class FraudCaseApp:
                 foreground="#b26a00",
                 wraplength=520,
                 justify="left",
-            ).grid(row=3, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
+            ).grid(row=4, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY // 2, 0))
 
         ttk.Label(
             action_group,
@@ -8073,7 +8113,7 @@ class FraudCaseApp:
             ),
             wraplength=520,
             justify="left",
-        ).grid(row=4, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
+        ).grid(row=5, column=0, sticky="w", padx=COL_PADX, pady=(ROW_PADY, 0))
         self.refresh_autosave_list()
         self._set_catalog_dependent_state(self._catalog_loading or self._active_import_jobs > 0)
 
@@ -11278,6 +11318,38 @@ class FraudCaseApp:
     @staticmethod
     def _normalize_identifier(identifier):
         return (identifier or '').strip().upper()
+
+    def _normalize_export_encoding(self, value: object) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"utf8", "utf-8"}:
+            return "utf-8"
+        if normalized in {"latin1", "latin-1", "latin_1", "iso-8859-1"}:
+            return "latin-1"
+        return "utf-8"
+
+    def _get_export_encoding(self) -> str:
+        encoding_var = getattr(self, "export_encoding_var", None)
+        if encoding_var is not None and hasattr(encoding_var, "get"):
+            return self._normalize_export_encoding(encoding_var.get())
+        settings = getattr(self, "_user_settings", {}) or {}
+        return self._normalize_export_encoding(settings.get("export_encoding"))
+
+    def _update_export_encoding(self, *_event) -> None:
+        normalized = self._normalize_export_encoding(self.export_encoding_var.get())
+        if normalized != self.export_encoding_var.get():
+            self.export_encoding_var.set(normalized)
+        self._user_settings["export_encoding"] = normalized
+        self._persist_user_settings()
+
+    @staticmethod
+    def _build_export_encoding_error(file_name: str, encoding: str, exc: UnicodeEncodeError) -> str:
+        if encoding == "latin-1":
+            return (
+                f"No se pudo exportar {file_name} en Latin-1 porque el texto contiene caracteres "
+                "que no existen en esa codificación. Cambia la codificación a UTF-8 o reemplaza "
+                "los caracteres especiales antes de exportar."
+            )
+        return f"No se pudo exportar {file_name} usando {encoding}: {exc}"
 
     def _run_duplicate_check_post_load(self, from_background: Optional[bool] = None):
         """Ejecuta la validación de claves técnicas tras cargas masivas.
@@ -15737,17 +15809,21 @@ class FraudCaseApp:
         history_targets: list[tuple[str, list[dict[str, object]], list[str]]] = []
         normalized_case_id = self._normalize_identifier(case_id)
         history_timestamp = datetime.now()
+        export_encoding = self._get_export_encoding()
 
         def write_csv(file_name, rows, header, *, historical_name: Optional[str] = None):
             path = folder / f"{report_prefix}_{file_name}"
-            with path.open('w', newline='', encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=header)
-                writer.writeheader()
-                for row in rows:
-                    sanitized_row = {
-                        field: _sanitize_csv_value(row.get(field, "")) for field in header
-                    }
-                    writer.writerow(sanitized_row)
+            try:
+                with path.open('w', newline='', encoding=export_encoding) as f:
+                    writer = csv.DictWriter(f, fieldnames=header)
+                    writer.writeheader()
+                    for row in rows:
+                        sanitized_row = {
+                            field: _sanitize_csv_value(row.get(field, "")) for field in header
+                        }
+                        writer.writerow(sanitized_row)
+            except UnicodeEncodeError as exc:
+                raise ValueError(self._build_export_encoding_error(file_name, export_encoding, exc)) from exc
             created_files.append(path)
             if historical_name:
                 history_targets.append((historical_name, rows, header))
@@ -15844,25 +15920,37 @@ class FraudCaseApp:
                 if docx_path:
                     created_files.append(docx_path)
         for table_name, rows, header in history_targets:
-            history_path = append_historical_records(
-                table_name,
-                rows,
-                header,
-                folder,
-                normalized_case_id,
-                timestamp=history_timestamp,
-            )
+            try:
+                history_path = append_historical_records(
+                    table_name,
+                    rows,
+                    header,
+                    folder,
+                    normalized_case_id,
+                    timestamp=history_timestamp,
+                    encoding=export_encoding,
+                )
+            except UnicodeEncodeError as exc:
+                raise ValueError(
+                    self._build_export_encoding_error(f"h_{table_name}.csv", export_encoding, exc)
+                ) from exc
             if history_path:
                 created_files.append(history_path)
         export_definitions = self._build_export_definitions(data)
         architecture_path = self._update_architecture_diagram(export_definitions)
         if architecture_path:
             created_files.append(architecture_path)
-        warnings.extend(
-            self._mirror_exports_to_external_drive(
-                created_files, normalized_case_id, notify_user=False, consolidation_timestamp=history_timestamp
-            )
-        )
+        mirror_args = (created_files, normalized_case_id)
+        mirror_kwargs = {
+            "notify_user": False,
+            "consolidation_timestamp": history_timestamp,
+            "history_encoding": export_encoding,
+        }
+        try:
+            warnings.extend(self._mirror_exports_to_external_drive(*mirror_args, **mirror_kwargs))
+        except TypeError:
+            mirror_kwargs.pop("history_encoding", None)
+            warnings.extend(self._mirror_exports_to_external_drive(*mirror_args, **mirror_kwargs))
         return {
             "data": data,
             "report_prefix": report_prefix,
@@ -16537,6 +16625,7 @@ class FraudCaseApp:
         *,
         notify_user: bool = True,
         consolidation_timestamp: datetime | None = None,
+        history_encoding: str | None = None,
     ) -> list[str]:
         normalized_sources = [Path(path) for path in file_paths or [] if path]
         messages: list[str] = []
@@ -16544,11 +16633,20 @@ class FraudCaseApp:
             return messages
         history_paths = [path for path in normalized_sources if path.name.startswith("h_")]
         history_base = history_paths[0].parent if history_paths else Path(EXPORTS_DIR)
+        normalized_encoding = (
+            self._normalize_export_encoding(history_encoding)
+            if history_encoding
+            else self._get_export_encoding()
+        )
         external_base = self._get_external_drive_path()
         if not external_base:
             if history_paths:
                 self._append_pending_consolidation(
-                    case_id, [path.name for path in history_paths], timestamp=consolidation_timestamp, base_dir=history_base
+                    case_id,
+                    [path.name for path in history_paths],
+                    timestamp=consolidation_timestamp,
+                    base_dir=history_base,
+                    encoding=normalized_encoding,
                 )
             return messages
         case_label = case_id or 'caso'
@@ -16560,7 +16658,11 @@ class FraudCaseApp:
             log_event("validacion", message, self.logs)
             if history_paths:
                 self._append_pending_consolidation(
-                    case_id, [path.name for path in history_paths], timestamp=consolidation_timestamp, base_dir=history_base
+                    case_id,
+                    [path.name for path in history_paths],
+                    timestamp=consolidation_timestamp,
+                    base_dir=history_base,
+                    encoding=normalized_encoding,
                 )
             if notify_user and not getattr(self, '_suppress_messagebox', False):
                 messagebox.showwarning("Copia pendiente", message)
@@ -16596,7 +16698,11 @@ class FraudCaseApp:
             warning_message = "\n".join(lines)
             if history_failures:
                 self._append_pending_consolidation(
-                    case_id, history_failures, timestamp=consolidation_timestamp, base_dir=history_base
+                    case_id,
+                    history_failures,
+                    timestamp=consolidation_timestamp,
+                    base_dir=history_base,
+                    encoding=normalized_encoding,
                 )
             if notify_user and not getattr(self, '_suppress_messagebox', False):
                 messagebox.showwarning("Copia incompleta", warning_message)
