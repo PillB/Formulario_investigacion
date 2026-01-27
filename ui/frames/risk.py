@@ -715,6 +715,7 @@ class RiskFrame:
         return {
             "id_riesgo": self.id_var.get().strip(),
             "id_caso": self.case_id_var.get().strip(),
+            "nuevo_riesgo": bool(self.new_risk_var.get()),
             "lider": self.lider_var.get().strip(),
             "descripcion": self.descripcion_var.get().strip(),
             "criticidad": self.criticidad_var.get(),

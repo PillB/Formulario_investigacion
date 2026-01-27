@@ -14594,6 +14594,22 @@ class FraudCaseApp:
             return data
         return CaseData.from_mapping(data or {})
 
+    def _resolve_risk_catalog_mode(self, risk: Mapping) -> bool:
+        stored_flag = risk.get("nuevo_riesgo")
+        if stored_flag is None:
+            stored_flag = risk.get("es_riesgo_nuevo")
+        if stored_flag is None:
+            stored_flag = risk.get("new_risk")
+        if stored_flag is not None:
+            return not bool(stored_flag)
+        rid = (risk.get("id_riesgo") or "").strip()
+        if not rid:
+            return True
+        lookup = getattr(self, "risk_lookup", {}) or {}
+        if isinstance(lookup, Mapping) and rid in lookup:
+            return True
+        return False
+
     def populate_from_data(self, data):
         """Puebla el formulario con datos previamente guardados."""
 
@@ -14771,6 +14787,11 @@ class FraudCaseApp:
                 if i >= len(self.risk_frames):
                     self.add_risk()
                 rf = self.risk_frames[i]
+                is_catalog_mode = self._resolve_risk_catalog_mode(risk)
+                if hasattr(rf, "_set_catalog_mode"):
+                    rf._set_catalog_mode(is_catalog_mode)
+                elif hasattr(rf, "new_risk_var"):
+                    rf.new_risk_var.set(not is_catalog_mode)
                 rf.id_var.set(risk.get('id_riesgo', ''))
                 rf.lider_var.set(risk.get('lider', ''))
                 rf.descripcion_var.set(risk.get('descripcion', ''))
