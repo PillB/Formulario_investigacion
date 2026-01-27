@@ -280,7 +280,7 @@ def add_key_functionalities_slide(prs: Presentation) -> None:
 
     left_items = [
         "Pestañas alineadas al ciclo del caso: Caso, Clientes, Colaboradores, Productos, Riesgos, Normas, Análisis, Acciones y Resumen.",
-        "Validaciones en línea según Design document CM: formato AAAA-NNNN, IDs, fechas coherentes y montos con sumas exactas.",
+        "Validaciones en línea: formato AAAA-NNNN, IDs, fechas coherentes y montos con sumas exactas.",
         "Regla de llave técnica para evitar duplicados (caso + producto + cliente + colaborador + fecha + reclamo).",
         "Panel de validación con mensajes accionables y navegación directa al campo con error.",
     ]
