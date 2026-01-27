@@ -29,6 +29,133 @@ HEADER_FONT = Font(bold=True)
 WRAP = Alignment(vertical="top", wrap_text=True)
 
 
+def _append_source(description: str, source: str | None) -> str:
+    if not source or source == "No":
+        return description
+    suffix = "." if description and not description.endswith(".") else ""
+    return f"{description}{suffix} Fuente: {source}."
+
+
+def _wireframe_row(
+    field_name: str,
+    field_type: str,
+    description: str,
+    source: str | None = None,
+) -> tuple[str, str, str]:
+    return (field_name, field_type, _append_source(description, source))
+
+
+EXPORT_FIELD_DESCRIPTIONS = {
+    "casos.csv": {
+        "id_caso": "Identificador único del caso (AAAA-XXXX).",
+        "tipo_informe": "Tipo de informe a generar (Gerencia/Interno/Credicorp).",
+        "categoria1": "Categoría nivel 1 del caso (taxonomía).",
+        "categoria2": "Categoría nivel 2 del caso (taxonomía).",
+        "modalidad": "Modalidad del caso (taxonomía).",
+        "canal": "Canal donde ocurrió el evento.",
+        "proceso": "Proceso impactado.",
+        "fecha_de_ocurrencia": "Fecha de ocurrencia del caso (YYYY-MM-DD).",
+        "fecha_de_descubrimiento": "Fecha de descubrimiento del caso (YYYY-MM-DD).",
+        "centro_costos": "Centros de costos separados por ';'.",
+        "matricula_investigador": "Matrícula/ID del investigador principal.",
+        "investigador_nombre": "Nombre y apellidos del investigador principal.",
+        "investigador_cargo": "Cargo del investigador principal.",
+    },
+    "clientes.csv": {
+        "id_cliente": "Identificador del cliente según tipo de documento.",
+        "id_caso": "Caso asociado.",
+        "nombres": "Nombres del cliente.",
+        "apellidos": "Apellidos del cliente.",
+        "tipo_id": "Tipo de documento (DNI/RUC/Pasaporte/etc.).",
+        "flag": "Rol del cliente (Involucrado/Afectado/No aplica).",
+        "telefonos": "Teléfonos separados por ';'.",
+        "correos": "Correos separados por ';'.",
+        "direcciones": "Direcciones físicas separadas por ';'.",
+        "accionado": "Tribus/equipos accionados (lista múltiple).",
+    },
+    "colaboradores.csv": {
+        "id_colaborador": "ID del Team Member (letra + 5 dígitos).",
+        "id_caso": "Caso asociado.",
+        "flag": "Rol del colaborador (Involucrado/Relacionado/etc.).",
+        "nombres": "Nombres del colaborador.",
+        "apellidos": "Apellidos del colaborador.",
+        "division": "División del colaborador.",
+        "area": "Área del colaborador.",
+        "servicio": "Servicio del colaborador.",
+        "puesto": "Puesto del colaborador.",
+        "fecha_carta_inmediatez": "Fecha de carta de inmediatez (YYYY-MM-DD).",
+        "fecha_carta_renuncia": "Fecha de renuncia/cese (YYYY-MM-DD).",
+        "nombre_agencia": "Nombre de agencia (condicional).",
+        "codigo_agencia": "Código de agencia (6 dígitos, condicional).",
+        "tipo_falta": "Tipo de falta.",
+        "tipo_sancion": "Tipo de sanción.",
+    },
+    "productos.csv": {
+        "id_producto": "Identificador del producto investigado.",
+        "id_caso": "Caso asociado.",
+        "id_cliente": "Cliente titular del producto.",
+        "categoria1": "Categoría nivel 1 (override por producto).",
+        "categoria2": "Categoría nivel 2 (override por producto).",
+        "modalidad": "Modalidad (override por producto).",
+        "canal": "Canal (override por producto).",
+        "proceso": "Proceso impactado (override por producto).",
+        "fecha_ocurrencia": "Fecha de ocurrencia del producto (YYYY-MM-DD).",
+        "fecha_descubrimiento": "Fecha de descubrimiento del producto (YYYY-MM-DD).",
+        "monto_investigado": "Monto investigado total.",
+        "tipo_moneda": "Moneda principal.",
+        "monto_perdida_fraude": "Monto de pérdida por fraude.",
+        "monto_falla_procesos": "Monto por falla de procesos.",
+        "monto_contingencia": "Monto por contingencia.",
+        "monto_recuperado": "Monto recuperado.",
+        "monto_pago_deuda": "Monto de pago de deuda.",
+        "tipo_producto": "Tipo de producto (tarjeta, crédito, etc.).",
+    },
+    "producto_reclamo.csv": {
+        "id_reclamo": "ID del reclamo (C########).",
+        "id_caso": "Caso asociado.",
+        "id_producto": "Producto asociado.",
+        "nombre_analitica": "Nombre de analítica contable.",
+        "codigo_analitica": "Código de analítica contable.",
+    },
+    "involucramiento.csv": {
+        "id_producto": "Producto asociado.",
+        "id_caso": "Caso asociado.",
+        "tipo_involucrado": "Tipo de involucrado (cliente/colaborador).",
+        "id_colaborador": "ID del colaborador involucrado.",
+        "id_cliente_involucrado": "ID del cliente involucrado.",
+        "monto_asignado": "Monto asignado al involucrado.",
+    },
+    "detalles_riesgo.csv": {
+        "id_riesgo": "Identificador del riesgo.",
+        "id_caso": "Caso asociado.",
+        "lider": "Responsable del riesgo.",
+        "descripcion": "Descripción del riesgo.",
+        "criticidad": "Criticidad del riesgo.",
+        "exposicion_residual": "Exposición residual del riesgo.",
+        "planes_accion": "Planes de acción separados por ';'.",
+    },
+    "detalles_norma.csv": {
+        "id_norma": "Identificador de norma (XXXX.XXX.XX.XX).",
+        "id_caso": "Caso asociado.",
+        "descripcion": "Descripción de la norma.",
+        "fecha_vigencia": "Fecha de vigencia (YYYY-MM-DD).",
+        "acapite_inciso": "Acápite/inciso relacionado.",
+        "detalle_norma": "Detalle de la norma transgredida.",
+    },
+    "analisis.csv": {
+        "id_caso": "Caso asociado.",
+        "antecedentes": "Antecedentes del caso.",
+        "modus_operandi": "Modus operandi del evento.",
+        "hallazgos": "Hallazgos principales.",
+        "descargos": "Descargos del colaborador.",
+        "conclusiones": "Conclusiones generales.",
+        "recomendaciones": "Recomendaciones y mejoras.",
+        "comentario_breve": "Resumen breve sin saltos de línea (máx. 150).",
+        "comentario_amplio": "Resumen amplio sin saltos de línea (máx. 750).",
+    },
+}
+
+
 def _apply_headers(sheet, headers: Sequence[str]) -> None:
     sheet.append(list(headers))
     for cell in sheet[1]:
@@ -50,97 +177,93 @@ def _section_row(title: str, *, columns: int) -> list[str | None]:
 
 
 def _case_and_participants_rows() -> list[Sequence[str | None]]:
-    headers = ("Campo", "Tipo", "Descripción", "Autocompletado / Fuente")
+    headers = ("Campo", "Tipo", "Descripción")
     rows: list[Sequence[str | None]] = []
 
     rows.append(_section_row("1. Datos generales del caso", columns=len(headers)))
     rows.extend(
         [
-            (
+            _wireframe_row(
                 "Número de caso (AAAA-XXXX)",
                 "Entry (texto)",
                 "Identificador único del caso. Se valida formato AAAA-XXXX y se usa en la llave técnica.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Tipo de informe",
                 "Combobox",
                 "Tipo de reporte a generar (Gerencia/Interno/Credicorp).",
                 "settings.TIPO_INFORME_LIST",
             ),
-            (
+            _wireframe_row(
                 "Categoría nivel 1",
                 "Combobox",
                 "Categoría principal del fraude. Controla la lista de categoría nivel 2.",
                 "settings.TAXONOMIA",
             ),
-            (
+            _wireframe_row(
                 "Categoría nivel 2",
                 "Combobox",
                 "Subcategoría dependiente de la categoría nivel 1.",
                 "settings.TAXONOMIA",
             ),
-            (
+            _wireframe_row(
                 "Modalidad",
                 "Combobox",
                 "Modalidad específica dependiente de categoría 1/2.",
                 "settings.TAXONOMIA",
             ),
-            (
+            _wireframe_row(
                 "Canal",
                 "Combobox",
                 "Canal donde ocurrió el evento. Puede autocompletarse al elegir el ID de proceso.",
                 "settings.CANAL_LIST / process_details.csv",
             ),
-            (
+            _wireframe_row(
                 "ID Proceso",
                 "Entry (texto)",
                 "Identificador del proceso impactado (BPID-XXXXXX o BPID-RNF-XXXXXX).",
                 "process_details.csv (autopobla canal/proceso)",
             ),
-            (
+            _wireframe_row(
                 "Botón \"Seleccionar\" (ID Proceso)",
                 "Botón",
                 "Abre el selector de procesos para escoger un ID válido.",
                 "Catálogo de procesos",
             ),
-            (
+            _wireframe_row(
                 "Proceso impactado",
                 "Combobox",
                 "Proceso del negocio afectado por el evento.",
                 "settings.PROCESO_LIST / process_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Centro de costos del caso (; separados)",
                 "Entry (texto)",
                 "Lista de centros de costos. Cada valor debe ser numérico y >=5 dígitos.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Ocurrencia (YYYY-MM-DD)",
                 "Selector de fecha",
                 "Fecha de ocurrencia del caso. Debe ser <= hoy y anterior al descubrimiento.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Descubrimiento (YYYY-MM-DD)",
                 "Selector de fecha",
                 "Fecha de descubrimiento. Debe ser <= hoy y posterior a la ocurrencia.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Matrícula investigador",
                 "Entry (texto)",
                 "ID del investigador principal (letra + 5 dígitos) para autocompletar datos.",
                 "team_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Nombre y apellidos",
                 "Entry (solo lectura)",
                 "Nombre del investigador autocompletado desde catálogos.",
                 "team_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Puesto",
                 "Label (solo lectura)",
                 "Cargo del investigador autocompletado.",
@@ -152,166 +275,169 @@ def _case_and_participants_rows() -> list[Sequence[str | None]]:
     rows.append(_section_row("2. Clientes implicados", columns=len(headers)))
     rows.extend(
         [
-            (
+            _wireframe_row(
                 "Tabla resumen de clientes",
                 "Tabla",
                 "Resumen de clientes registrados en el caso.",
                 "Resumen dinámico",
             ),
-            ("Botón \"Añadir cliente\"", "Botón", "Crea un nuevo cliente.", ""),
-            (
+            _wireframe_row("Botón \"Añadir cliente\"", "Botón", "Crea un nuevo cliente."),
+            _wireframe_row(
                 "Afectación interna",
                 "Checkbutton",
-                "Marca si el cliente pertenece a afectación interna.",
-                "No",
+                "Marca si el cliente pertenece a afectación interna (checkbox compartido a nivel de caso).",
             ),
-            (
+            _wireframe_row(
                 "Tipo de ID",
                 "Combobox",
                 "Tipo de documento del cliente (DNI/RUC/Pasaporte/etc.).",
                 "settings.TIPO_ID_LIST",
             ),
-            (
+            _wireframe_row(
                 "ID del cliente",
                 "Entry (texto)",
                 "Documento del cliente. Valida longitud según tipo de ID.",
-                "No",
             ),
-            ("Nombres", "Entry (texto)", "Nombres del cliente.", "client_details.csv"),
-            ("Apellidos", "Entry (texto)", "Apellidos del cliente.", "client_details.csv"),
-            (
+            _wireframe_row("Nombres", "Entry (texto)", "Nombres del cliente.", "client_details.csv"),
+            _wireframe_row("Apellidos", "Entry (texto)", "Apellidos del cliente.", "client_details.csv"),
+            _wireframe_row(
                 "Flag",
                 "Combobox",
                 "Rol del cliente (Involucrado/Afectado/No aplica).",
                 "settings.FLAG_CLIENTE_LIST",
             ),
-            (
+            _wireframe_row(
                 "Accionado (lista múltiple)",
                 "Listbox",
                 "Tribus/equipos accionados. Valida selección múltiple.",
                 "settings.ACCIONADO_OPTIONS",
             ),
-            (
+            _wireframe_row(
                 "Teléfonos (separados por ;)",
                 "Entry (texto)",
                 "Teléfonos del cliente. Validación de números (+, 6-15 dígitos).",
                 "client_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Correos (separados por ;)",
                 "Entry (texto)",
                 "Correos del cliente. Deben cumplir formato de email.",
                 "client_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Direcciones (separados por ;)",
                 "Entry (texto)",
                 "Direcciones físicas del cliente (opcional).",
                 "client_details.csv",
             ),
-            ("Botón \"Eliminar cliente\"", "Botón", "Elimina el cliente del caso.", ""),
+            _wireframe_row(
+                "Botón \"Eliminar cliente\"",
+                "Botón",
+                "Elimina el cliente del caso.",
+            ),
         ]
     )
 
     rows.append(_section_row("3. Productos investigados", columns=len(headers)))
     rows.extend(
         [
-            ("Tabla resumen de productos", "Tabla", "Resumen de productos investigados.", ""),
-            ("Botón \"Agregar producto\"", "Botón", "Crea un nuevo producto.", ""),
-            (
+            _wireframe_row("Tabla resumen de productos", "Tabla", "Resumen de productos investigados."),
+            _wireframe_row("Botón \"Agregar producto\"", "Botón", "Crea un nuevo producto."),
+            _wireframe_row(
                 "ID del producto",
                 "Entry (texto)",
                 "Identificador del producto. Valida longitud según tipo de producto.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Cliente",
                 "Combobox",
                 "Cliente titular del producto.",
                 "Lista de clientes registrados",
             ),
-            (
+            _wireframe_row(
                 "Categoría 1",
                 "Combobox",
                 "Categoría principal del riesgo (override por producto).",
                 "settings.TAXONOMIA",
             ),
-            (
+            _wireframe_row(
                 "Categoría 2",
                 "Combobox",
                 "Subcategoría del producto (override).",
                 "settings.TAXONOMIA",
             ),
-            (
+            _wireframe_row(
                 "Modalidad",
                 "Combobox",
                 "Modalidad específica (override).",
                 "settings.TAXONOMIA",
             ),
-            ("Canal", "Combobox", "Canal del evento (override).", "settings.CANAL_LIST"),
-            ("Proceso", "Combobox", "Proceso impactado (override).", "settings.PROCESO_LIST"),
-            (
+            _wireframe_row("Canal", "Combobox", "Canal del evento (override).", "settings.CANAL_LIST"),
+            _wireframe_row(
+                "Proceso",
+                "Combobox",
+                "Proceso impactado (override).",
+                "settings.PROCESO_LIST",
+            ),
+            _wireframe_row(
                 "Tipo de producto",
                 "Combobox",
                 "Clasificación comercial (tarjeta, crédito, etc.).",
                 "settings.TIPO_PRODUCTO_LIST",
             ),
-            (
+            _wireframe_row(
                 "Fecha de ocurrencia (YYYY-MM-DD)",
                 "Selector de fecha",
                 "Fecha del evento. Requerida; debe ser <= hoy y < descubrimiento.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Fecha de descubrimiento (YYYY-MM-DD)",
                 "Selector de fecha",
                 "Fecha en que se detecta el evento. Requerida; <= hoy y > ocurrencia.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Monto investigado",
                 "Entry (número)",
-                "Monto total investigado. Debe ser suma de pérdida+falla+contingencia+recuperado.",
-                "No",
+                (
+                    "Monto total investigado (>=0, 12 dígitos, 2 decimales). Debe ser suma de "
+                    "pérdida + falla + contingencia + recuperado."
+                ),
             ),
-            ("Moneda", "Combobox", "Moneda principal.", "settings.TIPO_MONEDA_LIST"),
-            (
+            _wireframe_row("Moneda", "Combobox", "Moneda principal.", "settings.TIPO_MONEDA_LIST"),
+            _wireframe_row(
                 "Monto pérdida fraude",
                 "Entry (número)",
                 "Monto de pérdida por fraude. >=0, 12 dígitos, 2 decimales.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Monto falla procesos",
                 "Entry (número)",
                 "Monto por falla de procesos. >=0, 12 dígitos, 2 decimales.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Monto contingencia",
                 "Entry (número)",
-                "Monto de contingencia. Si tipo producto es crédito/tarjeta debe igualar al investigado.",
-                "No",
+                (
+                    "Monto de contingencia (>=0, 12 dígitos, 2 decimales). Si el tipo de producto "
+                    "es crédito/tarjeta debe igualar al investigado."
+                ),
             ),
-            (
+            _wireframe_row(
                 "Monto recuperado",
                 "Entry (número)",
-                "Monto recuperado. No puede ser mayor que el monto investigado.",
-                "No",
+                "Monto recuperado. >=0 y no puede ser mayor que el monto investigado.",
             ),
-            (
+            _wireframe_row(
                 "Monto pago deuda",
                 "Entry (número)",
-                "Monto de pago de deuda. No puede exceder el monto investigado.",
-                "No",
+                "Monto de pago de deuda. >=0 y no puede exceder el monto investigado.",
             ),
-            (
+            _wireframe_row(
                 "Botón \"Ir al primer faltante\"",
                 "Botón",
                 "Navega al reclamo pendiente cuando hay montos > 0.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Botón \"Autocompletar analítica\"",
                 "Botón",
                 "Aplica una analítica preseleccionada al reclamo pendiente.",
@@ -323,150 +449,182 @@ def _case_and_participants_rows() -> list[Sequence[str | None]]:
     rows.append(_section_row("Reclamos asociados", columns=len(headers)))
     rows.extend(
         [
-            ("Botón \"Añadir reclamo\"", "Botón", "Agrega un reclamo al producto.", ""),
-            (
+            _wireframe_row("Botón \"Añadir reclamo\"", "Botón", "Agrega un reclamo al producto."),
+            _wireframe_row(
                 "ID reclamo",
                 "Entry (texto)",
                 "Código de reclamo (C + 8 dígitos). Obligatorio si pérdida/falla/contingencia > 0.",
                 "claim_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Código analítica",
                 "Combobox",
                 "Código analítica contable de 10 dígitos (43/45/46/56...).",
                 "models.analitica_catalog",
             ),
-            (
+            _wireframe_row(
                 "Analítica nombre",
                 "Combobox",
                 "Nombre descriptivo de la analítica contable.",
                 "models.analitica_catalog",
             ),
-            ("Botón \"Eliminar reclamo\"", "Botón", "Elimina el reclamo del producto.", ""),
+            _wireframe_row(
+                "Botón \"Eliminar reclamo\"",
+                "Botón",
+                "Elimina el reclamo del producto.",
+            ),
         ]
     )
 
     rows.append(_section_row("Involucramiento de colaboradores", columns=len(headers)))
     rows.extend(
         [
-            ("Botón \"Añadir involucrado\"", "Botón", "Agrega un colaborador involucrado.", ""),
-            (
+            _wireframe_row(
+                "Botón \"Añadir involucrado\"",
+                "Botón",
+                "Agrega un colaborador involucrado.",
+            ),
+            _wireframe_row(
                 "Colaborador involucrado",
                 "Combobox",
                 "Selecciona colaborador relacionado con el producto.",
                 "Lista de colaboradores",
             ),
-            (
+            _wireframe_row(
                 "Monto asignado",
                 "Entry (número)",
                 "Monto asignado al colaborador (>=0, 12 dígitos, 2 decimales).",
-                "No",
             ),
-            ("Botón \"Eliminar involucrado\"", "Botón", "Elimina el involucrado.", ""),
+            _wireframe_row(
+                "Botón \"Eliminar involucrado\"",
+                "Botón",
+                "Elimina el involucrado.",
+            ),
         ]
     )
 
     rows.append(_section_row("Involucramiento de clientes", columns=len(headers)))
     rows.extend(
         [
-            ("Botón \"Añadir cliente involucrado\"", "Botón", "Agrega un cliente involucrado.", ""),
-            (
+            _wireframe_row(
+                "Botón \"Añadir cliente involucrado\"",
+                "Botón",
+                "Agrega un cliente involucrado.",
+            ),
+            _wireframe_row(
                 "Cliente involucrado",
                 "Combobox",
                 "Selecciona cliente relacionado distinto del titular.",
                 "Lista de clientes",
             ),
-            (
+            _wireframe_row(
                 "Monto asignado",
                 "Entry (número)",
                 "Monto asignado al cliente involucrado.",
-                "No",
             ),
-            ("Botón \"Eliminar cliente involucrado\"", "Botón", "Elimina el involucrado.", ""),
-            ("Botón \"Eliminar producto\"", "Botón", "Elimina el producto y sus relaciones.", ""),
+            _wireframe_row(
+                "Botón \"Eliminar cliente involucrado\"",
+                "Botón",
+                "Elimina el involucrado.",
+            ),
+            _wireframe_row(
+                "Botón \"Eliminar producto\"",
+                "Botón",
+                "Elimina el producto y sus relaciones.",
+            ),
         ]
     )
 
     rows.append(_section_row("4. Colaboradores involucrados", columns=len(headers)))
     rows.extend(
         [
-            ("Tabla resumen de colaboradores", "Tabla", "Resumen de colaboradores registrados.", ""),
-            ("Botón \"Añadir colaborador\"", "Botón", "Crea un colaborador.", ""),
-            (
+            _wireframe_row(
+                "Tabla resumen de colaboradores",
+                "Tabla",
+                "Resumen de colaboradores registrados.",
+            ),
+            _wireframe_row("Botón \"Añadir colaborador\"", "Botón", "Crea un colaborador."),
+            _wireframe_row(
                 "ID del colaborador",
                 "Entry (texto)",
                 "Identificador del Team Member (letra + 5 dígitos).",
                 "team_details.csv",
             ),
-            ("Nombres", "Entry (texto)", "Nombres del colaborador.", "team_details.csv"),
-            ("Apellidos", "Entry (texto)", "Apellidos del colaborador.", "team_details.csv"),
-            (
+            _wireframe_row("Nombres", "Entry (texto)", "Nombres del colaborador.", "team_details.csv"),
+            _wireframe_row(
+                "Apellidos", "Entry (texto)", "Apellidos del colaborador.", "team_details.csv"
+            ),
+            _wireframe_row(
                 "Flag",
                 "Combobox",
                 "Rol del colaborador (Involucrado/Relacionado/etc.).",
                 "settings.FLAG_COLABORADOR_LIST",
             ),
-            (
+            _wireframe_row(
                 "División",
                 "Combobox",
                 "División del colaborador (catálogo jerárquico).",
                 "TEAM_HIERARCHY_CATALOG",
             ),
-            (
+            _wireframe_row(
                 "Área",
                 "Combobox",
                 "Área dependiente de la división.",
                 "TEAM_HIERARCHY_CATALOG",
             ),
-            (
+            _wireframe_row(
                 "Servicio",
                 "Combobox",
                 "Servicio dependiente del área.",
                 "TEAM_HIERARCHY_CATALOG",
             ),
-            (
+            _wireframe_row(
                 "Puesto",
                 "Combobox",
                 "Puesto dependiente del servicio.",
                 "TEAM_HIERARCHY_CATALOG",
             ),
-            (
+            _wireframe_row(
                 "Fecha carta inmediatez (YYYY-MM-DD)",
                 "Selector de fecha",
                 "Fecha de emisión de carta de inmediatez.",
                 "team_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Fecha carta renuncia (YYYY-MM-DD)",
                 "Selector de fecha",
                 "Fecha de renuncia del colaborador.",
                 "team_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Nombre agencia",
                 "Combobox",
                 "Nombre de agencia (requerido si División=DCA/Canales y Área contiene 'area comercial').",
                 "AGENCY_CATALOG",
             ),
-            (
+            _wireframe_row(
                 "Código agencia",
                 "Combobox",
                 "Código de agencia (6 dígitos) requerido bajo condición de área comercial.",
                 "AGENCY_CATALOG",
             ),
-            (
+            _wireframe_row(
                 "Tipo de falta",
                 "Combobox",
                 "Clasificación de falta.",
                 "settings.TIPO_FALTA_LIST",
             ),
-            (
+            _wireframe_row(
                 "Tipo de sanción",
                 "Combobox",
                 "Clasificación de sanción.",
                 "settings.TIPO_SANCION_LIST",
             ),
-            ("Botón \"Eliminar colaborador\"", "Botón", "Elimina el colaborador del caso.", ""),
+            _wireframe_row(
+                "Botón \"Eliminar colaborador\"",
+                "Botón",
+                "Elimina el colaborador del caso.",
+            ),
         ]
     )
 
@@ -474,131 +632,140 @@ def _case_and_participants_rows() -> list[Sequence[str | None]]:
 
 
 def _risk_rows() -> list[Sequence[str | None]]:
-    headers = ("Campo", "Tipo", "Descripción", "Autocompletado / Fuente")
+    headers = ("Campo", "Tipo", "Descripción")
     rows: list[Sequence[str | None]] = []
     rows.append(_section_row("Riesgos identificados", columns=len(headers)))
     rows.extend(
         [
-            ("Tabla resumen de riesgos", "Tabla", "Listado de riesgos registrados.", ""),
-            ("Botón \"Agregar riesgo\"", "Botón", "Crea un riesgo en el caso.", ""),
-            (
+            _wireframe_row("Tabla resumen de riesgos", "Tabla", "Listado de riesgos registrados."),
+            _wireframe_row("Botón \"Agregar riesgo\"", "Botón", "Crea un riesgo en el caso."),
+            _wireframe_row(
                 "ID de riesgo",
                 "Entry (texto)",
                 "Identificador del riesgo (catálogo o libre).",
                 "risk_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Agregar riesgo nuevo",
                 "Checkbutton",
                 "Activa el modo manual para riesgos no catalogados.",
-                "No",
             ),
-            (
+            _wireframe_row(
                 "Criticidad",
                 "Combobox",
                 "Severidad del riesgo (obligatoria en modo catálogo).",
                 "settings.CRITICIDAD_LIST / risk_details.csv",
             ),
-            ("Líder", "Entry (texto)", "Responsable del riesgo.", "risk_details.csv"),
-            (
+            _wireframe_row(
+                "Líder",
+                "Entry (texto)",
+                "Responsable del riesgo.",
+                "risk_details.csv",
+            ),
+            _wireframe_row(
                 "Exposición residual (US$)",
                 "Entry (número)",
                 "Monto estimado (>=0, 12 dígitos, 2 decimales).",
                 "risk_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Descripción del riesgo",
                 "Entry (texto)",
                 "Descripción clara del riesgo.",
                 "risk_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Planes de acción (IDs separados por ;)",
                 "Entry (texto)",
                 "Lista de planes asociados sin duplicados.",
                 "risk_details.csv",
             ),
-            ("Botón \"Eliminar riesgo\"", "Botón", "Elimina el riesgo del caso.", ""),
+            _wireframe_row(
+                "Botón \"Eliminar riesgo\"",
+                "Botón",
+                "Elimina el riesgo del caso.",
+            ),
         ]
     )
     return [headers, *rows]
 
 
 def _norm_rows() -> list[Sequence[str | None]]:
-    headers = ("Campo", "Tipo", "Descripción", "Autocompletado / Fuente")
+    headers = ("Campo", "Tipo", "Descripción")
     rows: list[Sequence[str | None]] = []
     rows.append(_section_row("Registro de Normas", columns=len(headers)))
     rows.extend(
         [
-            ("Tabla resumen de normas", "Tabla", "Listado de normas transgredidas.", ""),
-            ("Botón \"Agregar norma\"", "Botón", "Crea una norma en el caso.", ""),
-            (
+            _wireframe_row("Tabla resumen de normas", "Tabla", "Listado de normas transgredidas."),
+            _wireframe_row("Botón \"Agregar norma\"", "Botón", "Crea una norma en el caso."),
+            _wireframe_row(
                 "ID de norma",
                 "Entry (texto)",
                 "Formato XXXX.XXX.XX.XX. Permite autopoblado desde catálogo.",
                 "norm_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Fecha de vigencia (YYYY-MM-DD)",
                 "Selector de fecha",
                 "Fecha de publicación/vigencia. No puede ser futura.",
                 "norm_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Descripción de la norma",
                 "Entry (texto)",
                 "Descripción o título de la norma transgredida.",
                 "norm_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Acápite/Inciso",
                 "Entry (texto)",
                 "Referencia del acápite o inciso aplicable.",
                 "norm_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Detalle de norma",
                 "Texto enriquecido",
                 "Detalle narrativo del incumplimiento.",
                 "norm_details.csv",
             ),
-            ("Botón \"Eliminar norma\"", "Botón", "Elimina la norma del caso.", ""),
+            _wireframe_row(
+                "Botón \"Eliminar norma\"",
+                "Botón",
+                "Elimina la norma del caso.",
+            ),
         ]
     )
     return [headers, *rows]
 
 
 def _analysis_rows() -> list[Sequence[str | None]]:
-    headers = ("Campo", "Tipo", "Descripción", "Autocompletado / Fuente")
+    headers = ("Campo", "Tipo", "Descripción")
     rows: list[Sequence[str | None]] = []
     rows.append(_section_row("Análisis narrativo", columns=len(headers)))
     rows.extend(
         [
-            (
+            _wireframe_row(
                 "Mostrar secciones extendidas del informe",
                 "Checkbutton",
                 "Habilita el notebook interno con secciones extendidas.",
-                "No",
             ),
-            ("Antecedentes", "Texto enriquecido", "Contexto del caso.", ""),
-            ("Modus operandi", "Texto enriquecido", "Forma de ejecución del fraude.", ""),
-            ("Hallazgos principales", "Texto enriquecido", "Hallazgos clave.", ""),
-            ("Descargos del colaborador", "Texto enriquecido", "Descargos formales.", ""),
-            ("Conclusiones", "Texto enriquecido", "Conclusiones generales.", ""),
-            ("Recomendaciones y mejoras", "Texto enriquecido", "Acciones correctivas.", ""),
-            (
+            _wireframe_row("Antecedentes", "Texto enriquecido", "Contexto del caso."),
+            _wireframe_row("Modus operandi", "Texto enriquecido", "Forma de ejecución del fraude."),
+            _wireframe_row("Hallazgos principales", "Texto enriquecido", "Hallazgos clave."),
+            _wireframe_row("Descargos del colaborador", "Texto enriquecido", "Descargos formales."),
+            _wireframe_row("Conclusiones", "Texto enriquecido", "Conclusiones generales."),
+            _wireframe_row("Recomendaciones y mejoras", "Texto enriquecido", "Acciones correctivas."),
+            _wireframe_row(
                 "Comentario breve",
                 "Texto enriquecido",
                 "Resumen sin saltos de línea (máx. 150 caracteres).",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Comentario amplio",
                 "Texto enriquecido",
                 "Resumen amplio sin saltos de línea (máx. 750 caracteres).",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Botón \"Auto-redactar\" (comentarios)",
                 "Botón",
                 "Genera un resumen automático sin PII.",
@@ -609,139 +776,231 @@ def _analysis_rows() -> list[Sequence[str | None]]:
     rows.append(_section_row("Secciones extendidas del informe", columns=len(headers)))
     rows.extend(
         [
-            ("Dirigido a", "Entry (texto)", "Destinatario del informe.", ""),
-            ("Referencia", "Entry (texto)", "Referencia interna del caso.", ""),
-            ("Área de reporte", "Entry (texto)", "Área que emite el informe.", ""),
-            (
+            _wireframe_row("Dirigido a", "Entry (texto)", "Destinatario del informe."),
+            _wireframe_row("Referencia", "Entry (texto)", "Referencia interna del caso."),
+            _wireframe_row("Área de reporte", "Entry (texto)", "Área que emite el informe."),
+            _wireframe_row(
                 "Fecha de reporte (YYYY-MM-DD)",
                 "Entry (texto)",
                 "Fecha del reporte. Debe ser <= hoy.",
-                "",
             ),
-            ("Tipología de evento", "Entry (texto)", "Tipología del evento.", ""),
-            (
+            _wireframe_row("Tipología de evento", "Entry (texto)", "Tipología del evento."),
+            _wireframe_row(
                 "Centro de costos (; separados)",
                 "Entry (texto)",
                 "Centros de costos (numéricos, >=5 dígitos).",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Procesos impactados",
                 "Entry (texto)",
                 "Lista de procesos impactados.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "N° de reclamos",
                 "Entry (texto)",
                 "Cantidad total de reclamos (numérico).",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Analítica contable",
                 "Combobox",
                 "Código/Nombre de analítica contable del catálogo.",
                 "models.analitica_catalog",
             ),
-            ("Producto (texto opcional)", "Entry (texto)", "Producto objetivo en texto libre.", ""),
-            ("Recomendaciones categorizadas - Laboral", "Texto enriquecido", "Lista por ámbito laboral.", ""),
-            ("Recomendaciones categorizadas - Operativo", "Texto enriquecido", "Lista por ámbito operativo.", ""),
-            ("Recomendaciones categorizadas - Legal", "Texto enriquecido", "Lista por ámbito legal.", ""),
-            (
+            _wireframe_row(
+                "Producto (texto opcional)",
+                "Entry (texto)",
+                "Producto objetivo en texto libre.",
+            ),
+            _wireframe_row(
+                "Recomendaciones categorizadas - Laboral",
+                "Texto enriquecido",
+                "Lista por ámbito laboral.",
+            ),
+            _wireframe_row(
+                "Recomendaciones categorizadas - Operativo",
+                "Texto enriquecido",
+                "Lista por ámbito operativo.",
+            ),
+            _wireframe_row(
+                "Recomendaciones categorizadas - Legal",
+                "Texto enriquecido",
+                "Lista por ámbito legal.",
+            ),
+            _wireframe_row(
                 "Investigador principal - Matrícula/ID",
                 "Entry (solo lectura)",
                 "Se sincroniza desde Datos generales del caso.",
                 "team_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Investigador principal - Nombre",
                 "Entry (solo lectura)",
                 "Autocompletado desde catálogos.",
                 "team_details.csv",
             ),
-            (
+            _wireframe_row(
                 "Investigador principal - Cargo",
                 "Entry (solo lectura)",
                 "Autocompletado desde catálogos.",
                 "team_details.csv",
             ),
-            ("Tabla de operaciones", "Tabla", "Registra operaciones vinculadas.", ""),
-            (
+            _wireframe_row("Tabla de operaciones", "Tabla", "Registra operaciones vinculadas."),
+            _wireframe_row(
                 "Operación - Fecha aprobación",
                 "Entry (texto)",
                 "Fecha de aprobación (YYYY-MM-DD).",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Operación - Importe desembolsado",
                 "Entry (número)",
                 "Monto con validación de 2 decimales.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Operación - Saldo deudor",
                 "Entry (número)",
                 "Monto con validación de 2 decimales.",
-                "",
             ),
-            ("Botón \"Agregar/Actualizar operación\"", "Botón", "Guarda o actualiza la operación.", ""),
-            ("Botón \"Eliminar operación\"", "Botón", "Elimina la operación seleccionada.", ""),
-            ("Botón \"Limpiar formulario\"", "Botón", "Limpia los campos de operación.", ""),
-            ("Anexos y respaldos", "Tabla", "Control de anexos adjuntos.", ""),
-            ("Anexo - Título", "Entry (texto)", "Título del anexo.", ""),
-            ("Anexo - Descripción", "Entry (texto)", "Descripción del anexo.", ""),
-            ("Botón \"Agregar/Actualizar anexo\"", "Botón", "Guarda el anexo en la tabla.", ""),
-            ("Botón \"Eliminar anexo\"", "Botón", "Elimina el anexo seleccionado.", ""),
-            ("Botón \"Limpiar\" (anexo)", "Botón", "Limpia el formulario de anexos.", ""),
+            _wireframe_row(
+                "Botón \"Agregar/Actualizar operación\"",
+                "Botón",
+                "Guarda o actualiza la operación.",
+            ),
+            _wireframe_row(
+                "Botón \"Eliminar operación\"",
+                "Botón",
+                "Elimina la operación seleccionada.",
+            ),
+            _wireframe_row(
+                "Botón \"Limpiar formulario\"",
+                "Botón",
+                "Limpia los campos de operación.",
+            ),
+            _wireframe_row("Anexos y respaldos", "Tabla", "Control de anexos adjuntos."),
+            _wireframe_row("Anexo - Título", "Entry (texto)", "Título del anexo."),
+            _wireframe_row(
+                "Anexo - Descripción",
+                "Entry (texto)",
+                "Descripción del anexo.",
+            ),
+            _wireframe_row(
+                "Botón \"Agregar/Actualizar anexo\"",
+                "Botón",
+                "Guarda el anexo en la tabla.",
+            ),
+            _wireframe_row(
+                "Botón \"Eliminar anexo\"",
+                "Botón",
+                "Elimina el anexo seleccionado.",
+            ),
+            _wireframe_row(
+                "Botón \"Limpiar\" (anexo)",
+                "Botón",
+                "Limpia el formulario de anexos.",
+            ),
         ]
     )
     return [headers, *rows]
 
 
 def _actions_rows() -> list[Sequence[str | None]]:
-    headers = ("Campo", "Tipo", "Descripción", "Autocompletado / Fuente")
+    headers = ("Campo", "Tipo", "Descripción")
     rows: list[Sequence[str | None]] = []
     rows.append(_section_row("Acciones", columns=len(headers)))
     rows.extend(
         [
-            (
+            _wireframe_row(
                 "Sonido de confirmación",
                 "Checkbutton",
                 "Activa/desactiva sonido tras validaciones y exportes.",
                 "Preferencias usuario",
             ),
-            (
+            _wireframe_row(
                 "Botón conmutar tema",
                 "Botón",
                 "Cambia el tema oscuro/claro.",
                 "ThemeManager",
             ),
-            ("Catálogos de detalle", "Sección", "Controles para carga de catálogos.", ""),
-            ("Estado/ayuda de catálogos", "Label", "Estado de carga de catálogos.", ""),
-            ("Botón \"Cargar catálogos\"", "Botón", "Carga catálogos desde CSV.", ""),
-            ("Botón \"Iniciar sin catálogos\"", "Botón", "Continúa sin catálogos.", ""),
-            ("Barra de progreso de catálogos", "Progressbar", "Indicador de carga.", ""),
-            ("Importar datos masivos (CSV)", "Sección", "Carga de archivos masivos.", ""),
-            ("Botón \"Cargar clientes\"", "Botón", "Importa clientes masivos.", "clientes_masivos.csv"),
-            ("Botón \"Cargar colaboradores\"", "Botón", "Importa colaboradores masivos.", "colaboradores_masivos.csv"),
-            ("Botón \"Cargar productos\"", "Botón", "Importa productos masivos.", "productos_masivos.csv"),
-            ("Botón \"Cargar combinado\"", "Botón", "Importa clientes/productos/colaboradores.", "datos_combinados_masivos.csv"),
-            ("Botón \"Cargar riesgos\"", "Botón", "Importa riesgos masivos.", "riesgos_masivos.csv"),
-            ("Botón \"Cargar normas\"", "Botón", "Importa normas masivas.", "normas_masivas.csv"),
-            ("Botón \"Cargar reclamos\"", "Botón", "Importa reclamos masivos.", "reclamos_masivos.csv"),
-            ("Estado de importación", "Label", "Estado de la importación masiva.", ""),
-            ("Barra de progreso de importación", "Progressbar", "Indicador de importación.", ""),
-            ("Guardar, cargar y reportes", "Sección", "Acciones de guardado y reportes.", ""),
-            ("Botón \"Guardar ahora\"", "Botón", "Valida y guarda exportes.", ""),
-            ("Botón \"Cargar archivo…\"", "Botón", "Carga un respaldo JSON.", ""),
-            ("Botón \"Recuperar último autosave\"", "Botón", "Recupera último autosave.", ""),
-            ("Botón \"Historial de recuperación\"", "Botón", "Abre historial de versiones.", ""),
-            ("Botón \"Generar informe (.md)\"", "Botón", "Genera informe Markdown.", ""),
-            ("Botón \"Generar Word (.docx)\"", "Botón", "Genera informe Word.", ""),
-            ("Botón \"Generar alerta temprana (.pptx)\"", "Botón", "Genera alerta temprana PPT.", ""),
-            ("Botón \"Generar carta de inmediatez\"", "Botón", "Genera carta de inmediatez.", ""),
-            ("Botón \"Borrar todos los datos\"", "Botón", "Limpia el formulario.", ""),
-            (
+            _wireframe_row("Catálogos de detalle", "Sección", "Controles para carga de catálogos."),
+            _wireframe_row("Estado/ayuda de catálogos", "Label", "Estado de carga de catálogos."),
+            _wireframe_row("Botón \"Cargar catálogos\"", "Botón", "Carga catálogos desde CSV."),
+            _wireframe_row("Botón \"Iniciar sin catálogos\"", "Botón", "Continúa sin catálogos."),
+            _wireframe_row("Barra de progreso de catálogos", "Progressbar", "Indicador de carga."),
+            _wireframe_row("Importar datos masivos (CSV)", "Sección", "Carga de archivos masivos."),
+            _wireframe_row(
+                "Botón \"Cargar clientes\"",
+                "Botón",
+                "Importa clientes masivos.",
+                "clientes_masivos.csv",
+            ),
+            _wireframe_row(
+                "Botón \"Cargar colaboradores\"",
+                "Botón",
+                "Importa colaboradores masivos.",
+                "colaboradores_masivos.csv",
+            ),
+            _wireframe_row(
+                "Botón \"Cargar productos\"",
+                "Botón",
+                "Importa productos masivos.",
+                "productos_masivos.csv",
+            ),
+            _wireframe_row(
+                "Botón \"Cargar combinado\"",
+                "Botón",
+                "Importa clientes/productos/colaboradores.",
+                "datos_combinados_masivos.csv",
+            ),
+            _wireframe_row(
+                "Botón \"Cargar riesgos\"",
+                "Botón",
+                "Importa riesgos masivos.",
+                "riesgos_masivos.csv",
+            ),
+            _wireframe_row(
+                "Botón \"Cargar normas\"",
+                "Botón",
+                "Importa normas masivas.",
+                "normas_masivas.csv",
+            ),
+            _wireframe_row(
+                "Botón \"Cargar reclamos\"",
+                "Botón",
+                "Importa reclamos masivos.",
+                "reclamos_masivos.csv",
+            ),
+            _wireframe_row("Estado de importación", "Label", "Estado de la importación masiva."),
+            _wireframe_row(
+                "Barra de progreso de importación",
+                "Progressbar",
+                "Indicador de importación.",
+            ),
+            _wireframe_row("Guardar, cargar y reportes", "Sección", "Acciones de guardado y reportes."),
+            _wireframe_row("Botón \"Guardar ahora\"", "Botón", "Valida y guarda exportes."),
+            _wireframe_row("Botón \"Cargar archivo…\"", "Botón", "Carga un respaldo JSON."),
+            _wireframe_row(
+                "Botón \"Recuperar último autosave\"",
+                "Botón",
+                "Recupera último autosave.",
+            ),
+            _wireframe_row(
+                "Botón \"Historial de recuperación\"",
+                "Botón",
+                "Abre historial de versiones.",
+            ),
+            _wireframe_row("Botón \"Generar informe (.md)\"", "Botón", "Genera informe Markdown."),
+            _wireframe_row("Botón \"Generar Word (.docx)\"", "Botón", "Genera informe Word."),
+            _wireframe_row(
+                "Botón \"Generar alerta temprana (.pptx)\"",
+                "Botón",
+                "Genera alerta temprana PPT.",
+            ),
+            _wireframe_row(
+                "Botón \"Generar carta de inmediatez\"",
+                "Botón",
+                "Genera carta de inmediatez.",
+            ),
+            _wireframe_row("Botón \"Borrar todos los datos\"", "Botón", "Limpia el formulario."),
+            _wireframe_row(
                 "Codificación de exportación",
                 "Combobox",
                 "Selecciona codificación para CSV (UTF-8 recomendado).",
@@ -753,57 +1012,52 @@ def _actions_rows() -> list[Sequence[str | None]]:
 
 
 def _summary_rows() -> list[Sequence[str | None]]:
-    headers = ("Sección/Tabla", "Tipo", "Descripción", "Autocompletado / Fuente")
+    headers = ("Sección/Tabla", "Tipo", "Descripción")
     rows: list[Sequence[str | None]] = []
     rows.extend(
         [
-            (
+            _wireframe_row(
                 "Label introductorio",
                 "Label",
                 "Introduce la sección de resumen con actualización automática.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Clientes registrados",
                 "Tabla",
                 "Columnas: ID Cliente, Nombres, Apellidos, Tipo ID, Flag, Teléfonos, Correos, Direcciones, Accionado.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Colaboradores involucrados",
                 "Tabla",
-                "Columnas: ID, Nombres, Apellidos, Flag, División, Área, Servicio, Puesto, Fechas, Agencia, Falta, Sanción.",
-                "",
+                (
+                    "Columnas: ID, Nombres, Apellidos, Flag, División, Área, Servicio, Puesto, "
+                    "Fechas, Agencia, Falta, Sanción."
+                ),
             ),
-            (
+            _wireframe_row(
                 "Asignaciones de involucrados",
                 "Tabla",
                 "Columnas: Producto, Tipo, Colaborador/Cliente involucrado, Monto asignado.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Productos investigados",
                 "Tabla",
                 "Columnas: ID Producto, Cliente, Tipo, Taxonomía, Fechas, Montos, Reclamos.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Riesgos registrados",
                 "Tabla",
                 "Columnas: ID Riesgo, Líder, Descripción, Criticidad, Exposición, Planes.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Reclamos asociados",
                 "Tabla",
                 "Columnas: ID Reclamo, ID Caso, ID Producto, Analítica, Código analítica.",
-                "",
             ),
-            (
+            _wireframe_row(
                 "Normas transgredidas",
                 "Tabla",
                 "Columnas: ID Norma, ID Caso, Descripción, Vigencia, Acápite/Inciso, Detalle.",
-                "",
             ),
         ]
     )
@@ -822,7 +1076,8 @@ def _export_structure_rows() -> list[Sequence[str | None]]:
                 field_type = "decimal"
             else:
                 field_type = "string"
-            rows.append((file_name, field, field_type, ""))
+            description = EXPORT_FIELD_DESCRIPTIONS.get(file_name, {}).get(field, "")
+            rows.append((file_name, field, field_type, description))
     rows.append(_section_row("eventos.csv", columns=len(headers)))
     rows.append(("eventos.csv", "(ver hoja Eventos_CSV)", "string", "El esquema canónico se detalla aparte."))
     rows.append(_section_row("eventos_lhcl.csv", columns=len(headers)))
@@ -912,8 +1167,15 @@ def _mapping_export_rows() -> list[Sequence[str | None]]:
         "monto_pago_deuda": "Productos > Monto pago deuda",
         "tipo_producto": "Productos > Tipo de producto",
     }
+    product_notes = {
+        "categoria1": "Override por producto; si está vacío se usa la taxonomía del caso.",
+        "categoria2": "Override por producto; si está vacío se usa la taxonomía del caso.",
+        "modalidad": "Override por producto; si está vacío se usa la taxonomía del caso.",
+        "canal": "Override por producto; si está vacío se usa el canal del caso.",
+        "proceso": "Override por producto; si está vacío se usa el proceso del caso.",
+    }
     for field in EXPORT_HEADERS["productos.csv"]:
-        rows.append(("productos.csv", field, product_map.get(field, ""), ""))
+        rows.append(("productos.csv", field, product_map.get(field, ""), product_notes.get(field, "")))
 
     claim_map = {
         "id_reclamo": "Productos > Reclamos asociados > ID reclamo",
@@ -933,8 +1195,13 @@ def _mapping_export_rows() -> list[Sequence[str | None]]:
         "id_cliente_involucrado": "Productos > Involucramiento clientes",
         "monto_asignado": "Productos > Monto asignado",
     }
+    inv_notes = {
+        "tipo_involucrado": "Valores esperados: cliente/colaborador.",
+        "id_colaborador": "Se llena solo si el tipo de involucrado es colaborador.",
+        "id_cliente_involucrado": "Se llena solo si el tipo de involucrado es cliente.",
+    }
     for field in EXPORT_HEADERS["involucramiento.csv"]:
-        rows.append(("involucramiento.csv", field, inv_map.get(field, ""), ""))
+        rows.append(("involucramiento.csv", field, inv_map.get(field, ""), inv_notes.get(field, "")))
 
     risk_map = {
         "id_riesgo": "Riesgos > ID de riesgo",
@@ -991,53 +1258,145 @@ def _eventos_rows() -> list[Sequence[str | None]]:
         "fecha_ocurrencia_caso": "fecha_ocurrencia",
         "fecha_descubrimiento_caso": "fecha_descubrimiento",
     }
+    origin_map = {
+        "case_id": "Caso > Número de caso",
+        "id_caso": "Caso > Número de caso",
+        "tipo_informe": "Caso > Tipo de informe",
+        "categoria_1": "Productos (override) / Caso > Taxonomía",
+        "categoria_2": "Productos (override) / Caso > Taxonomía",
+        "modalidad": "Productos (override) / Caso > Taxonomía",
+        "categoria1": "Caso > Categoría nivel 1",
+        "categoria2": "Caso > Categoría nivel 2",
+        "canal": "Productos (override) / Caso > Canal",
+        "proceso_impactado": "Productos (override) / Caso > Proceso",
+        "proceso": "Caso > Proceso impactado",
+        "fecha_de_ocurrencia": "Caso > Fecha de ocurrencia",
+        "fecha_de_descubrimiento": "Caso > Fecha de descubrimiento",
+        "fecha_ocurrencia_caso": "Caso > Fecha de ocurrencia",
+        "fecha_descubrimiento_caso": "Caso > Fecha de descubrimiento",
+        "centro_costos": "Caso > Centro de costos",
+        "matricula_investigador": "Caso > Matrícula investigador",
+        "investigador_nombre": "Caso > Nombre investigador",
+        "investigador_cargo": "Caso > Cargo investigador",
+        "tipo_de_producto": "Productos > Tipo de producto",
+        "tipo_producto": "Productos > Tipo de producto",
+        "product_id": "Productos > ID del producto",
+        "id_producto": "Productos > ID del producto",
+        "tipo_moneda": "Productos > Moneda",
+        "monto_investigado": "Productos > Monto investigado",
+        "monto_perdida_fraude": "Productos > Monto pérdida fraude",
+        "monto_falla_procesos": "Productos > Monto falla procesos",
+        "monto_contingencia": "Productos > Monto contingencia",
+        "monto_recuperado": "Productos > Monto recuperado",
+        "monto_pago_deuda": "Productos > Monto pago deuda",
+        "fecha_ocurrencia": "Productos > Fecha ocurrencia (fallback caso)",
+        "fecha_descubrimiento": "Productos > Fecha descubrimiento (fallback caso)",
+        "comentario_breve": "Análisis > Comentario breve",
+        "comentario_amplio": "Análisis > Comentario amplio",
+        "id_reclamo": "Productos > Reclamos asociados",
+        "nombre_analitica": "Productos > Reclamos asociados",
+        "codigo_analitica": "Productos > Reclamos asociados",
+        "tipo_involucrado": "Productos > Involucramientos",
+        "id_colaborador": "Productos > Involucramientos",
+        "id_cliente_involucrado": "Productos > Involucramientos",
+        "monto_asignado": "Productos > Involucramientos",
+    }
+    client_involved_origin = {
+        "tipo_id_cliente_involucrado": "Clientes (involucrado) > Tipo ID",
+        "client_id_involucrado": "Clientes (involucrado) > ID",
+        "flag_cliente_involucrado": "Clientes (involucrado) > Flag",
+        "nombres_cliente_involucrado": "Clientes (involucrado) > Nombres",
+        "apellidos_cliente_involucrado": "Clientes (involucrado) > Apellidos",
+    }
+    collaborator_involved_origin = {
+        "matricula_colaborador_involucrado": "Colaboradores (involucrado) > ID",
+        "apellido_paterno_involucrado": "Colaboradores (involucrado) > Apellidos",
+        "apellido_materno_involucrado": "Colaboradores (involucrado) > Apellidos",
+        "nombres_involucrado": "Colaboradores (involucrado) > Nombres",
+        "division": "Colaboradores (involucrado) > División",
+        "area": "Colaboradores (involucrado) > Área",
+        "servicio": "Colaboradores (involucrado) > Servicio",
+        "nombre_agencia": "Colaboradores (involucrado) > Nombre agencia",
+        "codigo_agencia": "Colaboradores (involucrado) > Código agencia",
+        "puesto": "Colaboradores (involucrado) > Puesto",
+        "fecha_cese": "Colaboradores (involucrado) > Fecha carta renuncia",
+        "tipo_de_falta": "Colaboradores (involucrado) > Tipo de falta",
+        "tipo_sancion": "Colaboradores (involucrado) > Tipo de sanción",
+    }
+    client_owner_origin = {
+        "telefonos_cliente_relacionado": "Clientes (titular) > Teléfonos",
+        "correos_cliente_relacionado": "Clientes (titular) > Correos",
+        "direcciones_cliente_relacionado": "Clientes (titular) > Direcciones",
+        "accionado_cliente_relacionado": "Clientes (titular) > Accionado",
+        "cliente_nombres": "Clientes (titular) > Nombres",
+        "cliente_apellidos": "Clientes (titular) > Apellidos",
+        "cliente_tipo_id": "Clientes (titular) > Tipo ID",
+        "cliente_flag": "Clientes (titular) > Flag",
+        "cliente_telefonos": "Clientes (titular) > Teléfonos",
+        "cliente_correos": "Clientes (titular) > Correos",
+        "cliente_direcciones": "Clientes (titular) > Direcciones",
+        "cliente_accionado": "Clientes (titular) > Accionado",
+        "id_cliente": "Clientes (titular) > ID",
+    }
+    collaborator_origin = {
+        "colaborador_flag": "Colaboradores > Flag",
+        "colaborador_nombres": "Colaboradores > Nombres",
+        "colaborador_apellidos": "Colaboradores > Apellidos",
+        "colaborador_division": "Colaboradores > División",
+        "colaborador_area": "Colaboradores > Área",
+        "colaborador_servicio": "Colaboradores > Servicio",
+        "colaborador_puesto": "Colaboradores > Puesto",
+        "colaborador_fecha_carta_inmediatez": "Colaboradores > Fecha carta inmediatez",
+        "colaborador_fecha_carta_renuncia": "Colaboradores > Fecha carta renuncia",
+        "colaborador_nombre_agencia": "Colaboradores > Nombre agencia",
+        "colaborador_codigo_agencia": "Colaboradores > Código agencia",
+        "colaborador_tipo_falta": "Colaboradores > Tipo de falta",
+        "colaborador_tipo_sancion": "Colaboradores > Tipo de sanción",
+    }
+    monto_detail_origin = {
+        "monto_fraude_interno_soles": "Productos > Monto pérdida fraude",
+        "monto_falla_en_proceso_soles": "Productos > Monto falla procesos",
+        "monto_contingencia_soles": "Productos > Monto contingencia",
+        "monto_recuperado_soles": "Productos > Monto recuperado",
+        "monto_pagado_soles": "Productos > Monto pago deuda",
+    }
+    placeholder_notes = {
+        "cod_operation": "Siempre se exporta como <SIN_DATO>.",
+        "apellido_materno_involucrado": "No se captura; se exporta como <SIN_DATO>.",
+        "monto_fraude_externo_soles": "Actualmente se exporta como <SIN_DATO>.",
+        "fecha_cese": "Se deriva de la fecha de carta de renuncia del colaborador.",
+    }
     canonical_fields = set(EVENTOS_HEADER_CANONICO_START)
     for field in EVENTOS_HEADER_CANONICO:
         if field in canonical_fields:
             description = "Campo canónico de eventos."
         else:
             description = "Campo legado incluido por compatibilidad histórica."
-        origin = ""
-        notes = ""
-        if field in {"case_id", "id_caso"}:
-            origin = "Caso > Número de caso"
-        elif field in {"tipo_informe"}:
-            origin = "Caso > Tipo de informe"
-        elif field in {"categoria_1", "categoria_2", "modalidad", "categoria1", "categoria2"}:
-            origin = "Caso/Producto > Taxonomía"
-        elif field in {"canal"}:
-            origin = "Caso/Producto > Canal"
-        elif field in {"proceso_impactado", "proceso"}:
-            origin = "Caso/Producto > Proceso"
-        elif field in {"product_id", "id_producto"}:
-            origin = "Productos > ID del producto"
-        elif field in {"tipo_de_producto", "tipo_producto"}:
-            origin = "Productos > Tipo de producto"
-        elif field.startswith("monto_"):
+        origin = (
+            origin_map.get(field)
+            or client_involved_origin.get(field)
+            or collaborator_involved_origin.get(field)
+            or client_owner_origin.get(field)
+            or collaborator_origin.get(field)
+            or monto_detail_origin.get(field)
+            or ""
+        )
+        notes = placeholder_notes.get(field, "")
+        if not origin and field.startswith("monto_"):
             origin = "Productos > Montos"
-        elif field in {"tipo_moneda"}:
-            origin = "Productos > Moneda"
-        elif field in {"id_reclamo", "nombre_analitica", "codigo_analitica"}:
-            origin = "Productos > Reclamos asociados"
-        elif field in {"telefonos_cliente_relacionado", "correos_cliente_relacionado", "direcciones_cliente_relacionado", "accionado_cliente_relacionado"}:
-            origin = "Clientes > Contacto"
-        elif field in {"matricula_colaborador_involucrado", "id_colaborador"}:
-            origin = "Productos > Involucramiento colaboradores"
-        elif field in {"id_cliente_involucrado", "client_id_involucrado"}:
-            origin = "Productos > Involucramiento clientes"
-        elif field in {"comentario_breve", "comentario_amplio"}:
-            origin = "Análisis > Comentarios"
-        elif field in {"fecha_ocurrencia", "fecha_descubrimiento"}:
-            origin = "Productos > Fechas"
-        elif field in {"fecha_ocurrencia_caso", "fecha_descubrimiento_caso"}:
-            origin = "Caso > Fechas"
-
         if field == "cod_operation":
-            notes = "Se exporta como <SIN_DATO> (placeholder)."
+            origin = "No aplica (legacy)"
         if field.endswith("_dolares"):
             notes = "Actualmente se llena con <SIN_DATO>."
+        if field in client_involved_origin or field in {"client_id_involucrado", "id_cliente_involucrado"}:
+            notes = f"{notes} Solo aplica si el involucrado es cliente.".strip()
+        if field in collaborator_involved_origin:
+            notes = f"{notes} Solo aplica si el involucrado es colaborador.".strip()
+        if field == "tipo_involucrado":
+            notes = f"{notes} Valores esperados: cliente/colaborador.".strip()
         if field in alias_map:
-            notes = f"{notes} Alias/compatibilidad con {alias_map[field]}.".strip()
+            alias_note = f"Alias/compatibilidad con {alias_map[field]}."
+            notes = f"{notes} {alias_note}".strip()
         rows.append((field, description, origin, notes))
     return [headers, *rows]
 
@@ -1190,6 +1549,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
     headers = ("Campo / Validación", "Descripción de la regla", "Mensaje de error", "Fuente")
     rows = [
         (
+            "Validación post-edición",
+            "La validación se ejecuta solo después de editar un campo (FocusOut/ComboboxSelected).",
+            "No se valida al iniciar; edita un campo para disparar la validación.",
+            "validators.FieldValidator",
+        ),
+        (
             "Número de caso",
             "Formato AAAA-NNNN.",
             "El número de caso debe seguir el formato AAAA-NNNN.",
@@ -1208,6 +1573,18 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "validators.validate_date_text",
         ),
         (
+            "Fecha de reporte",
+            "Formato YYYY-MM-DD; no puede ser futura.",
+            "La fecha de reporte debe tener el formato YYYY-MM-DD y no puede ser futura.",
+            "validators.validate_date_text",
+        ),
+        (
+            "Centro de costos",
+            "Valores numéricos separados por ';' con mínimo 5 dígitos.",
+            "Cada centro de costos debe ser numérico y tener al menos 5 dígitos.",
+            "app._validate_cost_centers",
+        ),
+        (
             "Fechas de producto",
             "Formato YYYY-MM-DD; ocurrencia < descubrimiento; ambas <= hoy.",
             "Las fechas del producto no pueden estar en el futuro.",
@@ -1223,6 +1600,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "Monto pago deuda",
             "Debe ser <= monto investigado.",
             "El pago de deuda no puede ser mayor al monto investigado.",
+            "ui/frames/products.py",
+        ),
+        (
+            "Monto recuperado",
+            "Debe ser <= monto investigado.",
+            "El monto recuperado no puede superar el monto investigado.",
             "ui/frames/products.py",
         ),
         (
@@ -1244,6 +1627,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "validators.validate_phone_list",
         ),
         (
+            "Accionado (cliente)",
+            "Debe seleccionar al menos una opción.",
+            "Debe seleccionar al menos una opción en Accionado.",
+            "validators.validate_multi_selection",
+        ),
+        (
             "ID de reclamo",
             "Formato C########.",
             "El ID de reclamo debe tener el formato CXXXXXXXX.",
@@ -1262,6 +1651,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "validators.validate_norm_id",
         ),
         (
+            "Fecha de vigencia (norma)",
+            "Formato YYYY-MM-DD; no puede ser futura.",
+            "La fecha de vigencia no puede estar en el futuro.",
+            "validators.validate_date_text",
+        ),
+        (
             "ID de riesgo",
             "Hasta 60 caracteres; catálogo si aplica.",
             "El ID de riesgo no puede tener más de 60 caracteres.",
@@ -1274,16 +1669,40 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "validators.validate_client_id",
         ),
         (
+            "ID de producto",
+            "Valida longitud según tipo de producto (tarjeta/crédito/etc.).",
+            "El ID del producto no cumple el formato requerido.",
+            "validators.validate_product_id",
+        ),
+        (
             "ID de colaborador",
             "Formato letra + 5 dígitos.",
             "El ID del colaborador debe iniciar con una letra seguida de 5 dígitos.",
             "validators.validate_team_member_id",
         ),
         (
+            "N° de reclamos",
+            "Debe ser numérico cuando se usa en el encabezado extendido.",
+            "El número de reclamos debe ser numérico.",
+            "app._validate_reclamos_count",
+        ),
+        (
+            "Analítica contable (encabezado)",
+            "Código de 10 dígitos válido del catálogo.",
+            "El código seleccionado no pertenece al catálogo de analíticas contables.",
+            "app._validate_header_analitica",
+        ),
+        (
             "Código de agencia",
             "6 dígitos numéricos.",
             "El código de agencia debe tener exactamente 6 dígitos.",
             "validators.validate_agency_code",
+        ),
+        (
+            "Fechas de carta (colaborador)",
+            "Formato YYYY-MM-DD; no pueden ser futuras.",
+            "Las fechas de carta deben tener el formato YYYY-MM-DD y no ser futuras.",
+            "validators.validate_date_text",
         ),
         (
             "Reclamos obligatorios",
@@ -1296,6 +1715,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "Si división es DCA/Canales y área contiene 'area comercial', agencia es obligatoria.",
             "Debe ingresar nombre y código de agencia.",
             "ui/frames/team.py",
+        ),
+        (
+            "Planes de acción",
+            "IDs separados por ';' y sin duplicados entre riesgos.",
+            "Plan de acción <id> duplicado entre riesgos.",
+            "app.validate_data",
         ),
         (
             "Llave técnica",
