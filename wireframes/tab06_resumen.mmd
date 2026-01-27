@@ -6,7 +6,7 @@ flowchart TB
     subgraph tablas["Tablas compactas"]
         clientes["Clientes registrados\nColumnas: ID Cliente, Nombres, Apellidos, Tipo ID, Flag, Teléfonos, Correos, Direcciones, Accionado"]
         colaboradores["Colaboradores involucrados\nColumnas: ID, Nombres, Apellidos, Flag, División, Área, Servicio, Puesto, Carta inmediatez, Carta renuncia, Nombre agencia, Código agencia, Tipo falta, Tipo sanción"]
-        involucramientos["Asignaciones por colaborador\nColumnas: Producto, Tipo involucrado, Colaborador, Cliente involucrado, Monto asignado"]
+        involucramientos["Asignaciones por involucrado (colaborador/cliente)\nColumnas: Producto, Tipo involucrado, Colaborador, Cliente involucrado, Monto asignado"]
         productos["Productos investigados\nColumnas: ID Producto, Cliente, Tipo, Categoría 1, Categoría 2, Modalidad, Canal, Proceso, Fecha ocurrencia, Fecha descubrimiento, Monto investigado, Moneda, Pérdida, Falla procesos, Contingencia, Recuperado, Pago deuda, ID Reclamo, Analítica, Código analítica"]
         riesgos["Riesgos registrados\nColumnas: ID Riesgo, ID Caso, Líder, Descripción, Criticidad, Exposición residual, Planes de acción"]
         reclamos["Reclamos asociados\nColumnas: ID Reclamo, ID Caso, ID Producto, Analítica, Código analítica"]

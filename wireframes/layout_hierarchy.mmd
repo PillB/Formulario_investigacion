@@ -18,7 +18,7 @@ flowchart TB
     subgraph main_tab_sections["Caso y participantes"]
         case_section["1. Datos generales del caso:\n- Número de caso (AAAA-XXXX)\n- Tipo de informe\n- Taxonomía: Categoría 1, Categoría 2, Modalidad\n- Canal, Proceso impactado\n- Investigador principal: Matrícula, Nombre y apellidos, Cargo\n- Fechas: Ocurrencia, Descubrimiento\n- Centro de costos del caso"]
         clients_section["2. Clientes implicados (acordeones múltiples)\nCampos: Tipo de ID, ID del cliente, Nombres, Apellidos, Flag, Accionado (lista múltiple),\nTeléfonos, Correos, Direcciones"]
-        products_section["3. Productos investigados (acordeones)\nDatos básicos: ID producto, Cliente, Categoría 1/2, Modalidad, Canal, Proceso, Tipo de producto,\nFechas de ocurrencia/descubrimiento, Moneda\nMontos: Investigado, Pérdida fraude, Falla procesos, Contingencia, Recuperado, Pago deuda\nReclamos asociados y analítica\nInvolucramiento de colaboradores por monto"]
+        products_section["3. Productos investigados (acordeones)\nDatos básicos: ID producto, Cliente, Categoría 1/2, Modalidad, Canal, Proceso, Tipo de producto,\nFechas de ocurrencia/descubrimiento, Moneda\nMontos: Investigado, Pérdida fraude, Falla procesos, Contingencia, Recuperado, Pago deuda\nReclamos asociados y analítica\nInvolucramiento de colaboradores y clientes por monto"]
         team_section["4. Colaboradores involucrados (acordeones)\nCampos: ID colaborador, Nombres, Apellidos, Flag, División, Área, Servicio, Puesto,\nFechas carta inmediatez/renuncia, Nombre/Código agencia, Tipo de falta, Tipo de sanción"]
     end
     main_tab --> main_tab_sections
@@ -44,12 +44,12 @@ flowchart TB
     subgraph actions_tab_sections["Acciones"]
         actions_header["Configuración: Sonido de confirmación (check), Botón alternar tema"]
         catalogs["Catálogos de detalle: estado, botones Cargar catálogos / Iniciar sin catálogos, barra de progreso"]
-        imports["Importar datos masivos (CSV): botones Cargar clientes, Cargar colaboradores, Cargar productos,\nCargar normas, Cargar riesgos; estado y barra de progreso"]
+        imports["Importar datos masivos (CSV): botones Cargar clientes, Cargar colaboradores, Cargar productos,\nCargar combinado, Cargar reclamos, Cargar normas, Cargar riesgos; estado y barra de progreso"]
     end
     actions_tab --> actions_tab_sections
 
     subgraph summary_tab_sections["Resumen"]
         summary_intro["Mensaje introductorio"]
-        summary_tables["Tablas compactas: Clientes, Colaboradores, Asignaciones por colaborador, Productos, Riesgos, Reclamos, Normas"]
+        summary_tables["Tablas compactas: Clientes, Colaboradores, Asignaciones por involucrado (colaborador/cliente), Productos, Riesgos, Reclamos, Normas"]
     end
     summary_tab --> summary_tab_sections
