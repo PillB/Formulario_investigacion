@@ -82,12 +82,19 @@ from tkinter import font as tkfont
 from tkinter import messagebox, scrolledtext, ttk
 
 from inheritance_service import InheritanceService
-from models import (AutofillService, build_detail_catalog_id_index,
-                    CatalogService, extract_code_from_display,
-                    find_analitica_by_code, format_analitica_option,
-                    get_analitica_display_options, iter_massive_csv_rows,
-                    normalize_detail_catalog_key, parse_involvement_entries,
-                    read_csv_headers_with_fallback)
+from models import (
+    AutofillService,
+    build_detail_catalog_id_index,
+    CatalogService,
+    extract_code_from_display,
+    find_analitica_by_code,
+    format_analitica_option,
+    get_analitica_display_options,
+    iter_massive_csv_rows,
+    normalize_detail_catalog_key,
+    parse_involvement_entries,
+    read_csv_headers_with_fallback,
+)
 from report.alerta_temprana import (
     PPTX_AVAILABLE,
     PPTX_MISSING_MESSAGE,
@@ -136,21 +143,39 @@ from utils.persistence_manager import (CURRENT_SCHEMA_VERSION,
 from utils.progress_dialog import ProgressDialog
 from utils.technical_key import EMPTY_PART, build_technical_key
 from utils.widget_registry import WidgetIdRegistry
-from validators import (drain_log_queue, FieldValidator, log_event,
-                        LOG_FIELDNAMES, normalize_log_row,
-                        normalize_without_accents, parse_decimal_amount,
-                        resolve_catalog_product_type, sanitize_rich_text,
-                        should_autofill_field, sum_investigation_components,
-                        TIPO_PRODUCTO_NORMALIZED, validate_agency_code,
-                        validate_case_id, validate_client_id,
-                        validate_codigo_analitica, validate_date_text,
-                        validate_email_list, validate_money_bounds,
-                        validate_multi_selection, validate_norm_id,
-                        validate_phone_list, validate_product_dates,
-                        validate_product_id, validate_reclamo_id,
-                        validate_required_text, validate_risk_id,
-                        validate_team_member_id, validate_process_id,
-                        normalize_team_member_identifier)
+from validators import (
+    drain_log_queue,
+    FieldValidator,
+    log_event,
+    LOG_FIELDNAMES,
+    normalize_log_row,
+    normalize_without_accents,
+    parse_decimal_amount,
+    resolve_catalog_product_type,
+    sanitize_rich_text,
+    should_autofill_field,
+    sum_investigation_components,
+    TIPO_PRODUCTO_NORMALIZED,
+    validate_agency_code,
+    validate_case_id,
+    validate_catalog_risk_id,
+    validate_client_id,
+    validate_codigo_analitica,
+    validate_date_text,
+    validate_email_list,
+    validate_money_bounds,
+    validate_multi_selection,
+    validate_norm_id,
+    validate_phone_list,
+    validate_product_dates,
+    validate_product_id,
+    validate_reclamo_id,
+    validate_required_text,
+    validate_risk_id,
+    validate_team_member_id,
+    validate_process_id,
+    normalize_team_member_identifier,
+)
 
 PIL_AVAILABLE = importlib_util.find_spec("PIL") is not None
 if PIL_AVAILABLE:
@@ -15558,18 +15583,20 @@ class FraudCaseApp:
         for idx, r in enumerate(self.risk_frames, start=1):
             rd = r.get_data()
             rid = rd['id_riesgo']
-            risk_message = validate_risk_id(rid)
+            try:
+                is_catalog_mode = r.is_catalog_mode()
+            except Exception:
+                new_risk_var = getattr(r, "new_risk_var", None)
+                is_catalog_mode = not bool(new_risk_var.get()) if new_risk_var else True
+            risk_message = (
+                validate_catalog_risk_id(rid) if is_catalog_mode else validate_risk_id(rid)
+            )
             if risk_message:
                 errors.append(f"Riesgo {idx}: {risk_message}")
             elif rid in risk_ids:
                 errors.append(f"ID de riesgo duplicado: {rid}")
             if rid:
                 risk_ids.add(rid)
-            try:
-                is_catalog_mode = r.is_catalog_mode()
-            except Exception:
-                new_risk_var = getattr(r, "new_risk_var", None)
-                is_catalog_mode = not bool(new_risk_var.get()) if new_risk_var else True
             if is_catalog_mode:
                 # Criticidad solo se exige en modo catálogo según el Design document CM.
                 criticidad_value = (rd.get('criticidad') or '').strip()
