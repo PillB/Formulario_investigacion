@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import os
+import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -48,6 +51,29 @@ class DiagramSpec:
     title: str
 
 
+def sanitize_mermaid_source(source: Path) -> Path | None:
+    """Create a sanitized Mermaid source file for labels that can break parsing."""
+    pattern = re.compile(r"(\\w+)\\[\\[(.*?)\\]\\]")
+    text = source.read_text(encoding="utf-8")
+
+    def _replace(match: re.Match[str]) -> str:
+        label = match.group(2)
+        if any(ch in label for ch in ("(", ")", "/", ",")):
+            safe_label = label.replace('"', "'")
+            return f'{match.group(1)}["{safe_label}"]'
+        return match.group(0)
+
+    sanitized_text = pattern.sub(_replace, text)
+    if sanitized_text == text:
+        return None
+
+    fd, path = tempfile.mkstemp(suffix=f"_{source.stem}.mmd")
+    os.close(fd)
+    sanitized_path = Path(path)
+    sanitized_path.write_text(sanitized_text, encoding="utf-8")
+    return sanitized_path
+
+
 def render_mermaid(source: Path, target: Path) -> Path:
     """Render Mermaid to PNG using CLI or generate placeholder images."""
     import shutil
@@ -57,16 +83,18 @@ def render_mermaid(source: Path, target: Path) -> Path:
         raise FileNotFoundError(source)
 
     target.parent.mkdir(parents=True, exist_ok=True)
+    sanitized_source = sanitize_mermaid_source(source)
+    mermaid_source = sanitized_source or source
     cmd: list[str] | None
     if shutil.which("mmdc"):
-        cmd = ["mmdc", "-i", str(source), "-o", str(target)]
+        cmd = ["mmdc", "-i", str(mermaid_source), "-o", str(target)]
     elif shutil.which("npx"):
         cmd = [
             "npx",
             "-y",
             "@mermaid-js/mermaid-cli",
             "-i",
-            str(source),
+            str(mermaid_source),
             "-o",
             str(target),
         ]
@@ -83,6 +111,9 @@ def render_mermaid(source: Path, target: Path) -> Path:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError:
         return render_placeholder(source, target, "Fallo al ejecutar Mermaid CLI")
+    finally:
+        if sanitized_source:
+            sanitized_source.unlink(missing_ok=True)
     return target
 
 
