@@ -56,7 +56,10 @@ def append_historical_records(
     target_dir.mkdir(parents=True, exist_ok=True)
     history_path = target_dir / f"h_{table_name}.csv"
     effective_timestamp = (timestamp or datetime.now()).isoformat()
-    full_header = list(header) + ["case_id", "fecactualizacion"]
+    full_header = list(header)
+    for meta_field in ("case_id", "fecactualizacion"):
+        if meta_field not in full_header:
+            full_header.append(meta_field)
     should_write_header = not history_path.exists()
     empty_placeholder = placeholder if placeholder is not None else settings.EVENTOS_PLACEHOLDER
 

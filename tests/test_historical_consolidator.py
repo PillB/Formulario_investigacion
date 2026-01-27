@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 
 import app as app_module
-import pytest
 import settings
 from app import FraudCaseApp
 from report_builder import CaseData
@@ -136,6 +135,29 @@ def test_append_historical_records_creates_and_appends(tmp_path):
     assert second_columns[2] == settings.EVENTOS_PLACEHOLDER
     assert second_columns[3] == "2024-0001"
     assert second_columns[4] == "2024-01-01T12:00:00"
+
+
+def test_append_historical_records_dedupes_metadata_columns(tmp_path):
+    header = ["case_id", "id_evento", "fecactualizacion"]
+    rows = [{"case_id": "WRONG", "id_evento": "EVT-1", "fecactualizacion": "2001-01-01"}]
+    timestamp = datetime(2024, 2, 2, 10, 30, 0)
+
+    history_path = append_historical_records(
+        "eventos",
+        rows,
+        header,
+        tmp_path,
+        "2024-0002",
+        timestamp=timestamp,
+    )
+
+    assert history_path == tmp_path / "h_eventos.csv"
+    contents = history_path.read_text(encoding="utf-8").splitlines()
+    assert contents[0].split(",") == ["case_id", "id_evento", "fecactualizacion"]
+    data_columns = contents[1].split(",")
+    assert data_columns[0] == "2024-0002"
+    assert data_columns[1] == "EVT-1"
+    assert data_columns[2] == "2024-02-02T10:30:00"
 
 
 def test_perform_save_exports_records_history_and_manifest(tmp_path, monkeypatch):

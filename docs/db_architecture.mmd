@@ -84,7 +84,9 @@ erDiagram
   INVOLUCRAMIENTOS {
     string id_caso FK
     string id_producto FK
+    string tipo_involucrado "colaborador/cliente"
     string id_colaborador FK
+    string id_cliente_involucrado FK
     decimal monto_asignado
   }
 
@@ -164,8 +166,9 @@ erDiagram
   CLIENTES ||--o{ CLIENT_ADDRESSES : "tiene direcciones"
   CLIENTES ||--o{ PRODUCTOS : posee
   PRODUCTOS ||--o{ RECLAMOS : "origina reclamos"
-  PRODUCTOS ||--o{ INVOLUCRAMIENTOS : "asigna colaboradores"
+  PRODUCTOS ||--o{ INVOLUCRAMIENTOS : "asigna involucrados"
   COLABORADORES ||--o{ INVOLUCRAMIENTOS : participa
+  CLIENTES ||--o{ INVOLUCRAMIENTOS : "participa (cliente involucrado)"
   RIESGOS ||--o{ PLANES_RIESGO : "tiene planes"
   LLAVE_TECNICA ||--|| PRODUCTOS : "usa"
   LLAVE_TECNICA ||--|| CLIENTES : "usa"

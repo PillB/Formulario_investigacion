@@ -286,8 +286,23 @@ EVENTOS_HEADER_LEGACY = [
     "colaborador_tipo_sancion",
     "monto_asignado",
 ]
-EVENTOS_HEADER_CANONICO = EVENTOS_HEADER_CANONICO_START + [
-    field for field in EVENTOS_HEADER_LEGACY if field not in EVENTOS_HEADER_CANONICO_START
+EVENTOS_HEADER_CANONICO = list(EVENTOS_HEADER_CANONICO_START)
+EVENTOS_HEADER_DUPLICATES = {
+    "id_caso",
+    "categoria1",
+    "categoria2",
+    "proceso",
+    "fecha_de_ocurrencia",
+    "fecha_de_descubrimiento",
+    "id_producto",
+    "id_colaborador",
+    "id_cliente_involucrado",
+    "tipo_producto",
+}
+EVENTOS_HEADER_EXPORT = EVENTOS_HEADER_CANONICO_START + [
+    field
+    for field in EVENTOS_HEADER_LEGACY
+    if field not in EVENTOS_HEADER_CANONICO_START and field not in EVENTOS_HEADER_DUPLICATES
 ]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -368,6 +383,8 @@ __all__ = [
     "DETAIL_LOOKUP_ALIASES",
     "EVENTOS_HEADER_CANONICO",
     "EVENTOS_HEADER_CANONICO_START",
+    "EVENTOS_HEADER_DUPLICATES",
+    "EVENTOS_HEADER_EXPORT",
     "EVENTOS_HEADER_LEGACY",
     "EVENTOS_PLACEHOLDER",
     "EXTERNAL_DRIVE_DIR",
