@@ -4,7 +4,7 @@ Este script actualiza las hojas del archivo
 ``docs/formulario_investigaciones_wireframe.xlsx`` con la estructura real de la
 UI, los catálogos y los exportes definidos en el código. Se apoya en los
 diagramas y definiciones de ``docs/`` y ``settings.py`` para mantener las
-descripciones alineadas con las reglas de negocio.
+descripciones alineadas con las reglas de negocio del Design document CM.pdf.
 
 Uso:
     python tools/generate_improved_wireframe_excel.py \\
@@ -14,15 +14,32 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Iterable, Sequence
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 
-from app import EXPORT_HEADERS
-from settings import EVENTOS_HEADER_CANONICO, EVENTOS_HEADER_CANONICO_START
-from validators import LOG_FIELDNAMES
+
+def _ensure_repo_root_on_path() -> Path:
+    """Asegura que el root del repositorio esté disponible en sys.path.
+
+    Esto evita errores de importación cuando el script se ejecuta desde fuera
+    del directorio raíz (por ejemplo, lanzándolo desde ``tools/``).
+    """
+
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    return repo_root
+
+
+_ensure_repo_root_on_path()
+
+from app import EXPORT_HEADERS  # noqa: E402
+from settings import EVENTOS_HEADER_CANONICO, EVENTOS_HEADER_CANONICO_START  # noqa: E402
+from validators import LOG_FIELDNAMES  # noqa: E402
 
 
 HEADER_FONT = Font(bold=True)
@@ -1656,6 +1673,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             CLASSIFY_VALIDATION,
         ),
         (
+            "Fecha de vigencia (norma)",
+            "Formato YYYY-MM-DD; no puede ser futura.",
+            "La fecha de vigencia no puede estar en el futuro.",
+            "validators.validate_date_text",
+        ),
+        (
             "Montos",
             ">=0, 12 dígitos, 2 decimales. Investigado = pérdida+falla+contingencia+recuperado.",
             "La suma de las cuatro partidas debe ser igual al monto investigado.",
@@ -1733,6 +1756,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             CLASSIFY_VALIDATION,
         ),
         (
+            "Criticidad (riesgo catálogo)",
+            "Obligatoria cuando se selecciona un riesgo del catálogo.",
+            "Debe seleccionar una criticidad válida.",
+            "ui/frames/risk.py",
+        ),
+        (
             "ID de cliente",
             "Valida longitud según tipo de documento.",
             "Mensaje específico según tipo de documento.",
@@ -1794,6 +1823,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "Debe completar ID y monto de involucramiento.",
             "ui/frames/products.py",
             CLASSIFY_VALIDATION,
+        ),
+        (
+            "Involucramiento (ID/monto)",
+            "Si hay ID se exige monto y viceversa.",
+            "Debe completar ID y monto de involucramiento.",
+            "ui/frames/products.py",
         ),
         (
             "Planes de acción",
