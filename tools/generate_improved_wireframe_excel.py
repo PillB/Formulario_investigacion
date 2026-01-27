@@ -29,6 +29,117 @@ HEADER_FONT = Font(bold=True)
 WRAP = Alignment(vertical="top", wrap_text=True)
 
 
+EXPORT_FIELD_DESCRIPTIONS = {
+    "casos.csv": {
+        "id_caso": "Identificador único del caso (AAAA-XXXX).",
+        "tipo_informe": "Tipo de informe a generar (Gerencia/Interno/Credicorp).",
+        "categoria1": "Categoría nivel 1 del caso (taxonomía).",
+        "categoria2": "Categoría nivel 2 del caso (taxonomía).",
+        "modalidad": "Modalidad del caso (taxonomía).",
+        "canal": "Canal donde ocurrió el evento.",
+        "proceso": "Proceso impactado.",
+        "fecha_de_ocurrencia": "Fecha de ocurrencia del caso (YYYY-MM-DD).",
+        "fecha_de_descubrimiento": "Fecha de descubrimiento del caso (YYYY-MM-DD).",
+        "centro_costos": "Centros de costos separados por ';'.",
+        "matricula_investigador": "Matrícula/ID del investigador principal.",
+        "investigador_nombre": "Nombre y apellidos del investigador principal.",
+        "investigador_cargo": "Cargo del investigador principal.",
+    },
+    "clientes.csv": {
+        "id_cliente": "Identificador del cliente según tipo de documento.",
+        "id_caso": "Caso asociado.",
+        "nombres": "Nombres del cliente.",
+        "apellidos": "Apellidos del cliente.",
+        "tipo_id": "Tipo de documento (DNI/RUC/Pasaporte/etc.).",
+        "flag": "Rol del cliente (Involucrado/Afectado/No aplica).",
+        "telefonos": "Teléfonos separados por ';'.",
+        "correos": "Correos separados por ';'.",
+        "direcciones": "Direcciones físicas separadas por ';'.",
+        "accionado": "Tribus/equipos accionados (lista múltiple).",
+    },
+    "colaboradores.csv": {
+        "id_colaborador": "ID del Team Member (letra + 5 dígitos).",
+        "id_caso": "Caso asociado.",
+        "flag": "Rol del colaborador (Involucrado/Relacionado/etc.).",
+        "nombres": "Nombres del colaborador.",
+        "apellidos": "Apellidos del colaborador.",
+        "division": "División del colaborador.",
+        "area": "Área del colaborador.",
+        "servicio": "Servicio del colaborador.",
+        "puesto": "Puesto del colaborador.",
+        "fecha_carta_inmediatez": "Fecha de carta de inmediatez (YYYY-MM-DD).",
+        "fecha_carta_renuncia": "Fecha de renuncia/cese (YYYY-MM-DD).",
+        "nombre_agencia": "Nombre de agencia (condicional).",
+        "codigo_agencia": "Código de agencia (6 dígitos, condicional).",
+        "tipo_falta": "Tipo de falta.",
+        "tipo_sancion": "Tipo de sanción.",
+    },
+    "productos.csv": {
+        "id_producto": "Identificador del producto investigado.",
+        "id_caso": "Caso asociado.",
+        "id_cliente": "Cliente titular del producto.",
+        "categoria1": "Categoría nivel 1 (override por producto).",
+        "categoria2": "Categoría nivel 2 (override por producto).",
+        "modalidad": "Modalidad (override por producto).",
+        "canal": "Canal (override por producto).",
+        "proceso": "Proceso impactado (override por producto).",
+        "fecha_ocurrencia": "Fecha de ocurrencia del producto (YYYY-MM-DD).",
+        "fecha_descubrimiento": "Fecha de descubrimiento del producto (YYYY-MM-DD).",
+        "monto_investigado": "Monto investigado total.",
+        "tipo_moneda": "Moneda principal.",
+        "monto_perdida_fraude": "Monto de pérdida por fraude.",
+        "monto_falla_procesos": "Monto por falla de procesos.",
+        "monto_contingencia": "Monto por contingencia.",
+        "monto_recuperado": "Monto recuperado.",
+        "monto_pago_deuda": "Monto de pago de deuda.",
+        "tipo_producto": "Tipo de producto (tarjeta, crédito, etc.).",
+    },
+    "producto_reclamo.csv": {
+        "id_reclamo": "ID del reclamo (C########).",
+        "id_caso": "Caso asociado.",
+        "id_producto": "Producto asociado.",
+        "nombre_analitica": "Nombre de analítica contable.",
+        "codigo_analitica": "Código de analítica contable.",
+    },
+    "involucramiento.csv": {
+        "id_producto": "Producto asociado.",
+        "id_caso": "Caso asociado.",
+        "tipo_involucrado": "Tipo de involucrado (cliente/colaborador).",
+        "id_colaborador": "ID del colaborador involucrado.",
+        "id_cliente_involucrado": "ID del cliente involucrado.",
+        "monto_asignado": "Monto asignado al involucrado.",
+    },
+    "detalles_riesgo.csv": {
+        "id_riesgo": "Identificador del riesgo.",
+        "id_caso": "Caso asociado.",
+        "lider": "Responsable del riesgo.",
+        "descripcion": "Descripción del riesgo.",
+        "criticidad": "Criticidad del riesgo.",
+        "exposicion_residual": "Exposición residual del riesgo.",
+        "planes_accion": "Planes de acción separados por ';'.",
+    },
+    "detalles_norma.csv": {
+        "id_norma": "Identificador de norma (XXXX.XXX.XX.XX).",
+        "id_caso": "Caso asociado.",
+        "descripcion": "Descripción de la norma.",
+        "fecha_vigencia": "Fecha de vigencia (YYYY-MM-DD).",
+        "acapite_inciso": "Acápite/inciso relacionado.",
+        "detalle_norma": "Detalle de la norma transgredida.",
+    },
+    "analisis.csv": {
+        "id_caso": "Caso asociado.",
+        "antecedentes": "Antecedentes del caso.",
+        "modus_operandi": "Modus operandi del evento.",
+        "hallazgos": "Hallazgos principales.",
+        "descargos": "Descargos del colaborador.",
+        "conclusiones": "Conclusiones generales.",
+        "recomendaciones": "Recomendaciones y mejoras.",
+        "comentario_breve": "Resumen breve sin saltos de línea (máx. 150).",
+        "comentario_amplio": "Resumen amplio sin saltos de línea (máx. 750).",
+    },
+}
+
+
 def _apply_headers(sheet, headers: Sequence[str]) -> None:
     sheet.append(list(headers))
     for cell in sheet[1]:
@@ -822,7 +933,8 @@ def _export_structure_rows() -> list[Sequence[str | None]]:
                 field_type = "decimal"
             else:
                 field_type = "string"
-            rows.append((file_name, field, field_type, ""))
+            description = EXPORT_FIELD_DESCRIPTIONS.get(file_name, {}).get(field, "")
+            rows.append((file_name, field, field_type, description))
     rows.append(_section_row("eventos.csv", columns=len(headers)))
     rows.append(("eventos.csv", "(ver hoja Eventos_CSV)", "string", "El esquema canónico se detalla aparte."))
     rows.append(_section_row("eventos_lhcl.csv", columns=len(headers)))
@@ -912,8 +1024,15 @@ def _mapping_export_rows() -> list[Sequence[str | None]]:
         "monto_pago_deuda": "Productos > Monto pago deuda",
         "tipo_producto": "Productos > Tipo de producto",
     }
+    product_notes = {
+        "categoria1": "Override por producto; si está vacío se usa la taxonomía del caso.",
+        "categoria2": "Override por producto; si está vacío se usa la taxonomía del caso.",
+        "modalidad": "Override por producto; si está vacío se usa la taxonomía del caso.",
+        "canal": "Override por producto; si está vacío se usa el canal del caso.",
+        "proceso": "Override por producto; si está vacío se usa el proceso del caso.",
+    }
     for field in EXPORT_HEADERS["productos.csv"]:
-        rows.append(("productos.csv", field, product_map.get(field, ""), ""))
+        rows.append(("productos.csv", field, product_map.get(field, ""), product_notes.get(field, "")))
 
     claim_map = {
         "id_reclamo": "Productos > Reclamos asociados > ID reclamo",
@@ -933,8 +1052,13 @@ def _mapping_export_rows() -> list[Sequence[str | None]]:
         "id_cliente_involucrado": "Productos > Involucramiento clientes",
         "monto_asignado": "Productos > Monto asignado",
     }
+    inv_notes = {
+        "tipo_involucrado": "Valores esperados: cliente/colaborador.",
+        "id_colaborador": "Se llena solo si el tipo de involucrado es colaborador.",
+        "id_cliente_involucrado": "Se llena solo si el tipo de involucrado es cliente.",
+    }
     for field in EXPORT_HEADERS["involucramiento.csv"]:
-        rows.append(("involucramiento.csv", field, inv_map.get(field, ""), ""))
+        rows.append(("involucramiento.csv", field, inv_map.get(field, ""), inv_notes.get(field, "")))
 
     risk_map = {
         "id_riesgo": "Riesgos > ID de riesgo",
@@ -991,53 +1115,142 @@ def _eventos_rows() -> list[Sequence[str | None]]:
         "fecha_ocurrencia_caso": "fecha_ocurrencia",
         "fecha_descubrimiento_caso": "fecha_descubrimiento",
     }
+    origin_map = {
+        "case_id": "Caso > Número de caso",
+        "id_caso": "Caso > Número de caso",
+        "tipo_informe": "Caso > Tipo de informe",
+        "categoria_1": "Productos (override) / Caso > Taxonomía",
+        "categoria_2": "Productos (override) / Caso > Taxonomía",
+        "modalidad": "Productos (override) / Caso > Taxonomía",
+        "categoria1": "Caso > Categoría nivel 1",
+        "categoria2": "Caso > Categoría nivel 2",
+        "canal": "Productos (override) / Caso > Canal",
+        "proceso_impactado": "Productos (override) / Caso > Proceso",
+        "proceso": "Caso > Proceso impactado",
+        "fecha_de_ocurrencia": "Caso > Fecha de ocurrencia",
+        "fecha_de_descubrimiento": "Caso > Fecha de descubrimiento",
+        "fecha_ocurrencia_caso": "Caso > Fecha de ocurrencia",
+        "fecha_descubrimiento_caso": "Caso > Fecha de descubrimiento",
+        "centro_costos": "Caso > Centro de costos",
+        "matricula_investigador": "Caso > Matrícula investigador",
+        "investigador_nombre": "Caso > Nombre investigador",
+        "investigador_cargo": "Caso > Cargo investigador",
+        "tipo_de_producto": "Productos > Tipo de producto",
+        "tipo_producto": "Productos > Tipo de producto",
+        "product_id": "Productos > ID del producto",
+        "id_producto": "Productos > ID del producto",
+        "tipo_moneda": "Productos > Moneda",
+        "monto_investigado": "Productos > Monto investigado",
+        "monto_perdida_fraude": "Productos > Monto pérdida fraude",
+        "monto_falla_procesos": "Productos > Monto falla procesos",
+        "monto_contingencia": "Productos > Monto contingencia",
+        "monto_recuperado": "Productos > Monto recuperado",
+        "monto_pago_deuda": "Productos > Monto pago deuda",
+        "fecha_ocurrencia": "Productos > Fecha ocurrencia (fallback caso)",
+        "fecha_descubrimiento": "Productos > Fecha descubrimiento (fallback caso)",
+        "comentario_breve": "Análisis > Comentario breve",
+        "comentario_amplio": "Análisis > Comentario amplio",
+        "id_reclamo": "Productos > Reclamos asociados",
+        "nombre_analitica": "Productos > Reclamos asociados",
+        "codigo_analitica": "Productos > Reclamos asociados",
+        "tipo_involucrado": "Productos > Involucramientos",
+        "id_colaborador": "Productos > Involucramientos",
+        "id_cliente_involucrado": "Productos > Involucramientos",
+        "monto_asignado": "Productos > Involucramientos",
+    }
+    client_involved_origin = {
+        "tipo_id_cliente_involucrado": "Clientes (involucrado) > Tipo ID",
+        "client_id_involucrado": "Clientes (involucrado) > ID",
+        "flag_cliente_involucrado": "Clientes (involucrado) > Flag",
+        "nombres_cliente_involucrado": "Clientes (involucrado) > Nombres",
+        "apellidos_cliente_involucrado": "Clientes (involucrado) > Apellidos",
+    }
+    collaborator_involved_origin = {
+        "matricula_colaborador_involucrado": "Colaboradores (involucrado) > ID",
+        "apellido_paterno_involucrado": "Colaboradores (involucrado) > Apellidos",
+        "apellido_materno_involucrado": "Colaboradores (involucrado) > Apellidos",
+        "nombres_involucrado": "Colaboradores (involucrado) > Nombres",
+        "division": "Colaboradores (involucrado) > División",
+        "area": "Colaboradores (involucrado) > Área",
+        "servicio": "Colaboradores (involucrado) > Servicio",
+        "nombre_agencia": "Colaboradores (involucrado) > Nombre agencia",
+        "codigo_agencia": "Colaboradores (involucrado) > Código agencia",
+        "puesto": "Colaboradores (involucrado) > Puesto",
+        "fecha_cese": "Colaboradores (involucrado) > Fecha carta renuncia",
+        "tipo_de_falta": "Colaboradores (involucrado) > Tipo de falta",
+        "tipo_sancion": "Colaboradores (involucrado) > Tipo de sanción",
+    }
+    client_owner_origin = {
+        "telefonos_cliente_relacionado": "Clientes (titular) > Teléfonos",
+        "correos_cliente_relacionado": "Clientes (titular) > Correos",
+        "direcciones_cliente_relacionado": "Clientes (titular) > Direcciones",
+        "accionado_cliente_relacionado": "Clientes (titular) > Accionado",
+        "cliente_nombres": "Clientes (titular) > Nombres",
+        "cliente_apellidos": "Clientes (titular) > Apellidos",
+        "cliente_tipo_id": "Clientes (titular) > Tipo ID",
+        "cliente_flag": "Clientes (titular) > Flag",
+        "cliente_telefonos": "Clientes (titular) > Teléfonos",
+        "cliente_correos": "Clientes (titular) > Correos",
+        "cliente_direcciones": "Clientes (titular) > Direcciones",
+        "cliente_accionado": "Clientes (titular) > Accionado",
+        "id_cliente": "Clientes (titular) > ID",
+    }
+    collaborator_origin = {
+        "colaborador_flag": "Colaboradores > Flag",
+        "colaborador_nombres": "Colaboradores > Nombres",
+        "colaborador_apellidos": "Colaboradores > Apellidos",
+        "colaborador_division": "Colaboradores > División",
+        "colaborador_area": "Colaboradores > Área",
+        "colaborador_servicio": "Colaboradores > Servicio",
+        "colaborador_puesto": "Colaboradores > Puesto",
+        "colaborador_fecha_carta_inmediatez": "Colaboradores > Fecha carta inmediatez",
+        "colaborador_fecha_carta_renuncia": "Colaboradores > Fecha carta renuncia",
+        "colaborador_nombre_agencia": "Colaboradores > Nombre agencia",
+        "colaborador_codigo_agencia": "Colaboradores > Código agencia",
+        "colaborador_tipo_falta": "Colaboradores > Tipo de falta",
+        "colaborador_tipo_sancion": "Colaboradores > Tipo de sanción",
+    }
+    monto_detail_origin = {
+        "monto_fraude_interno_soles": "Productos > Monto pérdida fraude",
+        "monto_falla_en_proceso_soles": "Productos > Monto falla procesos",
+        "monto_contingencia_soles": "Productos > Monto contingencia",
+        "monto_recuperado_soles": "Productos > Monto recuperado",
+        "monto_pagado_soles": "Productos > Monto pago deuda",
+    }
+    placeholder_notes = {
+        "cod_operation": "Siempre se exporta como <SIN_DATO>.",
+        "apellido_materno_involucrado": "No se captura; se exporta como <SIN_DATO>.",
+        "monto_fraude_externo_soles": "Actualmente se exporta como <SIN_DATO>.",
+    }
     canonical_fields = set(EVENTOS_HEADER_CANONICO_START)
     for field in EVENTOS_HEADER_CANONICO:
         if field in canonical_fields:
             description = "Campo canónico de eventos."
         else:
             description = "Campo legado incluido por compatibilidad histórica."
-        origin = ""
-        notes = ""
-        if field in {"case_id", "id_caso"}:
-            origin = "Caso > Número de caso"
-        elif field in {"tipo_informe"}:
-            origin = "Caso > Tipo de informe"
-        elif field in {"categoria_1", "categoria_2", "modalidad", "categoria1", "categoria2"}:
-            origin = "Caso/Producto > Taxonomía"
-        elif field in {"canal"}:
-            origin = "Caso/Producto > Canal"
-        elif field in {"proceso_impactado", "proceso"}:
-            origin = "Caso/Producto > Proceso"
-        elif field in {"product_id", "id_producto"}:
-            origin = "Productos > ID del producto"
-        elif field in {"tipo_de_producto", "tipo_producto"}:
-            origin = "Productos > Tipo de producto"
-        elif field.startswith("monto_"):
+        origin = (
+            origin_map.get(field)
+            or client_involved_origin.get(field)
+            or collaborator_involved_origin.get(field)
+            or client_owner_origin.get(field)
+            or collaborator_origin.get(field)
+            or monto_detail_origin.get(field)
+            or ""
+        )
+        notes = placeholder_notes.get(field, "")
+        if not origin and field.startswith("monto_"):
             origin = "Productos > Montos"
-        elif field in {"tipo_moneda"}:
-            origin = "Productos > Moneda"
-        elif field in {"id_reclamo", "nombre_analitica", "codigo_analitica"}:
-            origin = "Productos > Reclamos asociados"
-        elif field in {"telefonos_cliente_relacionado", "correos_cliente_relacionado", "direcciones_cliente_relacionado", "accionado_cliente_relacionado"}:
-            origin = "Clientes > Contacto"
-        elif field in {"matricula_colaborador_involucrado", "id_colaborador"}:
-            origin = "Productos > Involucramiento colaboradores"
-        elif field in {"id_cliente_involucrado", "client_id_involucrado"}:
-            origin = "Productos > Involucramiento clientes"
-        elif field in {"comentario_breve", "comentario_amplio"}:
-            origin = "Análisis > Comentarios"
-        elif field in {"fecha_ocurrencia", "fecha_descubrimiento"}:
-            origin = "Productos > Fechas"
-        elif field in {"fecha_ocurrencia_caso", "fecha_descubrimiento_caso"}:
-            origin = "Caso > Fechas"
-
         if field == "cod_operation":
-            notes = "Se exporta como <SIN_DATO> (placeholder)."
+            origin = "No aplica (legacy)"
         if field.endswith("_dolares"):
             notes = "Actualmente se llena con <SIN_DATO>."
+        if field in client_involved_origin or field in {"client_id_involucrado", "id_cliente_involucrado"}:
+            notes = f"{notes} Solo aplica si el involucrado es cliente.".strip()
+        if field in collaborator_involved_origin:
+            notes = f"{notes} Solo aplica si el involucrado es colaborador.".strip()
         if field in alias_map:
-            notes = f"{notes} Alias/compatibilidad con {alias_map[field]}.".strip()
+            alias_note = f"Alias/compatibilidad con {alias_map[field]}."
+            notes = f"{notes} {alias_note}".strip()
         rows.append((field, description, origin, notes))
     return [headers, *rows]
 
@@ -1208,6 +1421,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "validators.validate_date_text",
         ),
         (
+            "Centro de costos",
+            "Valores numéricos separados por ';' con mínimo 5 dígitos.",
+            "Cada centro de costos debe ser numérico y tener al menos 5 dígitos.",
+            "app._validate_cost_centers",
+        ),
+        (
             "Fechas de producto",
             "Formato YYYY-MM-DD; ocurrencia < descubrimiento; ambas <= hoy.",
             "Las fechas del producto no pueden estar en el futuro.",
@@ -1244,6 +1463,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "validators.validate_phone_list",
         ),
         (
+            "Accionado (cliente)",
+            "Debe seleccionar al menos una opción.",
+            "Debe seleccionar al menos una opción en Accionado.",
+            "validators.validate_multi_selection",
+        ),
+        (
             "ID de reclamo",
             "Formato C########.",
             "El ID de reclamo debe tener el formato CXXXXXXXX.",
@@ -1274,10 +1499,28 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "validators.validate_client_id",
         ),
         (
+            "ID de producto",
+            "Valida longitud según tipo de producto (tarjeta/crédito/etc.).",
+            "El ID del producto no cumple el formato requerido.",
+            "validators.validate_product_id",
+        ),
+        (
             "ID de colaborador",
             "Formato letra + 5 dígitos.",
             "El ID del colaborador debe iniciar con una letra seguida de 5 dígitos.",
             "validators.validate_team_member_id",
+        ),
+        (
+            "N° de reclamos",
+            "Debe ser numérico cuando se usa en el encabezado extendido.",
+            "El número de reclamos debe ser numérico.",
+            "app._validate_reclamos_count",
+        ),
+        (
+            "Analítica contable (encabezado)",
+            "Código de 10 dígitos válido del catálogo.",
+            "El código seleccionado no pertenece al catálogo de analíticas contables.",
+            "app._validate_header_analitica",
         ),
         (
             "Código de agencia",
@@ -1296,6 +1539,12 @@ def _validation_panel_rows() -> list[Sequence[str | None]]:
             "Si división es DCA/Canales y área contiene 'area comercial', agencia es obligatoria.",
             "Debe ingresar nombre y código de agencia.",
             "ui/frames/team.py",
+        ),
+        (
+            "Planes de acción",
+            "IDs separados por ';' y sin duplicados entre riesgos.",
+            "Plan de acción <id> duplicado entre riesgos.",
+            "app.validate_data",
         ),
         (
             "Llave técnica",
