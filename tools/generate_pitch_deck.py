@@ -250,7 +250,7 @@ def add_objective_slide(prs: Presentation) -> None:
         "Centralizar el registro de casos y participantes en una sola interfaz guiada por pestañas.",
         "Asegurar calidad de datos con validaciones cruzadas (fechas, montos, IDs, duplicados) alineadas al Design document CM.",
         "Eliminar inconsistencias de consolidar Excel dispersos mediante catálogos oficiales y autopoblado.",
-        "Generar reportes ejecutivos y exportes normalizados (eventos.csv) listos para Bakehouse/PDA.",
+        "Generar reportes ejecutivos y exportes normalizados (eventos.csv) listos para Lakehouse/PDA.",
         "Mantener trazabilidad con autosave, logs y versiones históricas por caso.",
     ]
     add_bullets(slide, bullets, MARGIN_X, content_top, SLIDE_WIDTH - 2 * MARGIN_X, Cm(10))
@@ -281,7 +281,7 @@ def add_key_functionalities_slide(prs: Presentation) -> None:
         "Exportes automáticos: eventos.csv, analisis.csv, clientes.csv y datasets históricos h_*.csv.",
         "Reportes clave: Carta de inmediatez, Informe de Gerencia, Alerta temprana (PPT) y resumen ejecutivo.",
         "Consistencia frente a Excel: catálogos maestros, autopoblado y auditoría de logs.",
-        "Integración con Bakehouse/PDA: eventos.csv mantiene estructura canónica y legacy.",
+        "Integración con Lakehouse/PDA: eventos.csv mantiene estructura canónica y legacy.",
     ]
     add_bullets(slide, right_items, right, content_top, right_col_width, Cm(10))
 
@@ -310,7 +310,7 @@ def add_flow_slide(prs: Presentation) -> None:
     content_top = add_title_block(
         slide,
         "Flujo de datos de punta a punta",
-        "Entrada guiada → validación → exportes listos para Bakehouse.",
+        "Entrada guiada → validación → exportes listos para Lakehouse.",
     )
     box_width = Cm(5.1)
     box_height = Cm(2.0)
@@ -322,7 +322,7 @@ def add_flow_slide(prs: Presentation) -> None:
         "Validaciones\n+ autosave",
         "Autopoblado\ncatálogos",
         "Reportes &\nexports",
-        "eventos.csv\nBakehouse",
+        "eventos.csv\nLakehouse",
     ]
 
     shapes = []
@@ -419,7 +419,7 @@ def add_circular_flow_slide(prs: Presentation, diagram_path: Path) -> None:
     content_top = add_title_block(
         slide,
         "Flujo circular: formulario ↔ eventos.csv",
-        "Garantiza la consistencia del export crítico para Bakehouse/PDA.",
+        "Garantiza la consistencia del export crítico para Lakehouse/PDA.",
     )
     image_height = SLIDE_HEIGHT - content_top - MARGIN_Y - Cm(1.2)
     add_image(slide, diagram_path, MARGIN_X, content_top, SLIDE_WIDTH - 2 * MARGIN_X, image_height)
