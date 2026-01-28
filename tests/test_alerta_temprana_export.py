@@ -170,3 +170,31 @@ def test_synthesize_section_text_uses_fallback_when_llm_missing():
     )
     resumen = _synthesize_section_text("Resumen", sections, caso, NullLLM())
     assert "transferencias sospechosas" in resumen
+
+
+def test_cronologia_prefers_hallazgos_bullets():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {"id_caso": "2025-0002"},
+            "analisis": {
+                "hallazgos": (
+                    "- Primer hallazgo relevante del caso.\n"
+                    "- Segundo hallazgo con detalle adicional para cronología.\n"
+                    "- Tercer hallazgo asociado a la investigación.\n"
+                    "- Cuarto hallazgo operativo.\n"
+                    "- Quinto hallazgo que no debe aparecer."
+                )
+            },
+            "productos": [],
+            "riesgos": [],
+            "operaciones": [{"accion": "No debería usarse", "estado": "Pendiente"}],
+            "colaboradores": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+    cronologia = sections["cronologia"]
+    assert "Primer hallazgo relevante" in cronologia
+    assert "Cuarto hallazgo operativo" in cronologia
+    assert "Quinto hallazgo" not in cronologia
