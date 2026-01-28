@@ -100,6 +100,10 @@ from report.alerta_temprana import (
     PPTX_MISSING_MESSAGE,
     build_alerta_temprana_ppt,
 )
+from report.resumen_ejecutivo import (
+    build_resumen_ejecutivo_filename,
+    build_resumen_ejecutivo_md,
+)
 from report.carta_inmediatez import CartaInmediatezError, CartaInmediatezGenerator
 from report_builder import (build_docx, build_event_rows,
                             build_llave_tecnica_rows, build_report_filename,
@@ -1226,6 +1230,7 @@ class FraudCaseApp:
         self.btn_docx = None
         self.btn_md = None
         self.btn_alerta_temprana = None
+        self.btn_resumen_ejecutivo = None
         self.btn_clear_form = None
         self.clients_detail_wrapper = None
         self.team_detail_wrapper = None
@@ -4442,6 +4447,7 @@ class FraudCaseApp:
                 getattr(self, "actions_action_bar", None),
                 getattr(self, "btn_docx", None),
                 getattr(self, "btn_md", None),
+                getattr(self, "btn_resumen_ejecutivo", None),
                 getattr(self, "btn_alerta_temprana", None),
                 getattr(self, "btn_clear_form", None),
             ]
@@ -4451,6 +4457,7 @@ class FraudCaseApp:
                 getattr(self, "_export_anchor_widget", None),
                 getattr(self, "btn_docx", None),
                 getattr(self, "btn_md", None),
+                getattr(self, "btn_resumen_ejecutivo", None),
                 getattr(self, "btn_alerta_temprana", None),
                 action_bar,
             ]
@@ -8020,6 +8027,13 @@ class FraudCaseApp:
             style="ActionBar.TButton",
         )
         md_button.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
+        resumen_button = ttk.Button(
+            report_frame,
+            text="Generar resumen ejecutivo (.md)",
+            command=self.generate_resumen_ejecutivo,
+            style="ActionBar.TButton",
+        )
+        resumen_button.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
         alerta_button = ttk.Button(
             report_frame,
             text="Generar alerta temprana (.pptx)",
@@ -8042,6 +8056,7 @@ class FraudCaseApp:
         )
         clear_button.pack(side="left", pady=(0, ROW_PADY // 2))
         self.btn_md = md_button
+        self.btn_resumen_ejecutivo = resumen_button
         self.btn_alerta_temprana = alerta_button
         self.btn_carta_inmediatez = carta_button
         self.btn_clear_form = clear_button
@@ -8068,6 +8083,7 @@ class FraudCaseApp:
             if self._docx_available
             else f"{DOCX_MISSING_MESSAGE} Usa el informe Markdown como respaldo."
         )
+        resumen_tooltip = "Genera un resumen ejecutivo estructurado (mensaje clave, soporte y evidencia)."
         alerta_tooltip = (
             "Genera una alerta temprana en formato PPT utilizando el resumen validado."
             if self._pptx_available
@@ -8098,6 +8114,10 @@ class FraudCaseApp:
             "Genera un informe detallado en Markdown. Siempre disponible como respaldo.",
         )
         self.register_tooltip(
+            resumen_button,
+            resumen_tooltip,
+        )
+        self.register_tooltip(
             alerta_button,
             alerta_tooltip,
         )
@@ -8112,7 +8132,11 @@ class FraudCaseApp:
 
         if getattr(self, "_export_anchor_widget", None) is None:
             self._export_anchor_widget = (
-                self.btn_docx or self.btn_alerta_temprana or md_button or self.actions_action_bar
+                self.btn_docx
+                or self.btn_resumen_ejecutivo
+                or self.btn_alerta_temprana
+                or md_button
+                or self.actions_action_bar
             )
         if md_button is not None and self._actions_bar_anchor is None:
             self._actions_bar_anchor = md_button
@@ -15773,6 +15797,14 @@ class FraudCaseApp:
         return Path(folder) / report_name
 
     @staticmethod
+    def _build_resumen_ejecutivo_path(data: CaseData, folder: Path) -> Path:
+        case = data.get("caso", {}) if isinstance(data, Mapping) else {}
+        report_name = build_resumen_ejecutivo_filename(
+            case.get("tipo_informe"), case.get("id_caso"), "md"
+        )
+        return Path(folder) / report_name
+
+    @staticmethod
     def _build_report_prefix(data: CaseData) -> str:
         """Devuelve el prefijo normalizado para los reportes y exportaciones.
 
@@ -15953,6 +15985,8 @@ class FraudCaseApp:
         created_files.append(json_path)
         md_path = self._build_report_path(data, folder, "md")
         created_files.append(save_md(data, md_path))
+        resumen_path = self._build_resumen_ejecutivo_path(data, folder)
+        created_files.append(build_resumen_ejecutivo_md(data, resumen_path))
         docx_path: Optional[Path] = None
         if not self._docx_available:
             warnings.append(DOCX_MISSING_MESSAGE)
@@ -16004,6 +16038,7 @@ class FraudCaseApp:
             "report_prefix": report_prefix,
             "created_files": created_files,
             "md_path": md_path,
+            "resumen_path": resumen_path,
             "docx_path": docx_path,
             "warnings": warnings,
         }
@@ -16075,6 +16110,48 @@ class FraudCaseApp:
         self._play_feedback_sound()
         self._show_success_toast(source_widget)
 
+    def _generate_resumen_ejecutivo_file(
+        self,
+        *,
+        source_widget: Optional[tk.Widget] = None,
+        widget_id: Optional[str] = None,
+    ) -> None:
+        data, folder, case_id = self._prepare_case_data_for_export()
+        if not data or not folder or not case_id:
+            return
+        resolved_widget_id = self._resolve_widget_id(source_widget, widget_id)
+        report_path = self._build_resumen_ejecutivo_path(data, folder)
+        try:
+            created_path = build_resumen_ejecutivo_md(data, report_path)
+        except Exception as exc:  # pragma: no cover - protección frente a fallos externos
+            messagebox.showerror(
+                "Error al generar informe",
+                f"No se pudo generar el resumen ejecutivo: {exc}",
+            )
+            log_event(
+                "validacion",
+                f"Error al generar resumen ejecutivo: {exc}",
+                self.logs,
+                widget_id=resolved_widget_id,
+                action_result="failure",
+            )
+            return
+        self._mirror_exports_to_external_drive([created_path], case_id)
+        messagebox.showinfo(
+            "Informe generado",
+            f"El resumen ejecutivo se ha guardado como {created_path.name}.",
+        )
+        log_event(
+            "navegacion",
+            "Resumen ejecutivo generado",
+            self.logs,
+            widget_id=resolved_widget_id,
+            action_result="success",
+        )
+        self.flush_logs_now()
+        self._play_feedback_sound()
+        self._show_success_toast(source_widget)
+
     def generate_docx_report(self):
         self._run_export_action(
             getattr(self, "btn_docx", None),
@@ -16088,6 +16165,15 @@ class FraudCaseApp:
             getattr(self, "btn_md", None),
             lambda: self._generate_report_file(
                 "md", save_md, "Markdown (.md)", source_widget=self.btn_md, widget_id="btn_md"
+            ),
+        )
+
+    def generate_resumen_ejecutivo(self):
+        self._run_export_action(
+            getattr(self, "btn_resumen_ejecutivo", None),
+            lambda: self._generate_resumen_ejecutivo_file(
+                source_widget=self.btn_resumen_ejecutivo,
+                widget_id="btn_resumen_ejecutivo",
             ),
         )
 
@@ -16629,6 +16715,7 @@ class FraudCaseApp:
         report_prefix = result.get("report_prefix") or ""
         data = result.get("data")
         md_path = result.get("md_path")
+        resumen_path = result.get("resumen_path")
         docx_path = result.get("docx_path")
         warnings = result.get("warnings") or []
 
@@ -16638,6 +16725,8 @@ class FraudCaseApp:
         reports = []
         if md_path:
             reports.append(Path(md_path).name)
+        if resumen_path:
+            reports.append(Path(resumen_path).name)
         if docx_path:
             reports.append(Path(docx_path).name)
         informes = " y ".join(reports) if reports else "el informe Markdown"

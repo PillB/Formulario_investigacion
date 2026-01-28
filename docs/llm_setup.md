@@ -16,9 +16,9 @@ This document walks through how large language models (LLMs) are wired in this c
 - `DEFAULT_MODEL = "PlanTL-GOB-ES/flan-t5-base-spanish"`
 
 **How it is used:**
-- `_synthesize_section_text(...)` builds a prompt and tries to call `SpanishSummaryHelper.summarize(...)`.
-- If the LLM is unavailable or fails, it falls back to deterministic, data-driven summaries.
-- `build_alerta_temprana_ppt(...)` instantiates `SpanishSummaryHelper()` by default and uses it to generate multiple sections: Resumen, Cronología, Análisis, etc.
+- `_synthesize_section_text(...)` builds a prompt and calls `SpanishSummaryHelper.summarize(...)` only when a helper is provided explicitly.
+- When no helper is passed, it uses deterministic templates from `report/alerta_temprana_content.py`.
+- `build_alerta_temprana_ppt(...)` now generates sections deterministically by default; pass a helper only if you want LLM summaries.
 
 ### 2) Auto-redacción in the UI
 **File:** `utils/auto_redaccion.py`
@@ -88,7 +88,7 @@ DEFAULT_MODEL = "models/hf/flan-t5-base-spanish"
 ```
 
 This will make **both**:
-- `build_alerta_temprana_ppt(...)`
+- `build_alerta_temprana_ppt(...)` (when `llm_helper` is passed explicitly)
 - `auto_redact_comment(...)`
 
 load from the local checkpoint (because they use `SpanishSummaryHelper()` with defaults).
@@ -117,7 +117,14 @@ result = auto_redact_comment(case_data, narrative, target_chars=400, label="brev
 
 ### Step 5: Run the app and verify LLM behavior
 - Generate “Auto-redacción” in the UI (Comentario breve/amplio).
-- Export the “Alerta temprana” PPT and check that sections are summarized.
+- Export the “Alerta temprana” PPT and check that sections are summarized when you pass a helper.
+
+### 3) Resumen ejecutivo (deterministic)
+**File:** `report/resumen_ejecutivo.py`
+
+**Key function:** `build_resumen_ejecutivo_md(...)`
+- Builds a pyramid-style summary (mensaje clave → puntos de soporte → evidencia).
+- Uses the same deterministic content assembly as `report/alerta_temprana_content.py`.
 
 If `transformers` is missing or a model fails to load, the app falls back to placeholders and deterministic summaries.
 

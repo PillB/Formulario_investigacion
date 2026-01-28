@@ -11,6 +11,7 @@ from report.alerta_temprana import (
     _synthesize_section_text,
     build_alerta_temprana_ppt,
 )
+from report.alerta_temprana_content import build_alerta_temprana_sections
 from report_builder import CaseData
 
 
@@ -132,10 +133,12 @@ def test_build_alerta_temprana_ppt_generates_presentation(tmp_path):
 
     deck = Presentation(path)
     all_text = " ".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert len(deck.slides) == 2
     assert "Alerta temprana" in all_text
+    assert "Resumen ejecutivo" in all_text
     assert "2025-0001" in all_text
     assert "Cronología" in all_text
-    assert "Riesgos" in all_text
+    assert "Riesgos identificados" in all_text
     assert "sintetizado" in all_text
     assert any("Fraude" in prompt for _section, prompt in stub_llm.prompts)
 
@@ -152,7 +155,18 @@ def test_synthesize_section_text_uses_fallback_when_llm_missing():
         def summarize(self, section, prompt, *, max_new_tokens=None):
             return None
 
-    resumen = _synthesize_section_text(
-        "Resumen", caso, analisis, productos, riesgos, operaciones, colaboradores, NullLLM()
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": caso,
+            "analisis": analisis,
+            "productos": productos,
+            "riesgos": riesgos,
+            "operaciones": operaciones,
+            "colaboradores": colaboradores,
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
     )
+    resumen = _synthesize_section_text("Resumen", sections, caso, NullLLM())
     assert "transferencias sospechosas" in resumen
