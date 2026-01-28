@@ -6,7 +6,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
+
+import settings
+from report.styling_enhancer import (
+    apply_cell_shading,
+    apply_header_band,
+    style_section_heading,
+    style_table,
+    style_title,
+)
+from validators import parse_decimal_amount, sanitize_rich_text
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
@@ -23,10 +33,6 @@ DOCX_MISSING_MESSAGE = (
     "La dependencia opcional 'python-docx' no está instalada. "
     "Instálala con 'pip install python-docx' para habilitar el informe Word."
 )
-
-import settings
-from validators import parse_decimal_amount, sanitize_rich_text
-from report.styling_enhancer import apply_cell_shading, apply_header_band, style_section_heading, style_table, style_title
 
 
 PLACEHOLDER = "-"
@@ -227,7 +233,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
             analysis_texts.get("comentario_amplio"), placeholder
         ),
     }
-    header = list(settings.EVENTOS_HEADER_CANONICO)
+    header = list(settings.EVENTOS_HEADER_EXPORT)
 
     productos = case_data.get("productos") if isinstance(case_data, Mapping) else []
     reclamos = case_data.get("reclamos") if isinstance(case_data, Mapping) else []
@@ -392,109 +398,108 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 accionado_relacionado, placeholder
             ),
         }
-        rows.append(
-            {
-                **{field: placeholder for field in header},
-                **canonical_row,
-                **base_row,
-                "categoria1": _event_placeholder(categoria1, placeholder),
-                "categoria2": _event_placeholder(categoria2, placeholder),
-                "modalidad": _event_placeholder(modalidad, placeholder),
-                "canal": _event_placeholder(canal, placeholder),
-                "proceso": _event_placeholder(proceso, placeholder),
-                "id_producto": _event_placeholder(product.get("id_producto"), placeholder),
-                "id_cliente": _event_placeholder(product.get("id_cliente"), placeholder),
-                "id_colaborador": _event_placeholder(
-                    inv.get("id_colaborador") if not is_client_involvement else None, placeholder
-                ),
-                "id_cliente_involucrado": _event_placeholder(
-                    involved_client_id if is_client_involvement else None, placeholder
-                ),
-                "tipo_involucrado": _event_placeholder(inv_tipo, placeholder),
-                "id_reclamo": _event_placeholder(claim.get("id_reclamo"), placeholder),
-                "fecha_ocurrencia": _event_placeholder(product_occurrence, placeholder),
-                "fecha_descubrimiento": _event_placeholder(product_discovery, placeholder),
-                "tipo_producto": _event_placeholder(product.get("tipo_producto"), placeholder),
-                "tipo_moneda": _event_placeholder(product.get("tipo_moneda"), placeholder),
-                "monto_investigado": _event_placeholder(
-                    product.get("monto_investigado"), placeholder
-                ),
-                "monto_perdida_fraude": _event_placeholder(monto_perdida_fraude, placeholder),
-                "monto_falla_procesos": _event_placeholder(monto_falla_procesos, placeholder),
-                "monto_contingencia": _event_placeholder(monto_contingencia, placeholder),
-                "monto_recuperado": _event_placeholder(monto_recuperado, placeholder),
-                "monto_pago_deuda": _event_placeholder(monto_pago_deuda, placeholder),
-                "nombre_analitica": _event_placeholder(
-                    claim.get("nombre_analitica"), placeholder
-                ),
-                "codigo_analitica": _event_placeholder(
-                    claim.get("codigo_analitica"), placeholder
-                ),
-                "cliente_nombres": _event_placeholder(client.get("nombres"), placeholder),
-                "cliente_apellidos": _event_placeholder(client.get("apellidos"), placeholder),
-                "cliente_tipo_id": _event_placeholder(client.get("tipo_id"), placeholder),
-                "cliente_flag": _event_placeholder(client.get("flag"), placeholder),
-                "cliente_telefonos": _event_placeholder(client.get("telefonos"), placeholder),
-                "cliente_correos": _event_placeholder(client.get("correos"), placeholder),
-                "cliente_direcciones": _event_placeholder(
-                    client.get("direcciones"), placeholder
-                ),
-                "cliente_accionado": _event_placeholder(client.get("accionado"), placeholder),
-                "colaborador_flag": _event_placeholder(
-                    collaborator.get("flag") if not is_client_involvement else None, placeholder
-                ),
-                "colaborador_nombres": _event_placeholder(
-                    collaborator.get("nombres") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_apellidos": _event_placeholder(
-                    collaborator.get("apellidos") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_division": _event_placeholder(
-                    collaborator.get("division") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_area": _event_placeholder(
-                    collaborator.get("area") if not is_client_involvement else None, placeholder
-                ),
-                "colaborador_servicio": _event_placeholder(
-                    collaborator.get("servicio") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_puesto": _event_placeholder(
-                    collaborator.get("puesto") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_fecha_carta_inmediatez": _event_placeholder(
-                    collaborator.get("fecha_carta_inmediatez")
-                    if not is_client_involvement
-                    else None,
-                    placeholder,
-                ),
-                "colaborador_fecha_carta_renuncia": _event_placeholder(
-                    collaborator.get("fecha_carta_renuncia") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_nombre_agencia": _event_placeholder(
-                    collaborator.get("nombre_agencia") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_codigo_agencia": _event_placeholder(
-                    collaborator.get("codigo_agencia") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_tipo_falta": _event_placeholder(
-                    collaborator.get("tipo_falta") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "colaborador_tipo_sancion": _event_placeholder(
-                    collaborator.get("tipo_sancion") if not is_client_involvement else None,
-                    placeholder,
-                ),
-                "monto_asignado": _event_placeholder(inv.get("monto_asignado"), placeholder),
-            }
-        )
+        full_row = {
+            **{field: placeholder for field in header},
+            **canonical_row,
+            **base_row,
+            "categoria1": _event_placeholder(categoria1, placeholder),
+            "categoria2": _event_placeholder(categoria2, placeholder),
+            "modalidad": _event_placeholder(modalidad, placeholder),
+            "canal": _event_placeholder(canal, placeholder),
+            "proceso": _event_placeholder(proceso, placeholder),
+            "id_producto": _event_placeholder(product.get("id_producto"), placeholder),
+            "id_cliente": _event_placeholder(product.get("id_cliente"), placeholder),
+            "id_colaborador": _event_placeholder(
+                inv.get("id_colaborador") if not is_client_involvement else None, placeholder
+            ),
+            "id_cliente_involucrado": _event_placeholder(
+                involved_client_id if is_client_involvement else None, placeholder
+            ),
+            "tipo_involucrado": _event_placeholder(inv_tipo, placeholder),
+            "id_reclamo": _event_placeholder(claim.get("id_reclamo"), placeholder),
+            "fecha_ocurrencia": _event_placeholder(product_occurrence, placeholder),
+            "fecha_descubrimiento": _event_placeholder(product_discovery, placeholder),
+            "tipo_producto": _event_placeholder(product.get("tipo_producto"), placeholder),
+            "tipo_moneda": _event_placeholder(product.get("tipo_moneda"), placeholder),
+            "monto_investigado": _event_placeholder(
+                product.get("monto_investigado"), placeholder
+            ),
+            "monto_perdida_fraude": _event_placeholder(monto_perdida_fraude, placeholder),
+            "monto_falla_procesos": _event_placeholder(monto_falla_procesos, placeholder),
+            "monto_contingencia": _event_placeholder(monto_contingencia, placeholder),
+            "monto_recuperado": _event_placeholder(monto_recuperado, placeholder),
+            "monto_pago_deuda": _event_placeholder(monto_pago_deuda, placeholder),
+            "nombre_analitica": _event_placeholder(
+                claim.get("nombre_analitica"), placeholder
+            ),
+            "codigo_analitica": _event_placeholder(
+                claim.get("codigo_analitica"), placeholder
+            ),
+            "cliente_nombres": _event_placeholder(client.get("nombres"), placeholder),
+            "cliente_apellidos": _event_placeholder(client.get("apellidos"), placeholder),
+            "cliente_tipo_id": _event_placeholder(client.get("tipo_id"), placeholder),
+            "cliente_flag": _event_placeholder(client.get("flag"), placeholder),
+            "cliente_telefonos": _event_placeholder(client.get("telefonos"), placeholder),
+            "cliente_correos": _event_placeholder(client.get("correos"), placeholder),
+            "cliente_direcciones": _event_placeholder(
+                client.get("direcciones"), placeholder
+            ),
+            "cliente_accionado": _event_placeholder(client.get("accionado"), placeholder),
+            "colaborador_flag": _event_placeholder(
+                collaborator.get("flag") if not is_client_involvement else None, placeholder
+            ),
+            "colaborador_nombres": _event_placeholder(
+                collaborator.get("nombres") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_apellidos": _event_placeholder(
+                collaborator.get("apellidos") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_division": _event_placeholder(
+                collaborator.get("division") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_area": _event_placeholder(
+                collaborator.get("area") if not is_client_involvement else None, placeholder
+            ),
+            "colaborador_servicio": _event_placeholder(
+                collaborator.get("servicio") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_puesto": _event_placeholder(
+                collaborator.get("puesto") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_fecha_carta_inmediatez": _event_placeholder(
+                collaborator.get("fecha_carta_inmediatez")
+                if not is_client_involvement
+                else None,
+                placeholder,
+            ),
+            "colaborador_fecha_carta_renuncia": _event_placeholder(
+                collaborator.get("fecha_carta_renuncia") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_nombre_agencia": _event_placeholder(
+                collaborator.get("nombre_agencia") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_codigo_agencia": _event_placeholder(
+                collaborator.get("codigo_agencia") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_tipo_falta": _event_placeholder(
+                collaborator.get("tipo_falta") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "colaborador_tipo_sancion": _event_placeholder(
+                collaborator.get("tipo_sancion") if not is_client_involvement else None,
+                placeholder,
+            ),
+            "monto_asignado": _event_placeholder(inv.get("monto_asignado"), placeholder),
+        }
+        rows.append({field: full_row.get(field, placeholder) for field in header})
 
     return rows, header
 
@@ -1206,7 +1211,8 @@ def _build_report_context(case_data: CaseData):
 def _md_table(headers: Iterable[str], rows: List[List[Any]], *, placeholder: str = PLACEHOLDER) -> List[str]:
     if not rows:
         return [placeholder]
-    safe = lambda cell: str(cell or '').replace('|', '\\|')
+    def safe(cell: object) -> str:
+        return str(cell or "").replace("|", "\\|")
     lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(['---'] * len(headers)) + " |"]
     for row in rows:
         lines.append("| " + " | ".join(safe(col) for col in row) + " |")

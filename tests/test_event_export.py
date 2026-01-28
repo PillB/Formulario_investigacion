@@ -121,7 +121,7 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
 
     rows, header = build_event_rows(case_data)
 
-    assert header == settings.EVENTOS_HEADER_CANONICO
+    assert header == settings.EVENTOS_HEADER_EXPORT
 
     placeholder = settings.EVENTOS_PLACEHOLDER
     colaborador_row = next(row for row in rows if row["product_id"] == "=P1")
@@ -134,7 +134,7 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
     assert colaborador_row["matricula_colaborador_involucrado"] == "=COL1"
     assert colaborador_row["nombres_involucrado"] == "Juan"
     assert colaborador_row["telefonos_cliente_relacionado"] == "=999"
-    assert colaborador_row["id_caso"] == "2024-1001"
+    assert colaborador_row["case_id"] == "2024-1001"
     assert colaborador_row["fecha_ocurrencia_caso"] == "2024-01-01"
     assert colaborador_row["fecha_descubrimiento_caso"] == "2024-01-02"
     assert colaborador_row["cliente_telefonos"] == "=999"
@@ -145,7 +145,7 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
     assert cliente_row["matricula_colaborador_involucrado"] == placeholder
     assert cliente_row["division"] == placeholder
     assert cliente_row["tipo_de_producto"] == placeholder
-    assert cliente_row["id_colaborador"] == placeholder
+    assert cliente_row["matricula_colaborador_involucrado"] == placeholder
 
     csv_path = tmp_path / "caso_eventos.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as file:
@@ -155,10 +155,10 @@ def test_event_rows_merge_entities_and_fill_gaps(tmp_path):
             writer.writerow({field: _sanitize_csv_value(row.get(field, "")) for field in header})
 
     parsed = list(csv.DictReader(csv_path.open("r", newline="", encoding="utf-8")))
-    assert parsed[0]["id_producto"] == "'=P1"
-    assert parsed[0]["id_colaborador"] == "'=COL1"
-    assert parsed[0]["cliente_telefonos"] == "'=999"
-    assert parsed[-1]["id_colaborador"] == settings.EVENTOS_PLACEHOLDER
+    assert parsed[0]["product_id"] == "'=P1"
+    assert parsed[0]["matricula_colaborador_involucrado"] == "'=COL1"
+    assert parsed[0]["telefonos_cliente_relacionado"] == "'=999"
+    assert parsed[-1]["matricula_colaborador_involucrado"] == settings.EVENTOS_PLACEHOLDER
 
 
 def test_event_round_trip_prefers_case_dates_over_product_dates(monkeypatch):

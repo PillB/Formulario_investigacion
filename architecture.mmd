@@ -1,5 +1,5 @@
 %% Diagramas de arquitectura y flujos de artefactos
-%% Actualizado automáticamente el 2025-12-30 05:01:13
+%% Actualizado automáticamente el 2026-01-27 21:29:00
 %%{init: { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif', 'themeVariables': { 'fontFamily': 'Noto Sans, DejaVu Sans, Segoe UI, Arial, sans-serif' } } }%%
 
 erDiagram
@@ -71,8 +71,8 @@ erDiagram
     string fecha_cese
     string tipo_de_falta
     string tipo_sancion
-    string fecha_ocurrencia
-    string fecha_descubrimiento
+    string fecha_ocurrencia_caso
+    string fecha_descubrimiento_caso
     string monto_fraude_interno_soles
     string monto_fraude_interno_dolares
     string monto_fraude_externo_soles
@@ -94,22 +94,14 @@ erDiagram
     string correos_cliente_relacionado
     string direcciones_cliente_relacionado
     string accionado_cliente_relacionado
-    string id_caso
-    string categoria1
-    string categoria2
-    string proceso
-    string fecha_de_ocurrencia
-    string fecha_de_descubrimiento
     string centro_costos
     string matricula_investigador
     string investigador_nombre
     string investigador_cargo
-    string id_producto
     string id_cliente
-    string id_colaborador
-    string id_cliente_involucrado
     string tipo_involucrado
-    string tipo_producto
+    string fecha_ocurrencia
+    string fecha_descubrimiento
     string monto_perdida_fraude
     string monto_falla_procesos
     string monto_contingencia
@@ -194,16 +186,10 @@ erDiagram
     string nombre_analitica
     string codigo_analitica
   }
-  INVOLUCRAMIENTO_COLABORADOR {
+  INVOLUCRAMIENTO {
     string id_producto
     string id_caso
     string id_colaborador
-    string monto_asignado
-  }
-  INVOLUCRAMIENTO_CLIENTE {
-    string id_producto
-    string id_caso
-    string id_cliente_involucrado
     string monto_asignado
   }
   DETALLES_RIESGO {
@@ -250,20 +236,17 @@ erDiagram
   CASOS ||--o{ DETALLES_NORMA : contiene
   CASOS ||--o{ DETALLES_RIESGO : contiene
   CASOS ||--o{ EVENTOS : contiene
-  CASOS ||--o{ INVOLUCRAMIENTO_COLABORADOR : contiene
-  CASOS ||--o{ INVOLUCRAMIENTO_CLIENTE : contiene
+  CASOS ||--o{ INVOLUCRAMIENTO : contiene
   CASOS ||--o{ LLAVE_TECNICA : contiene
   CASOS ||--o{ PRODUCTOS : contiene
   CASOS ||--o{ PRODUCTO_RECLAMO : contiene
-  CLIENTES ||--o{ EVENTOS : id_cliente
+  CLIENTES ||--o{ EVENTOS : client_id_involucrado
   CLIENTES ||--o{ LLAVE_TECNICA : id_cliente
   CLIENTES ||--o{ PRODUCTOS : id_cliente
-  COLABORADORES ||--o{ EVENTOS : id_colaborador
-  COLABORADORES ||--o{ INVOLUCRAMIENTO_COLABORADOR : id_colaborador
+  COLABORADORES ||--o{ EVENTOS : matricula_colaborador_involucrado
+  COLABORADORES ||--o{ INVOLUCRAMIENTO : id_colaborador
   COLABORADORES ||--o{ LLAVE_TECNICA : id_colaborador
-  PRODUCTOS ||--o{ EVENTOS : id_producto
-  PRODUCTOS ||--o{ INVOLUCRAMIENTO_COLABORADOR : id_producto
-  PRODUCTOS ||--o{ INVOLUCRAMIENTO_CLIENTE : id_producto
-  CLIENTES ||--o{ INVOLUCRAMIENTO_CLIENTE : id_cliente_involucrado
+  PRODUCTOS ||--o{ EVENTOS : product_id
+  PRODUCTOS ||--o{ INVOLUCRAMIENTO : id_producto
   PRODUCTOS ||--o{ LLAVE_TECNICA : id_producto
   PRODUCTOS ||--o{ PRODUCTO_RECLAMO : id_producto

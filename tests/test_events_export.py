@@ -148,10 +148,17 @@ def test_save_exports_writes_event_rows(tmp_path, with_relations):
     assert len(rows) == expected_count
 
     placeholder = settings.EVENTOS_PLACEHOLDER
-    collaborator_row = next((row for row in rows if row.get("tipo_involucrado") == "colaborador"), rows[0])
-    assert collaborator_row["id_caso"] == case_id
-    assert collaborator_row["id_producto"] == _sanitize_csv_value("=P-1" if with_relations else "P-EMPTY")
-    assert collaborator_row["id_cliente"] == ("CL1" if with_relations else "CL2")
+    collaborator_row = next(
+        (
+            row
+            for row in rows
+            if row.get("matricula_colaborador_involucrado") not in ("", settings.EVENTOS_PLACEHOLDER)
+        ),
+        rows[0],
+    )
+    assert collaborator_row["case_id"] == case_id
+    assert collaborator_row["product_id"] == _sanitize_csv_value("=P-1" if with_relations else "P-EMPTY")
+    assert collaborator_row["client_id_involucrado"] in {("CL1" if with_relations else "CL2"), settings.EVENTOS_PLACEHOLDER}
     assert collaborator_row["fecha_ocurrencia_caso"] == "2024-01-10"
     assert collaborator_row["fecha_descubrimiento_caso"] == "2024-01-11"
     assert collaborator_row["fecha_ocurrencia"] == "2024-02-01"
@@ -159,18 +166,22 @@ def test_save_exports_writes_event_rows(tmp_path, with_relations):
     assert collaborator_row["cod_operation"] == placeholder
 
     if with_relations:
-        assert collaborator_row["id_colaborador"] == _sanitize_csv_value("=COL1")
+        assert collaborator_row["matricula_colaborador_involucrado"] == _sanitize_csv_value("=COL1")
         assert collaborator_row["id_reclamo"] == _sanitize_csv_value("-RC1")
-        assert collaborator_row["cliente_telefonos"] == _sanitize_csv_value("=999")
+        assert collaborator_row["telefonos_cliente_relacionado"] == _sanitize_csv_value("=999")
         assert collaborator_row["monto_contingencia"] == "20.00"
         assert collaborator_row["colaborador_tipo_falta"] == "Grave"
-        client_row = next(row for row in rows if row.get("tipo_involucrado") == "cliente")
-        assert client_row["id_cliente_involucrado"] == "CL1"
-        assert client_row["id_colaborador"] == placeholder
+        client_row = next(
+            row
+            for row in rows
+            if row.get("client_id_involucrado") not in ("", settings.EVENTOS_PLACEHOLDER)
+        )
+        assert client_row["client_id_involucrado"] == "CL1"
+        assert client_row["matricula_colaborador_involucrado"] == placeholder
     else:
-        assert collaborator_row["id_colaborador"] == placeholder
+        assert collaborator_row["matricula_colaborador_involucrado"] == placeholder
         assert collaborator_row["id_reclamo"] == placeholder
-        assert collaborator_row["cliente_telefonos"] == placeholder
+        assert collaborator_row["telefonos_cliente_relacionado"] == placeholder
         assert collaborator_row["nombre_analitica"] == placeholder
         assert collaborator_row["colaborador_flag"] == placeholder
 
