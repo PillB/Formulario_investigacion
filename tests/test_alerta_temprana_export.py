@@ -11,7 +11,10 @@ from report.alerta_temprana import (
     _synthesize_section_text,
     build_alerta_temprana_ppt,
 )
-from report.alerta_temprana_content import build_alerta_temprana_sections
+from report.alerta_temprana_content import (
+    MAX_BULLETS,
+    build_alerta_temprana_sections,
+)
 from report_builder import CaseData
 
 
@@ -198,3 +201,71 @@ def test_cronologia_prefers_hallazgos_bullets():
     assert "Primer hallazgo relevante" in cronologia
     assert "Cuarto hallazgo operativo" in cronologia
     assert "Quinto hallazgo" not in cronologia
+
+
+def test_sections_limit_and_truncate_bullets():
+    long_detail = "Detalle " + ("x" * 220)
+    data = {
+        "caso": {"id_caso": "2025-0003", "investigador_nombre": "Equipo"},
+        "analisis": {},
+        "productos": [],
+        "riesgos": [
+            {"id_riesgo": f"R{i}", "descripcion": long_detail, "criticidad": "Alta"}
+            for i in range(MAX_BULLETS + 2)
+        ],
+        "operaciones": [
+            {"accion": long_detail, "cliente": "Cliente", "estado": "Pendiente"}
+            for _ in range(MAX_BULLETS + 1)
+        ],
+        "colaboradores": [
+            {"nombres": f"Persona {i}", "flag": "involucrado", "area": long_detail}
+            for i in range(MAX_BULLETS + 1)
+        ],
+        "encabezado": {},
+        "clientes": [],
+        "reclamos": [],
+    }
+    sections = build_alerta_temprana_sections(data)
+    riesgos_lines = sections["riesgos"].splitlines()
+    acciones_lines = sections["acciones"].splitlines()
+    responsables_lines = sections["responsables"].splitlines()
+
+    assert len(riesgos_lines) == MAX_BULLETS
+    assert len(acciones_lines) == MAX_BULLETS
+    assert len(responsables_lines) == MAX_BULLETS
+    assert any(line.endswith("…") for line in riesgos_lines)
+    assert any(line.endswith("…") for line in acciones_lines)
+    assert any(line.endswith("…") for line in responsables_lines)
+
+
+@pytest.mark.skipif(not alerta_temprana.PPTX_AVAILABLE, reason="python-pptx no disponible")
+def test_add_section_panel_supports_bullet_paragraphs():
+    from pptx import Presentation
+    from pptx.oxml.ns import qn
+    from pptx.util import Inches
+
+    deck = Presentation()
+    deck.slide_width = Inches(13.33)
+    deck.slide_height = Inches(7.5)
+    slide = deck.slides.add_slide(deck.slide_layouts[6])
+
+    alerta_temprana._add_section_panel(
+        slide,
+        Inches(0.5),
+        Inches(0.5),
+        Inches(5.0),
+        Inches(2.5),
+        "Detalle",
+        "• Primer punto\nSegundo párrafo\n- Tercer punto",
+    )
+
+    body_box = slide.shapes[-1]
+    paragraphs = body_box.text_frame.paragraphs
+    assert [para.text for para in paragraphs[:3]] == ["Primer punto", "Segundo párrafo", "Tercer punto"]
+
+    first_ppr = paragraphs[0]._p.get_or_add_pPr()
+    second_ppr = paragraphs[1]._p.get_or_add_pPr()
+    third_ppr = paragraphs[2]._p.get_or_add_pPr()
+    assert first_ppr.find(qn("a:buChar")) is not None
+    assert second_ppr.find(qn("a:buChar")) is None
+    assert third_ppr.find(qn("a:buChar")) is not None

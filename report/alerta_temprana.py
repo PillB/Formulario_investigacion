@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import importlib.util
 from pathlib import Path
+import re
 from typing import Mapping
 
 from report.alerta_temprana_content import (
@@ -19,12 +20,16 @@ if pptx_spec:
     from pptx.dml.color import RGBColor
     from pptx.enum.shapes import MSO_SHAPE
     from pptx.enum.text import PP_ALIGN
+    from pptx.oxml.ns import qn
+    from pptx.oxml.xmlchemy import OxmlElement
     from pptx.util import Inches, Pt
 else:  # pragma: no cover - dependencia opcional
     Presentation = None
     RGBColor = None
     MSO_SHAPE = None
     PP_ALIGN = None
+    qn = None
+    OxmlElement = None
     Inches = None
     Pt = None
 
@@ -46,6 +51,32 @@ COLUMN_GAP = Inches(0.3) if Inches else 0
 MASTHEAD_HEIGHT = Inches(1.1) if Inches else 0
 SECTION_HEADER_HEIGHT = Inches(0.28) if Inches else 0
 PANEL_PADDING = Inches(0.18) if Inches else 0
+BULLET_PREFIX = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+
+
+def _set_paragraph_bullet(paragraph, enabled: bool) -> None:
+    if not enabled or not PPTX_AVAILABLE:
+        return
+    ppr = paragraph._p.get_or_add_pPr()
+    existing = ppr.find(qn("a:buChar"))
+    if existing is not None:
+        ppr.remove(existing)
+    bullet = OxmlElement("a:buChar")
+    bullet.set("char", "•")
+    ppr.insert(0, bullet)
+
+
+def _split_body_paragraphs(body: str) -> list[tuple[str, bool]]:
+    lines = [line.strip() for line in str(body or "").splitlines() if line.strip()]
+    if not lines:
+        return [(PLACEHOLDER, False)]
+    parsed = []
+    for line in lines:
+        is_bullet = bool(BULLET_PREFIX.match(line))
+        text = BULLET_PREFIX.sub("", line).strip() if is_bullet else line
+        if text:
+            parsed.append((text, is_bullet))
+    return parsed or [(PLACEHOLDER, False)]
 
 
 def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> str:
@@ -182,11 +213,14 @@ def _add_section_panel(slide, left, top, width, height, title: str, body: str, *
     frame = body_box.text_frame
     frame.clear()
     frame.word_wrap = True
-    para = frame.paragraphs[0]
-    para.text = body
-    para.font.size = Pt(11)
-    para.alignment = PP_ALIGN.LEFT
-    para.line_spacing = 1.15
+    paragraphs = _split_body_paragraphs(body)
+    for index, (text, is_bullet) in enumerate(paragraphs):
+        para = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
+        para.text = text
+        para.font.size = Pt(11)
+        para.alignment = PP_ALIGN.LEFT
+        para.line_spacing = 1.15
+        _set_paragraph_bullet(para, is_bullet)
     return panel
 
 

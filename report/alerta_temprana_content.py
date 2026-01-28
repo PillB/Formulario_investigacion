@@ -97,6 +97,17 @@ def _bullet_text(lines: Sequence[str]) -> str:
     return "\n".join(f"• {line}" for line in lines)
 
 
+def _limit_bullets(
+    lines: Sequence[str],
+    *,
+    max_items: int = MAX_BULLETS,
+    max_chars: int = MAX_BULLET_CHARS,
+) -> list[str]:
+    if not lines:
+        return []
+    trimmed = [_truncate(line, max_chars) for line in lines if line]
+    return trimmed[:max_items]
+
 def _aggregate_amounts(products: Iterable[Mapping[str, object]] | None) -> dict[str, Decimal]:
     totals = {
         "investigado": Decimal("0"),
@@ -188,7 +199,7 @@ def _build_cronologia_section(
             summary = " - ".join(part for part in (fecha, accion, estado) if part and part != PLACEHOLDER)
             if summary:
                 lines.append(summary)
-        return _bullet_text(lines[:MAX_BULLETS])
+        return _bullet_text(_limit_bullets(lines))
     ocurrencia = _format_date(caso.get("fecha_de_ocurrencia"))
     descubrimiento = _format_date(caso.get("fecha_de_descubrimiento"))
     product_dates = [
@@ -235,8 +246,8 @@ def _build_riesgos_section(riesgos: Sequence[Mapping[str, object]]) -> str:
         if plan:
             line = f"{line}. Plan: {plan}" if line else f"Plan: {plan}"
         if line:
-            bullets.append(_truncate(line, 200))
-    return _bullet_text(bullets[:MAX_BULLETS])
+            bullets.append(line)
+    return _bullet_text(_limit_bullets(bullets))
 
 
 def _build_acciones_section(analisis: Mapping[str, object], operaciones: Sequence[Mapping[str, object]]) -> str:
@@ -252,8 +263,8 @@ def _build_acciones_section(analisis: Mapping[str, object], operaciones: Sequenc
         estado = _safe_text(op.get("estado"), "")
         line = " - ".join(part for part in (accion, cliente, estado) if part and part != PLACEHOLDER)
         if line:
-            bullets.append(_truncate(line, 200))
-    return _bullet_text(bullets[:MAX_BULLETS])
+            bullets.append(line)
+    return _bullet_text(_limit_bullets(bullets))
 
 
 def _build_responsables_section(
@@ -273,7 +284,7 @@ def _build_responsables_section(
         flag = _safe_text(colab.get("flag"), "")
         area = _safe_text(colab.get("area"), "")
         bullets.append(f"{nombre} ({flag or 'involucrado'} - {area or 'área no especificada'})")
-    return _bullet_text(bullets[:MAX_BULLETS])
+    return _bullet_text(_limit_bullets(bullets))
 
 
 def build_alerta_temprana_sections(
