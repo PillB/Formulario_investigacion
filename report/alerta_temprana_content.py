@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+import re
 from typing import Iterable, Mapping, Sequence
 
 from report_builder import CaseData
@@ -10,7 +11,9 @@ from validators import parse_decimal_amount, sanitize_rich_text
 
 PLACEHOLDER = "N/A"
 MAX_SECTION_CHARS = 600
-MAX_BULLETS = 5
+MAX_BULLETS = 4
+MAX_BULLET_CHARS = 180
+MIN_TRUNCATE_WORD_BOUNDARY = 0.6
 
 
 @dataclass(frozen=True)
@@ -46,7 +49,12 @@ def _format_amount(value: Decimal | None) -> str:
 def _truncate(text: str, max_chars: int) -> str:
     cleaned = sanitize_rich_text(text, max_chars=None).strip()
     if max_chars and len(cleaned) > max_chars:
-        return cleaned[: max_chars - 1].rstrip() + "…"
+        truncated = cleaned[: max_chars - 1].rstrip()
+        last_space = truncated.rfind(" ")
+        min_space_index = int(max_chars * MIN_TRUNCATE_WORD_BOUNDARY)
+        if last_space >= min_space_index:
+            truncated = truncated[:last_space].rstrip()
+        return truncated + "…"
     return cleaned
 
 
@@ -58,14 +66,28 @@ def _extract_rich_text(entry: object) -> str:
     return sanitize_rich_text(raw_text, max_chars=MAX_SECTION_CHARS).strip()
 
 
-def _split_bullets(text: str, *, max_items: int = MAX_BULLETS) -> list[str]:
+def _split_bullets(
+    text: str,
+    *,
+    max_items: int = MAX_BULLETS,
+    max_chars: int = MAX_BULLET_CHARS,
+) -> list[str]:
     if not text:
         return []
-    raw_lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if len(raw_lines) == 1:
-        sentences = [part.strip() for part in raw_lines[0].split(". ") if part.strip()]
-        raw_lines = [sentence.rstrip(".") for sentence in sentences]
-    bullets = [_truncate(line, 180) for line in raw_lines if line]
+    cleaned = sanitize_rich_text(text, max_chars=None).strip()
+    if not cleaned:
+        return []
+    raw_lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+    candidates: list[str] = []
+    bullet_prefix = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+    for line in raw_lines:
+        normalized = bullet_prefix.sub("", line).strip()
+        if normalized:
+            candidates.append(normalized)
+    if len(candidates) <= 1:
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", cleaned) if part.strip()]
+        candidates = [sentence.rstrip(".") for sentence in sentences]
+    bullets = [_truncate(line, max_chars) for line in candidates if line]
     return bullets[:max_items]
 
 
@@ -142,10 +164,19 @@ def _build_cronologia_section(
     productos: Sequence[Mapping[str, object]],
     operaciones: Sequence[Mapping[str, object]],
 ) -> str:
-    hallazgos = _extract_rich_text(analisis.get("hallazgos"))
-    if hallazgos:
-        bullets = _split_bullets(hallazgos)
-        return _bullet_text(bullets)
+    for key in (
+        "hallazgos",
+        "comentario_breve",
+        "conclusiones",
+        "antecedentes",
+        "comentario_amplio",
+        "modus_operandi",
+    ):
+        narrative = _extract_rich_text(analisis.get(key))
+        if narrative:
+            bullets = _split_bullets(narrative)
+            if bullets:
+                return _bullet_text(bullets)
     if operaciones:
         lines = []
         for op in operaciones:
