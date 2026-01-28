@@ -8029,7 +8029,7 @@ class FraudCaseApp:
         md_button.pack(side="left", padx=(0, 8), pady=(0, ROW_PADY // 2))
         resumen_button = ttk.Button(
             report_frame,
-            text="Generar resumen ejecutivo (.md)",
+            text="Generar resumen ejecutivo",
             command=self.generate_resumen_ejecutivo,
             style="ActionBar.TButton",
         )

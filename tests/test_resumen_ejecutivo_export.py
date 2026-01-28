@@ -13,14 +13,17 @@ def test_build_resumen_ejecutivo_md(tmp_path):
     data = CaseData.from_mapping(
         {
             "caso": {"id_caso": "2025-0002", "tipo_informe": "Gerencia"},
-            "clientes": [{"id_cliente": "CLI1"}],
-            "colaboradores": [],
-            "productos": [{"monto_investigado": "100.00"}],
+            "clientes": [{"id_cliente": "CLI1", "nombres": "Ana", "apellidos": "Perez"}],
+            "colaboradores": [{"id_colaborador": "T12345", "nombres": "Juan", "apellidos": "Soto"}],
+            "productos": [{"id_producto": "P001", "monto_investigado": "100.00"}],
             "reclamos": [],
             "involucramientos": [],
             "riesgos": [{"id_riesgo": "R1", "descripcion": "Riesgo operativo"}],
             "normas": [],
-            "analisis": {"hallazgos": {"text": "Se identificaron patrones anómalos."}},
+            "analisis": {
+                "hallazgos": {"text": "Se identificaron patrones anómalos."},
+                "conclusiones": {"text": "El caso requiere seguimiento inmediato."},
+            },
             "encabezado": {"dirigido_a": "Gerencia de Riesgos"},
             "operaciones": [],
             "anexos": [],
@@ -34,8 +37,35 @@ def test_build_resumen_ejecutivo_md(tmp_path):
     assert "# Resumen Ejecutivo" in content
     assert "**Caso:** 2025-0002" in content
     assert "Mensaje clave" in content
-    assert "Puntos de soporte" in content
-    assert "Evidencia" in content
+    assert "Contexto del caso" in content
+    assert "Hallazgos y análisis" in content
+    assert "Evidencia y trazabilidad" in content
+    assert "Monto investigado 100.00" in content
+
+
+def test_resumen_ejecutivo_fallbacks(tmp_path):
+    data = CaseData.from_mapping(
+        {
+            "caso": {},
+            "clientes": [],
+            "colaboradores": [],
+            "productos": [],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {},
+            "encabezado": {},
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+    output = tmp_path / "Resumen_Ejecutivo_Gerencia_0000.md"
+    path = build_resumen_ejecutivo_md(data, output)
+    content = path.read_text(encoding="utf-8")
+    assert "N/A" in content
 
 
 @pytest.mark.skipif(
