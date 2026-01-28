@@ -160,6 +160,8 @@ def _build_resumen_section(
         comentario = _extract_rich_text(analisis.get("antecedentes"))
     summary_line = _truncate(comentario, 280) if comentario else PLACEHOLDER
     header = _case_title(caso, encabezado)
+    if header == PLACEHOLDER and summary_line == PLACEHOLDER and not products:
+        return PLACEHOLDER
     amounts = (
         f"Monto investigado {_format_amount(totals['investigado'])}; "
         f"Pérdida fraude {_format_amount(totals['perdida_fraude'])}; "
@@ -207,6 +209,8 @@ def _build_cronologia_section(
         for prod in productos
         if isinstance(prod, Mapping) and prod.get("fecha_ocurrencia")
     ]
+    if ocurrencia == PLACEHOLDER and descubrimiento == PLACEHOLDER and not product_dates:
+        return PLACEHOLDER
     bullets = [
         f"Ocurrencia: {ocurrencia}. Descubrimiento: {descubrimiento}.",
     ]
@@ -229,7 +233,9 @@ def _build_analisis_section(analisis: Mapping[str, object]) -> str:
         text = _extract_rich_text(analisis.get("comentario_amplio"))
         if text:
             parts.append(text)
-    return _bullet_text(parts or [PLACEHOLDER])
+    if not parts:
+        return PLACEHOLDER
+    return _bullet_text(parts)
 
 
 def _build_riesgos_section(riesgos: Sequence[Mapping[str, object]]) -> str:
