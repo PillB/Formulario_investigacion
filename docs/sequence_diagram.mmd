@@ -12,7 +12,7 @@ sequenceDiagram
     participant Reporte as Reportes base (report_builder)
     participant Alertas as Alerta temprana (report/alerta_temprana.py)
     participant Cartas as Cartas (report/carta_inmediatez.py)
-    participant Resumen as Resumen Ejecutivo (pendiente)
+    participant Resumen as Resumen Ejecutivo (report/resumen_ejecutivo.py)
     participant Historico as Históricos h_*.csv
     participant External as external drive/<id_caso>/
 
@@ -62,8 +62,8 @@ sequenceDiagram
     Alertas-->>Investigador: PPTX de alerta temprana
     UI->>Cartas: Abrir diálogo y generar cartas de inmediatez
     Cartas-->>Investigador: DOCX + CSV de cartas y fechas en pestaña colaboradores
-    UI->>Resumen: build_resumen_ejecutivo() (pendiente)
-    Resumen-->>Investigador: Resumen Ejecutivo (N/A en código)
+    UI->>Resumen: build_resumen_ejecutivo_md()
+    Resumen-->>Investigador: Resumen Ejecutivo (.md)
     UI->>Historico: append_historical_records -> h_*.csv (incluye h_eventos.csv y h_eventos_lhcl.csv)
     Historico-->>External: Espejo automático al detectar external drive
     Historico-->>UI: pending_consolidation.txt cuando falta la unidad externa

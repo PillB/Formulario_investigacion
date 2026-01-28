@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from decimal import Decimal
 import importlib.util
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping
 
-from validators import parse_decimal_amount, sanitize_rich_text
+from report.alerta_temprana_content import (
+    ExecutiveSummary,
+    build_alerta_temprana_sections,
+    build_executive_summary,
+)
+from validators import sanitize_rich_text
 from report_builder import CaseData
 
 pptx_spec = importlib.util.find_spec("pptx")
@@ -30,7 +33,7 @@ PPTX_MISSING_MESSAGE = (
     "La dependencia opcional 'python-pptx' no está instalada. "
     "Ejecuta 'pip install python-pptx' para habilitar la alerta temprana en PPT."
 )
-PLACEHOLDER = "-"
+PLACEHOLDER = "N/A"
 DEFAULT_MODEL = "PlanTL-GOB-ES/flan-t5-base-spanish"
 MAX_SECTION_CHARS = 600
 
@@ -45,157 +48,11 @@ SECTION_HEADER_HEIGHT = Inches(0.28) if Inches else 0
 PANEL_PADDING = Inches(0.18) if Inches else 0
 
 
-def _safe_text(value: str | None, placeholder: str = PLACEHOLDER) -> str:
-    return (value or "").strip() or placeholder
-
-
-def _format_date(value: str | None) -> str:
-    text = (value or "").strip()
-    if not text:
-        return PLACEHOLDER
-    try:
-        parsed = datetime.fromisoformat(text)
-        return parsed.strftime("%Y-%m-%d")
-    except ValueError:
-        return text
-
-
-def _format_amount(value: Decimal | None) -> str:
-    if value is None:
-        return PLACEHOLDER
-    quantized = value.quantize(Decimal("0.01"))
-    return f"{quantized:,.2f}"
-
-
-def _aggregate_amounts(products: Iterable[Mapping[str, object]] | None) -> dict[str, Decimal]:
-    totals = {
-        "investigado": Decimal("0"),
-        "perdida_fraude": Decimal("0"),
-        "falla_procesos": Decimal("0"),
-        "contingencia": Decimal("0"),
-        "recuperado": Decimal("0"),
-    }
-    for product in products or []:
-        if not isinstance(product, Mapping):
-            continue
-        for key, field in (
-            ("investigado", "monto_investigado"),
-            ("perdida_fraude", "monto_perdida_fraude"),
-            ("falla_procesos", "monto_falla_procesos"),
-            ("contingencia", "monto_contingencia"),
-            ("recuperado", "monto_recuperado"),
-        ):
-            amount = parse_decimal_amount(product.get(field) if isinstance(product, Mapping) else None)
-            if amount is not None:
-                totals[key] += amount
-    return totals
-
-
-def _extract_rich_text(entry: object) -> str:
-    if isinstance(entry, Mapping):
-        raw_text = entry.get("text")
-    else:
-        raw_text = entry
-    return sanitize_rich_text(raw_text, max_chars=MAX_SECTION_CHARS)
-
-
-def _join_sentences(lines: Iterable[str], *, max_chars: int = MAX_SECTION_CHARS) -> str:
-    text = " ".join(part for part in (line.strip() for line in lines) if part)
-    return sanitize_rich_text(text, max_chars=max_chars)
-
-
-def _collect_narrative(analysis: Mapping[str, object]) -> str:
-    ordered_keys = (
-        ("antecedentes", "Antecedentes"),
-        ("modus_operandi", "Modus operandi"),
-        ("hallazgos", "Hallazgos"),
-        ("descargos", "Descargos"),
-        ("conclusiones", "Conclusiones"),
-        ("recomendaciones", "Recomendaciones"),
-    )
-    sections: list[str] = []
-    for key, label in ordered_keys:
-        text = _extract_rich_text(analysis.get(key))
-        if text:
-            sections.append(f"{label}: {text}")
-    return _join_sentences(sections)
-
-
-def _timeline_summary(caso: Mapping[str, object], productos: Sequence[Mapping[str, object]]) -> str:
-    fases: list[str] = []
-    ocurrencia = _format_date(caso.get("fecha_de_ocurrencia"))
-    descubrimiento = _format_date(caso.get("fecha_de_descubrimiento"))
-    if ocurrencia != PLACEHOLDER or descubrimiento != PLACEHOLDER:
-        fases.append(f"Ocurrencia: {ocurrencia}; Descubrimiento: {descubrimiento}")
-    product_dates = [
-        _format_date(prod.get("fecha_ocurrencia"))
-        for prod in productos
-        if isinstance(prod, Mapping) and prod.get("fecha_ocurrencia")
-    ]
-    if product_dates:
-        fases.append(f"Productos registrados en: {', '.join(sorted(set(product_dates)))}")
-    return _join_sentences(fases, max_chars=280) or PLACEHOLDER
-
-
-def _risk_summary(risks: Iterable[Mapping[str, object]]) -> str:
-    parts: list[str] = []
-    for risk in risks or []:
-        if not isinstance(risk, Mapping):
-            continue
-        risk_id = (risk.get("id_riesgo") or "").strip()
-        desc = (risk.get("descripcion") or "").strip()
-        criticidad = (risk.get("criticidad") or "").strip()
-        snippet = "; ".join(part for part in (risk_id, desc, criticidad) if part)
-        if snippet:
-            parts.append(snippet)
-    return _join_sentences(parts, max_chars=360)
-
-
-def _acciones_summary(analysis: Mapping[str, object], operaciones: Sequence[Mapping[str, object]]) -> str:
-    recomendacion = _extract_rich_text(analysis.get("recomendaciones"))
-    if recomendacion:
-        return recomendacion
-    lines: list[str] = []
-    for op in operaciones or []:
-        if not isinstance(op, Mapping):
-            continue
-        cliente = _safe_text(op.get("cliente"), "")
-        estado = _safe_text(op.get("estado"), "")
-        accion = _safe_text(op.get("accion"), "")
-        resumen = " ".join(part for part in (accion, cliente, estado) if part)
-        if resumen:
-            lines.append(resumen)
-    return _join_sentences(lines, max_chars=280)
-
-
-def _responsables_summary(caso: Mapping[str, object], colaboradores: Sequence[Mapping[str, object]]) -> str:
-    responsables: list[str] = []
-    investigador = caso.get("investigador_nombre") or (caso.get("investigador") or {}).get("nombre")
-    if investigador:
-        responsables.append(f"Investigador: {_safe_text(investigador, 'Investigador principal')}")
-    for colab in colaboradores or []:
-        if not isinstance(colab, Mapping):
-            continue
-        nombre = _safe_text(colab.get("nombres") or colab.get("nombre_completo"), "")
-        if not nombre:
-            continue
-        flag = _safe_text(colab.get("flag"), "")
-        area = _safe_text(colab.get("area"), "")
-        responsables.append(f"{nombre} ({flag or 'involucrado'} - {area or 'área no especificada'})")
-    return _join_sentences(responsables, max_chars=280) or PLACEHOLDER
-
-
-def _default_case_title(caso: Mapping[str, object]) -> str:
-    codigo = _safe_text(caso.get("id_caso"), "Caso sin código")
-    emisor = _safe_text(caso.get("investigador_nombre") or (caso.get("investigador") or {}).get("nombre"), "Equipo de investigación")
-    return f"{codigo} · Emitido por {emisor}"
-
-
 def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> str:
-    categoria = _safe_text(caso.get("categoria1"), "Categoría no especificada")
-    modalidad = _safe_text(caso.get("modalidad"), "Modalidad no especificada")
-    canal = _safe_text(caso.get("canal"), "Canal no especificado")
-    tipo = _safe_text(caso.get("tipo_informe"), "Tipo no especificado")
+    categoria = str(caso.get("categoria1") or "Categoría no especificada").strip()
+    modalidad = str(caso.get("modalidad") or "Modalidad no especificada").strip()
+    canal = str(caso.get("canal") or "Canal no especificado").strip()
+    tipo = str(caso.get("tipo_informe") or "Tipo no especificado").strip()
     return (
         "Eres un analista de riesgos que redacta resúmenes ejecutivos en español. "
         "Redacta respuestas de 2 a 4 frases, tono conciso, en voz activa, sin viñetas. "
@@ -265,49 +122,36 @@ class SpanishSummaryHelper:
 
 def _synthesize_section_text(
     section: str,
+    sections: Mapping[str, str],
     caso: Mapping[str, object],
-    analisis: Mapping[str, object],
-    productos: Sequence[Mapping[str, object]],
-    riesgos: Sequence[Mapping[str, object]],
-    operaciones: Sequence[Mapping[str, object]],
-    colaboradores: Sequence[Mapping[str, object]],
     llm_helper: SpanishSummaryHelper | None,
 ) -> str:
-    narrative = _collect_narrative(analisis)
-    timeline = _timeline_summary(caso, productos)
-    riesgos_text = _risk_summary(riesgos)
-    acciones_text = _acciones_summary(analisis, operaciones)
-    responsables_text = _responsables_summary(caso, colaboradores)
-
+    section_key_map = {
+        "Resumen": "resumen",
+        "Cronología": "cronologia",
+        "Cronologia": "cronologia",
+        "Análisis": "analisis",
+        "Analisis": "analisis",
+        "Riesgos": "riesgos",
+        "Acciones": "acciones",
+        "Responsables": "responsables",
+    }
+    section_key = section_key_map.get(section, section.lower())
+    fallback_source = sections.get(section_key, PLACEHOLDER)
+    if not llm_helper:
+        return fallback_source
     context_lines = [
-        f"Caso: {_safe_text(caso.get('id_caso'), 'sin ID')} | "
-        f"Tipo: {_safe_text(caso.get('tipo_informe'), 'sin tipo')} | "
-        f"Modalidad: {_safe_text(caso.get('modalidad'), 'sin modalidad')}",
-        f"Cronología: {timeline}",
-        f"Narrativa: {narrative or PLACEHOLDER}",
-        f"Riesgos: {riesgos_text or PLACEHOLDER}",
-        f"Acciones: {acciones_text or PLACEHOLDER}",
-        f"Responsables: {responsables_text or PLACEHOLDER}",
+        f"Caso: {sections.get('codigo', PLACEHOLDER)} | Tipo: {caso.get('tipo_informe', PLACEHOLDER)}",
+        f"Resumen: {sections.get('resumen', PLACEHOLDER)}",
+        f"Cronología: {sections.get('cronologia', PLACEHOLDER)}",
+        f"Análisis: {sections.get('analisis', PLACEHOLDER)}",
+        f"Riesgos: {sections.get('riesgos', PLACEHOLDER)}",
+        f"Acciones: {sections.get('acciones', PLACEHOLDER)}",
+        f"Responsables: {sections.get('responsables', PLACEHOLDER)}",
     ]
     prompt = _build_prompt(section, "\n".join(context_lines), caso)
-
-    llm_summary = llm_helper.summarize(section, prompt) if llm_helper else None
-    if llm_summary:
-        return llm_summary
-
-    if section == "Resumen":
-        fallback_source = narrative or acciones_text or riesgos_text
-    elif section == "Cronología":
-        fallback_source = timeline
-    elif section == "Análisis":
-        fallback_source = narrative
-    elif section == "Riesgos" or section.startswith("Riesgos"):
-        fallback_source = riesgos_text
-    elif section == "Acciones" or section.startswith("Acciones"):
-        fallback_source = acciones_text
-    else:  # Responsables
-        fallback_source = responsables_text
-    return fallback_source or PLACEHOLDER
+    llm_summary = llm_helper.summarize(section, prompt)
+    return llm_summary or fallback_source
 
 
 def _add_section_panel(slide, left, top, width, height, title: str, body: str, *, accent: RGBColor | None = None):
@@ -346,7 +190,14 @@ def _add_section_panel(slide, left, top, width, height, title: str, body: str, *
     return panel
 
 
-def _add_masthead(slide, slide_width, caso: Mapping[str, object]):
+def _add_masthead(
+    slide,
+    slide_width,
+    title: str,
+    case_text: str,
+    codigo_text: str,
+    issuer_text: str,
+):
     if not PPTX_AVAILABLE:
         return None
     masthead = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, slide_width, MASTHEAD_HEIGHT)
@@ -358,13 +209,13 @@ def _add_masthead(slide, slide_width, caso: Mapping[str, object]):
     left_frame = left_box.text_frame
     left_frame.clear()
     title_para = left_frame.paragraphs[0]
-    title_para.text = "Alerta temprana · Reporte/Informe de Alertas Tempranas por Casos de Fraude"
+    title_para.text = title
     title_para.font.size = Pt(11)
     title_para.font.bold = True
     title_para.font.color.rgb = RGBColor(255, 255, 255)
 
     case_line = left_frame.add_paragraph()
-    case_line.text = f"Caso: {_safe_text(caso.get('titulo') or caso.get('resumen'), _default_case_title(caso))}"
+    case_line.text = f"Caso: {case_text}"
     case_line.font.size = Pt(11)
     case_line.font.color.rgb = RGBColor(214, 225, 240)
 
@@ -373,18 +224,67 @@ def _add_masthead(slide, slide_width, caso: Mapping[str, object]):
     right_frame = right_box.text_frame
     right_frame.clear()
     code_para = right_frame.paragraphs[0]
-    code_para.text = f"Código: {_safe_text(caso.get('id_caso'), 'BCP-0XX')}"
+    code_para.text = f"Código: {codigo_text}"
     code_para.font.size = Pt(11)
     code_para.font.bold = True
     code_para.font.color.rgb = RGBColor(255, 255, 255)
     code_para.alignment = PP_ALIGN.RIGHT
 
     issuer_para = right_frame.add_paragraph()
-    issuer_para.text = f"Emitido por: {_safe_text(caso.get('investigador_nombre') or (caso.get('investigador') or {}).get('nombre'), 'Equipo de investigación')}"
+    issuer_para.text = f"Emitido por: {issuer_text}"
     issuer_para.font.size = Pt(11)
     issuer_para.font.color.rgb = RGBColor(214, 225, 240)
     issuer_para.alignment = PP_ALIGN.RIGHT
     return masthead
+
+
+def _add_executive_summary_slide(slide, sections: Mapping[str, str], summary: ExecutiveSummary):
+    if not PPTX_AVAILABLE:
+        return None
+    _add_masthead(
+        slide,
+        SLIDE_WIDTH_16_9,
+        "Resumen ejecutivo · Alerta temprana",
+        sections.get("caso", PLACEHOLDER),
+        sections.get("codigo", PLACEHOLDER),
+        sections.get("emitido_por", PLACEHOLDER),
+    )
+    body_top = MARGIN + MASTHEAD_HEIGHT + Inches(0.05)
+    full_width = SLIDE_WIDTH_16_9 - (2 * MARGIN)
+    available_height = SLIDE_HEIGHT_16_9 - body_top - MARGIN
+    gap = Inches(0.08)
+    panel_height = (available_height - (2 * gap)) / 3
+
+    _add_section_panel(
+        slide,
+        MARGIN,
+        body_top,
+        full_width,
+        panel_height,
+        "Mensaje clave",
+        summary.headline,
+        accent=RGBColor(219, 223, 232),
+    )
+    _add_section_panel(
+        slide,
+        MARGIN,
+        body_top + panel_height + gap,
+        full_width,
+        panel_height,
+        "Puntos de soporte (3-5)",
+        "\n".join(f"• {line}" for line in summary.supporting_points),
+        accent=RGBColor(219, 223, 232),
+    )
+    _add_section_panel(
+        slide,
+        MARGIN,
+        body_top + (2 * panel_height) + (2 * gap),
+        full_width,
+        panel_height,
+        "Evidencia / trazabilidad",
+        "\n".join(f"• {line}" for line in summary.evidence),
+        accent=RGBColor(214, 226, 240),
+    )
 
 
 def build_alerta_temprana_ppt(
@@ -402,20 +302,25 @@ def build_alerta_temprana_ppt(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     caso = dataset.get("caso", {}) if isinstance(dataset, Mapping) else {}
-    productos = dataset.get("productos") if isinstance(dataset, Mapping) else []
-    riesgos = dataset.get("riesgos") if isinstance(dataset, Mapping) else []
-    analisis = dataset.get("analisis") if isinstance(dataset, Mapping) else {}
-    operaciones = dataset.get("operaciones") if isinstance(dataset, Mapping) else []
-    colaboradores = dataset.get("colaboradores") if isinstance(dataset, Mapping) else []
-
-    llm = llm_helper or SpanishSummaryHelper()
+    sections = build_alerta_temprana_sections(dataset)
+    resumen_ejecutivo = build_executive_summary(dataset)
+    llm = llm_helper
 
     presentation = Presentation()
     presentation.slide_width = SLIDE_WIDTH_16_9
     presentation.slide_height = SLIDE_HEIGHT_16_9
     slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    _add_executive_summary_slide(slide, sections, resumen_ejecutivo)
 
-    _add_masthead(slide, presentation.slide_width, caso)
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    _add_masthead(
+        slide,
+        presentation.slide_width,
+        sections.get("titulo_reporte", "Reporte de Alertas Tempranas por Casos de Fraude"),
+        sections.get("caso", PLACEHOLDER),
+        sections.get("codigo", PLACEHOLDER),
+        sections.get("emitido_por", PLACEHOLDER),
+    )
 
     body_top = MARGIN + MASTHEAD_HEIGHT + Inches(0.05)
     total_width = presentation.slide_width - (2 * MARGIN) - COLUMN_GAP
@@ -438,9 +343,7 @@ def build_alerta_temprana_ppt(
     acciones_height = int(right_usable_height * 0.26)
     responsables_height = max(right_usable_height - riesgos_height - acciones_height, int(Inches(1)))
 
-    resumen_text = _synthesize_section_text(
-        "Resumen", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
-    )
+    resumen_text = _synthesize_section_text("Resumen", sections, caso, llm)
     _add_section_panel(
         slide,
         left_x,
@@ -452,9 +355,7 @@ def build_alerta_temprana_ppt(
         accent=RGBColor(219, 223, 232),
     )
 
-    cronologia_text = _synthesize_section_text(
-        "Cronología", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
-    )
+    cronologia_text = _synthesize_section_text("Cronología", sections, caso, llm)
     _add_section_panel(
         slide,
         left_x,
@@ -466,9 +367,7 @@ def build_alerta_temprana_ppt(
         accent=RGBColor(219, 223, 232),
     )
 
-    analisis_text = _synthesize_section_text(
-        "Análisis", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
-    )
+    analisis_text = _synthesize_section_text("Análisis", sections, caso, llm)
     _add_section_panel(
         slide,
         left_x,
@@ -480,37 +379,31 @@ def build_alerta_temprana_ppt(
         accent=RGBColor(219, 223, 232),
     )
 
-    riesgos_text = _synthesize_section_text(
-        "Riesgos Potenciales", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
-    )
+    riesgos_text = _synthesize_section_text("Riesgos", sections, caso, llm)
     _add_section_panel(
         slide,
         right_x,
         body_top,
         right_column_width,
         riesgos_height,
-        "Riesgos Potenciales",
+        "Riesgos identificados",
         riesgos_text,
         accent=RGBColor(214, 226, 240),
     )
 
-    acciones_text = _synthesize_section_text(
-        "Acciones Inmediatas", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
-    )
+    acciones_text = _synthesize_section_text("Acciones", sections, caso, llm)
     _add_section_panel(
         slide,
         right_x,
         body_top + riesgos_height + section_gap,
         right_column_width,
         acciones_height,
-        "Acciones Inmediatas",
+        "Acciones inmediatas",
         acciones_text,
         accent=RGBColor(214, 226, 240),
     )
 
-    responsables_text = _synthesize_section_text(
-        "Responsables", caso, analisis, productos, riesgos, operaciones, colaboradores, llm
-    )
+    responsables_text = _synthesize_section_text("Responsables", sections, caso, llm)
     _add_section_panel(
         slide,
         right_x,
@@ -526,11 +419,9 @@ def build_alerta_temprana_ppt(
     notes.text = (
         "Plantilla 16:9 con barra superior azul oscuro que expone el tipo de reporte, el caso y los campos de código/"
         "emisor. El cuerpo usa grilla de dos columnas: izquierda (2/3) con Resumen, Cronología y Análisis apilados;"
-        " derecha (1/3) con Riesgos Potenciales, Acciones Inmediatas y Responsables. Las barras grises de sección"
-        " indican los encabezados. Las anotaciones rojas se usan como tooltips: en Resumen señalan proceso core,"
-        " severidad y clientes impactados; en Cronología remarcan recurrencia y aumento de criticidad; en Análisis"
-        " destacan datos sensibles, alcance transversal y conteos; en Riesgos nombran vulnerabilidad y pérdidas"
-        " potenciales; en Acciones listan bloqueos y límites; Responsables fija dueños al pie derecho."
+        " derecha (1/3) con Riesgos identificados, Acciones inmediatas y Responsables. Las barras grises de sección"
+        " indican los encabezados. Se prioriza texto determinístico: resumen con montos, cronología desde hallazgos,"
+        " análisis desde antecedentes/conclusiones y riesgos desde catálogo."
     )
 
     presentation.save(output_path)

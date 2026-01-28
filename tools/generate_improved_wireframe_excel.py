@@ -1584,19 +1584,25 @@ def _alerta_rows() -> list[Sequence[str | None]]:
         (
             "Masthead",
             "Carátula del caso.",
-            "ID caso, investigador, categoría, canal.",
+            "ID caso, investigador, referencia/temática (encabezado), categoría, canal.",
+            CLASSIFY_REPORT,
+        ),
+        (
+            "Resumen ejecutivo",
+            "Mensaje clave con soporte y evidencias.",
+            "ID caso + referencia + montos agregados + hallazgos/resumen ejecutivo.",
             CLASSIFY_REPORT,
         ),
         (
             "Resumen",
             "Resumen numérico.",
-            "Suma de montos investigado, pérdida, falla, contingencia, recuperado.",
+            "Resumen ejecutivo/Conclusiones + montos agregados.",
             CLASSIFY_REPORT,
         ),
         (
             "Cronología",
             "Fechas clave del caso.",
-            "Fechas de ocurrencia/descubrimiento (caso y productos).",
+            "Hallazgos (análisis) + operaciones; fallback a fechas de ocurrencia/descubrimiento.",
             CLASSIFY_REPORT,
         ),
         (
@@ -1606,7 +1612,7 @@ def _alerta_rows() -> list[Sequence[str | None]]:
             CLASSIFY_REPORT,
         ),
         (
-            "Riesgos",
+            "Riesgos identificados",
             "Listado de riesgos.",
             "ID riesgo, descripción, criticidad.",
             CLASSIFY_REPORT,
@@ -1621,6 +1627,31 @@ def _alerta_rows() -> list[Sequence[str | None]]:
             "Responsables",
             "Investigador y responsables.",
             "Investigador principal + colaboradores con flag y área.",
+            CLASSIFY_REPORT,
+        ),
+    ]
+    return [headers, *rows]
+
+
+def _resumen_ejecutivo_rows() -> list[Sequence[str | None]]:
+    headers = ("Sección", "Descripción", "Campos / Datos requeridos", "Clasificación")
+    rows = [
+        (
+            "Mensaje clave",
+            "Síntesis principal (piramidal).",
+            "ID caso, categoría/modalidad, canal/proceso, montos agregados.",
+            CLASSIFY_REPORT,
+        ),
+        (
+            "Puntos de soporte (3-5)",
+            "Hallazgos, riesgos y acciones relevantes.",
+            "Hallazgos/conclusiones, riesgos, recomendaciones/operaciones, responsables.",
+            CLASSIFY_REPORT,
+        ),
+        (
+            "Evidencia / trazabilidad",
+            "Métricas y referencias.",
+            "Conteos (productos/clientes/colaboradores), fechas clave, dirigido a, área reporte.",
             CLASSIFY_REPORT,
         ),
     ]
@@ -1962,6 +1993,7 @@ def build_workbook() -> Workbook:
         "Carta_inmediatez": _carta_rows(),
         "Informe_Gerencia": _gerencia_rows(),
         "Alerta_Temprana": _alerta_rows(),
+        "Resumen_Ejecutivo": _resumen_ejecutivo_rows(),
         "Panel_Validacion": _validation_panel_rows(),
         "Mapeo Catalogos": _catalog_rows(),
     }

@@ -23,7 +23,7 @@ flowchart TB
         reporting[["report_builder.py<br/>Generación CSV/JSON/MD/DOCX"]]
         alerta[["report/alerta_temprana.py<br/>Alerta temprana PPT"]]
         carta[["report/carta_inmediatez.py<br/>Cartas de inmediatez"]]
-        resumen_exec[["Resumen ejecutivo (pendiente en código)<br/>report/resumen_ejecutivo.py"]]
+        resumen_exec[["Resumen ejecutivo<br/>report/resumen_ejecutivo.py"]]
         files(("Sistema de archivos<br/>autosave.json, autosaves/<caso>/auto_N.json,<br/>exports/*.csv (eventos.csv, eventos_lhcl.csv, h_eventos.csv, h_eventos_lhcl.csv), version.json, md/docx/pptx"))
         historical(("exports/h_*.csv<br/>Consolidación histórica"))
         manifest(("pending_consolidation.txt<br/>Manifiesto de reaplicación"))
@@ -92,7 +92,7 @@ flowchart TB
     alerta --> files
     carta --> files
     carta --> historical
-    resumen_exec -. "Pendiente de implementación" .-> files
+    resumen_exec --> files
     historical -- "Si la unidad externa existe" --> external
     files --> external
     historical -. "Si falta external drive se registra en manifiesto" .-> manifest

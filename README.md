@@ -1,6 +1,6 @@
 # Gestión de Casos de Fraude (Tkinter)
 
-Aplicación de escritorio en Python/Tkinter para registrar, validar y exportar expedientes de fraude. Incluye pestañas para caso, clientes, colaboradores, productos, riesgos, normas, análisis y acciones; soporta validación en línea, importaciones masivas desde CSV, autoguardado y exportación a CSV/JSON/Markdown/Word, presentaciones de alerta temprana (PPTX) y cartas de inmediatez con historial h_*.csv.
+Aplicación de escritorio en Python/Tkinter para registrar, validar y exportar expedientes de fraude. Incluye pestañas para caso, clientes, colaboradores, productos, riesgos, normas, análisis y acciones; soporta validación en línea, importaciones masivas desde CSV, autoguardado y exportación a CSV/JSON/Markdown/Word, resumen ejecutivo (Markdown), presentaciones de alerta temprana (PPTX) y cartas de inmediatez con historial h_*.csv.
 
 ## Contenido rápido
 - [Prerrequisitos](#prerrequisitos)
@@ -111,6 +111,7 @@ Esto renderiza los esquemas de las pestañas (incluyendo los nuevos controles de
 
 ### Guardar, exportar y respaldar
 - **Guardar y enviar** valida todo, genera CSV por entidad, un JSON completo, Markdown y Word; añade históricos `h_*.csv` y espeja los artefactos en `external drive/<id_caso>/` (si no está disponible, queda registro en `pending_consolidation.txt` para reintentar).
+- **Generar resumen ejecutivo (.md)** crea un resumen con mensaje clave, soporte y evidencia para comité.
 - **Generar alerta temprana (.pptx)** construye una presentación resumida desde la pestaña **Acciones** (requiere `python-pptx`).
 - **Generar carta de inmediatez** abre el diálogo de selección y produce DOCX/CSV con numeración correlativa e historial consolidado.
 - **Cargar formulario** permite restaurar cualquier respaldo JSON (versión enviada, checkpoint manual o autosave guardado).
@@ -155,7 +156,7 @@ Esto renderiza los esquemas de las pestañas (incluyendo los nuevos controles de
 
 ## Importación y exportación
 - **Importar CSV**: desde **Acciones**, selecciona el archivo adecuado; la app valida, omite duplicados y sincroniza combobox/listados.
-- **Exportar**: **Guardar y enviar** genera CSV por entidad, JSON completo, Markdown y Word (`python-docx` necesario) en `exports/`, anexando históricos `h_*.csv` y reflejándolos en `external drive/<id_caso>/` o en `pending_consolidation.txt` si falta la unidad. **Acciones** también expone botones para PPT de alerta temprana (`python-pptx`) y cartas de inmediatez (`python-docx` + plantilla en `exports/cartas/`).
+- **Exportar**: **Guardar y enviar** genera CSV por entidad, JSON completo, Markdown, resumen ejecutivo y Word (`python-docx` necesario) en `exports/`, anexando históricos `h_*.csv` y reflejándolos en `external drive/<id_caso>/` o en `pending_consolidation.txt` si falta la unidad. **Acciones** también expone botones para resumen ejecutivo, PPT de alerta temprana (`python-pptx`) y cartas de inmediatez (`python-docx` + plantilla en `exports/cartas/`).
 
 ### Registro de eventos
 - Los eventos se guardan en `logs.csv` con columnas `timestamp`, `tipo`, `subtipo`, `widget_id`, `coords` y `mensaje`.

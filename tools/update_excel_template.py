@@ -681,6 +681,11 @@ EXTERNAL_DRIVE_ROWS: Sequence[tuple[str, str, str]] = (
     ),
     (
         f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
+        "Resumen_Ejecutivo_<tipo>_<id_caso>.md",
+        "Se duplica al exportar Guardar y enviar y al usar Generar resumen ejecutivo.",
+    ),
+    (
+        f"{Path(EXTERNAL_DRIVE_DIR).as_posix()}/<id_caso>",
         "<nombre_informe>.docx",
         (
             "Se duplica al exportar Guardar y enviar y al usar Generar informe Word, "
