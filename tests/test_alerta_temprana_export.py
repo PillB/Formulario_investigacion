@@ -13,6 +13,7 @@ from report.alerta_temprana import (
 )
 from report.alerta_temprana_content import (
     MAX_BULLETS,
+    PLACEHOLDER,
     build_alerta_temprana_sections,
 )
 from report_builder import CaseData
@@ -173,6 +174,53 @@ def test_synthesize_section_text_uses_fallback_when_llm_missing():
     )
     resumen = _synthesize_section_text("Resumen", sections, caso, NullLLM())
     assert "transferencias sospechosas" in resumen
+
+
+def test_sections_empty_return_placeholder():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {},
+            "analisis": {},
+            "productos": [],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+    assert sections["resumen"] == PLACEHOLDER
+    assert sections["cronologia"] == PLACEHOLDER
+    assert sections["analisis"] == PLACEHOLDER
+
+
+def test_synthesize_section_text_skips_llm_when_sources_empty():
+    class StubLLM:
+        def __init__(self):
+            self.prompts = []
+
+        def summarize(self, section, prompt, *, max_new_tokens=None):
+            self.prompts.append((section, prompt))
+            return "contenido inventado"
+
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {},
+            "analisis": {},
+            "productos": [],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+    stub_llm = StubLLM()
+    texto = _synthesize_section_text("Resumen", sections, {}, stub_llm)
+    assert texto == PLACEHOLDER
+    assert stub_llm.prompts == []
 
 
 def test_cronologia_prefers_hallazgos_bullets():

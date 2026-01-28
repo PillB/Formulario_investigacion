@@ -79,6 +79,18 @@ def _split_body_paragraphs(body: str) -> list[tuple[str, bool]]:
     return parsed or [(PLACEHOLDER, False)]
 
 
+def _is_placeholder_text(value: object) -> bool:
+    text = str(value or "").strip()
+    return not text or text == PLACEHOLDER
+
+
+def _has_source_content(sections: Mapping[str, str]) -> bool:
+    for key in ("resumen", "cronologia", "analisis", "riesgos", "acciones", "responsables"):
+        if not _is_placeholder_text(sections.get(key, PLACEHOLDER)):
+            return True
+    return False
+
+
 def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> str:
     categoria = str(caso.get("categoria1") or "Categoría no especificada").strip()
     modalidad = str(caso.get("modalidad") or "Modalidad no especificada").strip()
@@ -169,6 +181,10 @@ def _synthesize_section_text(
     }
     section_key = section_key_map.get(section, section.lower())
     fallback_source = sections.get(section_key, PLACEHOLDER)
+    if _is_placeholder_text(fallback_source):
+        return PLACEHOLDER
+    if not _has_source_content(sections):
+        return PLACEHOLDER
     if not llm_helper:
         return fallback_source
     context_lines = [
