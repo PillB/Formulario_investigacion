@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
+import math
 import importlib.util
 from pathlib import Path
 import re
@@ -13,6 +15,8 @@ from report.alerta_temprana_content import (
 )
 from validators import sanitize_rich_text
 from report_builder import CaseData
+
+logger = logging.getLogger(__name__)
 
 pptx_spec = importlib.util.find_spec("pptx")
 if pptx_spec:
@@ -52,6 +56,95 @@ MASTHEAD_HEIGHT = Inches(1.1) if Inches else 0
 SECTION_HEADER_HEIGHT = Inches(0.28) if Inches else 0
 PANEL_PADDING = Inches(0.18) if Inches else 0
 BULLET_PREFIX = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+DEFAULT_BODY_FONT_PT = 11
+MIN_BODY_FONT_PT = 9
+AVG_CHAR_WIDTH_FACTOR = 0.52
+DEFAULT_LINE_SPACING = 1.15
+
+
+@dataclass(frozen=True)
+class FitTextResult:
+    text: str
+    font_pt: int
+    truncated: bool
+
+
+def _emu_to_inches(value: float | int) -> float:
+    if not Inches:
+        return float(value)
+    return float(value) / float(Inches(1))
+
+
+def _estimate_chars_per_line(width_in: float, font_pt: int) -> int:
+    if width_in <= 0 or font_pt <= 0:
+        return 1
+    width_pt = width_in * 72
+    char_width = font_pt * AVG_CHAR_WIDTH_FACTOR
+    estimated = int(width_pt / max(char_width, 1))
+    return max(estimated, 15)
+
+
+def _estimate_line_capacity(height_in: float, font_pt: int, line_spacing: float) -> int:
+    if height_in <= 0 or font_pt <= 0:
+        return 1
+    line_height_in = (font_pt / 72) * line_spacing
+    return max(int(height_in / max(line_height_in, 0.01)), 1)
+
+
+def _estimate_text_lines(text: str, chars_per_line: int) -> int:
+    if not text:
+        return 1
+    normalized = text.splitlines() or [text]
+    total = 0
+    for line in normalized:
+        length = max(len(line), 1)
+        total += max(1, math.ceil(length / max(chars_per_line, 1)))
+    return total
+
+
+def _truncate_text_to_fit(text: str, max_chars: int) -> str:
+    cleaned = sanitize_rich_text(text, max_chars=None).strip()
+    if max_chars <= 0 or len(cleaned) <= max_chars:
+        return cleaned
+    truncated = cleaned[: max_chars - 1].rstrip()
+    last_space = truncated.rfind(" ")
+    min_space_index = int(max_chars * 0.6)
+    if last_space >= min_space_index:
+        truncated = truncated[:last_space].rstrip()
+    return truncated + "…"
+
+
+def _fit_text_to_box(
+    text: str,
+    width_in: float,
+    height_in: float,
+    *,
+    section_title: str,
+    base_font_pt: int = DEFAULT_BODY_FONT_PT,
+    min_font_pt: int = MIN_BODY_FONT_PT,
+    line_spacing: float = DEFAULT_LINE_SPACING,
+) -> FitTextResult:
+    cleaned = sanitize_rich_text(text, max_chars=None).strip()
+    if not cleaned:
+        return FitTextResult(text=PLACEHOLDER, font_pt=base_font_pt, truncated=False)
+    for font_pt in range(base_font_pt, min_font_pt - 1, -1):
+        max_lines = _estimate_line_capacity(height_in, font_pt, line_spacing)
+        chars_per_line = _estimate_chars_per_line(width_in, font_pt)
+        total_lines = _estimate_text_lines(cleaned, chars_per_line)
+        if total_lines <= max_lines:
+            return FitTextResult(text=cleaned, font_pt=font_pt, truncated=False)
+    max_lines = _estimate_line_capacity(height_in, min_font_pt, line_spacing)
+    chars_per_line = _estimate_chars_per_line(width_in, min_font_pt)
+    max_chars = max_lines * chars_per_line
+    truncated = _truncate_text_to_fit(cleaned, max_chars)
+    if truncated != cleaned:
+        logger.warning(
+            "Se truncó la sección '%s' para ajustarse al panel (%s → %s caracteres).",
+            section_title,
+            len(cleaned),
+            len(truncated),
+        )
+    return FitTextResult(text=truncated, font_pt=min_font_pt, truncated=truncated != cleaned)
 
 
 def _set_paragraph_bullet(paragraph, enabled: bool) -> None:
@@ -225,17 +318,23 @@ def _add_section_panel(slide, left, top, width, height, title: str, body: str, *
     text_top = top + SECTION_HEADER_HEIGHT + PANEL_PADDING
     text_width = width - (2 * PANEL_PADDING)
     text_height = height - SECTION_HEADER_HEIGHT - (2 * PANEL_PADDING)
+    fit = _fit_text_to_box(
+        body,
+        _emu_to_inches(text_width),
+        _emu_to_inches(text_height),
+        section_title=title,
+    )
     body_box = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
     frame = body_box.text_frame
     frame.clear()
     frame.word_wrap = True
-    paragraphs = _split_body_paragraphs(body)
+    paragraphs = _split_body_paragraphs(fit.text)
     for index, (text, is_bullet) in enumerate(paragraphs):
         para = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
         para.text = text
-        para.font.size = Pt(11)
+        para.font.size = Pt(fit.font_pt)
         para.alignment = PP_ALIGN.LEFT
-        para.line_spacing = 1.15
+        para.line_spacing = DEFAULT_LINE_SPACING
         _set_paragraph_bullet(para, is_bullet)
     return panel
 

@@ -8,6 +8,7 @@ import app as app_module
 from report import alerta_temprana
 from report.alerta_temprana import (
     SpanishSummaryHelper,
+    _fit_text_to_box,
     _synthesize_section_text,
     build_alerta_temprana_ppt,
 )
@@ -284,6 +285,20 @@ def test_sections_limit_and_truncate_bullets():
     assert any(line.endswith("…") for line in riesgos_lines)
     assert any(line.endswith("…") for line in acciones_lines)
     assert any(line.endswith("…") for line in responsables_lines)
+
+
+def test_fit_text_to_box_truncates_long_narrative(caplog):
+    long_text = ("Narrativa extensa " * 400).strip()
+    with caplog.at_level("WARNING"):
+        result = _fit_text_to_box(
+            long_text,
+            width_in=3.5,
+            height_in=1.2,
+            section_title="Cronología",
+        )
+    assert result.truncated is True
+    assert result.text.endswith("…")
+    assert "Cronología" in caplog.text
 
 
 @pytest.mark.skipif(not alerta_temprana.PPTX_AVAILABLE, reason="python-pptx no disponible")

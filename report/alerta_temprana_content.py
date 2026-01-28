@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from datetime import datetime
 from decimal import Decimal
 import re
@@ -8,6 +9,8 @@ from typing import Iterable, Mapping, Sequence
 
 from report_builder import CaseData
 from validators import parse_decimal_amount, sanitize_rich_text
+
+logger = logging.getLogger(__name__)
 
 PLACEHOLDER = "N/A"
 MAX_SECTION_CHARS = 600
@@ -46,7 +49,7 @@ def _format_amount(value: Decimal | None) -> str:
     return f"{quantized:,.2f}"
 
 
-def _truncate(text: str, max_chars: int) -> str:
+def _truncate(text: str, max_chars: int, *, label: str = "") -> str:
     cleaned = sanitize_rich_text(text, max_chars=None).strip()
     if max_chars and len(cleaned) > max_chars:
         truncated = cleaned[: max_chars - 1].rstrip()
@@ -54,7 +57,13 @@ def _truncate(text: str, max_chars: int) -> str:
         min_space_index = int(max_chars * MIN_TRUNCATE_WORD_BOUNDARY)
         if last_space >= min_space_index:
             truncated = truncated[:last_space].rstrip()
-        return truncated + "…"
+        result = truncated + "…"
+        logger.warning(
+            "Se truncó el texto%s a %s caracteres.",
+            f" ({label})" if label else "",
+            max_chars,
+        )
+        return result
     return cleaned
 
 
@@ -71,6 +80,7 @@ def _split_bullets(
     *,
     max_items: int = MAX_BULLETS,
     max_chars: int = MAX_BULLET_CHARS,
+    label: str = "",
 ) -> list[str]:
     if not text:
         return []
@@ -87,7 +97,7 @@ def _split_bullets(
     if len(candidates) <= 1:
         sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", cleaned) if part.strip()]
         candidates = [sentence.rstrip(".") for sentence in sentences]
-    bullets = [_truncate(line, max_chars) for line in candidates if line]
+    bullets = [_truncate(line, max_chars, label=label) for line in candidates if line]
     return bullets[:max_items]
 
 
@@ -102,10 +112,11 @@ def _limit_bullets(
     *,
     max_items: int = MAX_BULLETS,
     max_chars: int = MAX_BULLET_CHARS,
+    label: str = "",
 ) -> list[str]:
     if not lines:
         return []
-    trimmed = [_truncate(line, max_chars) for line in lines if line]
+    trimmed = [_truncate(line, max_chars, label=label) for line in lines if line]
     return trimmed[:max_items]
 
 def _aggregate_amounts(products: Iterable[Mapping[str, object]] | None) -> dict[str, Decimal]:
@@ -158,7 +169,7 @@ def _build_resumen_section(
         comentario = _extract_rich_text(analisis.get("conclusiones"))
     if not comentario:
         comentario = _extract_rich_text(analisis.get("antecedentes"))
-    summary_line = _truncate(comentario, 280) if comentario else PLACEHOLDER
+    summary_line = _truncate(comentario, 280, label="resumen") if comentario else PLACEHOLDER
     header = _case_title(caso, encabezado)
     if header == PLACEHOLDER and summary_line == PLACEHOLDER and not products:
         return PLACEHOLDER
@@ -168,7 +179,7 @@ def _build_resumen_section(
         f"Contingencia {_format_amount(totals['contingencia'])}; "
         f"Recuperado {_format_amount(totals['recuperado'])}."
     )
-    return _truncate(f"{header}. {summary_line}. {amounts}", MAX_SECTION_CHARS)
+    return _truncate(f"{header}. {summary_line}. {amounts}", MAX_SECTION_CHARS, label="resumen")
 
 
 def _build_cronologia_section(
@@ -187,7 +198,7 @@ def _build_cronologia_section(
     ):
         narrative = _extract_rich_text(analisis.get(key))
         if narrative:
-            bullets = _split_bullets(narrative)
+            bullets = _split_bullets(narrative, label="cronologia")
             if bullets:
                 return _bullet_text(bullets)
     if operaciones:
@@ -201,7 +212,7 @@ def _build_cronologia_section(
             summary = " - ".join(part for part in (fecha, accion, estado) if part and part != PLACEHOLDER)
             if summary:
                 lines.append(summary)
-        return _bullet_text(_limit_bullets(lines))
+        return _bullet_text(_limit_bullets(lines, label="cronologia"))
     ocurrencia = _format_date(caso.get("fecha_de_ocurrencia"))
     descubrimiento = _format_date(caso.get("fecha_de_descubrimiento"))
     product_dates = [
@@ -228,7 +239,7 @@ def _build_analisis_section(analisis: Mapping[str, object]) -> str:
     ):
         text = _extract_rich_text(analisis.get(key))
         if text:
-            parts.append(f"{label}: {_truncate(text, 180)}")
+            parts.append(f"{label}: {_truncate(text, 180, label='analisis')}")
     if not parts:
         text = _extract_rich_text(analisis.get("comentario_amplio"))
         if text:
@@ -253,13 +264,13 @@ def _build_riesgos_section(riesgos: Sequence[Mapping[str, object]]) -> str:
             line = f"{line}. Plan: {plan}" if line else f"Plan: {plan}"
         if line:
             bullets.append(line)
-    return _bullet_text(_limit_bullets(bullets))
+    return _bullet_text(_limit_bullets(bullets, label="riesgos"))
 
 
 def _build_acciones_section(analisis: Mapping[str, object], operaciones: Sequence[Mapping[str, object]]) -> str:
     recomendacion = _extract_rich_text(analisis.get("recomendaciones"))
     if recomendacion:
-        return _bullet_text(_split_bullets(recomendacion))
+        return _bullet_text(_split_bullets(recomendacion, label="acciones"))
     bullets = []
     for op in operaciones:
         if not isinstance(op, Mapping):
@@ -270,7 +281,7 @@ def _build_acciones_section(analisis: Mapping[str, object], operaciones: Sequenc
         line = " - ".join(part for part in (accion, cliente, estado) if part and part != PLACEHOLDER)
         if line:
             bullets.append(line)
-    return _bullet_text(_limit_bullets(bullets))
+    return _bullet_text(_limit_bullets(bullets, label="acciones"))
 
 
 def _build_responsables_section(
@@ -290,7 +301,7 @@ def _build_responsables_section(
         flag = _safe_text(colab.get("flag"), "")
         area = _safe_text(colab.get("area"), "")
         bullets.append(f"{nombre} ({flag or 'involucrado'} - {area or 'área no especificada'})")
-    return _bullet_text(_limit_bullets(bullets))
+    return _bullet_text(_limit_bullets(bullets, label="responsables"))
 
 
 def build_alerta_temprana_sections(
@@ -344,24 +355,34 @@ def build_executive_summary(data: CaseData | Mapping[str, object]) -> ExecutiveS
         f"Pérdida fraude {_format_amount(totals['perdida_fraude'])}; "
         f"Contingencia {_format_amount(totals['contingencia'])}."
     )
-    headline = _truncate(" - ".join(filter(None, headline_parts)) + f". {impact}", 280)
+    headline = _truncate(
+        " - ".join(filter(None, headline_parts)) + f". {impact}",
+        280,
+        label="resumen_ejecutivo",
+    )
 
     supporting = []
     hallazgos = _extract_rich_text(analisis.get("hallazgos"))
     if hallazgos:
-        supporting.append(f"Hallazgos clave: {_truncate(hallazgos, 180)}")
+        supporting.append(f"Hallazgos clave: {_truncate(hallazgos, 180, label='resumen_ejecutivo')}")
     riesgos_text = _build_riesgos_section(riesgos)
     if riesgos_text != PLACEHOLDER:
-        supporting.append(f"Riesgos identificados: {_truncate(riesgos_text.replace('• ', ''), 180)}")
+        supporting.append(
+            f"Riesgos identificados: {_truncate(riesgos_text.replace('• ', ''), 180, label='resumen_ejecutivo')}"
+        )
     acciones_text = _build_acciones_section(analisis, operaciones)
     if acciones_text != PLACEHOLDER:
-        supporting.append(f"Acciones en curso: {_truncate(acciones_text.replace('• ', ''), 180)}")
+        supporting.append(
+            f"Acciones en curso: {_truncate(acciones_text.replace('• ', ''), 180, label='resumen_ejecutivo')}"
+        )
     responsables_text = _build_responsables_section(caso, colaboradores)
     if responsables_text != PLACEHOLDER:
-        supporting.append(f"Responsables asignados: {_truncate(responsables_text.replace('• ', ''), 180)}")
+        supporting.append(
+            f"Responsables asignados: {_truncate(responsables_text.replace('• ', ''), 180, label='resumen_ejecutivo')}"
+        )
     comentario = _extract_rich_text(analisis.get("comentario_breve"))
     if comentario and comentario not in supporting:
-        supporting.append(f"Resumen ejecutivo: {_truncate(comentario, 180)}")
+        supporting.append(f"Resumen ejecutivo: {_truncate(comentario, 180, label='resumen_ejecutivo')}")
     supporting_points = supporting[:MAX_BULLETS] or [PLACEHOLDER]
 
     evidence = [
