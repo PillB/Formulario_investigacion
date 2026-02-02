@@ -1,14 +1,14 @@
-id_colaborador,nombres,apellidos,flag,division,area,servicio,puesto,fecha_carta_inmediatez,fecha_carta_renuncia,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion
-T12345,María,Acuña,Involucrado,DCA,Area Comercial,Servicio 1,Puesto 1,2024-01-15,,Agencia Central,123456,Inconducta funcional,Amonestación
-U00123,Luis,Ramírez,Relacionado,Finanzas,Área de Control,Servicio 2,Puesto 2,,,,,Negligencia funcional,Suspensión 2 días
-T54321,Carmen,López,Involucrado,Operaciones,Área de Operaciones,Servicio 3,Puesto 3,,,,,No aplica,No aplica
-A98765,Julia,Contreras,Relacionado,Canales de atención,Area Comercial,Servicio 4,Puesto 4,2023-12-01,,Agencia Norte,654321,No aplica,No aplica
-C11223,Carlos,Pérez,Relacionado,DCA,Área de soporte,Servicio 6,Puesto 6,,,,Agencia Callao,222333,Negligencia funcional,Exhortación
-D33333,Diana,Salas,Involucrado,Canales de atención,Área de Experiencia,Servicio 7,Puesto 7,,,,,No aplica,Suspensión 1 día
-E12345,Esteban,Cruz,Relacionado,Auditoría,Área de Auditoría,Servicio 8,Puesto 8,,,,,No aplica,Exhortación
-F54321,Fernanda,Ruiz,Involucrado,DCA,Area Comercial Digital,Servicio 9,Puesto 9,2024-02-10,,Agencia Digital,987654,Inconducta funcional,Despido
-G67890,Gabriel,Soto,Relacionado,Canales de atención,Area Comercial,Servicio 10,Puesto 10,2024-03-05,,Agencia Sur,111222,Negligencia funcional,Suspensión de 3 días
-H11111,Helena,Vargas,Relacionado,Riesgos,Área de Gestión,Servicio 11,Puesto 11,,,,,No aplica,Exhortación
-J22222,Jorge,Medina,Involucrado,Operaciones,Área Corporativa,Servicio 12,Puesto 12,,,,,No aplica,Amonestación
-K33333,Karla,Paredes,Involucrado,Canales de atención,Area Comercial Especial,Servicio 13,Puesto 13,2024-01-20,,Agencia Especial,555666,Negligencia funcional,Suspensión de 4 días
-L44444,Laura,Torres,Relacionado,DCA,Área de Seguridad,Servicio 14,Puesto 14,,,,,No aplica,No aplica
+id_colaborador,nombres,apellidos,flag,division,area,servicio,puesto,fecha_carta_inmediatez,fecha_carta_renuncia,motivo_cese,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion
+T12345,María,Acuña,Involucrado,DCA,Area Comercial,Servicio 1,Puesto 1,2024-01-15,,,Agencia Central,123456,Inconducta funcional,Amonestación
+U00123,Luis,Ramírez,Relacionado,Finanzas,Área de Control,Servicio 2,Puesto 2,,,,,,Negligencia funcional,Suspensión 2 días
+T54321,Carmen,López,Involucrado,Operaciones,Área de Operaciones,Servicio 3,Puesto 3,,,,,,No aplica,No aplica
+A98765,Julia,Contreras,Relacionado,Canales de atención,Area Comercial,Servicio 4,Puesto 4,2023-12-01,,,Agencia Norte,654321,No aplica,No aplica
+C11223,Carlos,Pérez,Relacionado,DCA,Área de soporte,Servicio 6,Puesto 6,,,,,Agencia Callao,222333,Negligencia funcional,Exhortación
+D33333,Diana,Salas,Involucrado,Canales de atención,Área de Experiencia,Servicio 7,Puesto 7,,,,,,No aplica,Suspensión 1 día
+E12345,Esteban,Cruz,Relacionado,Auditoría,Área de Auditoría,Servicio 8,Puesto 8,,,,,,No aplica,Exhortación
+F54321,Fernanda,Ruiz,Involucrado,DCA,Area Comercial Digital,Servicio 9,Puesto 9,2024-02-10,,,Agencia Digital,987654,Inconducta funcional,Despido
+G67890,Gabriel,Soto,Relacionado,Canales de atención,Area Comercial,Servicio 10,Puesto 10,2024-03-05,,,Agencia Sur,111222,Negligencia funcional,Suspensión de 3 días
+H11111,Helena,Vargas,Relacionado,Riesgos,Área de Gestión,Servicio 11,Puesto 11,,,,,,No aplica,Exhortación
+J22222,Jorge,Medina,Involucrado,Operaciones,Área Corporativa,Servicio 12,Puesto 12,,,,,,No aplica,Amonestación
+K33333,Karla,Paredes,Involucrado,Canales de atención,Area Comercial Especial,Servicio 13,Puesto 13,2024-01-20,,,Agencia Especial,555666,Negligencia funcional,Suspensión de 4 días
+L44444,Laura,Torres,Relacionado,DCA,Área de Seguridad,Servicio 14,Puesto 14,,,,,,No aplica,No aplica
