@@ -19,7 +19,7 @@ def test_mandatory_header_structure_preserved(tmp_path: Path, sample_case_data):
     document = Document(output)
     header_table = document.tables[0]
 
-    assert len(header_table.rows) == 11
+    assert len(header_table.rows) == 12
     assert all(len(row.cells) == 4 for row in header_table.rows)
 
     labels = [header_table.cell(idx, 0).text for idx in range(len(header_table.rows))]
@@ -35,6 +35,7 @@ def test_mandatory_header_structure_preserved(tmp_path: Path, sample_case_data):
         "Analítica Contable",
         "Producto",
         "N° de Reclamos",
+        "ID de Reclamos",
     ]
 
     # Valores de columnas combinadas deben conservar el texto original
