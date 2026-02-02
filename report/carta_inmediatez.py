@@ -8,6 +8,7 @@ las generaciones en archivos CSV locales e históricos.
 from __future__ import annotations
 
 import csv
+import socket
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import util as importlib_util
@@ -52,6 +53,25 @@ class CartaInmediatezGenerator:
         "Tipo_entrevista",
     )
 
+    HISTORY_FIELDS = (
+        "id_carta",
+        "matricula_team_member",
+        "nombres_team_member",
+        "apellidos_team_member",
+        "fecha_creacion",
+        "numero_caso",
+        "matricula_investigador",
+        "hostname",
+    )
+
+    _HISTORY_FIELD_MAP = {
+        "id_carta": "Numero_de_Carta",
+        "matricula_team_member": "matricula_team_member",
+        "numero_caso": "numero_caso",
+    }
+
+    _HISTORY_KEYS = ("numero_caso", "matricula_team_member", "Numero_de_Carta")
+
     def __init__(
         self,
         exports_dir: Path,
@@ -94,25 +114,69 @@ class CartaInmediatezGenerator:
             try:
                 with path.open(newline="", encoding="utf-8") as handle:
                     reader = csv.DictReader(line for line in handle if line.strip())
+                    fieldnames = [field.strip() for field in (reader.fieldnames or [])]
+                    use_history_map = "id_carta" in fieldnames
                     for row in reader:
-                        normalized = tuple((row.get(key) or "").strip() for key in self.CSV_FIELDS)
+                        if use_history_map:
+                            normalized_row = {
+                                target: row.get(source, "") for source, target in self._HISTORY_FIELD_MAP.items()
+                            }
+                        else:
+                            normalized_row = {field: row.get(field, "") for field in self.CSV_FIELDS}
+                        normalized = tuple(
+                            (normalized_row.get(key) or "").strip() for key in self._HISTORY_KEYS
+                        )
                         if normalized in seen_rows:
                             continue
                         seen_rows.add(normalized)
-                        records.append({field: row.get(field, "") for field in self.CSV_FIELDS})
+                        records.append(normalized_row)
             except OSError as exc:
                 raise CartaInmediatezError(f"No se pudo leer el historial de cartas: {exc}") from exc
         return records
 
-    def _write_records(self, path: Path, rows: Iterable[dict[str, str]]) -> None:
+    def _write_records(self, path: Path, rows: Iterable[dict[str, str]], fields: Sequence[str]) -> None:
         existing = path.exists()
         try:
             with path.open("a", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=self.CSV_FIELDS)
+                writer = csv.DictWriter(handle, fieldnames=fields)
                 if not existing:
                     writer.writeheader()
                 for row in rows:
-                    writer.writerow({field: self._sanitize_csv_value(row.get(field)) for field in self.CSV_FIELDS})
+                    writer.writerow({field: self._sanitize_csv_value(row.get(field)) for field in fields})
+        except OSError as exc:
+            raise CartaInmediatezError(f"No se pudo actualizar {path.name}: {exc}") from exc
+
+    def _ensure_history_schema(self, path: Path) -> None:
+        if not path.exists():
+            return
+        try:
+            with path.open(newline="", encoding="utf-8") as handle:
+                reader = csv.DictReader(line for line in handle if line.strip())
+                fieldnames = [field.strip() for field in (reader.fieldnames or [])]
+                if "id_carta" in fieldnames:
+                    return
+                rows = list(reader)
+        except OSError as exc:
+            raise CartaInmediatezError(f"No se pudo leer el historial de cartas: {exc}") from exc
+        upgraded_rows = [
+            {
+                "id_carta": row.get("Numero_de_Carta", ""),
+                "matricula_team_member": row.get("matricula_team_member", ""),
+                "nombres_team_member": "",
+                "apellidos_team_member": "",
+                "fecha_creacion": row.get("fecha_generacion", ""),
+                "numero_caso": row.get("numero_caso", ""),
+                "matricula_investigador": row.get("matricula_investigador", ""),
+                "hostname": "",
+            }
+            for row in rows
+        ]
+        try:
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=self.HISTORY_FIELDS)
+                writer.writeheader()
+                for row in upgraded_rows:
+                    writer.writerow({field: self._sanitize_csv_value(row.get(field)) for field in self.HISTORY_FIELDS})
         except OSError as exc:
             raise CartaInmediatezError(f"No se pudo actualizar {path.name}: {exc}") from exc
 
@@ -279,6 +343,24 @@ class CartaInmediatezGenerator:
             "Tipo_entrevista": "Involucrado" if flag == "involucrado" else "Informativo",
         }
 
+    def _build_history_row(
+        self,
+        context: CartaContext,
+        member: Mapping[str, str],
+        numero_carta: str,
+        hostname: str,
+    ) -> dict[str, str]:
+        return {
+            "id_carta": numero_carta,
+            "matricula_team_member": self._normalize_identifier(member.get("id_colaborador")),
+            "nombres_team_member": sanitize_rich_text(member.get("nombres", ""), max_chars=None),
+            "apellidos_team_member": sanitize_rich_text(member.get("apellidos", ""), max_chars=None),
+            "fecha_creacion": context.generation_date.strftime("%Y-%m-%d"),
+            "numero_caso": context.case_id,
+            "matricula_investigador": context.investigator_id,
+            "hostname": hostname,
+        }
+
     def _ensure_no_duplicates(
         self,
         records: Sequence[Mapping[str, str]],
@@ -329,20 +411,31 @@ class CartaInmediatezGenerator:
 
         numbers = self._allocate_numbers(len(members), existing_records, context.generation_date.year)
         created_rows: list[dict[str, str]] = []
+        created_history_rows: list[dict[str, str]] = []
         created_files: list[Path] = []
+        hostname = socket.gethostname()
 
         for member, numero_carta in zip(members, numbers):
             row = self._build_row(context, member, numero_carta)
             created_rows.append(row)
+            created_history_rows.append(self._build_history_row(context, member, numero_carta, hostname))
             placeholders = self._build_placeholder_map(context, row, member)
             output_name = f"carta_{row['matricula_team_member'] or 'colaborador'}_{numero_carta}.docx"
             output_path = cartas_dir / output_name
             self.renderer(self.template_path, output_path, placeholders)
             created_files.append(output_path)
 
-        self._write_records(self.exports_dir / "cartas_inmediatez.csv", created_rows)
-        self._write_records(self.exports_dir / "h_cartas_inmediatez.csv", created_rows)
+        self._write_records(self.exports_dir / "cartas_inmediatez.csv", created_rows, self.CSV_FIELDS)
+        history_path = self.exports_dir / "h_cartas_inmediatez.csv"
+        self._ensure_history_schema(history_path)
+        self._write_records(history_path, created_history_rows, self.HISTORY_FIELDS)
         if self.external_dir:
-            self._write_records(self.external_dir / "h_cartas_inmediatez.csv", created_rows)
+            external_history_path = self.external_dir / "h_cartas_inmediatez.csv"
+            self._ensure_history_schema(external_history_path)
+            self._write_records(
+                external_history_path,
+                created_history_rows,
+                self.HISTORY_FIELDS,
+            )
 
         return {"files": created_files, "rows": created_rows}

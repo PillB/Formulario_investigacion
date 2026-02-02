@@ -36,6 +36,25 @@ def _write_history(path: Path, rows: list[list[str]]) -> None:
             writer.writerow(row)
 
 
+def _write_extended_history(path: Path, rows: list[list[str]]) -> None:
+    headers = [
+        "id_carta",
+        "matricula_team_member",
+        "nombres_team_member",
+        "apellidos_team_member",
+        "fecha_creacion",
+        "numero_caso",
+        "matricula_investigador",
+        "hostname",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(headers)
+        for row in rows:
+            writer.writerow(row)
+
+
 def test_carta_generator_appends_history_and_files(tmp_path: Path) -> None:
     year = datetime.now().year
     exports_dir = tmp_path / "exports"
@@ -93,6 +112,13 @@ def test_carta_generator_appends_history_and_files(tmp_path: Path) -> None:
     assert {row["Numero_de_Carta"] for row in history_rows} == {f"003-{year}", f"004-{year}"}
     external_history = external_dir / "h_cartas_inmediatez.csv"
     assert external_history.exists()
+    extended_history = exports_dir / "h_cartas_inmediatez.csv"
+    extended_rows = list(csv.DictReader(extended_history.open(encoding="utf-8")))
+    assert {row["id_carta"] for row in extended_rows} == {f"002-{year}", f"003-{year}", f"004-{year}"}
+    assert {row["numero_caso"] for row in extended_rows} == {f"{year}-0101", "2024-0001"}
+    assert {row["matricula_investigador"] for row in extended_rows} == {"INV001", "INV999"}
+    new_rows = [row for row in extended_rows if row["numero_caso"] == f"{year}-0101"]
+    assert all(row["hostname"] for row in new_rows)
     assert all(path.exists() for path in result["files"])
 
 
@@ -114,6 +140,43 @@ def test_carta_generator_detects_duplicate(tmp_path: Path) -> None:
         "Involucrado",
     ]
     _write_history(exports_dir / "cartas_inmediatez.csv", [duplicate_row])
+    generator = CartaInmediatezGenerator(exports_dir, None, renderer=_stub_renderer, docx_available=True)
+
+    case_payload = {
+        "caso": {"id_caso": case_id, "investigador": {"matricula": "INV999", "nombre": "Investigador X"}}
+    }
+    members = [
+        {
+            "id_colaborador": "TM010",
+            "nombres": "Ana",
+            "apellidos": "Pérez",
+            "puesto": "Analista",
+            "nombre_agencia": "Agencia Central",
+            "codigo_agencia": "000123",
+            "flag": "Involucrado",
+            "division": "Division Comercial",
+        }
+    ]
+
+    with pytest.raises(CartaInmediatezError):
+        generator.generate_cartas(case_payload, members)
+
+
+def test_carta_generator_reads_extended_history_for_duplicates(tmp_path: Path) -> None:
+    year = datetime.now().year
+    exports_dir = tmp_path / "exports"
+    case_id = f"{year}-0101"
+    duplicate_row = [
+        f"001-{year}",
+        "TM010",
+        "Ana",
+        "Pérez",
+        f"{year}-02-02",
+        case_id,
+        "INV001",
+        "host-01",
+    ]
+    _write_extended_history(exports_dir / "h_cartas_inmediatez.csv", [duplicate_row])
     generator = CartaInmediatezGenerator(exports_dir, None, renderer=_stub_renderer, docx_available=True)
 
     case_payload = {
