@@ -276,6 +276,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
             case_discovery,
         )
         fecha_cese = collaborator.get("fecha_carta_renuncia") if not is_client_involvement else None
+        motivo_cese = collaborator.get("motivo_cese") if not is_client_involvement else None
         telefono_relacionado = client.get("telefonos")
         correos_relacionado = client.get("correos")
         direcciones_relacionado = client.get("direcciones")
@@ -341,6 +342,7 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 collaborator.get("puesto") if not is_client_involvement else None, placeholder
             ),
             "fecha_cese": _event_placeholder(fecha_cese, placeholder),
+            "motivo_cese": _event_placeholder(motivo_cese, placeholder),
             "tipo_de_falta": _event_placeholder(
                 collaborator.get("tipo_falta") if not is_client_involvement else None, placeholder
             ),
@@ -474,6 +476,10 @@ def build_event_rows(case_data: Mapping[str, Any] | CaseData) -> tuple[list[dict
                 ),
                 "colaborador_fecha_carta_renuncia": _event_placeholder(
                     collaborator.get("fecha_carta_renuncia") if not is_client_involvement else None,
+                    placeholder,
+                ),
+                "colaborador_motivo_cese": _event_placeholder(
+                    collaborator.get("motivo_cese") if not is_client_involvement else None,
                     placeholder,
                 ),
                 "colaborador_nombre_agencia": _event_placeholder(
@@ -1015,6 +1021,7 @@ def _build_report_context(case_data: CaseData):
             _safe_text(col.get("tipo_falta") or col.get("falta"), placeholder="-"),
             _safe_text(col.get("fecha_carta_inmediatez") or col.get("fecha_carta_inmediate"), placeholder="-"),
             _safe_text(col.get("fecha_carta_renuncia"), placeholder="-"),
+            _safe_text(col.get("motivo_cese"), placeholder="-"),
         ]
         for col in team
     ]
@@ -1401,6 +1408,7 @@ def build_md(case_data: CaseData) -> str:
                 "Falta cometida",
                 "Fecha Carta de Inmediatez",
                 "Fecha Carta de Renuncia",
+                "Motivo de cese",
             ],
             context["collaborator_rows"],
         )
@@ -1638,6 +1646,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
             "Falta cometida",
             "Fecha Carta de Inmediatez",
             "Fecha Carta de Renuncia",
+            "Motivo de cese",
         ],
         context["collaborator_rows"],
     )

@@ -263,6 +263,7 @@ def test_combined_import_eventos_restores_missing_involved_details(tmp_path, mon
             "nombre_agencia": "Agencia Norte",
             "codigo_agencia": "654321",
             "fecha_cese": "2024-01-05",
+            "motivo_cese": "Renuncia",
             "tipo_de_falta": "Falta leve",
             "tipo_sancion": TIPO_SANCION_LIST[0],
             "fecha_ocurrencia": "2024-01-01",
@@ -305,4 +306,5 @@ def test_combined_import_eventos_restores_missing_involved_details(tmp_path, mon
     assert team_frame.tipo_falta_var.get() == "Falta leve"
     assert team_frame.tipo_sancion_var.get() == TIPO_SANCION_LIST[0]
     assert team_frame.fecha_carta_renuncia_var.get() == "2024-01-05"
+    assert team_frame.motivo_cese_var.get() == "Renuncia"
     assert messagebox_spy.errors == []

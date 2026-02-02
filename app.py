@@ -10645,6 +10645,7 @@ class FraudCaseApp:
                             "colaborador_fecha_carta_renuncia",
                         ),
                     ),
+                    ("motivo_cese", ("motivo_cese", "colaborador_motivo_cese")),
                     ("flag_colaborador", ("flag_colaborador", "colaborador_flag")),
                 ):
                     for source in sources:
@@ -11986,7 +11987,7 @@ class FraudCaseApp:
             frame.fecha_carta_renuncia_var.set(fecha_ren_val)
         elif not fecha_ren_val and not preserve_existing:
             frame.fecha_carta_renuncia_var.set('')
-        motivo_cese_val = (row.get('motivo_cese') or '').strip()
+        motivo_cese_val = (row.get('motivo_cese') or row.get('colaborador_motivo_cese') or '').strip()
         if motivo_cese_val and should_autofill_field(frame.motivo_cese_var.get(), preserve_existing):
             frame.motivo_cese_var.set(motivo_cese_val)
         elif not motivo_cese_val and not preserve_existing:
