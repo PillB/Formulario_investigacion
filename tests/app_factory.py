@@ -130,6 +130,7 @@ def build_import_app(monkeypatch, messagebox_spy=None):
             'puesto_var': ('puesto',),
             'fecha_carta_inmediatez_var': ('fecha_carta_inmediatez',),
             'fecha_carta_renuncia_var': ('fecha_carta_renuncia',),
+            'motivo_cese_var': ('motivo_cese',),
             'nombre_agencia_var': ('nombre_agencia',),
             'codigo_agencia_var': ('codigo_agencia',),
             'tipo_falta_var': ('tipo_falta',),

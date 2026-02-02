@@ -9,7 +9,7 @@ from models import TeamHierarchyCatalog
 from models.static_team_catalog import AGENCY_CATALOG, build_team_catalog_rows
 from settings import FLAG_COLABORADOR_LIST, TIPO_FALTA_LIST, TIPO_SANCION_LIST
 from validators import (FieldValidator, log_event, normalize_team_member_identifier,
-                        normalize_without_accents, should_autofill_field,
+                        normalize_without_accents, requires_motivo_cese, should_autofill_field,
                         validate_agency_code, validate_date_text, validate_required_text,
                         validate_team_member_id)
 from ui.frames.utils import (
@@ -43,6 +43,7 @@ class TeamMemberFrame:
         ("puesto", "Puesto"),
         ("fecha_carta_inmediatez", "Carta inmediatez"),
         ("fecha_carta_renuncia", "Carta renuncia"),
+        ("motivo_cese", "Motivo cese"),
         ("nombre_agencia", "Nombre agencia"),
         ("codigo_agencia", "Código agencia"),
         ("tipo_falta", "Tipo falta"),
@@ -106,6 +107,7 @@ class TeamMemberFrame:
         self.puesto_var = tk.StringVar()
         self.fecha_carta_inmediatez_var = tk.StringVar()
         self.fecha_carta_renuncia_var = tk.StringVar()
+        self.motivo_cese_var = tk.StringVar()
         self.nombre_agencia_var = tk.StringVar()
         self.codigo_agencia_var = tk.StringVar()
         self.tipo_falta_var = tk.StringVar()
@@ -351,8 +353,22 @@ class TeamMemberFrame:
             "Registrar en formato YYYY-MM-DD. Puede quedar vacío si no aplica.",
         )
 
-        ttk.Label(self.frame, text="Nombre agencia:").grid(
+        ttk.Label(self.frame, text="Motivo de cese:").grid(
             row=10, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+        )
+        motivo_cese_entry = self._make_badged_field(
+            self.frame,
+            "team_motivo_cese",
+            lambda parent: ttk.Entry(parent, textvariable=self.motivo_cese_var, width=self._entry_width(25)),
+            row=10,
+            column=1,
+            columnspan=2,
+        )
+        self._bind_dirty_tracking(motivo_cese_entry, "motivo_cese")
+        self.tooltip_register(motivo_cese_entry, "Detalla el motivo de cese cuando aplique.")
+
+        ttk.Label(self.frame, text="Nombre agencia:").grid(
+            row=11, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         nombre_ag_cb = self._make_badged_field(
             self.frame,
@@ -362,7 +378,7 @@ class TeamMemberFrame:
                 textvariable=self.nombre_agencia_var,
                 width=self._entry_width(25),
             ),
-            row=10,
+            row=11,
             column=1,
             columnspan=2,
         )
@@ -373,7 +389,7 @@ class TeamMemberFrame:
             nombre_ag_cb.bind(sequence, lambda _e=None: self._on_agency_name_change(), add="+")
 
         ttk.Label(self.frame, text="Código agencia:").grid(
-            row=11, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=12, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         cod_ag_cb = self._make_badged_field(
             self.frame,
@@ -383,7 +399,7 @@ class TeamMemberFrame:
                 textvariable=self.codigo_agencia_var,
                 width=self._entry_width(10),
             ),
-            row=11,
+            row=12,
             column=1,
             columnspan=2,
         )
@@ -397,7 +413,7 @@ class TeamMemberFrame:
         self._apply_team_catalog_state(preserve_values=True, silent=True)
 
         ttk.Label(self.frame, text="Tipo de falta:").grid(
-            row=12, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=13, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         falta_cb = self._make_badged_field(
             self.frame,
@@ -409,7 +425,7 @@ class TeamMemberFrame:
                 state="readonly",
                 width=20,
             ),
-            row=12,
+            row=13,
             column=1,
             columnspan=2,
         )
@@ -417,7 +433,7 @@ class TeamMemberFrame:
         self.tooltip_register(falta_cb, "Selecciona la falta disciplinaria tipificada.")
 
         ttk.Label(self.frame, text="Tipo de sanción:").grid(
-            row=13, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
+            row=14, column=0, padx=COL_PADX, pady=ROW_PADY, sticky="e"
         )
         sanc_cb = self._make_badged_field(
             self.frame,
@@ -429,7 +445,7 @@ class TeamMemberFrame:
                 state="readonly",
                 width=20,
             ),
-            row=13,
+            row=14,
             column=1,
             columnspan=2,
         )
@@ -437,7 +453,7 @@ class TeamMemberFrame:
         self.tooltip_register(sanc_cb, "Describe la sanción propuesta o aplicada.")
 
         self._fallback_label.grid(
-            row=14,
+            row=15,
             column=0,
             columnspan=3,
             padx=COL_PADX,
@@ -448,7 +464,7 @@ class TeamMemberFrame:
 
         action_row = ttk.Frame(self.frame)
         ensure_grid_support(action_row)
-        action_row.grid(row=15, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
+        action_row.grid(row=16, column=0, columnspan=3, padx=COL_PADX, pady=ROW_PADY, sticky="ew")
         if hasattr(action_row, "columnconfigure"):
             action_row.columnconfigure(0, weight=1)
             action_row.columnconfigure(1, weight=0)
@@ -480,6 +496,18 @@ class TeamMemberFrame:
                 self.logs,
                 f"Colaborador {self.idx+1} - Nombres",
                 variables=[self.nombres_var],
+            )
+        )
+        self.validators.append(
+            FieldValidator(
+                motivo_cese_entry,
+                self.badges.wrap_validation(
+                    self._badge_key("team_motivo_cese"),
+                    self._validate_motivo_cese,
+                ),
+                self.logs,
+                f"Colaborador {self.idx+1} - Motivo de cese",
+                variables=[self.motivo_cese_var],
             )
         )
         self.validators.append(
@@ -1078,6 +1106,7 @@ class TeamMemberFrame:
             "apellidos": self.apellidos_var.get(),
             "fecha_carta_inmediatez": self.fecha_carta_inmediatez_var.get(),
             "fecha_carta_renuncia": self.fecha_carta_renuncia_var.get(),
+            "motivo_cese": self.motivo_cese_var.get(),
             "nombre_agencia": self.nombre_agencia_var.get(),
             "codigo_agencia": self.codigo_agencia_var.get(),
         }
@@ -1282,6 +1311,7 @@ class TeamMemberFrame:
             "apellidos": self.apellidos_var,
             "fecha_carta_inmediatez": self.fecha_carta_inmediatez_var,
             "fecha_carta_renuncia": self.fecha_carta_renuncia_var,
+            "motivo_cese": self.motivo_cese_var,
         }.items():
             if key in result.applied:
                 var.set(result.applied[key])
@@ -1302,6 +1332,17 @@ class TeamMemberFrame:
             ('dca' in division_norm or 'canales de atencion' in division_norm)
             and ('area comercial' in area_norm)
         )
+
+    def _requires_motivo_cese(self) -> bool:
+        return requires_motivo_cese(
+            self.fecha_carta_renuncia_var.get(),
+            self.tipo_sancion_var.get(),
+        )
+
+    def _validate_motivo_cese(self) -> str | None:
+        if not self._requires_motivo_cese():
+            return None
+        return validate_required_text(self.motivo_cese_var.get(), "el motivo de cese")
 
     def _validate_agency_fields(self, field: str) -> str | None:
         requires_agency = self._requires_agency_details()
@@ -1387,8 +1428,10 @@ class TeamMemberFrame:
             if not result or not result.found:
                 data = self.team_lookup.get(cid)
                 if data:
-                    def choose_value(var, key):
+                    def choose_value(var, key, fallback_key=None):
                         value = data.get(key, "").strip()
+                        if not value and fallback_key:
+                            value = data.get(fallback_key, "").strip()
                         if self._dirty_fields.get(key):
                             return None
                         if value and should_autofill_field(var.get(), preserve_existing):
@@ -1412,8 +1455,10 @@ class TeamMemberFrame:
                         ("apellidos", self.apellidos_var),
                         ("fecha_carta_inmediatez", self.fecha_carta_inmediatez_var),
                         ("fecha_carta_renuncia", self.fecha_carta_renuncia_var),
+                        ("motivo_cese", self.motivo_cese_var),
                     ):
-                        chosen = choose_value(var, key)
+                        fallback = "fecha_cese" if key == "fecha_carta_renuncia" else None
+                        chosen = choose_value(var, key, fallback)
                         if chosen:
                             var.set(chosen)
 
@@ -1640,6 +1685,7 @@ class TeamMemberFrame:
             "puesto": self.puesto_var.get().strip(),
             "fecha_carta_inmediatez": self.fecha_carta_inmediatez_var.get().strip(),
             "fecha_carta_renuncia": self.fecha_carta_renuncia_var.get().strip(),
+            "motivo_cese": self.motivo_cese_var.get().strip(),
             "nombre_agencia": self.nombre_agencia_var.get().strip(),
             "codigo_agencia": self.codigo_agencia_var.get().strip(),
             "tipo_falta": self.tipo_falta_var.get(),
@@ -1661,6 +1707,7 @@ class TeamMemberFrame:
                 self.puesto_var,
                 self.fecha_carta_inmediatez_var,
                 self.fecha_carta_renuncia_var,
+                self.motivo_cese_var,
                 self.nombre_agencia_var,
                 self.codigo_agencia_var,
                 self.tipo_falta_var,

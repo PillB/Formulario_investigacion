@@ -160,6 +160,7 @@ from validators import (
     should_autofill_field,
     sum_investigation_components,
     TIPO_PRODUCTO_NORMALIZED,
+    requires_motivo_cese,
     validate_agency_code,
     validate_case_id,
     validate_catalog_risk_id,
@@ -243,6 +244,7 @@ EXPORT_HEADERS = {
         "puesto",
         "fecha_carta_inmediatez",
         "fecha_carta_renuncia",
+        "motivo_cese",
         "nombre_agencia",
         "codigo_agencia",
         "tipo_falta",
@@ -771,6 +773,7 @@ class FraudCaseApp:
                 "puesto",
                 "fecha_carta_inmediatez",
                 "fecha_carta_renuncia",
+                "motivo_cese",
                 "nombre_agencia",
                 "codigo_agencia",
                 "tipo_falta",
@@ -8474,18 +8477,8 @@ class FraudCaseApp:
             return
         for idx, member in enumerate(self.team_frames):
             data = member.get_data()
-            values = (
-                data.get("id_colaborador", ""),
-                data.get("nombres", ""),
-                data.get("apellidos", ""),
-                data.get("division", ""),
-                data.get("area", ""),
-                data.get("servicio", ""),
-                data.get("puesto", ""),
-                data.get("tipo_sancion", ""),
-                data.get("fecha_carta_inmediatez", ""),
-                data.get("fecha_carta_renuncia", ""),
-            )
+            field_order = [field for field, _ in self.COLLABORATOR_SUMMARY_COLUMNS]
+            values = tuple(data.get(field, "") for field in field_order)
             tags = ("even",) if idx % 2 == 0 else ("odd",)
             tree.insert("", "end", iid=data.get("id_colaborador", f"colaborador-{idx}"), values=values, tags=tags)
         self._apply_treeview_theme(tree)
@@ -9221,6 +9214,15 @@ class FraudCaseApp:
             )
             if carta_ren_msg:
                 raise ValueError(f"Colaborador fila {idx}: {carta_ren_msg}")
+            if requires_motivo_cese(
+                collaborator.get("fecha_carta_renuncia", ""),
+                collaborator.get("tipo_sancion", ""),
+            ):
+                motivo_msg = validate_required_text(
+                    collaborator.get("motivo_cese", ""), "el motivo de cese"
+                )
+                if motivo_msg:
+                    raise ValueError(f"Colaborador fila {idx}: {motivo_msg}")
             sanitized.append(tuple(collaborator.get(field, "") for field in field_order))
         return sanitized
 
@@ -10483,6 +10485,7 @@ class FraudCaseApp:
             "tipo_sancion": ("colaborador_tipo_sancion", "tipo_sancion"),
             "fecha_carta_inmediatez": ("colaborador_fecha_carta_inmediatez",),
             "fecha_carta_renuncia": ("colaborador_fecha_carta_renuncia",),
+            "motivo_cese": ("motivo_cese",),
             "flag_colaborador": ("colaborador_flag",),
         }
         for target_key in team_mapping:
@@ -11183,6 +11186,7 @@ class FraudCaseApp:
                 'puesto': frame.puesto_var.get,
                 'fecha_carta_inmediatez': frame.fecha_carta_inmediatez_var.get,
                 'fecha_carta_renuncia': frame.fecha_carta_renuncia_var.get,
+                'motivo_cese': frame.motivo_cese_var.get,
                 'nombre_agencia': frame.nombre_agencia_var.get,
                 'codigo_agencia': frame.codigo_agencia_var.get,
                 'tipo_falta': frame.tipo_falta_var.get,
@@ -11977,11 +11981,16 @@ class FraudCaseApp:
             frame.fecha_carta_inmediatez_var.set(fecha_inm_val)
         elif not fecha_inm_val and not preserve_existing:
             frame.fecha_carta_inmediatez_var.set('')
-        fecha_ren_val = (row.get('fecha_carta_renuncia') or '').strip()
+        fecha_ren_val = (row.get('fecha_carta_renuncia') or row.get('fecha_cese') or '').strip()
         if fecha_ren_val and should_autofill_field(frame.fecha_carta_renuncia_var.get(), preserve_existing):
             frame.fecha_carta_renuncia_var.set(fecha_ren_val)
         elif not fecha_ren_val and not preserve_existing:
             frame.fecha_carta_renuncia_var.set('')
+        motivo_cese_val = (row.get('motivo_cese') or '').strip()
+        if motivo_cese_val and should_autofill_field(frame.motivo_cese_var.get(), preserve_existing):
+            frame.motivo_cese_var.set(motivo_cese_val)
+        elif not motivo_cese_val and not preserve_existing:
+            frame.motivo_cese_var.set('')
         nombre_agencia_val = (row.get('nombre_agencia') or '').strip()
         if nombre_agencia_val and should_autofill_field(frame.nombre_agencia_var.get(), preserve_existing):
             frame.nombre_agencia_var.set(nombre_agencia_val)
@@ -12006,6 +12015,7 @@ class FraudCaseApp:
                 'puesto': frame.puesto_var.get(),
                 'fecha_carta_inmediatez': frame.fecha_carta_inmediatez_var.get(),
                 'fecha_carta_renuncia': frame.fecha_carta_renuncia_var.get(),
+                'motivo_cese': frame.motivo_cese_var.get(),
                 'nombre_agencia': frame.nombre_agencia_var.get(),
                 'codigo_agencia': frame.codigo_agencia_var.get(),
                 'tipo_falta': frame.tipo_falta_var.get(),
@@ -14721,6 +14731,7 @@ class FraudCaseApp:
                 tm.puesto_var.set(col.get('puesto', ''))
                 tm.fecha_carta_inmediatez_var.set(col.get('fecha_carta_inmediatez', ''))
                 tm.fecha_carta_renuncia_var.set(col.get('fecha_carta_renuncia', ''))
+                tm.motivo_cese_var.set(col.get('motivo_cese', ''))
                 tm.nombre_agencia_var.set(col.get('nombre_agencia', ''))
                 tm.codigo_agencia_var.set(col.get('codigo_agencia', ''))
                 tm.tipo_falta_var.set(col.get('tipo_falta', ''))
@@ -16517,6 +16528,7 @@ class FraudCaseApp:
                     "puesto",
                     "fecha_carta_inmediatez",
                     "fecha_carta_renuncia",
+                    "motivo_cese",
                     "nombre_agencia",
                     "codigo_agencia",
                     "tipo_falta",

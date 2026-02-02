@@ -53,6 +53,13 @@ def validate_required_text(value: str, label: str) -> Optional[str]:
     return None
 
 
+def requires_motivo_cese(fecha_carta_renuncia: str, tipo_sancion: str) -> bool:
+    if (fecha_carta_renuncia or "").strip():
+        return True
+    sancion_norm = normalize_without_accents(tipo_sancion).lower()
+    return any(keyword in sancion_norm for keyword in ("renuncia", "cesado", "despido", "desvinculacion"))
+
+
 def validate_case_id(value: str) -> Optional[str]:
     text = value.strip()
     if not text:
