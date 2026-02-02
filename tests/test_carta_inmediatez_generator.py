@@ -199,6 +199,104 @@ def test_carta_generator_reads_extended_history_for_duplicates(tmp_path: Path) -
         generator.generate_cartas(case_payload, members)
 
 
+def test_carta_generator_rejects_duplicate_card_ids_in_history(tmp_path: Path) -> None:
+    year = datetime.now().year
+    exports_dir = tmp_path / "exports"
+    rows = [
+        [
+            f"{year}-0001",
+            f"{year}-03-01",
+            "03",
+            "Investigador",
+            "INV001",
+            "TM010",
+            "Sede",
+            "000001",
+            "Agencia Central",
+            f"005-{year}",
+            "Involucrado",
+        ],
+        [
+            f"{year}-0002",
+            f"{year}-03-02",
+            "03",
+            "Investigador",
+            "INV002",
+            "TM011",
+            "Sede",
+            "000002",
+            "Agencia Norte",
+            f"005-{year}",
+            "Informativo",
+        ],
+    ]
+    _write_history(exports_dir / "h_cartas_inmediatez.csv", rows)
+    generator = CartaInmediatezGenerator(exports_dir, None, renderer=_stub_renderer, docx_available=True)
+
+    case_payload = {
+        "caso": {
+            "id_caso": f"{year}-0101",
+            "investigador": {"matricula": "INV999", "nombre": "Investigador X"},
+        }
+    }
+    members = [
+        {
+            "id_colaborador": "TM012",
+            "nombres": "Ana",
+            "apellidos": "Pérez",
+            "puesto": "Analista",
+            "nombre_agencia": "Agencia Central",
+            "codigo_agencia": "000123",
+            "flag": "Involucrado",
+            "division": "Division Comercial",
+        }
+    ]
+
+    with pytest.raises(CartaInmediatezError):
+        generator.generate_cartas(case_payload, members)
+
+
+def test_carta_generator_skips_existing_card_ids(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    year = datetime.now().year
+    exports_dir = tmp_path / "exports"
+    existing_row = [
+        f"{year}-0001",
+        f"{year}-01-01",
+        "01",
+        "Investigador",
+        "INV001",
+        "TM010",
+        "Sede",
+        "000001",
+        "Agencia Central",
+        f"001-{year}",
+        "Involucrado",
+    ]
+    _write_history(exports_dir / "h_cartas_inmediatez.csv", [existing_row])
+    generator = CartaInmediatezGenerator(exports_dir, None, renderer=_stub_renderer, docx_available=True)
+    monkeypatch.setattr(generator, "_parse_last_sequence", lambda *_: 0)
+
+    case_payload = {
+        "caso": {"id_caso": f"{year}-0102", "investigador": {"matricula": "INV999", "nombre": "Investigador X"}}
+    }
+    members = [
+        {
+            "id_colaborador": "TM020",
+            "nombres": "Luis",
+            "apellidos": "Diaz",
+            "puesto": "Gestor",
+            "nombre_agencia": "Agencia Central",
+            "codigo_agencia": "000123",
+            "flag": "Relacionado",
+            "division": "Sede Norte",
+        }
+    ]
+
+    result = generator.generate_cartas(case_payload, members)
+
+    assert result["rows"][0]["Numero_de_Carta"] == f"002-{year}"
+
+
 def test_default_template_matches_required_layout(tmp_path: Path) -> None:
     pytest.importorskip("docx")
     exports_dir = tmp_path / "exports"

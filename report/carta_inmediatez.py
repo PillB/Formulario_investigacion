@@ -195,9 +195,46 @@ class CartaInmediatezGenerator:
                 continue
         return max_value
 
-    def _allocate_numbers(self, count: int, records: Sequence[Mapping[str, str]], year: int) -> list[str]:
+    def _collect_existing_card_ids(self, records: Sequence[Mapping[str, str]]) -> tuple[set[str], set[str]]:
+        existing_ids: set[str] = set()
+        duplicates: set[str] = set()
+        for record in records:
+            card_id = self._normalize_identifier(record.get("Numero_de_Carta"))
+            if not card_id:
+                continue
+            if card_id in existing_ids:
+                duplicates.add(card_id)
+            existing_ids.add(card_id)
+        return existing_ids, duplicates
+
+    def _ensure_unique_card_ids(self, records: Sequence[Mapping[str, str]]) -> set[str]:
+        existing_ids, duplicates = self._collect_existing_card_ids(records)
+        if duplicates:
+            repeated = ", ".join(sorted(duplicates))
+            raise CartaInmediatezError(
+                "Se encontraron números de carta duplicados en los históricos: "
+                f"{repeated}. Corrige los registros antes de generar nuevas cartas."
+            )
+        return existing_ids
+
+    def _allocate_numbers(
+        self,
+        count: int,
+        records: Sequence[Mapping[str, str]],
+        year: int,
+        existing_ids: set[str],
+    ) -> list[str]:
         start = self._parse_last_sequence(records, year) + 1
-        return [f"{index:03d}-{year}" for index in range(start, start + count)]
+        allocated: list[str] = []
+        candidate = start
+        reserved = set(existing_ids)
+        while len(allocated) < count:
+            numero_carta = f"{candidate:03d}-{year}"
+            if numero_carta not in reserved:
+                allocated.append(numero_carta)
+                reserved.add(numero_carta)
+            candidate += 1
+        return allocated
 
     def _render_with_docx(self, template_path: Path, output_path: Path, placeholders: Mapping[str, str]) -> None:
         if not self.docx_available or Document is None:
@@ -409,7 +446,13 @@ class CartaInmediatezGenerator:
         member_ids = [member.get("id_colaborador", "") for member in members]
         self._ensure_no_duplicates(existing_records, context.case_id, member_ids)
 
-        numbers = self._allocate_numbers(len(members), existing_records, context.generation_date.year)
+        existing_card_ids = self._ensure_unique_card_ids(existing_records)
+        numbers = self._allocate_numbers(
+            len(members),
+            existing_records,
+            context.generation_date.year,
+            existing_card_ids,
+        )
         created_rows: list[dict[str, str]] = []
         created_history_rows: list[dict[str, str]] = []
         created_files: list[Path] = []
