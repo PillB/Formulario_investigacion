@@ -112,7 +112,7 @@ from report_builder import (build_docx, build_event_rows,
 from settings import (AUTOSAVE_FILE, BASE_DIR, CANAL_LIST, CLIENT_ID_ALIASES,
                       CONFETTI_ENABLED, CRITICIDAD_LIST, DETAIL_LOOKUP_ALIASES,
                       ENABLE_EXTENDED_ANALYSIS_SECTIONS, EVENTOS_HEADER_CANONICO,
-                      EVENTOS_PLACEHOLDER,
+                      EVENTOS_HEADER_EXPORT, EVENTOS_PLACEHOLDER,
                       ensure_external_drive_dir, EXPORTS_DIR,
                       EXTERNAL_LOGS_FILE, FLAG_CLIENTE_LIST,
                       FLAG_COLABORADOR_LIST, LOGS_FILE, MASSIVE_SAMPLE_FILES,
@@ -15846,7 +15846,7 @@ class FraudCaseApp:
         created_files = []
         llave_rows, llave_header = build_llave_tecnica_rows(data)
         event_rows, _event_header = build_event_rows(data)
-        event_header = list(EVENTOS_HEADER_CANONICO)
+        event_header = list(EVENTOS_HEADER_EXPORT)
         # Nota: las reglas de validación siguen el Design document CM.pdf; este bloque sólo ajusta exportaciones.
         amount_field_names = {
             "monto_investigado",
@@ -16444,7 +16444,7 @@ class FraudCaseApp:
 
         llave_rows, llave_header = build_llave_tecnica_rows(data)
         event_rows, _event_header = build_event_rows(data)
-        event_header = list(EVENTOS_HEADER_CANONICO)
+        event_header = list(EVENTOS_HEADER_EXPORT)
         analisis_data = data.get("analisis") if isinstance(data, Mapping) else {}
         analysis_texts = self._normalize_analysis_texts(analisis_data or {})
         caso = data.get("caso") if isinstance(data, Mapping) else {}
@@ -16639,17 +16639,19 @@ class FraudCaseApp:
             table_name = str(definition.get("name", "")).upper().replace(".CSV", "")
             if not table_name:
                 continue
-            if "id_caso" in headers and table_name != "CASOS":
+            if {"id_caso", "case_id"} & headers and table_name != "CASOS":
                 relations.add(f"  CASOS ||--o{{ {table_name} : contiene")
             fk_targets = {
-                "CLIENTES": "id_cliente",
-                "COLABORADORES": "id_colaborador",
-                "PRODUCTOS": "id_producto",
-                "RIESGOS": "id_riesgo",
-                "DETALLES_NORMA": "id_norma",
+                "CLIENTES": {"id_cliente", "client_id_involucrado"},
+                "COLABORADORES": {"id_colaborador", "matricula_colaborador_involucrado"},
+                "PRODUCTOS": {"id_producto", "product_id"},
+                "RIESGOS": {"id_riesgo"},
+                "DETALLES_NORMA": {"id_norma"},
             }
-            for target_table, fk_field in fk_targets.items():
-                if target_table in table_names and fk_field in headers and target_table != table_name:
+            for target_table, fk_fields in fk_targets.items():
+                matching = fk_fields & headers
+                if target_table in table_names and matching and target_table != table_name:
+                    fk_field = sorted(matching)[0]
                     relations.add(f"  {target_table} ||--o{{ {table_name} : {fk_field}")
 
         if relations:

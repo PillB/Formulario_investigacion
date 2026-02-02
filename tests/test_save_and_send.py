@@ -187,9 +187,9 @@ def test_save_and_send_updates_architecture_diagram(tmp_path, messagebox_spy):
         assert table in content
     assert 'CASOS ||--o{ PRODUCTOS' in content
     assert 'CASOS ||--o{ EVENTOS' in content
-    assert 'PRODUCTOS ||--o{ EVENTOS : id_producto' in content
-    assert 'CLIENTES ||--o{ EVENTOS : id_cliente' in content
-    assert 'COLABORADORES ||--o{ EVENTOS : id_colaborador' in content
+    assert 'PRODUCTOS ||--o{ EVENTOS : product_id' in content
+    assert 'CLIENTES ||--o{ EVENTOS : client_id_involucrado' in content
+    assert 'COLABORADORES ||--o{ EVENTOS : matricula_colaborador_involucrado' in content
 
 
 def test_save_and_send_reports_catalog_errors_once(messagebox_spy):
