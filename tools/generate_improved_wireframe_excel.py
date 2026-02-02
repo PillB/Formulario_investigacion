@@ -1908,6 +1908,8 @@ def _catalog_rows() -> list[Sequence[str | None]]:
         ("team_details.csv", "puesto", "Colaboradores - Puesto", "Sí", "", CLASSIFY_LAKE),
         ("team_details.csv", "fecha_carta_inmediatez", "Colaboradores - Fecha carta inmediatez", "Sí", "", CLASSIFY_LAKE),
         ("team_details.csv", "fecha_carta_renuncia", "Colaboradores - Fecha carta renuncia", "Sí", "", CLASSIFY_LAKE),
+        ("team_details.csv", "fecha_cese", "Colaboradores - Fecha de cese", "Sí", "", CLASSIFY_LAKE),
+        ("team_details.csv", "motivo_cese", "Colaboradores - Motivo de cese", "Sí", "", CLASSIFY_LAKE),
         ("team_details.csv", "nombre_agencia", "Colaboradores - Nombre agencia", "Sí", "", CLASSIFY_LAKE),
         ("team_details.csv", "codigo_agencia", "Colaboradores - Código agencia", "Sí", "", CLASSIFY_LAKE),
         ("team_details.csv", "tipo_falta", "Colaboradores - Tipo de falta", "Sí", "", CLASSIFY_LAKE),

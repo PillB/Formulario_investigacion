@@ -1,7 +1,5 @@
 import csv
 
-import csv
-
 from models import AutofillService, CatalogService
 from settings import BASE_DIR
 
@@ -19,6 +17,8 @@ def _write_team_details(tmp_path, rows):
         "puesto",
         "fecha_carta_inmediatez",
         "fecha_carta_renuncia",
+        "fecha_cese",
+        "motivo_cese",
         "nombre_agencia",
         "codigo_agencia",
         "tipo_falta",
@@ -122,6 +122,30 @@ def test_autofill_selects_latest_snapshot_before_case_date(tmp_path):
     assert result.found is True
     assert result.applied["division"] == "Division 2024"
     assert service.team_snapshots["T1"][0]["data"]["codigo_agencia"] == "000111"
+
+
+def test_team_details_preserves_new_columns(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            {
+                "id_colaborador": "T9",
+                "nombres": "Nombre 2024",
+                "apellidos": "Apellido 2024",
+                "flag": "Involucrado",
+                "division": "Division 2024",
+                "fecha_cese": "2024-12-31",
+                "motivo_cese": "Renuncia",
+                "codigo_agencia": "000999",
+                "fecha_actualizacion": "2024-06-15",
+            }
+        ],
+    )
+    service, _, _ = _build_services(tmp_path)
+
+    snapshot = service.team_snapshots["T9"][0]["data"]
+    assert snapshot["fecha_cese"] == "2024-12-31"
+    assert snapshot["motivo_cese"] == "Renuncia"
 
 
 def test_autofill_respects_dirty_fields(tmp_path):

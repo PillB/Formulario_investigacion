@@ -120,6 +120,7 @@ Esto renderiza los esquemas de las pestañas (incluyendo los nuevos controles de
 ### Pegado rápido en Resumen
 - En **Resumen**, pega datos tabulares (Ctrl+V). Las tablas sincronizan con las secciones principales.
 - Orden único para **Colaboradores** (Resumen y CSV): `id_colaborador`, `nombres`, `apellidos`, `flag`, `division`, `area`, `servicio`, `puesto`, `fecha_carta_inmediatez`, `fecha_carta_renuncia`, `nombre_agencia`, `codigo_agencia`, `tipo_falta`, `tipo_sancion`. Incluye ambas fechas para evitar ambigüedad al pegar desde Excel.
+- Orden esperado para el catálogo `team_details.csv`: `id_colaborador`, `nombres`, `apellidos`, `flag`, `division`, `area`, `servicio`, `puesto`, `fecha_carta_inmediatez`, `fecha_carta_renuncia`, `fecha_cese`, `motivo_cese`, `nombre_agencia`, `codigo_agencia`, `tipo_falta`, `tipo_sancion`, `fecha_actualizacion`.
 - Orden único para **Productos** y CSV combinado: `id_producto`, `id_cliente`, `tipo_producto`, `categoria1`, `categoria2`, `modalidad`, `canal`, `proceso`, `fecha_ocurrencia`, `fecha_descubrimiento`, `monto_investigado`, `tipo_moneda`, `monto_perdida_fraude`, `monto_falla_procesos`, `monto_contingencia`, `monto_recuperado`, `monto_pago_deuda`, `id_reclamo`, `nombre_analitica`, `codigo_analitica` (y, para `datos_combinados_masivos.csv`, `tipo_involucrado`, `id_colaborador`, `id_cliente_involucrado`, `monto_asignado`). Las tres columnas de reclamos siempre van al final en el mismo orden que los encabezados esperados.
 
 ## Guía por pestaña
