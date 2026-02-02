@@ -177,6 +177,35 @@ def test_autofill_maps_fecha_cese_to_fecha_carta_renuncia(tmp_path):
     assert result.applied["motivo_cese"] == "Renuncia"
 
 
+def test_autofill_applies_fecha_cese_and_motivo_cese(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            {
+                "id_colaborador": "T70",
+                "nombres": "Nombre 2024",
+                "apellidos": "Apellido 2024",
+                "flag": "Involucrado",
+                "fecha_cese": "2024-03-20",
+                "motivo_cese": "Despido",
+                "fecha_actualizacion": "2024-03-21",
+            }
+        ],
+    )
+    _, autofill, _ = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T70",
+        current_values={"fecha_cese": "", "motivo_cese": ""},
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="2024-03-22",
+    )
+
+    assert result.applied["fecha_cese"] == "2024-03-20"
+    assert result.applied["motivo_cese"] == "Despido"
+
+
 def test_autofill_respects_dirty_fields(tmp_path):
     _write_team_details(
         tmp_path,

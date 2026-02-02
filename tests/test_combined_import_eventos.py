@@ -145,6 +145,7 @@ def test_combined_export_import_restores_involved_details(tmp_path, monkeypatch,
                     "puesto": "Analista",
                     "nombre_agencia": "Agencia Centro",
                     "codigo_agencia": "123456",
+                    "motivo_cese": "Renuncia",
                 }
             ],
             "productos": [
@@ -220,6 +221,7 @@ def test_combined_export_import_restores_involved_details(tmp_path, monkeypatch,
     assert team_frame.puesto_var.get() == "Analista"
     assert team_frame.nombre_agencia_var.get() == "Agencia Centro"
     assert team_frame.codigo_agencia_var.get() == "123456"
+    assert team_frame.motivo_cese_var.get() == "Renuncia"
     assert messagebox_spy.errors == []
 
 
