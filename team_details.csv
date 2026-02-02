@@ -1,10 +1,10 @@
-id_colaborador,nombres,apellidos,flag,division,area,servicio,puesto,fecha_carta_inmediatez,fecha_carta_renuncia,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion,fecha_actualizacion
-T12345,María,Acuña,Involucrado,GCIA DE DIVISION CANALES DE ATENCION,AREA COMERCIAL LIMA 1,AREA LIMA 1 - REGION 62,GERENTE DE AGENCIA,2024-05-01,,Agencia Cronos,194057,Inconducta funcional,Amonestación,2024-05-15
-T12345,María,Acuña,Relacionado,GCIA DE DIVISION CANALES DE ATENCION,AREA COMERCIAL LIMA 1,GERENCIA INBOUND LINEAS SERVICIO Y VENTA,ASESOR DEL CLIENTE LIMA,,,Agencia Cronos,194057,No aplica,No aplica,2023-07-22
-U00123,Luis,Ramírez,Relacionado,GERENCIA DE BANCA EXCLUSIVA DIGITAL,,GERENCIA DE BANCA EXCLUSIVA DIGITAL,EJECUTIVO BEX DIGITAL,,,Agencia Ejecutivo BEX Digital,175994,Negligencia funcional,Suspensión 2 días,2023-09-12
-T54321,Carmen,López,Involucrado,TRIBU EXPERIENCIA DEL COLABORADOR,REGION 02 - NORTE 1,REGION 02 - NORTE 1,EJECUTIVO PYME,,,Agencia Ejecutivo Pyme,186989,Inconducta funcional,Exhortación,2024-01-10
-T54321,Carmen,López,Involucrado,TRIBU EXPERIENCIA DEL COLABORADOR,REGION 02 - NORTE 1,REGION 02 - NORTE 1,EJECUTIVO PYME,,,Agencia Ejecutivo Pyme,186989,Inconducta funcional,Exhortación,2020-11-20
-Z99999,Julio,Pereira,Relacionado,GERENCIA DE NEGOCIOS 528,GERENCIA DE VENTAS TRANSACCIONALES I,GERENCIA DE VENTAS TRANSACCIONALES I,SUPERVISOR DE VENTAS PYME,,,Agencia Data Engineer Advanced,217777,No aplica,No aplica,2024-06-18
-Z99999,Julio,Pereira,Relacionado,GERENCIA DE NEGOCIOS 528,GERENCIA DE VENTAS TRANSACCIONALES I,GERENCIA DE VENTAS TRANSACCIONALES I,SUPERVISOR DE VENTAS PYME,,,Agencia Data Engineer Advanced,217777,No aplica,No aplica,2022-02-14
-S50005,Sofía,Núñez,No aplica,GERENCIA DE GESTION OPERATIVA,,,GERENTE PYME FACT. NEGOCIABLE,,,,No aplica,No aplica,2023-11-05
-A60006,Andrés,Quispe,Relacionado,TRIBU PYME,GERENCIA DE BANCA ENALTA,GERENCIA DE BANCA ENALTA,EJECUTIVO PYME SENIOR,,,Agencia Asistente I Soporte Gestión Operativa,247640,No aplica,No aplica,2024-02-27
+id_colaborador,nombres,apellidos,flag,division,area,servicio,puesto,fecha_carta_inmediatez,fecha_carta_renuncia,fecha_cese,motivo_cese,nombre_agencia,codigo_agencia,tipo_falta,tipo_sancion,fecha_actualizacion
+T12345,María,Acuña,Involucrado,GCIA DE DIVISION CANALES DE ATENCION,AREA COMERCIAL LIMA 1,AREA LIMA 1 - REGION 62,GERENTE DE AGENCIA,2024-05-01,,,,Agencia Cronos,194057,Inconducta funcional,Amonestación,2024-05-15
+T12345,María,Acuña,Relacionado,GCIA DE DIVISION CANALES DE ATENCION,AREA COMERCIAL LIMA 1,GERENCIA INBOUND LINEAS SERVICIO Y VENTA,ASESOR DEL CLIENTE LIMA,,,,,Agencia Cronos,194057,No aplica,No aplica,2023-07-22
+U00123,Luis,Ramírez,Relacionado,GERENCIA DE BANCA EXCLUSIVA DIGITAL,,GERENCIA DE BANCA EXCLUSIVA DIGITAL,EJECUTIVO BEX DIGITAL,,,,,Agencia Ejecutivo BEX Digital,175994,Negligencia funcional,Suspensión 2 días,2023-09-12
+T54321,Carmen,López,Involucrado,TRIBU EXPERIENCIA DEL COLABORADOR,REGION 02 - NORTE 1,REGION 02 - NORTE 1,EJECUTIVO PYME,,,,,Agencia Ejecutivo Pyme,186989,Inconducta funcional,Exhortación,2024-01-10
+T54321,Carmen,López,Involucrado,TRIBU EXPERIENCIA DEL COLABORADOR,REGION 02 - NORTE 1,REGION 02 - NORTE 1,EJECUTIVO PYME,,,,,Agencia Ejecutivo Pyme,186989,Inconducta funcional,Exhortación,2020-11-20
+Z99999,Julio,Pereira,Relacionado,GERENCIA DE NEGOCIOS 528,GERENCIA DE VENTAS TRANSACCIONALES I,GERENCIA DE VENTAS TRANSACCIONALES I,SUPERVISOR DE VENTAS PYME,,,,,Agencia Data Engineer Advanced,217777,No aplica,No aplica,2024-06-18
+Z99999,Julio,Pereira,Relacionado,GERENCIA DE NEGOCIOS 528,GERENCIA DE VENTAS TRANSACCIONALES I,GERENCIA DE VENTAS TRANSACCIONALES I,SUPERVISOR DE VENTAS PYME,,,,,Agencia Data Engineer Advanced,217777,No aplica,No aplica,2022-02-14
+S50005,Sofía,Núñez,No aplica,GERENCIA DE GESTION OPERATIVA,,,GERENTE PYME FACT. NEGOCIABLE,,,,,,,No aplica,No aplica,2023-11-05
+A60006,Andrés,Quispe,Relacionado,TRIBU PYME,GERENCIA DE BANCA ENALTA,GERENCIA DE BANCA ENALTA,EJECUTIVO PYME SENIOR,,,,,Agencia Asistente I Soporte Gestión Operativa,247640,No aplica,No aplica,2024-02-27
