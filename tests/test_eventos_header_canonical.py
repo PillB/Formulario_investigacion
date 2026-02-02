@@ -6,6 +6,7 @@ def test_eventos_header_canonical_has_expected_column_names():
 
     assert "tipo_moneda" in header
     assert "tipo_sancion" in header
+    assert "motivo_cese" in header
     assert "codigo_analitica" in header
     assert "fecha_ocurrencia_caso" in header
     assert "fecha_descubrimiento_caso" in header
