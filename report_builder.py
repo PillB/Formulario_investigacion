@@ -947,7 +947,13 @@ def _build_report_context(case_data: CaseData):
     productos_texto = encabezado.get("producto") or ", ".join(
         sorted({str(prod.get("tipo_producto", "")).strip() or str(prod.get("producto", "")).strip() for prod in products})
     )
-    reclamos_count = encabezado.get("numero_reclamos") or len(reclamos)
+    reclamos_ids = sorted(
+        {str(rec.get("id_reclamo", "")).strip() for rec in reclamos if rec.get("id_reclamo")}
+    )
+    reclamos_count = encabezado.get("numero_reclamos")
+    if not reclamos_count:
+        reclamos_count = len([rec for rec in reclamos if rec]) or len(reclamos_ids)
+    reclamos_ids_text = ", ".join(reclamos_ids) if reclamos_ids else PLACEHOLDER
 
     header_headers = [
         "Dirigido a",
@@ -968,6 +974,7 @@ def _build_report_context(case_data: CaseData):
         "Producto",
         "Procesos impactados",
         "N° de Reclamos",
+        "ID de Reclamos",
     ]
 
     referencia = _safe_text(
@@ -998,6 +1005,7 @@ def _build_report_context(case_data: CaseData):
         _safe_text(productos_texto),
         _safe_text(procesos),
         _safe_text(reclamos_count),
+        _safe_text(reclamos_ids_text),
     ]
 
     def _collaborator_name(record: Mapping[str, Any]) -> str:
@@ -1347,6 +1355,7 @@ def _build_header_markdown_table(header_values: Mapping[str, Any]) -> List[str]:
             _cell("td", _value("Procesos impactados")),
         ),
         _row(_cell("th", "N° de Reclamos"), _cell("td", _value("N° de Reclamos"), colspan=3)),
+        _row(_cell("th", "ID de Reclamos"), _cell("td", _value("ID de Reclamos"), colspan=3)),
     ]
 
     return ["<table>", "  <tbody>", *[f"    {row}" for row in rows], "  </tbody>", "</table>", ""]
@@ -1564,7 +1573,7 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
         style_title(paragraph)
     style_section_heading(document.add_heading("Encabezado Institucional", level=2))
     header_values = dict(zip(context["header_headers"], context["header_row"]))
-    header_table = document.add_table(rows=11, cols=4)
+    header_table = document.add_table(rows=12, cols=4)
 
     def _set_cells(row_idx: int, col_idx: int, label: str, value: Any) -> None:
         header_table.rows[row_idx].cells[col_idx].text = label
@@ -1612,6 +1621,9 @@ def build_docx(case_data: CaseData, path: Path | str) -> Path:
 
     _set_cells(10, 0, "N° de Reclamos", header_values.get("N° de Reclamos", PLACEHOLDER))
     _merge_value(10, 1, 3)
+
+    _set_cells(11, 0, "ID de Reclamos", header_values.get("ID de Reclamos", PLACEHOLDER))
+    _merge_value(11, 1, 3)
     apply_header_band(header_table.rows[:3], alignment=WD_ALIGN_PARAGRAPH.LEFT)
     for paragraph in header_table.rows[2].cells[3].paragraphs:
         paragraph.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT

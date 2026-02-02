@@ -248,6 +248,13 @@ def test_md_renders_analysis_tags_into_markdown():
     assert "```\nCelda A\nCelda B\n```" in md
 
 
+def test_md_header_includes_reclamos_ids_and_count(sample_case_data):
+    md = report_builder.build_md(sample_case_data)
+
+    assert '<th>N° de Reclamos</th><td colspan="3">1</td>' in md
+    assert '<th>ID de Reclamos</th><td colspan="3">C12345678</td>' in md
+
+
 def test_report_filename_normalization():
     assert report_builder.build_report_filename("Inicial", "2024-0001", "md") == "Informe_Inicial_2024-0001.md"
     assert report_builder.build_report_filename("Cierre Especial", "2024/0002", "docx") == "Informe_Cierre_Especial_2024_0002.docx"
