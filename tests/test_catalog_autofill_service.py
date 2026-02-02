@@ -148,6 +148,35 @@ def test_team_details_preserves_new_columns(tmp_path):
     assert snapshot["motivo_cese"] == "Renuncia"
 
 
+def test_autofill_maps_fecha_cese_to_fecha_carta_renuncia(tmp_path):
+    _write_team_details(
+        tmp_path,
+        [
+            {
+                "id_colaborador": "T7",
+                "nombres": "Nombre 2024",
+                "apellidos": "Apellido 2024",
+                "flag": "Involucrado",
+                "fecha_cese": "2024-01-15",
+                "motivo_cese": "Renuncia",
+                "fecha_actualizacion": "2024-02-01",
+            }
+        ],
+    )
+    _, autofill, _ = _build_services(tmp_path)
+
+    result = autofill.lookup_team_autofill(
+        "T7",
+        current_values={"fecha_carta_renuncia": "", "motivo_cese": ""},
+        dirty_fields={},
+        preserve_existing=False,
+        case_date="2024-02-15",
+    )
+
+    assert result.applied["fecha_carta_renuncia"] == "2024-01-15"
+    assert result.applied["motivo_cese"] == "Renuncia"
+
+
 def test_autofill_respects_dirty_fields(tmp_path):
     _write_team_details(
         tmp_path,

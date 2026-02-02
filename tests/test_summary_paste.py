@@ -93,6 +93,7 @@ def test_ingest_summary_rows_create_frames_with_normalized_values(monkeypatch, m
         "Puesto B",
         "2023-01-01",
         "2023-02-01",
+        "Renuncia voluntaria",
         "Agencia Sur",
         "123456",
         TIPO_FALTA_LIST[0],

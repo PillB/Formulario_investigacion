@@ -88,7 +88,7 @@ SUMMARY_CASES = [
     ),
     SummaryPasteCase(
         key="colaboradores",
-        columns=build_columns(14),
+        columns=build_columns(15),
         valid_row=[
             "T67890",
             "Ana",
@@ -100,6 +100,7 @@ SUMMARY_CASES = [
             "Puesto B",
             "2023-01-01",
             "2023-02-01",
+            "Renuncia voluntaria",
             "Agencia Sur",
             "123456",
             TIPO_FALTA_LIST[0],
@@ -116,6 +117,7 @@ SUMMARY_CASES = [
             "Puesto B",
             "2023-01-01",
             "2023-02-01",
+            "",
             "",
             "12345",
             "Inválida",

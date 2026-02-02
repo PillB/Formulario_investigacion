@@ -45,7 +45,7 @@ class AutofillService:
         for key, current_value in current_values.items():
             if dirty_fields.get(key):
                 continue
-            value = (catalog_entry.get(key) or "").strip()
+            value = self._resolve_team_value(key, catalog_entry)
             if value and should_autofill_field(current_value, preserve_existing):
                 applied[key] = value
 
@@ -54,6 +54,15 @@ class AutofillService:
             if message:
                 self.warning_handler(message)
         return AutofillResult(True, used_future_snapshot, applied, meta)
+
+    @staticmethod
+    def _resolve_team_value(key: str, catalog_entry: Mapping[str, str]) -> str:
+        value = (catalog_entry.get(key) or "").strip()
+        if value:
+            return value
+        if key == "fecha_carta_renuncia":
+            return (catalog_entry.get("fecha_cese") or "").strip()
+        return ""
 
     @staticmethod
     def _build_fallback_warning(reason: str | None) -> str | None:

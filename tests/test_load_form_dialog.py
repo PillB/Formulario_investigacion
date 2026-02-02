@@ -51,6 +51,7 @@ class _PopulateTeamFrame:
         self.puesto_var = DummyVar()
         self.fecha_carta_inmediatez_var = DummyVar()
         self.fecha_carta_renuncia_var = DummyVar()
+        self.motivo_cese_var = DummyVar()
         self.nombre_agencia_var = DummyVar()
         self.codigo_agencia_var = DummyVar()
         self.tipo_falta_var = DummyVar()
