@@ -14410,6 +14410,70 @@ class FraudCaseApp:
             categories[str(key)] = extra_values
         return categories
 
+    @staticmethod
+    def _build_responsables_payload(
+        colaboradores: list[dict[str, object]],
+        productos: list[dict[str, object]],
+        involucramientos: list[dict[str, object]],
+    ) -> list[dict[str, str]]:
+        """Construye responsables explícitos para unidad y producto."""
+
+        indexados = {
+            str(col.get("id_colaborador") or "").strip(): col
+            for col in colaboradores
+            if isinstance(col, Mapping) and str(col.get("id_colaborador") or "").strip()
+        }
+        responsables: list[dict[str, str]] = []
+        vistos: set[tuple[str, str, str]] = set()
+
+        def _append(scope: str, colaborador: Mapping[str, object], *, id_producto: str = "") -> None:
+            colaborador_id = str(colaborador.get("id_colaborador") or "").strip()
+            nombres = str(colaborador.get("nombres") or colaborador.get("nombre_completo") or "").strip()
+            if not (colaborador_id or nombres):
+                return
+            clave = (scope, colaborador_id, id_producto.strip())
+            if clave in vistos:
+                return
+            vistos.add(clave)
+            responsables.append(
+                {
+                    "scope": scope,
+                    "id_colaborador": colaborador_id,
+                    "nombre": nombres,
+                    "puesto": str(colaborador.get("puesto") or "").strip(),
+                    "division": str(colaborador.get("division") or "").strip(),
+                    "area": str(colaborador.get("area") or "").strip(),
+                    "servicio": str(colaborador.get("servicio") or "").strip(),
+                    "nombre_agencia": str(colaborador.get("nombre_agencia") or "").strip(),
+                    "id_producto": id_producto.strip(),
+                }
+            )
+
+        for col in colaboradores:
+            if isinstance(col, Mapping):
+                _append("unidad", col)
+
+        productos_ids = {
+            str(prod.get("id_producto") or "").strip()
+            for prod in productos
+            if isinstance(prod, Mapping) and str(prod.get("id_producto") or "").strip()
+        }
+        for inv in involucramientos:
+            if not isinstance(inv, Mapping):
+                continue
+            if str(inv.get("tipo_involucrado") or "").strip() != "colaborador":
+                continue
+            colaborador_id = str(inv.get("id_colaborador") or "").strip()
+            producto_id = str(inv.get("id_producto") or "").strip()
+            if not colaborador_id or not producto_id or producto_id not in productos_ids:
+                continue
+            col = indexados.get(colaborador_id)
+            if col is not None:
+                _append("producto", col, id_producto=producto_id)
+
+        return responsables
+
+
     def gather_data(self):
         """Reúne todos los datos del formulario en una estructura de diccionarios."""
         self._ensure_case_vars()
@@ -14528,6 +14592,11 @@ class FraudCaseApp:
         data['firmas'] = self._normalize_table_rows(getattr(self, '_firmas_data', []))
         data['recomendaciones_categorias'] = self._normalize_recommendation_categories(
             getattr(self, '_recomendaciones_categorias', {})
+        )
+        data['responsables'] = self._build_responsables_payload(
+            data['colaboradores'],
+            data['productos'],
+            data['involucramientos'],
         )
         sanitized_data = self._sanitize_payload_strings(data, skip_keys={"analisis"})
         return CaseData.from_mapping(sanitized_data)

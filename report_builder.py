@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 try:  # python-docx es opcional en tiempo de ejecución
     from docx import Document as DocxDocument
@@ -523,6 +523,7 @@ class CaseData(Mapping):
     anexos: List[Dict[str, Any]]
     firmas: List[Dict[str, Any]]
     recomendaciones_categorias: Dict[str, Any]
+    responsables: List[Dict[str, Any]]
     _dict_cache: Dict[str, Any] = field(default=None, init=False, repr=False)
 
     def as_dict(self) -> Dict[str, Any]:
@@ -542,6 +543,7 @@ class CaseData(Mapping):
                 "anexos": self.anexos,
                 "firmas": self.firmas,
                 "recomendaciones_categorias": self.recomendaciones_categorias,
+                "responsables": self.responsables,
             }
         return self._dict_cache
 
@@ -574,6 +576,7 @@ class CaseData(Mapping):
             anexos=list(payload.get("anexos") or []),
             firmas=list(payload.get("firmas") or []),
             recomendaciones_categorias=dict(payload.get("recomendaciones_categorias") or {}),
+            responsables=list(payload.get("responsables") or []),
         )
 
 
