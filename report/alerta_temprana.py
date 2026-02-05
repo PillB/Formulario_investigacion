@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import logging
 import math
 import importlib.util
+import os
 from pathlib import Path
 import re
 from typing import Mapping
@@ -43,7 +44,9 @@ PPTX_MISSING_MESSAGE = (
     "Ejecuta 'pip install python-pptx' para habilitar la alerta temprana en PPT."
 )
 PLACEHOLDER = "N/A"
-DEFAULT_MODEL = "PlanTL-GOB-ES/flan-t5-base-spanish"
+DEFAULT_MODEL = "mrm8488/bert2bert_shared-spanish-finetuned-summarization"
+MODEL_ENV_VAR = "LOCAL_SUMMARY_MODEL_DIR"
+LOCAL_MODEL_FOLDER = "mrm8488/bert2bert_shared-spanish-finetuned-summarization"
 MAX_SECTION_CHARS = 600
 SECTION_WORD_LIMITS: dict[str, tuple[int, int]] = {
     "Resumen": (80, 120),
@@ -228,8 +231,17 @@ def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> st
     canal = str(caso.get("canal") or "Canal no especificado").strip()
     tipo = str(caso.get("tipo_informe") or "Tipo no especificado").strip()
     min_words, max_words = SECTION_WORD_LIMITS.get(section, (80, 120))
+    section_specific = {
+        "Resumen": "Enfatiza hecho principal, impacto y estado actual del incidente.",
+        "Cronología": "Describe secuencia temporal verificable con hitos claros y sin inferencias.",
+        "Análisis": "Explica causa raíz operacional y brechas de control observables.",
+        "Riesgos": "Prioriza riesgos residuales, exposición y probabilidad de recurrencia.",
+        "Recomendaciones": "Propón acciones inmediatas, medibles y con foco preventivo.",
+        "Responsables": "Asigna responsables por rol/área (sin datos personales ni PII).",
+    }.get(section, "Resume de forma ejecutiva con foco en trazabilidad y acción.")
     return (
         "Eres un analista senior de investigaciones y riesgo operacional que redacta contenidos para PPT en español. "
+        "No inventes datos ni supongas hechos ausentes en el contexto. "
         "Enfócate en fallas de control/proceso y evita personalizar hallazgos en personas específicas, "
         "salvo para designar responsables de seguimiento. "
         "Debe reflejar lo pedido por usuarios expertos: explicar qué pasó, cuál es el hallazgo principal, "
@@ -239,11 +251,31 @@ def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> st
         "Redacta en 2 a 4 frases, tono ejecutivo, voz activa, sin viñetas ni relleno. "
         f"Extensión objetivo: entre {min_words} y {max_words} palabras para esta sección. "
         "Evita repetir información textual entre secciones y prioriza mensajes accionables. "
+        f"Instrucción específica de la sección: {section_specific} "
         f"Sección objetivo: {section}. "
         f"Tipo de informe: {tipo}; Categoría: {categoria}; Modalidad: {modalidad}; Canal: {canal}. "
-        "Usa los datos factuales del caso y la cronología incluida. "
+        "Usa solo los datos factuales del caso y la cronología incluida. "
         f"Contexto completo:\n{contexto}"
     )
+
+
+def _resolve_model_reference(model_name: str) -> str:
+    configured_path = os.environ.get(MODEL_ENV_VAR, "").strip()
+    if configured_path:
+        candidate = Path(configured_path).expanduser().resolve()
+        if candidate.exists() and candidate.is_dir():
+            return str(candidate)
+
+    repo_root = Path(__file__).resolve().parents[1]
+    external_drive = (repo_root / "external drive").resolve()
+    candidates = [
+        (external_drive / LOCAL_MODEL_FOLDER).resolve(),
+        external_drive,
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_dir():
+            return str(candidate)
+    return model_name
 
 
 @dataclass
@@ -262,8 +294,9 @@ class SpanishSummaryHelper:
             return
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
+        model_ref = _resolve_model_reference(self.model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_ref, local_files_only=True)
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_ref, local_files_only=True)
         self._pipeline = pipeline(
             task="text2text-generation",
             model=model,

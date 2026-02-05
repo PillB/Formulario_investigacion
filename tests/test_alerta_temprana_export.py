@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import tkinter as tk
 from tkinter import ttk
@@ -16,6 +17,27 @@ from report.alerta_temprana_content import (build_alerta_temprana_sections,
                                             PLACEHOLDER)
 from report_builder import CaseData
 
+
+
+def test_build_prompt_includes_anti_hallucination_guidance():
+    prompt = _build_prompt("Resumen", "Contexto demo", {"tipo_informe": "Fraude"})
+    assert "No inventes datos" in prompt
+    assert "Instrucción específica de la sección" in prompt
+
+
+def test_resolve_model_reference_uses_external_drive(monkeypatch, tmp_path):
+    repo_root = tmp_path / "repo"
+    model_dir = repo_root / "external drive" / "mrm8488" / "bert2bert_shared-spanish-finetuned-summarization"
+    model_dir.mkdir(parents=True)
+    fake_module = repo_root / "report" / "alerta_temprana.py"
+    fake_module.parent.mkdir(parents=True, exist_ok=True)
+    fake_module.write_text("", encoding="utf-8")
+
+    monkeypatch.delenv("LOCAL_SUMMARY_MODEL_DIR", raising=False)
+    monkeypatch.setattr(alerta_temprana, "__file__", str(fake_module))
+
+    resolved = alerta_temprana._resolve_model_reference("fallback/model")
+    assert resolved == str(model_dir.resolve())
 
 @pytest.mark.skipif(
     os.name != "nt" and not os.environ.get("DISPLAY"),
@@ -637,3 +659,35 @@ def test_responsables_section_falls_back_to_colaboradores_when_roles_missing():
     )
 
     assert "Persona Involucrada (Relacionado - Canales)" in sections["responsables"]
+
+
+@pytest.mark.skipif(
+    os.name != "nt" and not os.environ.get("DISPLAY"),
+    reason="Tkinter no disponible en el entorno de pruebas",
+)
+def test_generate_report_file_passes_llm_helper_for_pptx(monkeypatch):
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError:
+        pytest.skip("Tkinter no disponible en el entorno de pruebas")
+
+    app = app_module.FraudCaseApp(root)
+
+    monkeypatch.setattr(app, "_prepare_case_data_for_export", lambda: ({"caso": {"id_caso": "2025-0001"}}, Path("/tmp"), "2025-0001"))
+    monkeypatch.setattr(app, "_build_report_path", lambda *_args, **_kwargs: Path("/tmp/alerta.pptx"))
+    monkeypatch.setattr(app, "_mirror_exports_to_external_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app, "flush_logs_now", lambda: None)
+    monkeypatch.setattr(app, "_play_feedback_sound", lambda: None)
+    monkeypatch.setattr(app, "_show_success_toast", lambda *_args, **_kwargs: None)
+
+    calls = {}
+
+    def fake_builder(_data, _path, llm_helper=None):
+        calls["llm_helper"] = llm_helper
+        return Path("/tmp/alerta.pptx")
+
+    app._generate_report_file("pptx", fake_builder, "Alerta temprana (.pptx)")
+
+    assert calls["llm_helper"] is not None
+    root.destroy()

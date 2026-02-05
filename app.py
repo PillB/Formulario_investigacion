@@ -98,6 +98,7 @@ from models import (
 from report.alerta_temprana import (
     PPTX_AVAILABLE,
     PPTX_MISSING_MESSAGE,
+    SpanishSummaryHelper,
     build_alerta_temprana_ppt,
 )
 from report.resumen_ejecutivo import (
@@ -1230,6 +1231,7 @@ class FraudCaseApp:
         self._carta_tree: Optional[ttk.Treeview] = None
         self._carta_rows: list[dict[str, str]] = []
         self._carta_generator: CartaInmediatezGenerator | None = None
+        self._llm_summary_helper: SpanishSummaryHelper | None = None
         self.btn_docx = None
         self.btn_md = None
         self.btn_alerta_temprana = None
@@ -16067,7 +16069,13 @@ class FraudCaseApp:
         md_path = self._build_report_path(data, folder, "md")
         created_files.append(save_md(data, md_path))
         resumen_path = self._build_resumen_ejecutivo_path(data, folder)
-        created_files.append(build_resumen_ejecutivo_md(data, resumen_path))
+        created_files.append(
+            build_resumen_ejecutivo_md(
+                data,
+                resumen_path,
+                llm_helper=self._get_llm_summary_helper(),
+            )
+        )
         docx_path: Optional[Path] = None
         if not self._docx_available:
             warnings.append(DOCX_MISSING_MESSAGE)
@@ -16124,6 +16132,11 @@ class FraudCaseApp:
             "warnings": warnings,
         }
 
+    def _get_llm_summary_helper(self) -> SpanishSummaryHelper:
+        if self._llm_summary_helper is None:
+            self._llm_summary_helper = SpanishSummaryHelper()
+        return self._llm_summary_helper
+
     def _generate_report_file(
         self,
         extension: str,
@@ -16161,7 +16174,10 @@ class FraudCaseApp:
             return
         report_path = self._build_report_path(data, folder, extension)
         try:
-            created_path = builder(data, report_path)
+            if extension == "pptx":
+                created_path = builder(data, report_path, llm_helper=self._get_llm_summary_helper())
+            else:
+                created_path = builder(data, report_path)
         except Exception as exc:  # pragma: no cover - protección frente a fallos externos
             messagebox.showerror(
                 "Error al generar informe",
@@ -16203,7 +16219,11 @@ class FraudCaseApp:
         resolved_widget_id = self._resolve_widget_id(source_widget, widget_id)
         report_path = self._build_resumen_ejecutivo_path(data, folder)
         try:
-            created_path = build_resumen_ejecutivo_md(data, report_path)
+            created_path = build_resumen_ejecutivo_md(
+                data,
+                report_path,
+                llm_helper=self._get_llm_summary_helper(),
+            )
         except Exception as exc:  # pragma: no cover - protección frente a fallos externos
             messagebox.showerror(
                 "Error al generar informe",
