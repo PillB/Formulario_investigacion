@@ -8,7 +8,7 @@ import pytest
 import app as app_module
 from report import alerta_temprana
 from report.alerta_temprana import (_fit_text_to_box, _synthesize_section_text,
-                                    build_alerta_temprana_ppt,
+                                    build_alerta_temprana_ppt, _build_prompt,
                                     SpanishSummaryHelper)
 from report.alerta_temprana_content import (build_alerta_temprana_sections,
                                             build_executive_summary,
@@ -278,6 +278,53 @@ def test_synthesize_section_text_skips_llm_when_sources_empty():
     texto = _synthesize_section_text("Resumen", sections, {}, stub_llm)
     assert texto == PLACEHOLDER
     assert stub_llm.prompts == []
+
+
+def test_build_prompt_emphasizes_control_process_failures_and_interview_scope():
+    prompt = _build_prompt(
+        "Análisis",
+        "Resumen: hubo suplantaciones.\nRiesgos: control de autenticación vulnerable.",
+        {
+            "categoria1": "Tarjeta",
+            "modalidad": "Digital",
+            "canal": "App",
+            "tipo_informe": "Alerta temprana",
+        },
+    )
+
+    assert "Enfócate en fallas de control/proceso" in prompt
+    assert "qué control/proceso falló" in prompt
+    assert "modalidad y recomendaciones inmediatas" in prompt
+    assert "Extensión objetivo: entre 110 y 170 palabras" in prompt
+
+
+def test_synthesize_section_text_uses_section_specific_token_budget():
+    class StubLLM:
+        def __init__(self):
+            self.calls = []
+            self.max_new_tokens = 144
+
+        def summarize(self, section, prompt, *, max_new_tokens=None):
+            self.calls.append((section, max_new_tokens, prompt))
+            return "síntesis"
+
+    sections = {
+        "codigo": "2025-0009",
+        "resumen": "Resumen con datos factuales.",
+        "cronologia": "Cronología base.",
+        "analisis": "Análisis con hallazgo principal y control fallido.",
+        "riesgos": "Riesgo operacional alto.",
+        "recomendaciones": "Reforzar controles de onboarding digital.",
+        "responsables": "Dueño de proceso digital.",
+    }
+    caso = {"tipo_informe": "Fraude", "modalidad": "Digital"}
+    llm = StubLLM()
+
+    _synthesize_section_text("Resumen", sections, caso, llm)
+    _synthesize_section_text("Análisis", sections, caso, llm)
+
+    assert llm.calls[0][1] == 160
+    assert llm.calls[1][1] == 220
 
 
 def test_cronologia_prefers_hallazgos_bullets():

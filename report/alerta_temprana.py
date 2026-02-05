@@ -45,6 +45,28 @@ PPTX_MISSING_MESSAGE = (
 PLACEHOLDER = "N/A"
 DEFAULT_MODEL = "PlanTL-GOB-ES/flan-t5-base-spanish"
 MAX_SECTION_CHARS = 600
+SECTION_WORD_LIMITS: dict[str, tuple[int, int]] = {
+    "Resumen": (80, 120),
+    "Cronología": (90, 130),
+    "Cronologia": (90, 130),
+    "Análisis": (110, 170),
+    "Analisis": (110, 170),
+    "Riesgos": (70, 110),
+    "Recomendaciones": (70, 110),
+    "Responsables": (55, 90),
+    "Mensaje clave": (35, 60),
+}
+SECTION_MAX_NEW_TOKENS: dict[str, int] = {
+    "Resumen": 160,
+    "Cronología": 176,
+    "Cronologia": 176,
+    "Análisis": 220,
+    "Analisis": 220,
+    "Riesgos": 150,
+    "Recomendaciones": 150,
+    "Responsables": 128,
+    "Mensaje clave": 96,
+}
 
 TRANSFORMERS_AVAILABLE = importlib.util.find_spec("transformers") is not None
 
@@ -205,10 +227,18 @@ def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> st
     modalidad = str(caso.get("modalidad") or "Modalidad no especificada").strip()
     canal = str(caso.get("canal") or "Canal no especificado").strip()
     tipo = str(caso.get("tipo_informe") or "Tipo no especificado").strip()
+    min_words, max_words = SECTION_WORD_LIMITS.get(section, (80, 120))
     return (
-        "Eres un analista de riesgos que redacta resúmenes ejecutivos en español. "
-        "Redacta respuestas de 2 a 4 frases, tono conciso, en voz activa, sin viñetas. "
-        "Mantén un máximo de 120 palabras y evita repetir datos ya mencionados. "
+        "Eres un analista senior de investigaciones y riesgo operacional que redacta contenidos para PPT en español. "
+        "Enfócate en fallas de control/proceso y evita personalizar hallazgos en personas específicas, "
+        "salvo para designar responsables de seguimiento. "
+        "Debe reflejar lo pedido por usuarios expertos: explicar qué pasó, cuál es el hallazgo principal, "
+        "qué control/proceso falló, impacto (monto/productos/clientes), modalidad y recomendaciones inmediatas. "
+        "Incluye trazabilidad con datos del formulario (caso, productos, clientes, montos, modalidad, taxonomía, "
+        "procesos, canales, riesgos, normas, hallazgos, conclusiones y recomendaciones). "
+        "Redacta en 2 a 4 frases, tono ejecutivo, voz activa, sin viñetas ni relleno. "
+        f"Extensión objetivo: entre {min_words} y {max_words} palabras para esta sección. "
+        "Evita repetir información textual entre secciones y prioriza mensajes accionables. "
         f"Sección objetivo: {section}. "
         f"Tipo de informe: {tipo}; Categoría: {categoria}; Modalidad: {modalidad}; Canal: {canal}. "
         "Usa los datos factuales del caso y la cronología incluida. "
@@ -309,7 +339,12 @@ def _synthesize_section_text(
         f"Responsables: {sections.get('responsables', PLACEHOLDER)}",
     ]
     prompt = _build_prompt(section, "\n".join(context_lines), caso)
-    llm_summary = llm_helper.summarize(section, prompt)
+    default_tokens = getattr(llm_helper, "max_new_tokens", 144)
+    llm_summary = llm_helper.summarize(
+        section,
+        prompt,
+        max_new_tokens=SECTION_MAX_NEW_TOKENS.get(section, default_tokens),
+    )
     return llm_summary or fallback_source
 
 
