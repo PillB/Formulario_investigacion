@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+import re
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-import re
 from typing import Iterable, Mapping, Sequence
 
 from report_builder import CaseData
@@ -118,6 +118,32 @@ def _limit_bullets(
         return []
     trimmed = [_truncate(line, max_chars, label=label) for line in lines if line]
     return trimmed[:max_items]
+
+
+def _extract_primary_finding(text: str) -> str:
+    bullets = _split_bullets(text, max_items=1, max_chars=180, label="hallazgo_principal")
+    return bullets[0] if bullets else ""
+
+
+def _extract_control_failure_sentence(analisis: Mapping[str, object]) -> str:
+    pattern = re.compile(r"(fall[óo]|falla)\s+(?:de\s+)?(?:el\s+)?control", re.IGNORECASE)
+    for key in (
+        "hallazgos",
+        "conclusiones",
+        "comentario_breve",
+        "comentario_amplio",
+        "antecedentes",
+        "modus_operandi",
+    ):
+        text = _extract_rich_text(analisis.get(key))
+        if not text:
+            continue
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+        for sentence in sentences:
+            if pattern.search(sentence):
+                return sentence.rstrip(".")
+    return ""
+
 
 def _aggregate_amounts(products: Iterable[Mapping[str, object]] | None) -> dict[str, Decimal]:
     totals = {
@@ -267,6 +293,15 @@ def _build_cronologia_section(
 
 def _build_analisis_section(analisis: Mapping[str, object]) -> str:
     parts = []
+    hallazgos_text = _extract_rich_text(analisis.get("hallazgos"))
+    hallazgo_principal = _extract_primary_finding(hallazgos_text)
+    if hallazgo_principal:
+        parts.append(f"Hallazgo principal: {_truncate(hallazgo_principal, 180, label='analisis')}")
+
+    control_failure = _extract_control_failure_sentence(analisis)
+    if control_failure:
+        parts.append(f"Fallo de control: {_truncate(control_failure, 180, label='analisis')}")
+
     for key, label in (
         ("antecedentes", "Antecedentes"),
         ("modus_operandi", "Modus operandi"),
