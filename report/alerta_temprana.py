@@ -178,7 +178,7 @@ def _is_placeholder_text(value: object) -> bool:
 
 
 def _has_source_content(sections: Mapping[str, str]) -> bool:
-    for key in ("resumen", "cronologia", "analisis", "riesgos", "acciones", "responsables"):
+    for key in ("resumen", "cronologia", "analisis", "riesgos", "recomendaciones", "acciones", "responsables"):
         if not _is_placeholder_text(sections.get(key, PLACEHOLDER)):
             return True
     return False
@@ -269,7 +269,10 @@ def _synthesize_section_text(
         "Análisis": "analisis",
         "Analisis": "analisis",
         "Riesgos": "riesgos",
-        "Acciones": "acciones",
+        "Recomendaciones": "recomendaciones",
+        "Recomendación": "recomendaciones",
+        "Recomendacion": "recomendaciones",
+        "Acciones": "recomendaciones",
         "Responsables": "responsables",
     }
     section_key = section_key_map.get(section, section.lower())
@@ -286,7 +289,7 @@ def _synthesize_section_text(
         f"Cronología: {sections.get('cronologia', PLACEHOLDER)}",
         f"Análisis: {sections.get('analisis', PLACEHOLDER)}",
         f"Riesgos: {sections.get('riesgos', PLACEHOLDER)}",
-        f"Acciones: {sections.get('acciones', PLACEHOLDER)}",
+        f"Recomendaciones: {sections.get('recomendaciones', sections.get('acciones', PLACEHOLDER))}",
         f"Responsables: {sections.get('responsables', PLACEHOLDER)}",
     ]
     prompt = _build_prompt(section, "\n".join(context_lines), caso)
@@ -540,15 +543,15 @@ def build_alerta_temprana_ppt(
         accent=RGBColor(214, 226, 240),
     )
 
-    acciones_text = _synthesize_section_text("Acciones", sections, caso, llm)
+    recomendaciones_text = _synthesize_section_text("Recomendaciones", sections, caso, llm)
     _add_section_panel(
         slide,
         right_x,
         body_top + riesgos_height + section_gap,
         right_column_width,
         acciones_height,
-        "Acciones inmediatas",
-        acciones_text,
+        "Recomendaciones",
+        recomendaciones_text,
         accent=RGBColor(214, 226, 240),
     )
 
@@ -568,7 +571,7 @@ def build_alerta_temprana_ppt(
     notes.text = (
         "Plantilla 16:9 con barra superior azul oscuro que expone el tipo de reporte, el caso y los campos de código/"
         "emisor. El cuerpo usa grilla de dos columnas: izquierda (2/3) con Resumen, Cronología y Análisis apilados;"
-        " derecha (1/3) con Riesgos identificados, Acciones inmediatas y Responsables. Las barras grises de sección"
+        " derecha (1/3) con Riesgos identificados, Recomendaciones y Responsables. Las barras grises de sección"
         " indican los encabezados. Se prioriza texto determinístico: resumen con montos, cronología desde hallazgos,"
         " análisis desde antecedentes/conclusiones y riesgos desde catálogo."
     )
