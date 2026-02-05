@@ -182,7 +182,7 @@ def add_image(slide, image_path: Path, left: float, top: float, width: float, he
 
 
 def load_wireframe_bullets(sheet_name: str, max_items: int = 7) -> list[str]:
-    workbook = load_workbook(WIRE_FRAMEBOOK, read_only=True)
+    workbook = load_workbook(WIRE_FRAMEBOOK, read_only=True, data_only=True)
     ws = workbook[sheet_name]
     bullets: list[str] = []
     for row in ws.iter_rows(values_only=True):
@@ -198,6 +198,15 @@ def load_wireframe_bullets(sheet_name: str, max_items: int = 7) -> list[str]:
         if len(bullets) >= max_items:
             break
     return bullets
+
+
+def build_slide_definition(
+    title: str,
+    subtitle: str,
+    diagram: Path | None,
+    bullets: list[str],
+) -> tuple[str, str, Path | None, list[str]]:
+    return title, subtitle, diagram, bullets
 
 
 def build_diagram_assets() -> dict[str, Path]:
@@ -302,7 +311,7 @@ def add_key_functionalities_slide(prs: Presentation) -> None:
 
     left_items = [
         "Pestañas alineadas al ciclo del caso: Caso, Clientes, Colaboradores, Productos, Riesgos, Normas, Análisis, Acciones y Resumen.",
-        "Validaciones en línea: formato AAAA-NNNN, IDs de cliente/producto, fechas coherentes y montos con sumas exactas.",
+        "Validaciones en línea: formato AAAA-NNNN, IDs, fechas coherentes y montos con sumas exactas.",
         "Regla de llave técnica para evitar duplicados (caso + producto + cliente + colaborador + fecha + reclamo).",
         "Panel de validación con mensajes accionables y navegación directa al campo con error.",
     ]
@@ -386,6 +395,33 @@ def add_flow_slide(prs: Presentation) -> None:
         SLIDE_WIDTH - 2 * MARGIN_X,
         Cm(1),
     )
+
+
+def add_report_exports_slide(prs: Presentation) -> None:
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    content_top = add_title_block(
+        slide,
+        "Reportes y exportes críticos",
+        "Salidas estandarizadas para gerencia, cumplimiento y Bakehouse/PDA.",
+    )
+    left_col_width = (SLIDE_WIDTH - 2 * MARGIN_X) * 0.48
+    right_col_width = (SLIDE_WIDTH - 2 * MARGIN_X) * 0.48
+    left = MARGIN_X
+    right = MARGIN_X + left_col_width + Cm(0.6)
+    left_items = [
+        "eventos.csv: export canónico/legacy con combinación Producto × Reclamo × Involucramiento.",
+        "analisis.csv: narrativa y hallazgos detallados.",
+        "clientes.csv / colaboradores.csv / productos.csv: entidades normalizadas para consolidación.",
+        "logs.csv: auditoría de validaciones, navegación e importaciones.",
+    ]
+    right_items = [
+        "Carta de inmediatez (DOCX + CSV): notificación formal al colaborador.",
+        "Informe de Gerencia: resumen ejecutivo con tablas y montos clave.",
+        "Alerta temprana (PPTX): síntesis visual con riesgos y cronología.",
+        "Históricos h_*.csv: consolidación con respaldo en unidad externa.",
+    ]
+    add_bullets(slide, left_items, left, content_top, left_col_width, Cm(9))
+    add_bullets(slide, right_items, right, content_top, right_col_width, Cm(9))
 
 
 def add_architecture_slide(prs: Presentation, diagram_path: Path) -> None:
@@ -488,6 +524,12 @@ def add_wireframe_slide(prs: Presentation, title: str, subtitle: str, diagram_pa
     )
 
 
+def add_reference_slide(prs: Presentation, title: str, subtitle: str, bullets: list[str]) -> None:
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    content_top = add_title_block(slide, title, subtitle)
+    add_bullets(slide, bullets, MARGIN_X, content_top, SLIDE_WIDTH - 2 * MARGIN_X, Cm(10))
+
+
 def build_deck(output_path: Path = DEFAULT_OUTPUT) -> Path:
     diagram_paths = build_diagram_assets()
     prs = Presentation()
@@ -499,43 +541,44 @@ def build_deck(output_path: Path = DEFAULT_OUTPUT) -> Path:
     add_key_functionalities_slide(prs)
     add_sequence_slide(prs, diagram_paths["sequence"])
     add_flow_slide(prs)
+    add_report_exports_slide(prs)
     add_tabs_architecture_slide(prs, diagram_paths["tabs_flow"])
     add_architecture_slide(prs, diagram_paths["architecture"])
     add_db_architecture_slide(prs, diagram_paths["db"])
     add_circular_flow_slide(prs, diagram_paths["circular"])
 
     wireframe_config = [
-        (
+        build_slide_definition(
             "Wireframe: Caso y participantes",
             "Sección central con datos del caso, clientes, productos y colaboradores.",
             diagram_paths["tab_case"],
             load_wireframe_bullets("Caso y Participantes"),
         ),
-        (
+        build_slide_definition(
             "Wireframe: Riesgos",
             "Registro de riesgos y planes de acción vinculados.",
             diagram_paths["tab_riesgos"],
             load_wireframe_bullets("Riesgos"),
         ),
-        (
+        build_slide_definition(
             "Wireframe: Normas",
             "Normativa transgredida y fechas de vigencia.",
             diagram_paths["tab_normas"],
             load_wireframe_bullets("Normas"),
         ),
-        (
+        build_slide_definition(
             "Wireframe: Análisis y narrativas",
             "Narrativa del caso y secciones extendidas del informe.",
             diagram_paths["tab_analisis"],
             load_wireframe_bullets("Análisis y Narrativas"),
         ),
-        (
+        build_slide_definition(
             "Wireframe: Acciones",
             "Operaciones de carga masiva, catálogos y exportes.",
             diagram_paths["tab_acciones"],
             load_wireframe_bullets("Acciones"),
         ),
-        (
+        build_slide_definition(
             "Wireframe: Resumen",
             "Vista consolidada para control previo a exportar.",
             diagram_paths["tab_resumen"],
@@ -544,7 +587,58 @@ def build_deck(output_path: Path = DEFAULT_OUTPUT) -> Path:
     ]
 
     for title, subtitle, diagram, bullets in wireframe_config:
-        add_wireframe_slide(prs, title, subtitle, diagram, bullets)
+        if diagram is None:
+            add_reference_slide(prs, title, subtitle, bullets)
+        else:
+            add_wireframe_slide(prs, title, subtitle, diagram, bullets)
+
+    reference_slides = [
+        build_slide_definition(
+            "Export: eventos.csv (estructura crítica)",
+            "Detalle de columnas y origen por pestaña.",
+            None,
+            load_wireframe_bullets("Eventos_CSV", max_items=9),
+        ),
+        build_slide_definition(
+            "Registro de Logs",
+            "Auditoría de interacciones, validaciones e importaciones.",
+            None,
+            load_wireframe_bullets("Logs", max_items=8),
+        ),
+        build_slide_definition(
+            "Reporte: Carta de inmediatez",
+            "Campos clave para la notificación formal.",
+            None,
+            load_wireframe_bullets("Carta_inmediatez", max_items=8),
+        ),
+        build_slide_definition(
+            "Reporte: Informe de Gerencia",
+            "Secciones y contenido ejecutivo.",
+            None,
+            load_wireframe_bullets("Informe_Gerencia", max_items=7),
+        ),
+        build_slide_definition(
+            "Reporte: Alerta temprana",
+            "Resumen visual para stakeholders.",
+            None,
+            load_wireframe_bullets("Alerta_Temprana", max_items=7),
+        ),
+        build_slide_definition(
+            "Panel de validación",
+            "Reglas críticas de formato y consistencia.",
+            None,
+            load_wireframe_bullets("Panel_Validacion", max_items=7),
+        ),
+        build_slide_definition(
+            "Mapeo de catálogos",
+            "Fuentes de datos maestros y autopoblado.",
+            None,
+            load_wireframe_bullets("Mapeo Catalogos", max_items=7),
+        ),
+    ]
+
+    for title, subtitle, _diagram, bullets in reference_slides:
+        add_reference_slide(prs, title, subtitle, bullets)
 
     prs.save(output_path)
     return output_path
