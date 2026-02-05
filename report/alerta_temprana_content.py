@@ -267,10 +267,15 @@ def _build_riesgos_section(riesgos: Sequence[Mapping[str, object]]) -> str:
     return _bullet_text(_limit_bullets(bullets, label="riesgos"))
 
 
-def _build_acciones_section(analisis: Mapping[str, object], operaciones: Sequence[Mapping[str, object]]) -> str:
+def _build_recomendaciones_section(
+    analisis: Mapping[str, object],
+    operaciones: Sequence[Mapping[str, object]],
+) -> str:
     recomendacion = _extract_rich_text(analisis.get("recomendaciones"))
+    if not recomendacion:
+        recomendacion = _extract_rich_text(analisis.get("acciones"))
     if recomendacion:
-        return _bullet_text(_split_bullets(recomendacion, label="acciones"))
+        return _bullet_text(_split_bullets(recomendacion, label="recomendaciones"))
     bullets = []
     for op in operaciones:
         if not isinstance(op, Mapping):
@@ -281,7 +286,7 @@ def _build_acciones_section(analisis: Mapping[str, object], operaciones: Sequenc
         line = " - ".join(part for part in (accion, cliente, estado) if part and part != PLACEHOLDER)
         if line:
             bullets.append(line)
-    return _bullet_text(_limit_bullets(bullets, label="acciones"))
+    return _bullet_text(_limit_bullets(bullets, label="recomendaciones"))
 
 
 def _build_responsables_section(
@@ -316,6 +321,7 @@ def build_alerta_temprana_sections(
     operaciones = dataset.get("operaciones") if isinstance(dataset, Mapping) else []
     colaboradores = dataset.get("colaboradores") if isinstance(dataset, Mapping) else []
 
+    recomendaciones = _build_recomendaciones_section(analisis, operaciones)
     return {
         "titulo_reporte": "Reporte de Alertas Tempranas por Casos de Fraude",
         "codigo": _safe_text(caso.get("id_caso")),
@@ -328,7 +334,8 @@ def build_alerta_temprana_sections(
         "cronologia": _build_cronologia_section(caso, analisis, productos, operaciones),
         "analisis": _build_analisis_section(analisis),
         "riesgos": _build_riesgos_section(riesgos),
-        "acciones": _build_acciones_section(analisis, operaciones),
+        "recomendaciones": recomendaciones,
+        "acciones": recomendaciones,
         "responsables": _build_responsables_section(caso, colaboradores),
     }
 
@@ -370,10 +377,11 @@ def build_executive_summary(data: CaseData | Mapping[str, object]) -> ExecutiveS
         supporting.append(
             f"Riesgos identificados: {_truncate(riesgos_text.replace('• ', ''), 180, label='resumen_ejecutivo')}"
         )
-    acciones_text = _build_acciones_section(analisis, operaciones)
-    if acciones_text != PLACEHOLDER:
+    recomendaciones_text = _build_recomendaciones_section(analisis, operaciones)
+    if recomendaciones_text != PLACEHOLDER:
         supporting.append(
-            f"Acciones en curso: {_truncate(acciones_text.replace('• ', ''), 180, label='resumen_ejecutivo')}"
+            "Recomendaciones en curso: "
+            f"{_truncate(recomendaciones_text.replace('• ', ''), 180, label='resumen_ejecutivo')}"
         )
     responsables_text = _build_responsables_section(caso, colaboradores)
     if responsables_text != PLACEHOLDER:

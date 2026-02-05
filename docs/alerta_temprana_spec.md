@@ -10,7 +10,7 @@ Este documento describe el mapeo **campo → narrativa → texto de slides** par
 | Análisis y narrativa | `antecedentes`, `modus_operandi`, `hallazgos`, `conclusiones`, `recomendaciones`, `comentario_breve`, `comentario_amplio` | Resumen, cronología y análisis |
 | Productos | `monto_*`, `fecha_ocurrencia` | Impacto y fechas |
 | Riesgos | `id_riesgo`, `descripcion`, `criticidad`, `planes_accion` | Riesgos identificados |
-| Operaciones | `accion`, `estado`, `fecha`, `cliente` | Cronología/acciones (fallback) |
+| Operaciones | `accion`, `estado`, `fecha`, `cliente` | Cronología/recomendaciones (fallback) |
 | Colaboradores | `nombres`, `flag`, `area` | Responsables |
 | Clientes | `id_cliente` | Evidencia (conteo) |
 | Reclamos | `id_reclamo` | Evidencia (conteo) |
@@ -31,7 +31,7 @@ Este documento describe el mapeo **campo → narrativa → texto de slides** par
    - **Plantilla:**  
      - “Hallazgos clave: <hallazgos>”  
      - “Riesgos identificados: <riesgos>”  
-     - “Acciones en curso: <recomendaciones/operaciones>”  
+     - “Recomendaciones en curso: <recomendaciones/operaciones>”  
      - “Responsables asignados: <investigador + colaboradores>”  
    - **Campos:** `analisis.hallazgos`, `riesgos`, `analisis.recomendaciones`, `operaciones`, `caso.investigador_nombre`, `colaboradores`.
 3. **Evidencia / trazabilidad**  
@@ -62,7 +62,7 @@ Fallback: `comentario_amplio`.
 **Riesgos identificados:**  
 Plantilla: `id_riesgo - descripcion - criticidad - Plan: planes_accion` (si existe).  
 
-**Acciones inmediatas:**  
+**Recomendaciones:**  
 Plantilla: `analisis.recomendaciones` (bullets).  
 Fallback: `operaciones` (acción/cliente/estado).
 

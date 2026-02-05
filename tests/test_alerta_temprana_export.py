@@ -144,6 +144,7 @@ def test_build_alerta_temprana_ppt_generates_presentation(tmp_path):
     assert "2025-0001" in all_text
     assert "Cronología" in all_text
     assert "Riesgos identificados" in all_text
+    assert "Recomendaciones" in all_text
     assert "sintetizado" in all_text
     assert any("Fraude" in prompt for _section, prompt in stub_llm.prompts)
 
@@ -194,6 +195,28 @@ def test_sections_empty_return_placeholder():
     assert sections["resumen"] == PLACEHOLDER
     assert sections["cronologia"] == PLACEHOLDER
     assert sections["analisis"] == PLACEHOLDER
+
+
+def test_recomendaciones_section_prefers_analisis_recomendaciones():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {"id_caso": "2025-0004"},
+            "analisis": {
+                "recomendaciones": "• Revisar límites de autorización.",
+                "acciones": "• Esta acción no debería usarse.",
+            },
+            "productos": [],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+    assert "Revisar límites de autorización" in sections["recomendaciones"]
+    assert "no debería" not in sections["recomendaciones"]
+    assert sections["acciones"] == sections["recomendaciones"]
 
 
 def test_synthesize_section_text_skips_llm_when_sources_empty():
@@ -276,14 +299,14 @@ def test_sections_limit_and_truncate_bullets():
     }
     sections = build_alerta_temprana_sections(data)
     riesgos_lines = sections["riesgos"].splitlines()
-    acciones_lines = sections["acciones"].splitlines()
+    recomendaciones_lines = sections["recomendaciones"].splitlines()
     responsables_lines = sections["responsables"].splitlines()
 
     assert len(riesgos_lines) == MAX_BULLETS
-    assert len(acciones_lines) == MAX_BULLETS
+    assert len(recomendaciones_lines) == MAX_BULLETS
     assert len(responsables_lines) == MAX_BULLETS
     assert any(line.endswith("…") for line in riesgos_lines)
-    assert any(line.endswith("…") for line in acciones_lines)
+    assert any(line.endswith("…") for line in recomendaciones_lines)
     assert any(line.endswith("…") for line in responsables_lines)
 
 
