@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+from report.alerta_temprana import SpanishSummaryHelper
 from report_builder import CaseData, build_report_filename
 from validators import parse_decimal_amount, sanitize_rich_text
 
@@ -420,9 +421,47 @@ def _render_summary(sections: Mapping[str, str], header_lines: Sequence[str], ev
     return "\n".join(blocks).strip() + "\n"
 
 
+def _build_resumen_llm_prompt(section_name: str, section_text: str, *, case_id: str, tipo_informe: str) -> str:
+    return (
+        "Eres un analista senior de fraude y riesgo operacional. "
+        "Reescribe la sección con tono ejecutivo, precisión factual y sin inventar datos. "
+        "No incluyas PII ni agregues encabezados. Entrega un solo párrafo. "
+        f"Caso: {case_id or PLACEHOLDER}. Tipo de informe: {tipo_informe or PLACEHOLDER}. "
+        f"Sección objetivo: {section_name}. "
+        "Mantén información accionable y evita repetición. "
+        f"Texto base: {section_text}"
+    )
+
+
+def _refine_resumen_sections_with_llm(
+    sections: dict[str, str],
+    *,
+    case_id: str,
+    tipo_informe: str,
+    llm_helper: SpanishSummaryHelper | None,
+) -> dict[str, str]:
+    if llm_helper is None:
+        return sections
+    refined: dict[str, str] = {}
+    for section_name, section_text in sections.items():
+        if section_text == PLACEHOLDER:
+            refined[section_name] = section_text
+            continue
+        prompt = _build_resumen_llm_prompt(
+            section_name,
+            section_text,
+            case_id=case_id,
+            tipo_informe=tipo_informe,
+        )
+        llm_text = llm_helper.summarize(f"resumen_ejecutivo_{section_name}", prompt, max_new_tokens=220)
+        refined[section_name] = _truncate(llm_text or section_text, MAX_PARAGRAPH_CHARS)
+    return refined
+
+
 def build_resumen_ejecutivo_md(
     data: CaseData | Mapping[str, object],
     output_path: Path,
+    llm_helper: SpanishSummaryHelper | None = None,
 ) -> Path:
     dataset = data if isinstance(data, CaseData) else CaseData.from_mapping(data or {})
     output_path = Path(output_path)
@@ -454,6 +493,12 @@ def build_resumen_ejecutivo_md(
         "Riesgos y normas": _build_risk_norm_section(riesgos, normas),
         "Conclusiones y recomendaciones": _build_conclusions_section(analisis, recomendaciones),
     }
+    sections = _refine_resumen_sections_with_llm(
+        sections,
+        case_id=case_id,
+        tipo_informe=_safe_text(case.get("tipo_informe")),
+        llm_helper=llm_helper,
+    )
     evidence = _build_evidence_section(
         case,
         encabezado,

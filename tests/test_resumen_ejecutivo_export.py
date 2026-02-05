@@ -95,3 +95,40 @@ def test_resumen_ejecutivo_button_invokes_command(monkeypatch, messagebox_spy):
 
     assert invoked
     root.destroy()
+
+
+def test_build_resumen_ejecutivo_md_uses_llm_helper(tmp_path):
+    class StubLLM:
+        def __init__(self):
+            self.calls = []
+
+        def summarize(self, section, prompt, *, max_new_tokens=None):
+            self.calls.append((section, prompt, max_new_tokens))
+            return f"Sección refinada {section}"
+
+    data = CaseData.from_mapping(
+        {
+            "caso": {"id_caso": "2025-0100", "tipo_informe": "Fraude"},
+            "clientes": [],
+            "colaboradores": [],
+            "productos": [{"id_producto": "P001", "monto_investigado": "120.00"}],
+            "reclamos": [],
+            "involucramientos": [],
+            "riesgos": [],
+            "normas": [],
+            "analisis": {"hallazgos": {"text": "Hallazgo base."}},
+            "encabezado": {},
+            "operaciones": [],
+            "anexos": [],
+            "firmas": [],
+            "recomendaciones_categorias": {},
+        }
+    )
+
+    stub_llm = StubLLM()
+    output = tmp_path / "Resumen_Ejecutivo_Gerencia_2025-0100.md"
+    path = build_resumen_ejecutivo_md(data, output, llm_helper=stub_llm)
+    content = path.read_text(encoding="utf-8")
+
+    assert "Sección refinada" in content
+    assert stub_llm.calls
