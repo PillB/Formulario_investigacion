@@ -17,6 +17,7 @@ MAX_SECTION_CHARS = 600
 MAX_BULLETS = 4
 MAX_BULLET_CHARS = 180
 MIN_TRUNCATE_WORD_BOUNDARY = 0.6
+REFERENCE_PATTERN = re.compile(r"\[[^\[\]]+:\s*[^\[\]]+\]")
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,7 @@ def _truncate(text: str, max_chars: int, *, label: str = "") -> str:
         if last_space >= min_space_index:
             truncated = truncated[:last_space].rstrip()
         result = truncated + "…"
+        result = _preserve_references(cleaned, result, max_chars)
         logger.warning(
             "Se truncó el texto%s a %s caracteres.",
             f" ({label})" if label else "",
@@ -90,6 +92,51 @@ def _truncate(text: str, max_chars: int, *, label: str = "") -> str:
         )
         return result
     return cleaned
+
+
+def _source_ref(tab: str, field: str) -> str:
+    return f"[{tab}: {field}]"
+
+
+def _with_source_reference(text: str, tab: str, field: str) -> str:
+    cleaned = sanitize_rich_text(text, max_chars=None).strip()
+    if not cleaned:
+        return ""
+    ref = _source_ref(tab, field)
+    if ref in cleaned:
+        return cleaned
+    return f"{cleaned} {ref}"
+
+
+def _preserve_references(original: str, truncated: str, max_chars: int) -> str:
+    if not max_chars:
+        return truncated
+    refs: list[str] = []
+    for ref in REFERENCE_PATTERN.findall(original):
+        if ref not in refs:
+            refs.append(ref)
+    if not refs:
+        return truncated
+
+    base = truncated.rstrip()
+    if len(base) > max_chars:
+        base = base[:max_chars].rstrip()
+
+    for ref in refs:
+        if ref in base:
+            continue
+        suffix = f" {ref}"
+        allowed_base = max_chars - len(suffix) - 1
+        if allowed_base <= 0:
+            continue
+        candidate = base[:allowed_base].rstrip()
+        if candidate.endswith("…"):
+            candidate = candidate[:-1].rstrip()
+        if candidate:
+            base = f"{candidate}…{suffix}"
+        elif len(ref) <= max_chars:
+            base = ref
+    return base.rstrip()
 
 
 def _extract_rich_text(entry: object) -> str:
@@ -217,9 +264,15 @@ def _build_resumen_section(
 ) -> str:
     totals = _aggregate_amounts(products)
     comentario = _extract_rich_text(analisis.get("comentario_breve"))
+    comentario_field = "Comentario breve"
     if not comentario:
         comentario = _extract_rich_text(analisis.get("hallazgos"))
-    mensaje_clave = _truncate(comentario, MAX_BULLET_CHARS, label="resumen_mensaje") if comentario else PLACEHOLDER
+        comentario_field = "Hallazgos"
+    mensaje_clave = (
+        _truncate(_with_source_reference(comentario, "Analisis", comentario_field), MAX_BULLET_CHARS, label="resumen_mensaje")
+        if comentario
+        else PLACEHOLDER
+    )
 
     support_lines = [
         (
@@ -230,9 +283,10 @@ def _build_resumen_section(
             f"Contingencia {_format_amount(totals['contingencia'])}; "
             f"Recuperado {_format_amount(totals['recuperado'])}."
         ),
-        f"Productos involucrados: {len(products) or 0}",
-        f"Clientes vinculados: {len(clientes) or 0}",
+        _with_source_reference(f"Productos involucrados: {len(products) or 0}", "Productos", "Tabla"),
+        _with_source_reference(f"Clientes vinculados: {len(clientes) or 0}", "Clientes", "Tabla"),
     ]
+    support_lines[0] = _with_source_reference(support_lines[0], "Productos", "Montos")
     has_support_data = bool(products or clientes) or any(value > 0 for value in totals.values())
     support_lines = _limit_bullets(support_lines, label="resumen_soporte") if has_support_data else []
     if not support_lines:
@@ -251,7 +305,7 @@ def _build_resumen_section(
         ("Área de reporte", _safe_text(encabezado.get("area_reporte")), "Encabezado", "area_reporte"),
     ):
         if value and value != PLACEHOLDER:
-            evidence_lines.append(f"{label}: {value} [{tab}: {field}]")
+            evidence_lines.append(_with_source_reference(f"{label}: {value}", tab, field))
     evidence_lines = _limit_bullets(evidence_lines, label="resumen_evidencias")
     if not evidence_lines:
         evidence_lines = [PLACEHOLDER]
@@ -330,11 +384,17 @@ def _build_analisis_section(analisis: Mapping[str, object]) -> str:
     hallazgos_text = _extract_rich_text(analisis.get("hallazgos"))
     hallazgo_principal = _extract_primary_finding(hallazgos_text)
     if hallazgo_principal:
-        parts.append(f"Hallazgo principal: {_truncate(hallazgo_principal, 180, label='analisis')}")
+        parts.append(
+            f"Hallazgo principal: "
+            f"{_truncate(_with_source_reference(hallazgo_principal, 'Analisis', 'Hallazgos'), 180, label='analisis')}"
+        )
 
     control_failure = _extract_control_failure_sentence(analisis)
     if control_failure:
-        parts.append(f"Fallo de control: {_truncate(control_failure, 180, label='analisis')}")
+        parts.append(
+            "Fallo de control: "
+            f"{_truncate(_with_source_reference(control_failure, 'Analisis', 'Conclusiones'), 180, label='analisis')}"
+        )
 
     for key, label in (
         ("antecedentes", "Antecedentes"),
@@ -343,11 +403,13 @@ def _build_analisis_section(analisis: Mapping[str, object]) -> str:
     ):
         text = _extract_rich_text(analisis.get(key))
         if text:
-            parts.append(f"{label}: {_truncate(text, 180, label='analisis')}")
+            parts.append(
+                f"{label}: {_truncate(_with_source_reference(text, 'Analisis', label), 180, label='analisis')}"
+            )
     if not parts:
         text = _extract_rich_text(analisis.get("comentario_amplio"))
         if text:
-            parts.append(text)
+            parts.append(_with_source_reference(text, 'Analisis', 'Comentario amplio'))
     if not parts:
         return PLACEHOLDER
     return _bullet_text(parts)
@@ -367,7 +429,7 @@ def _build_riesgos_section(riesgos: Sequence[Mapping[str, object]]) -> str:
         if plan:
             line = f"{line}. Plan: {plan}" if line else f"Plan: {plan}"
         if line:
-            bullets.append(line)
+            bullets.append(_with_source_reference(line, "Riesgos", "Registro"))
     return _bullet_text(_limit_bullets(bullets, label="riesgos"))
 
 
@@ -379,7 +441,8 @@ def _build_recomendaciones_section(
     if not recomendacion:
         recomendacion = _extract_rich_text(analisis.get("acciones"))
     if recomendacion:
-        return _bullet_text(_split_bullets(recomendacion, label="recomendaciones"))
+        tagged = _with_source_reference(recomendacion, "Analisis", "Recomendaciones")
+        return _bullet_text(_split_bullets(tagged, label="recomendaciones"))
     bullets = []
     for op in operaciones:
         if not isinstance(op, Mapping):
@@ -389,7 +452,7 @@ def _build_recomendaciones_section(
         estado = _safe_text(op.get("estado"), "")
         line = " - ".join(part for part in (accion, cliente, estado) if part and part != PLACEHOLDER)
         if line:
-            bullets.append(line)
+            bullets.append(_with_source_reference(line, "Operaciones", "Accion"))
     return _bullet_text(_limit_bullets(bullets, label="recomendaciones"))
 
 
@@ -529,17 +592,29 @@ def build_executive_summary(data: CaseData | Mapping[str, object]) -> ExecutiveS
     supporting_points = supporting[:MAX_BULLETS] or [PLACEHOLDER]
 
     evidence = [
-        f"Productos afectados: {len(productos) or 0}",
-        f"Clientes vinculados: {len(clientes) or 0}",
-        f"Colaboradores vinculados: {len(colaboradores) or 0}",
-        f"Riesgos registrados: {len(riesgos) or 0}",
-        f"Reclamos registrados: {len(reclamos) or 0}",
-        f"Categoría/Modalidad: {_safe_text(caso.get('categoria1'))} / {_safe_text(caso.get('modalidad'))}",
-        f"Canal/Proceso: {_safe_text(caso.get('canal'))} / {_safe_text(caso.get('proceso'))}",
-        f"Fecha ocurrencia: {_format_date(caso.get('fecha_de_ocurrencia'))}",
-        f"Fecha descubrimiento: {_format_date(caso.get('fecha_de_descubrimiento'))}",
-        f"Dirigido a: {_safe_text(encabezado.get('dirigido_a'))}",
-        f"Área de reporte: {_safe_text(encabezado.get('area_reporte'))}",
+        _with_source_reference(f"Productos afectados: {len(productos) or 0}", "Productos", "Tabla"),
+        _with_source_reference(f"Clientes vinculados: {len(clientes) or 0}", "Clientes", "Tabla"),
+        _with_source_reference(f"Colaboradores vinculados: {len(colaboradores) or 0}", "Colaboradores", "Tabla"),
+        _with_source_reference(f"Riesgos registrados: {len(riesgos) or 0}", "Riesgos", "Registro"),
+        _with_source_reference(f"Reclamos registrados: {len(reclamos) or 0}", "Reclamos", "Tabla"),
+        _with_source_reference(
+            f"Categoría/Modalidad: {_safe_text(caso.get('categoria1'))} / {_safe_text(caso.get('modalidad'))}",
+            "Caso",
+            "categoria1-modalidad",
+        ),
+        _with_source_reference(
+            f"Canal/Proceso: {_safe_text(caso.get('canal'))} / {_safe_text(caso.get('proceso'))}",
+            "Caso",
+            "canal-proceso",
+        ),
+        _with_source_reference(f"Fecha ocurrencia: {_format_date(caso.get('fecha_de_ocurrencia'))}", "Caso", "fecha_de_ocurrencia"),
+        _with_source_reference(
+            f"Fecha descubrimiento: {_format_date(caso.get('fecha_de_descubrimiento'))}",
+            "Caso",
+            "fecha_de_descubrimiento",
+        ),
+        _with_source_reference(f"Dirigido a: {_safe_text(encabezado.get('dirigido_a'))}", "Encabezado", "dirigido_a"),
+        _with_source_reference(f"Área de reporte: {_safe_text(encabezado.get('area_reporte'))}", "Encabezado", "area_reporte"),
     ]
     evidence_clean = [line for line in evidence if line]
     return ExecutiveSummary(

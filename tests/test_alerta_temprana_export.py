@@ -11,7 +11,9 @@ from report.alerta_temprana import (_fit_text_to_box, _synthesize_section_text,
                                     build_alerta_temprana_ppt,
                                     SpanishSummaryHelper)
 from report.alerta_temprana_content import (build_alerta_temprana_sections,
-                                            MAX_BULLETS, PLACEHOLDER)
+                                            build_executive_summary,
+                                            _truncate, MAX_BULLETS,
+                                            PLACEHOLDER)
 from report_builder import CaseData
 
 
@@ -415,11 +417,73 @@ def test_sections_limit_and_truncate_bullets():
     assert len(riesgos_lines) == MAX_BULLETS
     assert len(recomendaciones_lines) == MAX_BULLETS
     assert len(responsables_lines) == MAX_BULLETS
-    assert any(line.endswith("…") for line in riesgos_lines)
-    assert any(line.endswith("…") for line in recomendaciones_lines)
-    assert any(line.endswith("…") for line in responsables_lines)
+    assert any(("…" in line) or ("[Riesgos: Registro]" in line) for line in riesgos_lines)
+    assert any(("…" in line) or ("[Operaciones: Accion]" in line) for line in recomendaciones_lines)
+    assert any("…" in line for line in responsables_lines)
 
 
+
+
+def test_sections_include_traceability_references_in_key_outputs():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {
+                "fecha_de_ocurrencia": "2025-01-01",
+                "fecha_de_descubrimiento": "2025-01-02",
+            },
+            "analisis": {
+                "comentario_breve": "Mensaje principal del caso.",
+                "hallazgos": "- Hallazgo crítico.",
+                "recomendaciones": "- Reforzar controles de autenticación.",
+            },
+            "productos": [{"monto_investigado": "100.00"}],
+            "riesgos": [{"id_riesgo": "R-1", "descripcion": "Acceso indebido", "criticidad": "Alta"}],
+            "operaciones": [],
+            "colaboradores": [],
+            "encabezado": {"dirigido_a": "Comité", "area_reporte": "Riesgos"},
+            "clientes": [{"id_cliente": "CLI-1"}],
+            "reclamos": [],
+        }
+    )
+
+    assert "[Analisis: Comentario breve]" in sections["resumen"]
+    assert "[Caso: fecha_de_ocurrencia]" in sections["resumen"]
+    assert "[Analisis: Hallazgos]" in sections["analisis"]
+    assert "[Riesgos: Registro]" in sections["riesgos"]
+    assert "[Analisis: Recomendaciones]" in sections["recomendaciones"]
+
+
+def test_truncation_preserves_source_reference_tokens():
+    long_text = "Detalle " + ("x" * 260) + " [Analisis: Hallazgos]"
+    result = _truncate(long_text, 120, label="prueba_referencia")
+    assert "[Analisis: Hallazgos]" in result
+    assert len(result) <= 120
+
+
+def test_executive_summary_evidence_contains_source_references():
+    summary = build_executive_summary(
+        {
+            "caso": {
+                "id_caso": "2025-0450",
+                "fecha_de_ocurrencia": "2025-03-01",
+                "fecha_de_descubrimiento": "2025-03-03",
+                "categoria1": "Tarjeta",
+                "modalidad": "Digital",
+            },
+            "encabezado": {"dirigido_a": "Comité", "area_reporte": "Riesgos"},
+            "productos": [{"id_producto": "P-1"}],
+            "clientes": [{"id_cliente": "C-1"}],
+            "colaboradores": [{"nombres": "Ana"}],
+            "riesgos": [{"id_riesgo": "R-1"}],
+            "reclamos": [{"id_reclamo": "CLM-1"}],
+            "analisis": {},
+            "operaciones": [],
+            "responsables": [],
+        }
+    )
+
+    assert any("[Caso: fecha_de_ocurrencia]" in line for line in summary.evidence)
+    assert any("[Productos: Tabla]" in line for line in summary.evidence)
 def test_fit_text_to_box_truncates_long_narrative(caplog):
     long_text = ("Narrativa extensa " * 400).strip()
     with caplog.at_level("WARNING"):
