@@ -306,6 +306,37 @@ def test_cronologia_prefers_hallazgos_bullets():
     assert "Quinto hallazgo" not in cronologia
 
 
+def test_cronologia_orders_operaciones_by_fecha_with_fallback():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {
+                "id_caso": "2025-0012",
+                "fecha_de_ocurrencia": "2025-01-05",
+                "fecha_de_descubrimiento": "2025-01-10",
+            },
+            "analisis": {},
+            "productos": [{"fecha_ocurrencia": "2025-01-07"}],
+            "riesgos": [],
+            "operaciones": [
+                {"accion": "Cierre de investigación", "estado": "Completado", "fecha": "2025-03-05"},
+                {"accion": "Revisión inicial", "estado": "Pendiente"},
+                {"accion": "Entrevista", "estado": "En curso", "fecha": "2025-02-10"},
+            ],
+            "colaboradores": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+    cronologia_lines = [line.replace("•", "").strip() for line in sections["cronologia"].splitlines()]
+    assert cronologia_lines[0].startswith("2025-01-05")
+    assert cronologia_lines[1].startswith("2025-02-10")
+    assert cronologia_lines[2].startswith("2025-03-05")
+    assert "Revisión inicial" in cronologia_lines[0]
+    assert "Entrevista" in cronologia_lines[1]
+    assert "Cierre de investigación" in cronologia_lines[2]
+
+
 def test_analisis_section_prioritizes_hallazgo_principal_and_control_failure():
     sections = build_alerta_temprana_sections(
         {

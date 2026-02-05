@@ -42,6 +42,31 @@ def _format_date(value: object) -> str:
     return parsed.strftime("%Y-%m-%d")
 
 
+def _parse_iso_date(value: object) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _collect_fallback_dates(
+    caso: Mapping[str, object],
+    productos: Sequence[Mapping[str, object]],
+) -> list[datetime]:
+    candidates = [
+        _parse_iso_date(caso.get("fecha_de_ocurrencia")),
+        _parse_iso_date(caso.get("fecha_de_descubrimiento")),
+    ]
+    for producto in productos:
+        if not isinstance(producto, Mapping):
+            continue
+        candidates.append(_parse_iso_date(producto.get("fecha_ocurrencia")))
+    return [candidate for candidate in candidates if candidate]
+
+
 def _format_amount(value: Decimal | None) -> str:
     if value is None:
         return PLACEHOLDER
@@ -263,17 +288,26 @@ def _build_cronologia_section(
             if bullets:
                 return _bullet_text(bullets)
     if operaciones:
-        lines = []
-        for op in operaciones:
+        fallback_dates = _collect_fallback_dates(caso, productos)
+        fallback_date = min(fallback_dates) if fallback_dates else None
+        entries: list[tuple[datetime, int, str]] = []
+        for idx, op in enumerate(operaciones):
             if not isinstance(op, Mapping):
                 continue
+            parsed_date = _parse_iso_date(op.get("fecha"))
+            resolved_date = parsed_date or fallback_date
+            if not resolved_date:
+                continue
             accion = _safe_text(op.get("accion"), "")
-            fecha = _format_date(op.get("fecha"))
             estado = _safe_text(op.get("estado"), "")
-            summary = " - ".join(part for part in (fecha, accion, estado) if part and part != PLACEHOLDER)
-            if summary:
-                lines.append(summary)
-        return _bullet_text(_limit_bullets(lines, label="cronologia"))
+            detail_parts = [part for part in (accion, estado) if part]
+            detalle = " - ".join(detail_parts) if detail_parts else "Detalle no disponible"
+            fecha = resolved_date.strftime("%Y-%m-%d")
+            summary = f"{fecha} - {detalle}"
+            entries.append((resolved_date, idx, summary))
+        if entries:
+            lines = [entry[2] for entry in sorted(entries, key=lambda item: (item[0], item[1]))]
+            return _bullet_text(_limit_bullets(lines, label="cronologia"))
     ocurrencia = _format_date(caso.get("fecha_de_ocurrencia"))
     descubrimiento = _format_date(caso.get("fecha_de_descubrimiento"))
     product_dates = [
