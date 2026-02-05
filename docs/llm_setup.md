@@ -1,147 +1,106 @@
-# LLM implementation overview and local Hugging Face checkpoint setup
+# Configuración LLM local (checkpoint en `external drive`) y guía operativa
 
-## Scope and intent
-This document walks through how large language models (LLMs) are wired in this codebase and provides a step-by-step manual for using a **local, pretrained Hugging Face checkpoint** when running the app from a cloned repository. It also references the **Design document CM.pdf** to confirm that LLM usage is separate from the validation rules described there (see “Validation context”).
+## 1) Dónde está conectado el LLM en el proyecto
 
-## Where LLMs are implemented
-### 1) Report summarization for the “Alerta temprana” PPT
-**File:** `report/alerta_temprana.py`
+- **Auto-redacción en la pestaña “Análisis y narrativas”**: `utils/auto_redaccion.py` y `app.py`.
+- **Generación de Alerta Temprana (.pptx)**: `report/alerta_temprana.py` vía `build_alerta_temprana_ppt(...)`.
+- **Generación de Resumen Ejecutivo (.md)**: `report/resumen_ejecutivo.py` vía `build_resumen_ejecutivo_md(...)`.
 
-**Key class:** `SpanishSummaryHelper`
-- Uses `transformers` to build a `text2text-generation` pipeline.
-- Loads the model and tokenizer via `AutoModelForSeq2SeqLM.from_pretrained()` and `AutoTokenizer.from_pretrained()`.
-- Caches generated summaries by `(section, prompt, max_new_tokens)` to avoid repeated calls.
+El helper central es `SpanishSummaryHelper`, que ahora:
+1. Prioriza modelo local por variable de entorno `LOCAL_SUMMARY_MODEL_DIR`.
+2. Si no está definida, busca el checkpoint en `external drive`.
+3. Carga tokenizer y modelo con `local_files_only=True` (sin descargar del Hub).
 
-**Default model:**
-- `DEFAULT_MODEL = "PlanTL-GOB-ES/flan-t5-base-spanish"`
+---
 
-**How it is used:**
-- `_synthesize_section_text(...)` builds a prompt and calls `SpanishSummaryHelper.summarize(...)` only when a helper is provided explicitly.
-- When no helper is passed, it uses deterministic templates from `report/alerta_temprana_content.py`.
-- `build_alerta_temprana_ppt(...)` now generates sections deterministically by default; pass a helper only if you want LLM summaries.
+## 2) Paso a paso para descargar y dejar el checkpoint operativo
 
-### 2) Auto-redacción in the UI
-**File:** `utils/auto_redaccion.py`
-
-**Key function:** `auto_redact_comment(...)`
-- Builds a prompt from case data and the narrative sections.
-- Uses a shared `SpanishSummaryHelper` instance (lazy-loaded) to generate a summary.
-- Sanitizes PII with regex patterns and enforces maximum length.
-
-**Where it is triggered:**
-**File:** `app.py`
-- `FraudCaseApp._auto_redact_commentary(...)` collects narrative fields and calls `auto_redact_comment(...)`.
-- The result is placed into the rich-text widget for “Comentario breve” or “Comentario amplio”.
-
-## Local Hugging Face checkpoint setup (step-by-step)
-### Step 1: Install dependencies
-Ensure `transformers` and a compatible PyTorch build are available.
+### Paso 1. Instalar dependencias
 
 ```bash
 pip install -r requirements.txt
-# If torch is missing, install a CPU or CUDA build:
-# pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
 
-**Why:** `SpanishSummaryHelper` checks for `transformers` at runtime. Without it, LLM features fall back to placeholders.
+### Paso 2. Descargar el checkpoint de Hugging Face en local
 
-### Step 2: Download a pretrained Hugging Face checkpoint locally
-Choose a model compatible with `text2text-generation` (e.g., a T5/FLAN-based model).
+Modelo objetivo:
+- `mrm8488/bert2bert_shared-spanish-finetuned-summarization`
 
-**Recommended approach (Python):**
+Ejemplo con `huggingface_hub` (en tu máquina local):
+
 ```bash
 python - <<'PY'
 from huggingface_hub import snapshot_download
 
-model_id = "PlanTL-GOB-ES/flan-t5-base-spanish"  # replace with your chosen model
-local_dir = "models/hf/flan-t5-base-spanish"      # pick any local folder
-snapshot_download(repo_id=model_id, local_dir=local_dir, local_dir_use_symlinks=False)
-print(f"Downloaded to: {local_dir}")
+snapshot_download(
+    repo_id="mrm8488/bert2bert_shared-spanish-finetuned-summarization",
+    local_dir="external drive/mrm8488/bert2bert_shared-spanish-finetuned-summarization",
+    local_dir_use_symlinks=False,
+)
+print("Checkpoint descargado.")
 PY
 ```
 
-**Result:** A local folder with `config.json`, `tokenizer.json`, model weights, etc.
+### Paso 3. Validar estructura mínima esperada
 
-### Step 3: Store the checkpoint in a predictable location
-Place the model under the repository (example path):
+En la carpeta del modelo debe haber archivos como:
+- `config.json`
+- `tokenizer_config.json`
+- `special_tokens_map.json`
+- pesos del modelo (`pytorch_model.bin` o `model.safetensors`)
 
-```
-/workspace/Formulario_investigacion/models/hf/flan-t5-base-spanish
-```
+### Paso 4. (Opcional recomendado) Fijar ruta explícita
 
-Any location is fine as long as you provide the **absolute or relative path** to `from_pretrained(...)`.
-
-### Step 4: Point the app to the local checkpoint
-There are two main options:
-
-#### Option A — Update the default model path (applies to all LLM usage)
-**Edit:** `report/alerta_temprana.py`
-
-Change:
-```python
-DEFAULT_MODEL = "PlanTL-GOB-ES/flan-t5-base-spanish"
+```bash
+export LOCAL_SUMMARY_MODEL_DIR="/ruta/absoluta/a/external drive/mrm8488/bert2bert_shared-spanish-finetuned-summarization"
 ```
 
-To:
-```python
-DEFAULT_MODEL = "models/hf/flan-t5-base-spanish"
+### Paso 5. Probar el script CLI local
+
+```bash
+python tools/local_spanish_summarizer.py --input_file docs/sample_eventos.csv --max_len 120 --min_len 40
 ```
 
-This will make **both**:
-- `build_alerta_temprana_ppt(...)` (when `llm_helper` is passed explicitly)
-- `auto_redact_comment(...)`
+> Nota: para prueba real, usa un `.txt` con narrativa; el comando anterior ilustra solo la ejecución.
 
-load from the local checkpoint (because they use `SpanishSummaryHelper()` with defaults).
+### Paso 6. Probar flujo en UI
 
-#### Option B — Instantiate `SpanishSummaryHelper` with a custom path
-If you prefer not to change `DEFAULT_MODEL`, instantiate the helper with a path and pass it explicitly.
+1. Abrir app.
+2. Ir a **Análisis y narrativas**.
+3. Completar antecedentes/hallazgos/conclusiones.
+4. Pulsar **Auto-redactar** en comentario breve/amplio.
+5. Ir a **Acciones**:
+   - **Generar alerta temprana (.pptx)**
+   - **Generar resumen ejecutivo**
 
-**Example usage (PPT builder):**
-```python
-from report.alerta_temprana import SpanishSummaryHelper, build_alerta_temprana_ppt
+---
 
-llm = SpanishSummaryHelper(model_name="models/hf/flan-t5-base-spanish")
-build_alerta_temprana_ppt(data, output_path, llm_helper=llm)
-```
+## 3) Robustez y reintentos implementados
 
-**Example usage (auto-redacción):**
-```python
-from utils.auto_redaccion import auto_redact_comment
-from report.alerta_temprana import SpanishSummaryHelper
+Para reducir salidas erráticas (repeticiones, loops, texto sin sentido):
 
-llm = SpanishSummaryHelper(model_name="models/hf/flan-t5-base-spanish")
-result = auto_redact_comment(case_data, narrative, target_chars=400, label="breve", helper=llm)
-```
+- El helper LLM usa **múltiples intentos** con parámetros anti-repetición (`repetition_penalty`, `no_repeat_ngram_size`, `num_beams`).
+- Se detecta salida degenerada (n-gramas repetidos o texto demasiado pobre) y se reintenta.
+- Si todos los intentos fallan, se retorna fallback seguro en cada flujo.
 
-> Note: The UI currently calls `auto_redact_comment(...)` without a helper, so to use Option B inside the app you would wire a custom helper in `FraudCaseApp._auto_redact_commentary(...)`.
+Esto aplica tanto para:
+- secciones de Alerta Temprana,
+- refinamiento opcional de secciones en Resumen Ejecutivo,
+- y el CLI local `tools/local_spanish_summarizer.py`.
 
-### Step 5: Run the app and verify LLM behavior
-- Generate “Auto-redacción” in the UI (Comentario breve/amplio).
-- Export the “Alerta temprana” PPT and check that sections are summarized when you pass a helper.
+---
 
-### 3) Resumen ejecutivo (deterministic)
-**File:** `report/resumen_ejecutivo.py`
+## 4) Checklist de diagnóstico rápido
 
-**Key function:** `build_resumen_ejecutivo_md(...)`
-- Builds a pyramid-style summary (mensaje clave → puntos de soporte → evidencia).
-- Uses the same deterministic content assembly as `report/alerta_temprana_content.py`.
+1. ¿Existe `external drive`?
+2. ¿Existe el subdirectorio del modelo?
+3. ¿El modelo contiene tokenizer + pesos?
+4. ¿`transformers` y `torch` instalados?
+5. ¿`LOCAL_SUMMARY_MODEL_DIR` apunta a una carpeta válida?
+6. ¿El log muestra fallback por salida degenerada o error de runtime?
 
-If `transformers` is missing or a model fails to load, the app falls back to placeholders and deterministic summaries.
+---
 
-## Model selection guidance
-- The code expects a **Seq2Seq** model compatible with `text2text-generation`.
-- For Spanish summarization, consider T5/FLAN models trained or tuned for Spanish.
-- Keep prompts under reasonable length; `SpanishSummaryHelper.max_new_tokens` defaults to `144` and can be adjusted.
+## 5) Relación con validaciones del formulario (Design document CM.pdf)
 
-## Validation context (Design document CM.pdf)
-Per **Design document CM.pdf**, the app enforces strict validation rules (dates, IDs, amounts, and duplicate prevention). The LLM features described above **do not bypass** those validations:
-- Validation utilities are centralized (e.g., `validators.py` and related tests).
-- LLM output is used for narrative/summary fields only and is cleaned to remove PII.
-
-This separation ensures that the required format validations remain in place while enabling optional AI-assisted summaries.
-
-## Quick checklist
-- [ ] `transformers` installed
-- [ ] Local model checkpoint downloaded
-- [ ] `DEFAULT_MODEL` updated **or** `SpanishSummaryHelper(model_name=...)` passed explicitly
-- [ ] App successfully generates auto-redacción and/or PPT summaries
+Las reglas de validación de negocio (fechas, montos, IDs, duplicados) se mantienen en el pipeline de validación y **no dependen del LLM**. El LLM sólo asiste redacción narrativa y exportes textuales; no sustituye controles de datos ni reglas de consistencia.

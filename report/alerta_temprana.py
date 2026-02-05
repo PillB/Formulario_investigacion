@@ -71,6 +71,10 @@ SECTION_MAX_NEW_TOKENS: dict[str, int] = {
     "Mensaje clave": 96,
 }
 
+MAX_GENERATION_RETRIES = 3
+MIN_SUMMARY_CHARS = 24
+MAX_REPEATED_WORD_RATIO = 0.45
+
 TRANSFORMERS_AVAILABLE = importlib.util.find_spec("transformers") is not None
 
 SLIDE_WIDTH_16_9 = Inches(13.33) if Inches else 0
@@ -278,6 +282,49 @@ def _resolve_model_reference(model_name: str) -> str:
     return model_name
 
 
+def _has_repeated_ngrams(tokens: list[str], n: int, *, threshold: int) -> bool:
+    if len(tokens) < n * 2:
+        return False
+    counts: dict[tuple[str, ...], int] = {}
+    for idx in range(len(tokens) - n + 1):
+        key = tuple(tokens[idx : idx + n])
+        counts[key] = counts.get(key, 0) + 1
+        if counts[key] >= threshold:
+            return True
+    return False
+
+
+def _looks_degenerate_output(text: str) -> bool:
+    normalized = sanitize_rich_text(text, max_chars=None).strip().lower()
+    if len(normalized) < MIN_SUMMARY_CHARS:
+        return True
+    tokens = [tok for tok in re.split(r"\s+", normalized) if tok]
+    if len(tokens) < 6:
+        return True
+
+    repeated_words = sum(1 for tok in set(tokens) if tokens.count(tok) >= 3)
+    repeated_ratio = repeated_words / max(len(set(tokens)), 1)
+    if repeated_ratio > MAX_REPEATED_WORD_RATIO:
+        return True
+
+    if _has_repeated_ngrams(tokens, 2, threshold=4):
+        return True
+    if _has_repeated_ngrams(tokens, 3, threshold=3):
+        return True
+    return False
+
+
+def _build_retry_prompt(prompt: str, attempt: int) -> str:
+    if attempt <= 1:
+        return prompt
+    return (
+        f"{prompt}\n\n"
+        "Reintento de calidad: evita bucles de palabras, repeticiones y frases incoherentes. "
+        "Si falta contexto, resume únicamente lo verificable del texto base."
+    )
+
+
+
 @dataclass
 class SpanishSummaryHelper:
     model_name: str = DEFAULT_MODEL
@@ -304,7 +351,8 @@ class SpanishSummaryHelper:
         )
 
     def summarize(self, section: str, prompt: str, *, max_new_tokens: int | None = None) -> str | None:
-        key = (section, prompt, max_new_tokens or self.max_new_tokens)
+        token_budget = max_new_tokens or self.max_new_tokens
+        key = (section, prompt, token_budget)
         if key in self._cache:
             return self._cache[key]
 
@@ -314,25 +362,42 @@ class SpanishSummaryHelper:
 
         from transformers import set_seed
 
-        try:
-            set_seed(0)
-            outputs = self._pipeline(
-                prompt,
-                max_new_tokens=max_new_tokens or self.max_new_tokens,
-                num_beams=4,
-                do_sample=False,
-            )
-        except Exception as exc:  # pragma: no cover - defensivo frente a errores del modelo
-            self._load_error = exc
-            return None
+        generation_setups = (
+            {"num_beams": 4, "repetition_penalty": 1.1, "no_repeat_ngram_size": 3},
+            {"num_beams": 6, "repetition_penalty": 1.2, "no_repeat_ngram_size": 4},
+            {"num_beams": 8, "repetition_penalty": 1.3, "no_repeat_ngram_size": 4},
+        )
 
-        if not outputs:
-            return None
-        text = sanitize_rich_text(outputs[0].get("generated_text"), max_chars=MAX_SECTION_CHARS).strip()
-        if not text:
-            return None
-        self._cache[key] = text
-        return text
+        for attempt, setup in enumerate(generation_setups, start=1):
+            retry_prompt = _build_retry_prompt(prompt, attempt)
+            try:
+                set_seed(attempt)
+                outputs = self._pipeline(
+                    retry_prompt,
+                    max_new_tokens=token_budget,
+                    do_sample=False,
+                    length_penalty=1.0,
+                    **setup,
+                )
+            except (RuntimeError, ValueError) as exc:
+                self._load_error = exc
+                continue
+            except Exception as exc:  # pragma: no cover - defensivo frente a errores inesperados
+                self._load_error = exc
+                return None
+
+            if not outputs:
+                continue
+            text = sanitize_rich_text(outputs[0].get("generated_text"), max_chars=MAX_SECTION_CHARS).strip()
+            if not text:
+                continue
+            if _looks_degenerate_output(text):
+                logger.warning("Salida degenerada detectada en sección '%s' (intento %s).", section, attempt)
+                continue
+            self._cache[key] = text
+            return text
+        return None
+
 
 
 def _synthesize_section_text(

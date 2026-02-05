@@ -132,3 +132,40 @@ def test_summarize_spanish_text_wraps_inference_errors(
 
     with pytest.raises(exc_type, match="Error durante la generación del resumen"):
         summarizer.summarize_spanish_text("texto válido")
+
+
+def test_summarize_spanish_text_retries_when_output_is_degenerate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reintenta cuando la salida tiene patrones repetitivos no útiles."""
+
+    class DegenerateThenGoodPipeline:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self, _text: str, **_kwargs: object) -> list[dict[str, str]]:
+            self.calls += 1
+            if self.calls == 1:
+                return [{"summary_text": "fraude fraude fraude fraude fraude fraude"}]
+            return [{"summary_text": "Resumen útil con hallazgo y recomendación concreta."}]
+
+    pipe = DegenerateThenGoodPipeline()
+
+    monkeypatch.setattr(
+        summarizer_module.AutoTokenizer,
+        "from_pretrained",
+        lambda *args, **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        summarizer_module.AutoModelForSeq2SeqLM,
+        "from_pretrained",
+        lambda *args, **kwargs: object(),
+    )
+    monkeypatch.setattr(summarizer_module, "pipeline", lambda *args, **kwargs: pipe)
+    monkeypatch.setattr(summarizer_module.torch.cuda, "is_available", lambda: False)
+
+    summarizer = summarizer_module.LocalSpanishSummarizer(Path("/tmp/model"))
+    result = summarizer.summarize_spanish_text("Texto base")
+
+    assert "Resumen útil" in result
+    assert pipe.calls >= 2

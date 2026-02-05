@@ -691,3 +691,31 @@ def test_generate_report_file_passes_llm_helper_for_pptx(monkeypatch):
 
     assert calls["llm_helper"] is not None
     root.destroy()
+
+
+def test_spanish_summary_helper_retries_on_degenerate_output(monkeypatch):
+    helper = SpanishSummaryHelper()
+
+    class DummyPipeline:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, _prompt, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return [{"generated_text": "riesgo riesgo riesgo riesgo riesgo riesgo"}]
+            return [{"generated_text": "Resumen ejecutivo válido con acciones y trazabilidad."}]
+
+    dummy = DummyPipeline()
+    monkeypatch.setattr(helper, "_load_pipeline", lambda: None)
+    monkeypatch.setattr(helper, "_pipeline", dummy)
+
+    import sys
+    from types import SimpleNamespace
+
+    monkeypatch.setitem(sys.modules, "transformers", SimpleNamespace(set_seed=lambda _seed: None))
+    text = helper.summarize("Resumen", "Prompt base")
+
+    assert text is not None
+    assert "Resumen ejecutivo válido" in text
+    assert dummy.calls >= 2

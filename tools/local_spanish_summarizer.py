@@ -7,6 +7,7 @@ desde el directorio local ``external drive`` sin descargas de Internet.
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,32 @@ SUMMARY_PROMPT_PREFIX = (
     "Resume el siguiente texto en español con precisión factual, "
     "sin inventar datos y con lenguaje claro:\n\n"
 )
+
+
+def _has_repeated_ngrams(tokens: list[str], n: int, *, threshold: int) -> bool:
+    if len(tokens) < n * 2:
+        return False
+    counts: dict[tuple[str, ...], int] = {}
+    for idx in range(len(tokens) - n + 1):
+        key = tuple(tokens[idx : idx + n])
+        counts[key] = counts.get(key, 0) + 1
+        if counts[key] >= threshold:
+            return True
+    return False
+
+
+def _looks_degenerate_output(text: str) -> bool:
+    normalized = str(text or "").strip().lower()
+    if len(normalized) < 12:
+        return True
+    tokens = [tok for tok in re.split(r"\s+", normalized) if tok]
+    if len(tokens) < 3:
+        return False
+    if _has_repeated_ngrams(tokens, 2, threshold=4):
+        return True
+    if _has_repeated_ngrams(tokens, 3, threshold=3):
+        return True
+    return False
 
 
 class LocalSpanishSummarizer:
@@ -75,19 +102,37 @@ class LocalSpanishSummarizer:
 
         prompt_text = f"{SUMMARY_PROMPT_PREFIX}{normalized_text}"
 
-        try:
-            result: list[dict[str, Any]] = self.summarizer(
-                prompt_text,
-                max_length=max_length,
-                min_length=min_length,
-                truncation=True,
-                clean_up_tokenization_spaces=True,
-                do_sample=False,
-                num_beams=4,
-            )
-            return str(result[0]["summary_text"]).strip()
-        except (RuntimeError, ValueError) as error:
-            raise type(error)(f"Error durante la generación del resumen: {error}") from error
+        generation_setups = (
+            {"num_beams": 4, "repetition_penalty": 1.1, "no_repeat_ngram_size": 3},
+            {"num_beams": 6, "repetition_penalty": 1.2, "no_repeat_ngram_size": 4},
+            {"num_beams": 8, "repetition_penalty": 1.3, "no_repeat_ngram_size": 4},
+        )
+
+        last_error: RuntimeError | ValueError | None = None
+        for setup in generation_setups:
+            try:
+                result: list[dict[str, Any]] = self.summarizer(
+                    prompt_text,
+                    max_length=max_length,
+                    min_length=min_length,
+                    truncation=True,
+                    clean_up_tokenization_spaces=True,
+                    do_sample=False,
+                    length_penalty=1.0,
+                    **setup,
+                )
+            except (RuntimeError, ValueError) as error:
+                last_error = error
+                continue
+
+            summary_text = str(result[0]["summary_text"]).strip()
+            if _looks_degenerate_output(summary_text):
+                continue
+            return summary_text
+
+        if last_error is not None:
+            raise type(last_error)(f"Error durante la generación del resumen: {last_error}") from last_error
+        raise ValueError("El modelo devolvió una salida vacía o degenerada en todos los intentos.")
 
 
 def resolve_external_drive_model_path() -> Path:
