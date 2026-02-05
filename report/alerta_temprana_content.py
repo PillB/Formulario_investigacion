@@ -162,24 +162,59 @@ def _build_resumen_section(
     encabezado: Mapping[str, object],
     analisis: Mapping[str, object],
     products: Sequence[Mapping[str, object]],
+    clientes: Sequence[Mapping[str, object]],
 ) -> str:
     totals = _aggregate_amounts(products)
     comentario = _extract_rich_text(analisis.get("comentario_breve"))
     if not comentario:
-        comentario = _extract_rich_text(analisis.get("conclusiones"))
-    if not comentario:
-        comentario = _extract_rich_text(analisis.get("antecedentes"))
-    summary_line = _truncate(comentario, 280, label="resumen") if comentario else PLACEHOLDER
-    header = _case_title(caso, encabezado)
-    if header == PLACEHOLDER and summary_line == PLACEHOLDER and not products:
-        return PLACEHOLDER
-    amounts = (
-        f"Monto investigado {_format_amount(totals['investigado'])}; "
-        f"Pérdida fraude {_format_amount(totals['perdida_fraude'])}; "
-        f"Contingencia {_format_amount(totals['contingencia'])}; "
-        f"Recuperado {_format_amount(totals['recuperado'])}."
+        comentario = _extract_rich_text(analisis.get("hallazgos"))
+    mensaje_clave = _truncate(comentario, MAX_BULLET_CHARS, label="resumen_mensaje") if comentario else PLACEHOLDER
+
+    support_lines = [
+        (
+            "Montos: "
+            f"Investigado {_format_amount(totals['investigado'])}; "
+            f"Pérdida fraude {_format_amount(totals['perdida_fraude'])}; "
+            f"Falla procesos {_format_amount(totals['falla_procesos'])}; "
+            f"Contingencia {_format_amount(totals['contingencia'])}; "
+            f"Recuperado {_format_amount(totals['recuperado'])}."
+        ),
+        f"Productos involucrados: {len(products) or 0}",
+        f"Clientes vinculados: {len(clientes) or 0}",
+    ]
+    has_support_data = bool(products or clientes) or any(value > 0 for value in totals.values())
+    support_lines = _limit_bullets(support_lines, label="resumen_soporte") if has_support_data else []
+    if not support_lines:
+        support_lines = [PLACEHOLDER]
+
+    evidence_lines = []
+    for label, value, tab, field in (
+        ("Fecha ocurrencia", _format_date(caso.get("fecha_de_ocurrencia")), "Caso", "fecha_de_ocurrencia"),
+        (
+            "Fecha descubrimiento",
+            _format_date(caso.get("fecha_de_descubrimiento")),
+            "Caso",
+            "fecha_de_descubrimiento",
+        ),
+        ("Dirigido a", _safe_text(encabezado.get("dirigido_a")), "Encabezado", "dirigido_a"),
+        ("Área de reporte", _safe_text(encabezado.get("area_reporte")), "Encabezado", "area_reporte"),
+    ):
+        if value and value != PLACEHOLDER:
+            evidence_lines.append(f"{label}: {value} [{tab}: {field}]")
+    evidence_lines = _limit_bullets(evidence_lines, label="resumen_evidencias")
+    if not evidence_lines:
+        evidence_lines = [PLACEHOLDER]
+
+    resumen = "\n".join(
+        [
+            f"Mensaje clave: {mensaje_clave}",
+            "Puntos de soporte:",
+            _bullet_text(support_lines),
+            "Evidencias:",
+            _bullet_text(evidence_lines),
+        ]
     )
-    return _truncate(f"{header}. {summary_line}. {amounts}", MAX_SECTION_CHARS, label="resumen")
+    return _truncate(resumen, MAX_SECTION_CHARS, label="resumen")
 
 
 def _build_cronologia_section(
@@ -320,6 +355,7 @@ def build_alerta_temprana_sections(
     analisis = dataset.get("analisis") if isinstance(dataset, Mapping) else {}
     operaciones = dataset.get("operaciones") if isinstance(dataset, Mapping) else []
     colaboradores = dataset.get("colaboradores") if isinstance(dataset, Mapping) else []
+    clientes = dataset.get("clientes") if isinstance(dataset, Mapping) else []
 
     recomendaciones = _build_recomendaciones_section(analisis, operaciones)
     return {
@@ -330,7 +366,7 @@ def build_alerta_temprana_sections(
             caso.get("investigador_nombre") or (caso.get("investigador") or {}).get("nombre"),
             "Equipo de investigación",
         ),
-        "resumen": _build_resumen_section(caso, encabezado, analisis, productos),
+        "resumen": _build_resumen_section(caso, encabezado, analisis, productos, clientes),
         "cronologia": _build_cronologia_section(caso, analisis, productos, operaciones),
         "analisis": _build_analisis_section(analisis),
         "riesgos": _build_riesgos_section(riesgos),
