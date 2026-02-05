@@ -276,3 +276,19 @@ def test_docx_missing_docx_document(monkeypatch, sample_case_data):
         report_builder.build_docx(sample_case_data, Path("dummy.docx"))
 
     assert report_builder.DOCX_MISSING_MESSAGE in str(excinfo.value)
+
+
+def test_case_data_preserves_responsables_mapping():
+    data = CaseData.from_mapping(
+        {
+            "caso": {"id_caso": "2025-0300"},
+            "responsables": [
+                {"scope": "unidad", "nombre": "Ana", "division": "DCA"},
+                {"scope": "producto", "nombre": "Luis", "id_producto": "P-9"},
+            ],
+        }
+    )
+
+    assert len(data["responsables"]) == 2
+    assert data["responsables"][0]["scope"] == "unidad"
+    assert data.as_dict()["responsables"][1]["id_producto"] == "P-9"

@@ -396,11 +396,39 @@ def _build_recomendaciones_section(
 def _build_responsables_section(
     caso: Mapping[str, object],
     colaboradores: Sequence[Mapping[str, object]],
+    responsables: Sequence[Mapping[str, object]],
 ) -> str:
     bullets = []
+    explicit_responsables = False
     investigador = caso.get("investigador_nombre") or (caso.get("investigador") or {}).get("nombre")
     if investigador:
         bullets.append(f"Investigador: {_safe_text(investigador, 'Investigador principal')}")
+
+    for responsable in responsables:
+        if not isinstance(responsable, Mapping):
+            continue
+        nombre = _safe_text(responsable.get("nombre") or responsable.get("nombres"), "")
+        if not nombre:
+            continue
+        scope = _safe_text(responsable.get("scope"), "unidad").lower()
+        scope_label = "Responsable de unidad" if scope == "unidad" else "Responsable de producto"
+        puesto = _safe_text(responsable.get("puesto"), "")
+        division = _safe_text(responsable.get("division"), "")
+        area = _safe_text(responsable.get("area"), "")
+        servicio = _safe_text(responsable.get("servicio"), "")
+        agencia = _safe_text(responsable.get("nombre_agencia"), "")
+        producto = _safe_text(responsable.get("id_producto"), "")
+
+        fragments = [part for part in (puesto, division, area, servicio, agencia) if part and part != PLACEHOLDER]
+        suffix = f" — {' / '.join(fragments)}" if fragments else ""
+        if scope == "producto" and producto and producto != PLACEHOLDER:
+            suffix = f"{suffix} (Producto {producto})"
+        bullets.append(f"{scope_label}: {nombre}{suffix}")
+        explicit_responsables = True
+
+    if explicit_responsables:
+        return _bullet_text(_limit_bullets(bullets, label="responsables"))
+
     for colab in colaboradores:
         if not isinstance(colab, Mapping):
             continue
@@ -425,6 +453,7 @@ def build_alerta_temprana_sections(
     operaciones = dataset.get("operaciones") if isinstance(dataset, Mapping) else []
     colaboradores = dataset.get("colaboradores") if isinstance(dataset, Mapping) else []
     clientes = dataset.get("clientes") if isinstance(dataset, Mapping) else []
+    responsables = dataset.get("responsables") if isinstance(dataset, Mapping) else []
 
     recomendaciones = _build_recomendaciones_section(analisis, operaciones)
     return {
@@ -441,7 +470,7 @@ def build_alerta_temprana_sections(
         "riesgos": _build_riesgos_section(riesgos),
         "recomendaciones": recomendaciones,
         "acciones": recomendaciones,
-        "responsables": _build_responsables_section(caso, colaboradores),
+        "responsables": _build_responsables_section(caso, colaboradores, responsables),
     }
 
 
@@ -455,6 +484,7 @@ def build_executive_summary(data: CaseData | Mapping[str, object]) -> ExecutiveS
     operaciones = dataset.get("operaciones") if isinstance(dataset, Mapping) else []
     colaboradores = dataset.get("colaboradores") if isinstance(dataset, Mapping) else []
     clientes = dataset.get("clientes") if isinstance(dataset, Mapping) else []
+    responsables = dataset.get("responsables") if isinstance(dataset, Mapping) else []
     reclamos = dataset.get("reclamos") if isinstance(dataset, Mapping) else []
 
     totals = _aggregate_amounts(productos)
@@ -488,7 +518,7 @@ def build_executive_summary(data: CaseData | Mapping[str, object]) -> ExecutiveS
             "Recomendaciones en curso: "
             f"{_truncate(recomendaciones_text.replace('• ', ''), 180, label='resumen_ejecutivo')}"
         )
-    responsables_text = _build_responsables_section(caso, colaboradores)
+    responsables_text = _build_responsables_section(caso, colaboradores, responsables)
     if responsables_text != PLACEHOLDER:
         supporting.append(
             f"Responsables asignados: {_truncate(responsables_text.replace('• ', ''), 180, label='resumen_ejecutivo')}"

@@ -465,3 +465,64 @@ def test_add_section_panel_supports_bullet_paragraphs():
     assert first_ppr.find(qn("a:buChar")) is not None
     assert second_ppr.find(qn("a:buChar")) is None
     assert third_ppr.find(qn("a:buChar")) is not None
+
+
+def test_responsables_section_prioritizes_explicit_roles_over_colaboradores():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {"id_caso": "2025-0200", "investigador_nombre": "Líder"},
+            "analisis": {},
+            "productos": [{"id_producto": "P-001"}],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [
+                {"nombres": "Persona Involucrada", "flag": "Involucrado", "area": "Backoffice"}
+            ],
+            "responsables": [
+                {
+                    "scope": "unidad",
+                    "nombre": "Ana Unidad",
+                    "puesto": "Jefa",
+                    "division": "DCA",
+                    "area": "Área comercial",
+                    "servicio": "Atención",
+                    "nombre_agencia": "Agencia Centro",
+                },
+                {
+                    "scope": "producto",
+                    "nombre": "Luis Producto",
+                    "puesto": "Owner",
+                    "id_producto": "P-001",
+                },
+            ],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+
+    responsables = sections["responsables"]
+    assert "Responsable de unidad: Ana Unidad" in responsables
+    assert "Responsable de producto: Luis Producto" in responsables
+    assert "Persona Involucrada" not in responsables
+
+
+def test_responsables_section_falls_back_to_colaboradores_when_roles_missing():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {"id_caso": "2025-0201"},
+            "analisis": {},
+            "productos": [],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [
+                {"nombres": "Persona Involucrada", "flag": "Relacionado", "area": "Canales"}
+            ],
+            "responsables": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+
+    assert "Persona Involucrada (Relacionado - Canales)" in sections["responsables"]
