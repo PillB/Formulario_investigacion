@@ -1,4 +1,5 @@
 import os
+
 import tkinter as tk
 from tkinter import ttk
 
@@ -6,17 +7,11 @@ import pytest
 
 import app as app_module
 from report import alerta_temprana
-from report.alerta_temprana import (
-    SpanishSummaryHelper,
-    _fit_text_to_box,
-    _synthesize_section_text,
-    build_alerta_temprana_ppt,
-)
-from report.alerta_temprana_content import (
-    MAX_BULLETS,
-    PLACEHOLDER,
-    build_alerta_temprana_sections,
-)
+from report.alerta_temprana import (_fit_text_to_box, _synthesize_section_text,
+                                    build_alerta_temprana_ppt,
+                                    SpanishSummaryHelper)
+from report.alerta_temprana_content import (build_alerta_temprana_sections,
+                                            MAX_BULLETS, PLACEHOLDER)
 from report_builder import CaseData
 
 
@@ -309,6 +304,54 @@ def test_cronologia_prefers_hallazgos_bullets():
     assert "Primer hallazgo relevante" in cronologia
     assert "Cuarto hallazgo operativo" in cronologia
     assert "Quinto hallazgo" not in cronologia
+
+
+def test_analisis_section_prioritizes_hallazgo_principal_and_control_failure():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {"id_caso": "2025-0010"},
+            "analisis": {
+                "hallazgos": "- Primer hallazgo crítico.\n- Segundo hallazgo adicional.",
+                "conclusiones": "Falló el control de autenticación durante el proceso.",
+                "antecedentes": "Se observaron alertas en el monitoreo.",
+                "modus_operandi": "Uso de credenciales filtradas.",
+            },
+            "productos": [],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+    analisis = sections["analisis"].splitlines()
+    assert "Hallazgo principal" in analisis[0]
+    assert "Fallo de control" in analisis[1]
+    assert "Antecedentes" in analisis[2]
+    assert "Modus operandi" in analisis[3]
+
+
+def test_analisis_section_prioritizes_control_failure_without_hallazgos():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {"id_caso": "2025-0011"},
+            "analisis": {
+                "comentario_amplio": "Se verificó el expediente. Fallo de control en la validación.",
+                "antecedentes": "Operación usual para el cliente.",
+            },
+            "productos": [],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+    analisis = sections["analisis"].splitlines()
+    assert "Fallo de control" in analisis[0]
+    assert "Antecedentes" in analisis[1]
 
 
 def test_sections_limit_and_truncate_bullets():
