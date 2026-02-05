@@ -174,7 +174,23 @@ def _split_body_paragraphs(body: str) -> list[tuple[str, bool]]:
 
 def _is_placeholder_text(value: object) -> bool:
     text = str(value or "").strip()
-    return not text or text == PLACEHOLDER
+    if not text or text == PLACEHOLDER:
+        return True
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return True
+    cleaned = []
+    for line in lines:
+        normalized = line.lower()
+        if normalized.startswith("mensaje clave"):
+            parts = line.split(":", 1)
+            content = parts[1].strip() if len(parts) > 1 else ""
+            cleaned.append(content)
+            continue
+        if normalized.startswith("puntos de soporte") or normalized.startswith("evidencias"):
+            continue
+        cleaned.append(BULLET_PREFIX.sub("", line).strip())
+    return all(not item or item == PLACEHOLDER for item in cleaned)
 
 
 def _has_source_content(sections: Mapping[str, str]) -> bool:

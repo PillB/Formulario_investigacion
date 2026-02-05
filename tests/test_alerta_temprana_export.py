@@ -151,7 +151,7 @@ def test_build_alerta_temprana_ppt_generates_presentation(tmp_path):
 
 def test_synthesize_section_text_uses_fallback_when_llm_missing():
     caso = {"id_caso": "123", "tipo_informe": "Fraude", "modalidad": "Digital"}
-    analisis = {"antecedentes": {"text": "Hubo transferencias sospechosas sin autorización."}}
+    analisis = {"comentario_breve": {"text": "Hubo transferencias sospechosas sin autorización."}}
     productos = [{"fecha_ocurrencia": "2025-01-01"}]
     riesgos = [{"id_riesgo": "R1", "descripcion": "Credenciales filtradas"}]
     operaciones = [{"accion": "Bloquear tarjeta", "estado": "Pendiente"}]
@@ -192,9 +192,45 @@ def test_sections_empty_return_placeholder():
             "reclamos": [],
         }
     )
-    assert sections["resumen"] == PLACEHOLDER
+    assert "Mensaje clave" in sections["resumen"]
+    assert "Puntos de soporte" in sections["resumen"]
+    assert "Evidencias" in sections["resumen"]
+    assert "N/A" in sections["resumen"]
     assert sections["cronologia"] == PLACEHOLDER
     assert sections["analisis"] == PLACEHOLDER
+
+
+def test_resumen_section_includes_blocks_and_references():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {
+                "fecha_de_ocurrencia": "2025-01-01",
+                "fecha_de_descubrimiento": "2025-01-02",
+            },
+            "analisis": {"comentario_breve": "Mensaje principal del caso."},
+            "productos": [
+                {
+                    "monto_investigado": "100.00",
+                    "monto_perdida_fraude": "10.00",
+                    "monto_falla_procesos": "5.00",
+                    "monto_contingencia": "3.00",
+                    "monto_recuperado": "2.00",
+                }
+            ],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [],
+            "encabezado": {"dirigido_a": "Comité", "area_reporte": "Riesgos"},
+            "clientes": [{"id_cliente": "CLI-1"}],
+            "reclamos": [],
+        }
+    )
+    resumen = sections["resumen"]
+    assert "Mensaje clave" in resumen
+    assert "Puntos de soporte" in resumen
+    assert "Evidencias" in resumen
+    assert "Clientes vinculados: 1" in resumen
+    assert "[Caso: fecha_de_ocurrencia]" in resumen
 
 
 def test_recomendaciones_section_prefers_analisis_recomendaciones():
