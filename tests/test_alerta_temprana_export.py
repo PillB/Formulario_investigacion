@@ -313,6 +313,48 @@ def test_build_prompt_emphasizes_control_process_failures_and_interview_scope():
     assert "Extensión objetivo para la sección 'Análisis': entre 110 y 170 palabras." in prompt
 
 
+
+
+def test_synthesize_section_text_parses_llm_json_with_fuentes():
+    class StubLLM:
+        def summarize(self, section, prompt, *, max_new_tokens=None):
+            return '{"resumen":{"texto":"Resumen generado por LLM","fuentes":["hechos_relevantes"]}}'
+
+    sections = {
+        "codigo": "2025-0015",
+        "resumen": "Resumen fallback",
+        "cronologia": "Cronología base.",
+        "analisis": "Análisis base.",
+        "riesgos": "Riesgos base.",
+        "recomendaciones": "Recomendaciones base.",
+        "responsables": "Responsables base.",
+    }
+
+    texto = _synthesize_section_text("Resumen", sections, {"tipo_informe": "Fraude"}, StubLLM())
+
+    assert texto == "Resumen generado por LLM"
+
+
+def test_synthesize_section_text_completes_missing_fuentes_with_warning(caplog):
+    class StubLLM:
+        def summarize(self, section, prompt, *, max_new_tokens=None):
+            return '{"resumen":{"texto":"Resumen sin fuentes"}}'
+
+    sections = {
+        "codigo": "2025-0016",
+        "resumen": "Resumen fallback",
+        "cronologia": "Cronología base.",
+        "analisis": "Análisis base.",
+        "riesgos": "Riesgos base.",
+        "recomendaciones": "Recomendaciones base.",
+        "responsables": "Responsables base.",
+    }
+
+    with caplog.at_level("WARNING"):
+        texto = _synthesize_section_text("Resumen", sections, {"tipo_informe": "Fraude"}, StubLLM())
+
+    assert texto == "Resumen sin fuentes"
+    assert "no incluye 'fuentes'; se completa con lista vacía" in caplog.text
 def test_synthesize_section_text_uses_section_specific_token_budget():
     class StubLLM:
         def __init__(self):
