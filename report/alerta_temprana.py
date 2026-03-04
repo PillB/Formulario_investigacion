@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 import logging
 import math
 import importlib.util
@@ -223,6 +224,55 @@ def _has_source_content(sections: Mapping[str, str]) -> bool:
     return False
 
 
+def _section_to_schema_key(section: str) -> str:
+    key_map = {
+        "Resumen": "resumen",
+        "Cronología": "cronologia",
+        "Cronologia": "cronologia",
+        "Análisis": "analisis",
+        "Analisis": "analisis",
+        "Riesgos": "riesgos_identificados",
+        "Recomendaciones": "recomendaciones",
+        "Recomendación": "recomendaciones",
+        "Recomendacion": "recomendaciones",
+        "Acciones": "recomendaciones",
+        "Responsables": "responsables",
+    }
+    return key_map.get(section, section.lower())
+
+
+def _extract_text_from_llm_json(section: str, llm_output: str) -> str | None:
+    text = str(llm_output or "").strip()
+    if not text:
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+
+    section_key = _section_to_schema_key(section)
+    section_payload = payload.get(section_key)
+    if not isinstance(section_payload, Mapping):
+        return None
+
+    if "fuentes" not in section_payload:
+        logger.warning("La sección '%s' no incluye 'fuentes'; se completa con lista vacía.", section_key)
+        section_payload = dict(section_payload)
+        section_payload["fuentes"] = []
+    elif not isinstance(section_payload.get("fuentes"), list):
+        logger.warning("La sección '%s' tiene 'fuentes' inválido; se normaliza a lista vacía.", section_key)
+        section_payload = dict(section_payload)
+        section_payload["fuentes"] = []
+
+    body = section_payload.get("texto")
+    if body is None:
+        body = section_payload.get("contenido")
+    cleaned = sanitize_rich_text(body, max_chars=MAX_SECTION_CHARS).strip()
+    return cleaned or PLACEHOLDER
+
+
 def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> str:
     categoria = str(caso.get("categoria1") or "Categoría no especificada").strip()
     modalidad = str(caso.get("modalidad") or "Modalidad no especificada").strip()
@@ -241,9 +291,9 @@ def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> st
         f"Extensión objetivo para la sección '{section}': entre {min_words} y {max_words} palabras. "
         "Evita repetir información textual entre secciones y prioriza mensajes accionables. "
         "Devuelve SIEMPRE un JSON válido (sin markdown, sin texto extra) que cumpla este contrato fijo por sección: "
-        '{"resumen":{"contenido":"<texto>","fuentes":["<campo>"]},"cronologia":{"contenido":"<texto>","fuentes":["<campo>"]},"analisis":{"contenido":"<texto>","fuentes":["<campo>"]},"riesgos_identificados":{"contenido":"<texto>","fuentes":["<campo>"]},"recomendaciones":{"contenido":"<texto>","fuentes":["<campo>"]},"responsables":{"contenido":"<texto>","fuentes":["<campo>"]},"resumen_ejecutivo":{"mensaje_clave":"<texto>","puntos_soporte":["<punto_1>","<punto_2>","<punto_3>"],"evidencia_trazabilidad":["<evidencia_1>","<evidencia_2>"]}}. '
+        '{"resumen":{"texto":"<texto>","fuentes":["<campo>"]},"cronologia":{"texto":"<texto>","fuentes":["<campo>"]},"analisis":{"texto":"<texto>","fuentes":["<campo>"]},"riesgos_identificados":{"texto":"<texto>","fuentes":["<campo>"]},"recomendaciones":{"texto":"<texto>","fuentes":["<campo>"]},"responsables":{"texto":"<texto>","fuentes":["<campo>"]},"resumen_ejecutivo":{"mensaje_clave":"<texto>","puntos_soporte":["<punto_1>","<punto_2>","<punto_3>"],"evidencia_trazabilidad":["<evidencia_1>","<evidencia_2>"]}}. '
         "Ejemplo mínimo de estructura válida: "
-        '{"resumen":{"contenido":"Hallazgo principal...","fuentes":["hechos_relevantes"]},"cronologia":{"contenido":"N/A","fuentes":["hechos_cronologicos"]},"analisis":{"contenido":"Control de autenticación insuficiente...","fuentes":["conclusiones"]},"riesgos_identificados":{"contenido":"Exposición reputacional y operacional...","fuentes":["tipologias"]},"recomendaciones":{"contenido":"Fortalecer doble factor...","fuentes":["recomendaciones"]},"responsables":{"contenido":"Gerencia de Seguridad...","fuentes":["responsables_acciones"]},"resumen_ejecutivo":{"mensaje_clave":"Brecha de control en canal digital.","puntos_soporte":["40 eventos confirmados","Canal App","Impacto monetario en evaluación"],"evidencia_trazabilidad":["caso.numero","monto_investigado"]}}. '
+        '{"resumen":{"texto":"Hallazgo principal...","fuentes":["hechos_relevantes"]},"cronologia":{"texto":"N/A","fuentes":["hechos_cronologicos"]},"analisis":{"texto":"Control de autenticación insuficiente...","fuentes":["conclusiones"]},"riesgos_identificados":{"texto":"Exposición reputacional y operacional...","fuentes":["tipologias"]},"recomendaciones":{"texto":"Fortalecer doble factor...","fuentes":["recomendaciones"]},"responsables":{"texto":"Gerencia de Seguridad...","fuentes":["responsables_acciones"]},"resumen_ejecutivo":{"mensaje_clave":"Brecha de control en canal digital.","puntos_soporte":["40 eventos confirmados","Canal App","Impacto monetario en evaluación"],"evidencia_trazabilidad":["caso.numero","monto_investigado"]}}. '
         "Todas las llaves son obligatorias. Si faltan datos para una sección o campo, usa exactamente 'N/A' (o ['N/A'] para listas) y conserva la llave. "
         "La lista 'fuentes' debe mencionar nombres de campos del formulario realmente usados para redactar el contenido. "
         f"Sección objetivo: {section}. "
@@ -315,20 +365,7 @@ def _synthesize_section_text(
     caso: Mapping[str, object],
     llm_helper: SpanishSummaryHelper | None,
 ) -> str:
-    section_key_map = {
-        "Resumen": "resumen",
-        "Cronología": "cronologia",
-        "Cronologia": "cronologia",
-        "Análisis": "analisis",
-        "Analisis": "analisis",
-        "Riesgos": "riesgos",
-        "Recomendaciones": "recomendaciones",
-        "Recomendación": "recomendaciones",
-        "Recomendacion": "recomendaciones",
-        "Acciones": "recomendaciones",
-        "Responsables": "responsables",
-    }
-    section_key = section_key_map.get(section, section.lower())
+    section_key = _section_to_schema_key(section).replace("_identificados", "")
     fallback_source = sections.get(section_key, PLACEHOLDER)
     if _is_placeholder_text(fallback_source):
         return PLACEHOLDER
@@ -352,7 +389,10 @@ def _synthesize_section_text(
         prompt,
         max_new_tokens=SECTION_MAX_NEW_TOKENS.get(section, default_tokens),
     )
-    return llm_summary or fallback_source
+    if not llm_summary:
+        return fallback_source
+    parsed_text = _extract_text_from_llm_json(section, llm_summary)
+    return parsed_text or llm_summary
 
 
 def _add_section_panel(slide, left, top, width, height, title: str, body: str, *, accent: RGBColor | None = None):
