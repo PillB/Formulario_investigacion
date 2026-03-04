@@ -292,10 +292,10 @@ def test_build_prompt_emphasizes_control_process_failures_and_interview_scope():
         },
     )
 
-    assert "Enfócate en fallas de control/proceso" in prompt
+    assert "Enfócate en fallas de control/proceso (no en culpas individuales)." in prompt
     assert "qué control/proceso falló" in prompt
-    assert "modalidad y recomendaciones inmediatas" in prompt
-    assert "Extensión objetivo: entre 110 y 170 palabras" in prompt
+    assert "modalidad y recomendaciones" in prompt
+    assert "Extensión objetivo para la sección 'Análisis': entre 110 y 170 palabras." in prompt
 
 
 def test_synthesize_section_text_uses_section_specific_token_budget():
