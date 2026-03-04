@@ -266,7 +266,7 @@ def _extract_text_from_llm_json(section: str, llm_output: str) -> str | None:
         section_payload["fuentes"] = []
 
     body = section_payload.get("texto")
-    if body is None:
+    if not str(body or "").strip():
         body = section_payload.get("contenido")
     cleaned = sanitize_rich_text(body, max_chars=MAX_SECTION_CHARS).strip()
     return cleaned or PLACEHOLDER

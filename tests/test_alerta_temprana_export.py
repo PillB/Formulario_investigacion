@@ -375,6 +375,26 @@ def test_synthesize_section_text_completes_missing_fuentes_with_warning(caplog):
 
     assert texto == "Resumen sin fuentes"
     assert "no incluye 'fuentes'; se completa con lista vacía" in caplog.text
+
+def test_synthesize_section_text_falls_back_to_contenido_when_texto_empty():
+    class StubLLM:
+        def summarize(self, section, prompt, *, max_new_tokens=None):
+            return '{"resumen":{"texto":"   ","contenido":"Resumen legado disponible","fuentes":["hechos_relevantes"]}}'
+
+    sections = {
+        "codigo": "2025-0017",
+        "resumen": "Resumen fallback",
+        "cronologia": "Cronología base.",
+        "analisis": "Análisis base.",
+        "riesgos": "Riesgos base.",
+        "recomendaciones": "Recomendaciones base.",
+        "responsables": "Responsables base.",
+    }
+
+    texto = _synthesize_section_text("Resumen", sections, {"tipo_informe": "Fraude"}, StubLLM())
+
+    assert texto == "Resumen legado disponible"
+
 def test_synthesize_section_text_uses_section_specific_token_budget():
     class StubLLM:
         def __init__(self):
