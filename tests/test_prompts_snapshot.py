@@ -41,6 +41,6 @@ def test_alerta_temprana_prompt_snapshot_includes_examples_and_na_rule():
     assert "Ejemplo mínimo de estructura válida" in prompt
     assert '"cronologia":{"contenido":"N/A"' in prompt
     assert "usa exactamente 'N/A'" in prompt
-    assert "(o ['N/A'] para listas)" in prompt
+    assert '(o ["N/A"] para listas)' in prompt
     assert "Todas las llaves son obligatorias." in prompt
     assert "Extensión objetivo para la sección 'Resumen': entre 80 y 120 palabras." in prompt
