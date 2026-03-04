@@ -5,8 +5,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+from report.common_amounts import aggregate_product_amounts
 from report_builder import CaseData, build_report_filename
-from validators import parse_decimal_amount, sanitize_rich_text
+from validators import sanitize_rich_text
 
 PLACEHOLDER = "N/A"
 MAX_PARAGRAPH_CHARS = 520
@@ -63,32 +64,6 @@ def _truncate(text: str, max_chars: int = MAX_PARAGRAPH_CHARS) -> str:
     if max_chars and len(cleaned) > max_chars:
         return cleaned[: max_chars - 1].rstrip() + "…"
     return cleaned
-
-
-def _aggregate_amounts(products: Iterable[Mapping[str, object]] | None) -> dict[str, Decimal]:
-    totals = {
-        "investigado": Decimal("0"),
-        "perdida_fraude": Decimal("0"),
-        "falla_procesos": Decimal("0"),
-        "contingencia": Decimal("0"),
-        "recuperado": Decimal("0"),
-        "pago_deuda": Decimal("0"),
-    }
-    for product in products or []:
-        if not isinstance(product, Mapping):
-            continue
-        for key, field in (
-            ("investigado", "monto_investigado"),
-            ("perdida_fraude", "monto_perdida_fraude"),
-            ("falla_procesos", "monto_falla_procesos"),
-            ("contingencia", "monto_contingencia"),
-            ("recuperado", "monto_recuperado"),
-            ("pago_deuda", "monto_pago_deuda"),
-        ):
-            amount = parse_decimal_amount(product.get(field))
-            if amount is not None:
-                totals[key] += amount
-    return totals
 
 
 def _join_nonempty(parts: Sequence[str], *, sep: str = " / ") -> str:
@@ -478,7 +453,7 @@ def build_resumen_ejecutivo_md(
     normas = dataset.get("normas") if isinstance(dataset, Mapping) else []
     recomendaciones = dataset.get("recomendaciones_categorias") if isinstance(dataset, Mapping) else {}
 
-    totals = _aggregate_amounts(productos)
+    totals = aggregate_product_amounts(productos)
     case_id = _safe_text(case.get("id_caso"))
     header_lines = [
         f"**Caso:** {case_id}",

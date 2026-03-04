@@ -5,10 +5,11 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
 
+from report.common_amounts import aggregate_product_amounts
 from report_builder import CaseData
-from validators import parse_decimal_amount, sanitize_rich_text
+from validators import sanitize_rich_text
 
 logger = logging.getLogger(__name__)
 
@@ -217,30 +218,6 @@ def _extract_control_failure_sentence(analisis: Mapping[str, object]) -> str:
     return ""
 
 
-def _aggregate_amounts(products: Iterable[Mapping[str, object]] | None) -> dict[str, Decimal]:
-    totals = {
-        "investigado": Decimal("0"),
-        "perdida_fraude": Decimal("0"),
-        "falla_procesos": Decimal("0"),
-        "contingencia": Decimal("0"),
-        "recuperado": Decimal("0"),
-    }
-    for product in products or []:
-        if not isinstance(product, Mapping):
-            continue
-        for key, field in (
-            ("investigado", "monto_investigado"),
-            ("perdida_fraude", "monto_perdida_fraude"),
-            ("falla_procesos", "monto_falla_procesos"),
-            ("contingencia", "monto_contingencia"),
-            ("recuperado", "monto_recuperado"),
-        ):
-            amount = parse_decimal_amount(product.get(field))
-            if amount is not None:
-                totals[key] += amount
-    return totals
-
-
 def _case_title(caso: Mapping[str, object], encabezado: Mapping[str, object]) -> str:
     referencia = str(encabezado.get("referencia") or "").strip()
     if referencia:
@@ -262,7 +239,7 @@ def _build_resumen_section(
     products: Sequence[Mapping[str, object]],
     clientes: Sequence[Mapping[str, object]],
 ) -> str:
-    totals = _aggregate_amounts(products)
+    totals = aggregate_product_amounts(products)
     comentario = _extract_rich_text(analisis.get("comentario_breve"))
     comentario_field = "Comentario breve"
     if not comentario:
@@ -551,7 +528,7 @@ def build_executive_summary(data: CaseData | Mapping[str, object]) -> ExecutiveS
     responsables = dataset.get("responsables") if isinstance(dataset, Mapping) else []
     reclamos = dataset.get("reclamos") if isinstance(dataset, Mapping) else []
 
-    totals = _aggregate_amounts(productos)
+    totals = aggregate_product_amounts(productos)
     headline_parts = [
         f"Caso {_safe_text(caso.get('id_caso'))}",
         _case_title(caso, encabezado),
