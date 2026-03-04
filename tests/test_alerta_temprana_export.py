@@ -146,6 +146,21 @@ def test_build_alerta_temprana_ppt_generates_presentation(tmp_path):
     assert any("Fraude" in prompt for _section, prompt in stub_llm.prompts)
 
 
+def test_build_prompt_includes_control_process_focus_instruction():
+    prompt = _build_prompt(
+        "Análisis",
+        "Contexto de prueba",
+        {
+            "categoria1": "Tarjeta",
+            "modalidad": "Digital",
+            "canal": "App",
+            "tipo_informe": "Alerta temprana",
+        },
+    )
+
+    assert "Enfócate en fallas de control/proceso (no en culpas individuales)." in prompt
+
+
 def test_synthesize_section_text_uses_fallback_when_llm_missing():
     caso = {"id_caso": "123", "tipo_informe": "Fraude", "modalidad": "Digital"}
     analisis = {"comentario_breve": {"text": "Hubo transferencias sospechosas sin autorización."}}
