@@ -239,10 +239,12 @@ def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> st
         "Redacta en tono ejecutivo, voz activa, sin viñetas ni relleno. "
         f"Extensión objetivo para la sección '{section}': entre {min_words} y {max_words} palabras. "
         "Evita repetir información textual entre secciones y prioriza mensajes accionables. "
-        "Devuelve SIEMPRE un JSON válido (sin markdown, sin texto extra) con este esquema exacto: "
-        '{"seccion":"<nombre>","contenido":"<texto>","palabras_objetivo":{"min":<int>,"max":<int>},"fuentes":["<campo_1>","<campo_2>"]}. '
+        "Devuelve SIEMPRE un JSON válido (sin markdown, sin texto extra) que cumpla este contrato fijo por sección: "
+        '{"resumen":{"contenido":"<texto>","fuentes":["<campo>"]},"cronologia":{"contenido":"<texto>","fuentes":["<campo>"]},"analisis":{"contenido":"<texto>","fuentes":["<campo>"]},"riesgos_identificados":{"contenido":"<texto>","fuentes":["<campo>"]},"recomendaciones":{"contenido":"<texto>","fuentes":["<campo>"]},"responsables":{"contenido":"<texto>","fuentes":["<campo>"]},"resumen_ejecutivo":{"mensaje_clave":"<texto>","puntos_soporte":["<punto_1>","<punto_2>","<punto_3>"],"evidencia_trazabilidad":["<evidencia_1>","<evidencia_2>"]}}. '
+        "Ejemplo mínimo de estructura válida: "
+        '{"resumen":{"contenido":"Hallazgo principal...","fuentes":["hechos_relevantes"]},"cronologia":{"contenido":"N/A","fuentes":["hechos_cronologicos"]},"analisis":{"contenido":"Control de autenticación insuficiente...","fuentes":["conclusiones"]},"riesgos_identificados":{"contenido":"Exposición reputacional y operacional...","fuentes":["tipologias"]},"recomendaciones":{"contenido":"Fortalecer doble factor...","fuentes":["recomendaciones"]},"responsables":{"contenido":"Gerencia de Seguridad...","fuentes":["responsables_acciones"]},"resumen_ejecutivo":{"mensaje_clave":"Brecha de control en canal digital.","puntos_soporte":["40 eventos confirmados","Canal App","Impacto monetario en evaluación"],"evidencia_trazabilidad":["caso.numero","monto_investigado"]}}. '
+        "Todas las llaves son obligatorias. Si faltan datos para una sección o campo, usa exactamente 'N/A' (o ['N/A'] para listas) y conserva la llave. "
         "La lista 'fuentes' debe mencionar nombres de campos del formulario realmente usados para redactar el contenido. "
-        "Si faltan datos, usa 'N/A' en contenido y reporta en 'fuentes' los campos intentados. "
         f"Sección objetivo: {section}. "
         f"Tipo de informe: {tipo}; Categoría: {categoria}; Modalidad: {modalidad}; Canal: {canal}. "
         "Usa los datos factuales del caso y la cronología incluida. "

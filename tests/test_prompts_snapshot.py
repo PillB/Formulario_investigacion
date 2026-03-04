@@ -1,7 +1,7 @@
 from report.alerta_temprana import _build_prompt
 
 
-def test_alerta_temprana_prompt_snapshot_contains_schema_and_guardrails():
+def test_alerta_temprana_prompt_snapshot_contains_json_contract_by_section():
     prompt = _build_prompt(
         "Análisis",
         "Resumen: 40 suplantaciones detectadas.\nRiesgos: debilidad en autenticación.",
@@ -15,12 +15,18 @@ def test_alerta_temprana_prompt_snapshot_contains_schema_and_guardrails():
 
     assert "Enfócate en fallas de control/proceso (no en culpas individuales)." in prompt
     assert "Devuelve SIEMPRE un JSON válido" in prompt
-    assert '{"seccion":"<nombre>","contenido":"<texto>","palabras_objetivo":{"min":<int>,"max":<int>},"fuentes":["<campo_1>","<campo_2>"]}' in prompt
+    assert '"resumen":{"contenido":"<texto>","fuentes":["<campo>"]}' in prompt
+    assert '"cronologia":{"contenido":"<texto>","fuentes":["<campo>"]}' in prompt
+    assert '"analisis":{"contenido":"<texto>","fuentes":["<campo>"]}' in prompt
+    assert '"riesgos_identificados":{"contenido":"<texto>","fuentes":["<campo>"]}' in prompt
+    assert '"recomendaciones":{"contenido":"<texto>","fuentes":["<campo>"]}' in prompt
+    assert '"responsables":{"contenido":"<texto>","fuentes":["<campo>"]}' in prompt
+    assert '"resumen_ejecutivo":{"mensaje_clave":"<texto>"' in prompt
     assert "Extensión objetivo para la sección 'Análisis': entre 110 y 170 palabras." in prompt
     assert "Tipo de informe: Alerta temprana; Categoría: Tarjeta; Modalidad: Digital; Canal: App." in prompt
 
 
-def test_alerta_temprana_prompt_snapshot_word_limits_by_section():
+def test_alerta_temprana_prompt_snapshot_includes_examples_and_na_rule():
     prompt = _build_prompt(
         "Resumen",
         "Contexto base",
@@ -32,5 +38,9 @@ def test_alerta_temprana_prompt_snapshot_word_limits_by_section():
         },
     )
 
+    assert "Ejemplo mínimo de estructura válida" in prompt
+    assert '"cronologia":{"contenido":"N/A"' in prompt
+    assert "usa exactamente 'N/A'" in prompt
+    assert "(o ['N/A'] para listas)" in prompt
+    assert "Todas las llaves son obligatorias." in prompt
     assert "Extensión objetivo para la sección 'Resumen': entre 80 y 120 palabras." in prompt
-    assert "fuentes" in prompt
