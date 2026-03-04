@@ -389,6 +389,15 @@ def _build_evidence_section(
     riesgos: Sequence[Mapping[str, object]],
     normas: Sequence[Mapping[str, object]],
 ) -> list[str]:
+    analiticas = _summarize_values(
+        [
+            str(rec.get("codigo_analitica") or "").strip()
+            for rec in reclamos
+            if isinstance(rec, Mapping)
+        ]
+    )
+    lineas_riesgo_norma = _build_risk_norm_section(riesgos, normas)
+
     lines = [
         f"Clientes vinculados: {len(clientes)}",
         f"Colaboradores involucrados: {len(colaboradores)}",
@@ -404,19 +413,50 @@ def _build_evidence_section(
         f"Fecha de descubrimiento: {_format_date(caso.get('fecha_de_descubrimiento'))}",
         f"Dirigido a: {_safe_text(encabezado.get('dirigido_a'))}",
         f"Área de reporte: {_safe_text(encabezado.get('area_reporte'))}",
+        f"Analítica contable: {analiticas}",
+        f"Riesgos y normas: {lineas_riesgo_norma}",
     ]
     return lines
 
 
-def _render_summary(sections: Mapping[str, str], header_lines: Sequence[str], evidence: Sequence[str]) -> str:
+def _build_support_points(
+    case: Mapping[str, object],
+    encabezado: Mapping[str, object],
+    analisis: Mapping[str, object],
+    recomendaciones: Mapping[str, object],
+    clientes: Sequence[Mapping[str, object]],
+    colaboradores: Sequence[Mapping[str, object]],
+    productos: Sequence[Mapping[str, object]],
+    reclamos: Sequence[Mapping[str, object]],
+    riesgos: Sequence[Mapping[str, object]],
+    normas: Sequence[Mapping[str, object]],
+) -> list[str]:
+    candidates = [
+        _build_context_section(case, encabezado, productos, reclamos),
+        _build_scope_section(clientes, colaboradores, productos, reclamos),
+        _build_analysis_section(analisis),
+        _build_risk_norm_section(riesgos, normas),
+        _build_conclusions_section(analisis, recomendaciones),
+    ]
+    return [line for line in candidates if line and line != PLACEHOLDER]
+
+
+def _render_summary(
+    encabezado: str,
+    mensaje_clave: str,
+    puntos_soporte: Sequence[str],
+    evidencia: Sequence[str],
+) -> str:
     blocks = [
         "# Resumen Ejecutivo",
-        *header_lines,
+        _render_section("Encabezado", encabezado),
+        _render_section("Mensaje clave", mensaje_clave),
+        "## Puntos de soporte\n",
+        _render_bullets(puntos_soporte),
         "",
+        "## Evidencia / trazabilidad\n",
+        _render_bullets(evidencia),
     ]
-    blocks.extend(_render_section(title, body) for title, body in sections.items())
-    blocks.append("## Evidencia y trazabilidad\n")
-    blocks.append(_render_bullets(evidence))
     return "\n".join(blocks).strip() + "\n"
 
 
@@ -445,15 +485,20 @@ def build_resumen_ejecutivo_md(
         f"**Tipo de informe:** {_safe_text(case.get('tipo_informe'))}",
         f"**Fecha de reporte:** {_safe_text(encabezado.get('fecha_reporte') or case.get('fecha_reporte'))}",
     ]
-
-    sections = {
-        "Mensaje clave": _build_key_message(case, encabezado, analisis, totals),
-        "Contexto del caso": _build_context_section(case, encabezado, productos, reclamos),
-        "Alcance y afectados": _build_scope_section(clientes, colaboradores, productos, reclamos),
-        "Hallazgos y análisis": _build_analysis_section(analisis),
-        "Riesgos y normas": _build_risk_norm_section(riesgos, normas),
-        "Conclusiones y recomendaciones": _build_conclusions_section(analisis, recomendaciones),
-    }
+    encabezado_text = "\n".join(header_lines)
+    mensaje_clave = _build_key_message(case, encabezado, analisis, totals)
+    puntos_soporte = _build_support_points(
+        case,
+        encabezado,
+        analisis,
+        recomendaciones,
+        clientes,
+        colaboradores,
+        productos,
+        reclamos,
+        riesgos,
+        normas,
+    )
     evidence = _build_evidence_section(
         case,
         encabezado,
@@ -465,7 +510,7 @@ def build_resumen_ejecutivo_md(
         riesgos,
         normas,
     )
-    content = _render_summary(sections, header_lines, evidence)
+    content = _render_summary(encabezado_text, mensaje_clave, puntos_soporte, evidence)
     output_path.write_text(content, encoding="utf-8")
     return output_path
 

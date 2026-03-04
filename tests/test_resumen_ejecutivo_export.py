@@ -36,10 +36,11 @@ def test_build_resumen_ejecutivo_md(tmp_path):
     content = path.read_text(encoding="utf-8")
     assert "# Resumen Ejecutivo" in content
     assert "**Caso:** 2025-0002" in content
-    assert "Mensaje clave" in content
-    assert "Contexto del caso" in content
-    assert "Hallazgos y análisis" in content
-    assert "Evidencia y trazabilidad" in content
+    assert "## Encabezado" in content
+    assert "## Mensaje clave" in content
+    assert "## Puntos de soporte" in content
+    assert "## Evidencia / trazabilidad" in content
+    assert "Riesgos potenciales:" in content
     assert "Monto investigado 100.00" in content
 
 
