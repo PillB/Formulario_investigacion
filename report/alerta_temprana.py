@@ -45,6 +45,7 @@ PPTX_MISSING_MESSAGE = (
 PLACEHOLDER = "N/A"
 DEFAULT_MODEL = "PlanTL-GOB-ES/flan-t5-base-spanish"
 MAX_SECTION_CHARS = 600
+CONTROL_PROCESS_FOCUS_INSTRUCTION = "Enfócate en fallas de control/proceso (no en culpas individuales)."
 SECTION_WORD_LIMITS: dict[str, tuple[int, int]] = {
     "Resumen": (80, 120),
     "Cronología": (90, 130),
@@ -230,7 +231,7 @@ def _build_prompt(section: str, contexto: str, caso: Mapping[str, object]) -> st
     min_words, max_words = SECTION_WORD_LIMITS.get(section, (80, 120))
     return (
         "Eres un analista senior de investigaciones y riesgo operacional que redacta contenidos para PPT en español. "
-        "Enfócate en fallas de control/proceso (no en culpas individuales). "
+        f"{CONTROL_PROCESS_FOCUS_INSTRUCTION} "
         "No atribuyas responsabilidad a personas investigadas; limita nombres propios a dueños de proceso/unidad para seguimiento. "
         "Debe reflejar lo pedido por usuarios expertos: explicar qué pasó, cuál es el hallazgo principal, "
         "qué control/proceso falló, impacto (monto/productos/clientes), modalidad y recomendaciones. "
