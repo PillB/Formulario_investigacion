@@ -218,7 +218,7 @@ def _is_placeholder_text(value: object) -> bool:
 
 
 def _has_source_content(sections: Mapping[str, str]) -> bool:
-    for key in ("resumen", "cronologia", "analisis", "riesgos", "recomendaciones", "acciones", "responsables"):
+    for key in ("resumen", "cronologia", "analisis", "riesgos", "recomendaciones", "responsables"):
         if not _is_placeholder_text(sections.get(key, PLACEHOLDER)):
             return True
     return False
@@ -235,7 +235,6 @@ def _section_to_schema_key(section: str) -> str:
         "Recomendaciones": "recomendaciones",
         "Recomendación": "recomendaciones",
         "Recomendacion": "recomendaciones",
-        "Acciones": "recomendaciones",
         "Responsables": "responsables",
     }
     return key_map.get(section, section.lower())
@@ -379,7 +378,7 @@ def _synthesize_section_text(
         f"Cronología: {sections.get('cronologia', PLACEHOLDER)}",
         f"Análisis: {sections.get('analisis', PLACEHOLDER)}",
         f"Riesgos: {sections.get('riesgos', PLACEHOLDER)}",
-        f"Recomendaciones: {sections.get('recomendaciones', sections.get('acciones', PLACEHOLDER))}",
+        f"Recomendaciones: {sections.get('recomendaciones', PLACEHOLDER)}",
         f"Responsables: {sections.get('responsables', PLACEHOLDER)}",
     ]
     prompt = _build_prompt(section, "\n".join(context_lines), caso)
