@@ -437,6 +437,8 @@ def _build_recomendaciones_section(
     analisis: Mapping[str, object],
     operaciones: Sequence[Mapping[str, object]],
 ) -> str:
+    # Salida oficial: recomendaciones. Se mantiene lectura de `analisis.acciones`
+    # únicamente como compatibilidad hacia atrás cuando recomendaciones no exista.
     recomendacion = _extract_rich_text(analisis.get("recomendaciones"))
     if not recomendacion:
         recomendacion = _extract_rich_text(analisis.get("acciones"))
@@ -532,7 +534,6 @@ def build_alerta_temprana_sections(
         "analisis": _build_analisis_section(analisis),
         "riesgos": _build_riesgos_section(riesgos),
         "recomendaciones": recomendaciones,
-        "acciones": recomendaciones,
         "responsables": _build_responsables_section(caso, colaboradores, responsables),
     }
 

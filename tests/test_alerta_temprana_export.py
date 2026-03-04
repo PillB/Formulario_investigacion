@@ -264,7 +264,27 @@ def test_recomendaciones_section_prefers_analisis_recomendaciones():
     )
     assert "Revisar límites de autorización" in sections["recomendaciones"]
     assert "no debería" not in sections["recomendaciones"]
-    assert sections["acciones"] == sections["recomendaciones"]
+
+
+def test_recomendaciones_section_uses_analisis_acciones_as_fallback():
+    sections = build_alerta_temprana_sections(
+        {
+            "caso": {"id_caso": "2025-0005"},
+            "analisis": {
+                "acciones": "• Acción heredada para mitigar el hallazgo.",
+            },
+            "productos": [],
+            "riesgos": [],
+            "operaciones": [],
+            "colaboradores": [],
+            "encabezado": {},
+            "clientes": [],
+            "reclamos": [],
+        }
+    )
+
+    assert "Acción heredada para mitigar el hallazgo" in sections["recomendaciones"]
+    assert "acciones" not in sections
 
 
 def test_synthesize_section_text_skips_llm_when_sources_empty():
